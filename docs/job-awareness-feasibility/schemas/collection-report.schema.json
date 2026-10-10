@@ -1,0 +1,276 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "source_sha",
+    "docs_sha",
+    "fixture_sha256",
+    "at",
+    "files_checked",
+    "schema_errors",
+    "hash_errors",
+    "missing_evidence",
+    "worker_summaries"
+  ],
+  "properties": {
+    "schema": {
+      "const": "job-awareness-collection-report-v1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^JA-[A-Za-z0-9_-]{8,60}$"
+    },
+    "source_sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "docs_sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "fixture_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "files_checked": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "schema_errors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "hash_errors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "missing_evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "worker_summaries": {
+      "type": "object",
+      "required": [
+        "W1",
+        "W2",
+        "W3",
+        "W4",
+        "W5"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "W1": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "structural_validation",
+            "model_verification",
+            "result_ref"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "INCONCLUSIVE",
+                "BLOCKED",
+                "NOT_RUN"
+              ]
+            },
+            "structural_validation": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "NOT_RUN"
+              ]
+            },
+            "model_verification": {
+              "enum": [
+                "VERIFIED",
+                "UNVERIFIED",
+                "UNAVAILABLE"
+              ]
+            },
+            "result_ref": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "W2": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "structural_validation",
+            "model_verification",
+            "result_ref"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "INCONCLUSIVE",
+                "BLOCKED",
+                "NOT_RUN"
+              ]
+            },
+            "structural_validation": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "NOT_RUN"
+              ]
+            },
+            "model_verification": {
+              "enum": [
+                "VERIFIED",
+                "UNVERIFIED",
+                "UNAVAILABLE"
+              ]
+            },
+            "result_ref": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "W3": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "structural_validation",
+            "model_verification",
+            "result_ref"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "INCONCLUSIVE",
+                "BLOCKED",
+                "NOT_RUN"
+              ]
+            },
+            "structural_validation": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "NOT_RUN"
+              ]
+            },
+            "model_verification": {
+              "enum": [
+                "VERIFIED",
+                "UNVERIFIED",
+                "UNAVAILABLE"
+              ]
+            },
+            "result_ref": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "W4": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "structural_validation",
+            "model_verification",
+            "result_ref"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "INCONCLUSIVE",
+                "BLOCKED",
+                "NOT_RUN"
+              ]
+            },
+            "structural_validation": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "NOT_RUN"
+              ]
+            },
+            "model_verification": {
+              "enum": [
+                "VERIFIED",
+                "UNVERIFIED",
+                "UNAVAILABLE"
+              ]
+            },
+            "result_ref": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "W5": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "structural_validation",
+            "model_verification",
+            "result_ref"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "INCONCLUSIVE",
+                "BLOCKED",
+                "NOT_RUN"
+              ]
+            },
+            "structural_validation": {
+              "enum": [
+                "PASS",
+                "FAIL",
+                "NOT_RUN"
+              ]
+            },
+            "model_verification": {
+              "enum": [
+                "VERIFIED",
+                "UNVERIFIED",
+                "UNAVAILABLE"
+              ]
+            },
+            "result_ref": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # S0 immutable fixtures and independent comparison contract
 
-Status: **specification only, no fixture server created**. This document is the single source for per-lane synthetic inputs, so W1–W5 can start in parallel after one short S0 preparation.
+Status: **specification only, no fixture server created**. The exact serialized fixtures are defined by schemas/fixture-manifest.schema.json, run-manifest.schema.json and worker-input.schema.json. Step dependencies are in [STEP-IO-MATRIX.md](STEP-IO-MATRIX.md) and worker output layouts are in [I-O-FORMATS.md](I-O-FORMATS.md). This document is the single source for per-lane synthetic inputs, so W1–W5 can start in parallel after one short S0 preparation.
 
 ## 1. Golden envelope and carrier choices
 

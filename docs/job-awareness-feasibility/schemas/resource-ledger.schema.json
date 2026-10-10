@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "recorded_at",
+    "resources"
+  ],
+  "properties": {
+    "schema": {
+      "const": "job-awareness-resources-v1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^JA-[A-Za-z0-9_-]{8,60}$"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "resource_ref",
+          "owner",
+          "created_at",
+          "namespace",
+          "disposable",
+          "production_untouched",
+          "teardown_status",
+          "teardown_evidence_refs"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "resource_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owner": {
+            "enum": [
+              "S0",
+              "W1",
+              "W2",
+              "W3",
+              "W4",
+              "W5"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "namespace": {
+            "type": "string",
+            "minLength": 1
+          },
+          "disposable": {
+            "const": true
+          },
+          "production_untouched": {
+            "const": true
+          },
+          "teardown_status": {
+            "enum": [
+              "NOT_STARTED",
+              "DONE",
+              "BLOCKED",
+              "NOT_APPLICABLE"
+            ]
+          },
+          "teardown_evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

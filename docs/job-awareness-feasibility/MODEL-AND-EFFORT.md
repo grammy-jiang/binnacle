@@ -25,7 +25,7 @@ The Desktop operator can be a tool-driven ChatGPT Desktop/Codex Desktop agent **
 
 W5 ChatGPT subject model/effort must be selected and documented in the actual Chat UI before any paired trials. If GPT-6 Medium is not offered, S0/W5 cannot silently inherit default; propose an explicitly identified alternate fixed model/effort, log the substitution in a new pre-registered trial manifest, and mark this planned configuration BLOCKED/NOT_RUN until that change is explicitly approved. Every comparison pair must use the same subject model and reasoning level. Do not mix product surfaces, account tiers or model families and aggregate them as one cohort.
 
-## 3. Explicit CLI invocation requirements
+## 3. Mandatory agent handoff receipt\n\nAt every CLI or Desktop handoff, require the worker to load its frozen inputs/Wn.input.json first, select its declared model and effort explicitly, and persist Wn/model-selection.json **before** running an experiment. The receipt has schemas/model-selection.schema.json and must contain requested/effective model+effort, match verification, redacted selector command, proof references and explicit fallback status. The terminal results.json must exactly match it. See [HANDOFF-MODEL-AND-EFFORT.md](HANDOFF-MODEL-AND-EFFORT.md) and [I-O-FORMATS.md](I-O-FORMATS.md).\n\n## 4. Explicit CLI invocation requirements
 
 **Codex CLI**: use documented flags with per-worker model and effort, not ~/.codex/config.toml defaults. Illustrative syntax (the dispatcher must fill exact separate workdir and evidence paths):
 
@@ -63,7 +63,7 @@ Each is launched with cwd set to its own trusted worktree and its own results di
 
 Neither CLI tool should obtain GUI authority to become a second Desktop operator. Both are programming workers operating without ChatGPT interaction.
 
-## 4. Runtime verification and safe fallback
+## 5. Runtime verification and safe fallback
 
 1. **Preflight:** verify requested model ID/alias, CLI flag support, effort enum, account access and independent session/worktree. Read only non-sensitive settings; never read raw auth files.
 2. **First result:** capture runtime-reported effective model and effort from structured CLI output or trusted app UI. If unavailable, record EFFECTIVE_MODEL_UNVERIFIED and treat the lane INCONCLUSIVE until resolved; the CLI flags alone prove a request, not necessarily effective execution.
@@ -75,7 +75,7 @@ Neither CLI tool should obtain GUI authority to become a second Desktop operator
 
 Model naming is a run parameter, not a reason to rewrite acceptance criteria. The mandatory criteria for security isolation and receipt remain strict even if the selected model cannot complete the lane.
 
-## 5. Cost/effort attribution
+## 6. Cost/effort attribution
 
 W4 must distinguish the inference token cost of the experiment subjects from the **runtime/token overhead of the Binnacle reminder**. Expensive W3 reasoning time is not part of MCP latency; it is worker execution cost. The manager reports cost per lane if actually measured and never replaces an absent cost figure with a fabricated number.
 

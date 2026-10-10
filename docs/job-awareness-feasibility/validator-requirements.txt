@@ -1,0 +1,2 @@
+# Isolated offline evidence-validator dependency; not a Binnacle runtime dependency.
+jsonschema==4.26.0

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "worker",
+    "cases",
+    "variants",
+    "recommended_transition",
+    "outstanding_uncertainties"
+  ],
+  "properties": {
+    "schema": {
+      "const": "job-awareness-receipt-verdict-v1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^JA-[A-Za-z0-9_-]{8,60}$"
+    },
+    "worker": {
+      "const": "W3"
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1
+    },
+    "variants": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "verdict",
+          "necessary_assumptions",
+          "counterexample_refs"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "SERVER_FETCH",
+              "NEXT_TRUSTED_CALL",
+              "EXPLICIT_RECEIPT"
+            ]
+          },
+          "verdict": {
+            "enum": [
+              "SUPPORTED",
+              "REFUTED",
+              "UNRESOLVED"
+            ]
+          },
+          "necessary_assumptions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "counterexample_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "recommended_transition": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "outstanding_uncertainties": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

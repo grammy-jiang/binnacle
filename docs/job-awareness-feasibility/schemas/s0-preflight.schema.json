@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "source_sha",
+    "docs_sha",
+    "fixture_sha256",
+    "started_at",
+    "finished_at",
+    "state",
+    "executor",
+    "resource_baseline",
+    "desktop_app_status",
+    "outputs",
+    "blocking_reasons"
+  ],
+  "properties": {
+    "schema": {
+      "const": "job-awareness-s0-preflight-v1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^JA-[A-Za-z0-9_-]{8,60}$"
+    },
+    "source_sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "docs_sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "fixture_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "PREPARED",
+        "PARTIAL",
+        "BLOCKED"
+      ]
+    },
+    "executor": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "surface",
+        "version",
+        "session_ref",
+        "model"
+      ],
+      "properties": {
+        "surface": {
+          "const": "codex-cli"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requested_model",
+            "requested_effort",
+            "effective_model",
+            "effective_effort",
+            "verification",
+            "verification_evidence_ref",
+            "fallback_used",
+            "model_match_verified",
+            "effort_match_verified"
+          ],
+          "properties": {
+            "requested_model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requested_effort": {
+              "type": "string",
+              "minLength": 1
+            },
+            "effective_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "effective_effort": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verification": {
+              "type": "string",
+              "enum": [
+                "VERIFIED",
+                "UNVERIFIED",
+                "UNAVAILABLE"
+              ]
+            },
+            "verification_evidence_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "fallback_used": {
+              "type": "boolean"
+            },
+            "model_match_verified": {
+              "type": "boolean"
+            },
+            "effort_match_verified": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "resource_baseline": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "production_pid_digest",
+        "original_worktree_clean",
+        "test_namespace",
+        "staging_isolated"
+      ],
+      "properties": {
+        "production_pid_digest": {
+          "type": "string",
+          "minLength": 1
+        },
+        "original_worktree_clean": {
+          "type": "boolean"
+        },
+        "test_namespace": {
+          "type": "string",
+          "minLength": 1
+        },
+        "staging_isolated": {
+          "type": "boolean"
+        }
+      }
+    },
+    "desktop_app_status": {
+      "enum": [
+        "READY",
+        "UNVERIFIED",
+        "BLOCKED"
+      ]
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 3
+    },
+    "blocking_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

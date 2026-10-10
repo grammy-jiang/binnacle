@@ -4,7 +4,7 @@ Status: **execution procedure; not executed**. Owner: the ChatGPT supervisor (di
 
 ## 0. Non-negotiable workflow boundaries
 
-- Every worker uses a **declared model and explicit reasoning effort**, with runtime verification per [MODEL-AND-EFFORT.md](MODEL-AND-EFFORT.md); defaults and silent fallbacks are forbidden.
+- Every worker uses a **declared model and explicit reasoning effort**, with runtime verification and a required model-selection.json startup receipt per [HANDOFF-MODEL-AND-EFFORT.md](HANDOFF-MODEL-AND-EFFORT.md) and [MODEL-AND-EFFORT.md](MODEL-AND-EFFORT.md); defaults and silent fallbacks are forbidden.
 - Every worker gets one immutable input packet and one exclusive workspace. All source reading is pinned to the **same** baseline SHA, determined when the run begins, not a moving branch name.
 - No worker may change the production server, installed Binnacle or its config, systemd user units, live tunnel, primary connector, real job spool, master, existing production branches or another worker's worktree.
 - No unsafe local Codex/Claude sub-agent creation: these are separately invoked top-level worker CLI processes, each with an independent checkout and explicit role/permission boundary.
@@ -54,11 +54,11 @@ For each W1–W4, the dispatch record contains: worker ID, tool binary/version, 
 
 Each CLI worker must:
 
-- Read its own brief from [WORKER-BRIEFS.md](WORKER-BRIEFS.md) and signed/frozen input manifest. Never reinterpret the other lanes as its own tasks.
+- Read its own brief from [WORKER-BRIEFS.md](WORKER-BRIEFS.md), [STEP-IO-MATRIX.md](STEP-IO-MATRIX.md), the per-file [I-O-FORMATS.md](I-O-FORMATS.md), and signed/frozen input manifest. Never reinterpret the other lanes as its own tasks.
 - Write only disposable test code **inside its worktree or isolated /tmp root** and evidence **inside its assigned results directory**.
 - Run its own smallest appropriate targeted probes/tests. Do not run whole-repository gates five times; no production-code changes are permitted.
-- Output a complete scenario-by-scenario machine-readable report, concise Markdown findings, hashes of reproducible evidence, and exit status. If blocked, output the actual failed step and missing prerequisite.
-- After its final report is durable, exit. Do not begin integration, alter another worker's artifacts, post a GitHub review, merge or deploy.
+- First output an auditable model-selection.json startup receipt; then output a complete scenario-by-scenario schema-valid JSON report, concise Markdown findings, evidence-index.json with actual hashes, event JSONL, lane CSV and exit status. If blocked, output the actual failed step and missing prerequisite.
+- Before exit run validate_contracts --worker RUN_ROOT Wn and record the validation result; an error is not a PASS. After its final report is durable, exit. Do not begin integration, alter another worker's artifacts, post a GitHub review, merge or deploy.
 
 W5 follows [DESKTOP-OPERATOR.md](DESKTOP-OPERATOR.md) instead; it must not write production source or launch a parallel CLI coder. It submits exactly the same machine-readable evidence contract. A model statement of success is not a successful test.
 
@@ -70,7 +70,7 @@ The ChatGPT supervisor does exactly five things:
 
 1. Confirm S0 manifest, five assignments, exclusive ownership, and prerequisites; launch/request launch of independent workers according to the available approved entry points.
 2. Record each worker process/session identity, terminal status and evidence location; leave healthy workers uninterrupted.
-3. When a worker completes, verify immutable SHA bindings, schema validity and presence of raw evidence **without rerunning its experiments**.
+3. When a worker completes, run validate_contracts --worker RUN_ROOT Wn to verify immutable SHA bindings, selected model/effort receipt, schema and raw evidence hashes **without rerunning its experiments**.
 4. Mark any missing, contradictory or security-unsafe evidence as INCONCLUSIVE/BLOCKED and ask the *same assigned worker* for one bounded correction, rather than rewriting code itself.
 5. After all workers are terminal (PASS/FAIL/INCONCLUSIVE/BLOCKED), produce one user-visible synthesis from [MANAGER-SUMMARY-TEMPLATE.md](MANAGER-SUMMARY-TEMPLATE.md); state unanswered questions and Go/No-Go. Archive the results. Do not merge any prototype.
 

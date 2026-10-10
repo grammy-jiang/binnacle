@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "worker",
+    "scenario_id",
+    "event_id",
+    "at",
+    "elapsed_ms",
+    "layer",
+    "tool_call_id",
+    "job_id",
+    "chat_label",
+    "nonce_sha256",
+    "surface",
+    "outcome",
+    "raw_artifact_ref",
+    "response_sha256"
+  ],
+  "properties": {
+    "schema": {
+      "const": "job-awareness-event-v1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^JA-[A-Za-z0-9_-]{8,60}$"
+    },
+    "worker": {
+      "type": "string",
+      "enum": [
+        "S0",
+        "W1",
+        "W2",
+        "W3",
+        "W4",
+        "W5"
+      ]
+    },
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "elapsed_ms": {
+      "type": "number",
+      "minimum": 0
+    },
+    "layer": {
+      "type": "string",
+      "enum": [
+        "fixture_generated",
+        "server_generated",
+        "server_sent",
+        "client_received",
+        "model_used",
+        "workflow_continued"
+      ]
+    },
+    "tool_call_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "job_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "chat_label": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "nonce_sha256": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "surface": {
+      "type": "string",
+      "minLength": 1
+    },
+    "outcome": {
+      "type": "string",
+      "minLength": 1
+    },
+    "raw_artifact_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "response_sha256": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

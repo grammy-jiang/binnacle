@@ -1,0 +1,332 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "source_sha",
+    "docs_sha",
+    "at",
+    "workers"
+  ],
+  "properties": {
+    "schema": {
+      "const": "job-awareness-dispatch-ledger-v1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^JA-[A-Za-z0-9_-]{8,60}$"
+    },
+    "source_sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "docs_sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "workers": {
+      "type": "object",
+      "required": [
+        "W1",
+        "W2",
+        "W3",
+        "W4",
+        "W5"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "W1": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "input_sha256",
+            "requested_model",
+            "requested_effort",
+            "process_ref",
+            "session_ref",
+            "worktree",
+            "dispatch_state",
+            "reason"
+          ],
+          "properties": {
+            "input_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "requested_model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requested_effort": {
+              "type": "string",
+              "minLength": 1
+            },
+            "process_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "session_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "worktree": {
+              "type": "string",
+              "minLength": 1
+            },
+            "dispatch_state": {
+              "enum": [
+                "STARTED",
+                "BLOCKED",
+                "NOT_STARTED"
+              ]
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "W2": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "input_sha256",
+            "requested_model",
+            "requested_effort",
+            "process_ref",
+            "session_ref",
+            "worktree",
+            "dispatch_state",
+            "reason"
+          ],
+          "properties": {
+            "input_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "requested_model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requested_effort": {
+              "type": "string",
+              "minLength": 1
+            },
+            "process_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "session_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "worktree": {
+              "type": "string",
+              "minLength": 1
+            },
+            "dispatch_state": {
+              "enum": [
+                "STARTED",
+                "BLOCKED",
+                "NOT_STARTED"
+              ]
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "W3": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "input_sha256",
+            "requested_model",
+            "requested_effort",
+            "process_ref",
+            "session_ref",
+            "worktree",
+            "dispatch_state",
+            "reason"
+          ],
+          "properties": {
+            "input_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "requested_model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requested_effort": {
+              "type": "string",
+              "minLength": 1
+            },
+            "process_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "session_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "worktree": {
+              "type": "string",
+              "minLength": 1
+            },
+            "dispatch_state": {
+              "enum": [
+                "STARTED",
+                "BLOCKED",
+                "NOT_STARTED"
+              ]
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "W4": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "input_sha256",
+            "requested_model",
+            "requested_effort",
+            "process_ref",
+            "session_ref",
+            "worktree",
+            "dispatch_state",
+            "reason"
+          ],
+          "properties": {
+            "input_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "requested_model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requested_effort": {
+              "type": "string",
+              "minLength": 1
+            },
+            "process_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "session_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "worktree": {
+              "type": "string",
+              "minLength": 1
+            },
+            "dispatch_state": {
+              "enum": [
+                "STARTED",
+                "BLOCKED",
+                "NOT_STARTED"
+              ]
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "W5": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "input_sha256",
+            "requested_model",
+            "requested_effort",
+            "process_ref",
+            "session_ref",
+            "worktree",
+            "dispatch_state",
+            "reason"
+          ],
+          "properties": {
+            "input_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "requested_model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requested_effort": {
+              "type": "string",
+              "minLength": 1
+            },
+            "process_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "session_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "worktree": {
+              "type": "string",
+              "minLength": 1
+            },
+            "dispatch_state": {
+              "enum": [
+                "STARTED",
+                "BLOCKED",
+                "NOT_STARTED"
+              ]
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

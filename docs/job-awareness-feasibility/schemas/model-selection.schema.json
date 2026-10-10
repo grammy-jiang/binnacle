@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "worker",
+    "recorded_at",
+    "executor",
+    "subject",
+    "selection_command",
+    "observed_selector_evidence_refs",
+    "notes"
+  ],
+  "properties": {
+    "schema": {
+      "const": "job-awareness-model-selection-v1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^JA-[A-Za-z0-9_-]{8,60}$"
+    },
+    "worker": {
+      "enum": [
+        "W1",
+        "W2",
+        "W3",
+        "W4",
+        "W5"
+      ]
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "executor": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requested_model",
+        "requested_effort",
+        "effective_model",
+        "effective_effort",
+        "verification",
+        "verification_evidence_ref",
+        "fallback_used",
+        "model_match_verified",
+        "effort_match_verified"
+      ],
+      "properties": {
+        "requested_model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requested_effort": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effective_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "effective_effort": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verification": {
+          "type": "string",
+          "enum": [
+            "VERIFIED",
+            "UNVERIFIED",
+            "UNAVAILABLE"
+          ]
+        },
+        "verification_evidence_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fallback_used": {
+          "type": "boolean"
+        },
+        "model_match_verified": {
+          "type": "boolean"
+        },
+        "effort_match_verified": {
+          "type": "boolean"
+        }
+      }
+    },
+    "subject": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requested_model",
+            "requested_effort",
+            "effective_model",
+            "effective_effort",
+            "verification",
+            "verification_evidence_ref",
+            "fallback_used",
+            "model_match_verified",
+            "effort_match_verified"
+          ],
+          "properties": {
+            "requested_model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requested_effort": {
+              "type": "string",
+              "minLength": 1
+            },
+            "effective_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "effective_effort": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verification": {
+              "type": "string",
+              "enum": [
+                "VERIFIED",
+                "UNVERIFIED",
+                "UNAVAILABLE"
+              ]
+            },
+            "verification_evidence_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "fallback_used": {
+              "type": "boolean"
+            },
+            "model_match_verified": {
+              "type": "boolean"
+            },
+            "effort_match_verified": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "selection_command": {
+      "type": "string",
+      "minLength": 1
+    },
+    "observed_selector_evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

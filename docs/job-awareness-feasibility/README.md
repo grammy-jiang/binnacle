@@ -33,7 +33,7 @@ W5 combines both live visibility/behavior experiments and live multi-chat isolat
 
 One short S0 preparatory gate freezes common fixtures, source provenance and an isolated, authenticated disposable test MCP app (or returns a specific blocked capability). After S0, all five lanes start without waiting for one another. In particular, W5 exercises a frozen three-carrier matrix independently of W1's findings: it does not wait for W1 to choose a carrier. See [parallel execution](PARALLEL-EXECUTION.md).
 
-Model and effort choices are explicit and lane-specific, never inherited from CLI defaults. S0 uses Codex gpt-6-sol/medium; W1 uses Codex gpt-6-astra/high; W2 uses Claude opus/high; W3 uses Codex gpt-6-astra/xhigh; W4 uses Claude sonnet/medium. W5 pins its ChatGPT Chat test subject to GPT-6/Medium, subject to actual UI availability and explicit verification. See [model and effort](MODEL-AND-EFFORT.md).
+Model and effort choices are explicit and lane-specific, never inherited from CLI defaults. S0 uses Codex gpt-6-sol/medium; W1 uses Codex gpt-6-astra/high; W2 uses Claude opus/high; W3 uses Codex gpt-6-astra/xhigh; W4 uses Claude sonnet/medium. W5 pins its ChatGPT Chat test subject to GPT-6/Medium, subject to actual UI availability and explicit verification. See [model and effort](MODEL-AND-EFFORT.md) and the mandatory [handoff receipt protocol](HANDOFF-MODEL-AND-EFFORT.md).
 
 The **ChatGPT manager/supervisor** assigns the workers, checks evidence existence and independent provenance, and gives the user a synthesized report. The manager does **not** implement, edit worker code, execute worker experiments, merge prototype changes or invent missing measurements. Workers own their individual results and return machine-readable evidence. See [worker briefs](WORKER-BRIEFS.md), [desktop SOP](DESKTOP-OPERATOR.md), [evidence gates](EVIDENCE-AND-GATES.md), and [manager report template](MANAGER-SUMMARY-TEMPLATE.md).
 
@@ -71,6 +71,12 @@ The supervisor never equates server-emitted metadata with model visibility, a su
 6. [MANAGER-SUMMARY-TEMPLATE.md](MANAGER-SUMMARY-TEMPLATE.md) — read-only supervisory consolidation.
 7. [FIXTURE-CONTRACT.md](FIXTURE-CONTRACT.md) — immutable synthetic input and carrier contracts.
 8. [prompts/](prompts/) — standalone S0 and W1–W5 dispatch prompts.
-9. [worker-manifest.json](worker-manifest.json) — machine-readable lane assignments and dependency contracts.
+9. [STEP-IO-MATRIX.md](STEP-IO-MATRIX.md) — input/output of every S0, W1–W5 scenario and M0–M4.
+10. [I-O-FORMATS.md](I-O-FORMATS.md) — exact JSON/JSONL/CSV/Markdown file contracts.
+11. [HANDOFF-MODEL-AND-EFFORT.md](HANDOFF-MODEL-AND-EFFORT.md) — startup model/effort proof and no-default handoff policy.
+12. [step-io.json](step-io.json) and [worker-manifest.json](worker-manifest.json) — machine-readable steps, worker assignments and dependency contracts.
+13. [schemas/](schemas/) — JSON Schemas for structured input/output.
+14. [validate_contracts.py](../../tests/job_awareness_feasibility/validate_contracts.py) and [contract suite](../../tests/job_awareness_feasibility/contract_suite.py) — offline structural verifier with positive/negative tests.
+15. [PRELAUNCH-REVIEW.md](PRELAUNCH-REVIEW.md) — final gaps, corrections, evidence and exact launch checklist.
 
 No experiment tests, app installations, connections, browser interactions, production-code edits, deployment or service restart were executed in preparing these documents.

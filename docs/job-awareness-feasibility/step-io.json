@@ -1,0 +1,1773 @@
+{
+  "schema": "job-awareness-step-io-v1",
+  "status": "PLAN_ONLY",
+  "s0_steps": [
+    {
+      "id": "S0.0",
+      "owner": "S0",
+      "inputs": [
+        {
+          "ref": "repo://AGENTS.md",
+          "format": "reference"
+        },
+        {
+          "ref": "repo://DEVELOPMENT.md",
+          "format": "reference"
+        },
+        {
+          "ref": "plan://worker-manifest.json",
+          "format": "reference"
+        }
+      ],
+      "outputs": [
+        {
+          "ref": "S0/preflight.json",
+          "format": "json"
+        },
+        {
+          "ref": "S0/provenance.json",
+          "format": "json"
+        },
+        {
+          "ref": "S0/events.jsonl",
+          "format": "jsonl"
+        }
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "S0.1",
+      "owner": "S0",
+      "inputs": [
+        {
+          "ref": "S0/provenance.json",
+          "format": "json"
+        },
+        {
+          "ref": "plan://FIXTURE-CONTRACT.md",
+          "format": "reference"
+        }
+      ],
+      "outputs": [
+        {
+          "ref": "run-manifest.json",
+          "format": "json"
+        },
+        {
+          "ref": "S0/events.jsonl",
+          "format": "jsonl"
+        }
+      ],
+      "depends_on": [
+        "S0.0"
+      ]
+    },
+    {
+      "id": "S0.2",
+      "owner": "S0",
+      "inputs": [
+        {
+          "ref": "run-manifest.json",
+          "format": "json"
+        },
+        {
+          "ref": "plan://FIXTURE-CONTRACT.md",
+          "format": "reference"
+        }
+      ],
+      "outputs": [
+        {
+          "ref": "fixtures/fixture-manifest.json",
+          "format": "json"
+        },
+        {
+          "ref": "S0/fixture-index.json",
+          "format": "json"
+        },
+        {
+          "ref": "S0/events.jsonl",
+          "format": "jsonl"
+        }
+      ],
+      "depends_on": [
+        "S0.1"
+      ]
+    },
+    {
+      "id": "S0.3",
+      "owner": "S0",
+      "inputs": [
+        {
+          "ref": "fixtures/fixture-manifest.json",
+          "format": "json"
+        },
+        {
+          "ref": "plan://DESKTOP-OPERATOR.md",
+          "format": "reference"
+        }
+      ],
+      "outputs": [
+        {
+          "ref": "S0/resource-ledger.json",
+          "format": "json"
+        },
+        {
+          "ref": "S0/connection-evidence.json",
+          "format": "json"
+        },
+        {
+          "ref": "S0/preflight.json",
+          "format": "json"
+        }
+      ],
+      "depends_on": [
+        "S0.2"
+      ]
+    },
+    {
+      "id": "S0.4",
+      "owner": "S0",
+      "inputs": [
+        {
+          "ref": "fixtures/fixture-manifest.json",
+          "format": "json"
+        },
+        {
+          "ref": "plan://worker-manifest.json",
+          "format": "reference"
+        },
+        {
+          "ref": "S0/preflight.json",
+          "format": "json"
+        }
+      ],
+      "outputs": [
+        {
+          "ref": "inputs/W1.input.json",
+          "format": "json"
+        },
+        {
+          "ref": "inputs/W2.input.json",
+          "format": "json"
+        },
+        {
+          "ref": "inputs/W3.input.json",
+          "format": "json"
+        },
+        {
+          "ref": "inputs/W4.input.json",
+          "format": "json"
+        },
+        {
+          "ref": "inputs/W5.input.json",
+          "format": "json"
+        },
+        {
+          "ref": "run-manifest.json",
+          "format": "json"
+        }
+      ],
+      "depends_on": [
+        "S0.3"
+      ]
+    },
+    {
+      "id": "S0.5",
+      "owner": "S0",
+      "inputs": [
+        {
+          "ref": "run-manifest.json",
+          "format": "json"
+        },
+        {
+          "ref": "S0/preflight.json",
+          "format": "json"
+        },
+        {
+          "ref": "inputs/W1.input.json",
+          "format": "json"
+        },
+        {
+          "ref": "inputs/W2.input.json",
+          "format": "json"
+        },
+        {
+          "ref": "inputs/W3.input.json",
+          "format": "json"
+        },
+        {
+          "ref": "inputs/W4.input.json",
+          "format": "json"
+        },
+        {
+          "ref": "inputs/W5.input.json",
+          "format": "json"
+        }
+      ],
+      "outputs": [
+        {
+          "ref": "S0/readiness.md",
+          "format": "md"
+        },
+        {
+          "ref": "S0/preflight.json",
+          "format": "json"
+        }
+      ],
+      "depends_on": [
+        "S0.4"
+      ]
+    }
+  ],
+  "workers": {
+    "W1": [
+      {
+        "id": "RAW-BASE",
+        "owner": "W1",
+        "inputs": [
+          {
+            "ref": "inputs/W1.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W1/wire/RAW-BASE.json",
+            "format": "json"
+          },
+          {
+            "ref": "W1/carrier-matrix.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W1/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W1/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "M-META",
+        "owner": "W1",
+        "inputs": [
+          {
+            "ref": "inputs/W1.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W1/wire/M-META.json",
+            "format": "json"
+          },
+          {
+            "ref": "W1/carrier-matrix.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W1/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W1/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "M-TEXT",
+        "owner": "W1",
+        "inputs": [
+          {
+            "ref": "inputs/W1.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W1/wire/M-TEXT.json",
+            "format": "json"
+          },
+          {
+            "ref": "W1/carrier-matrix.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W1/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W1/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "M-STRUCT",
+        "owner": "W1",
+        "inputs": [
+          {
+            "ref": "inputs/W1.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W1/wire/M-STRUCT.json",
+            "format": "json"
+          },
+          {
+            "ref": "W1/carrier-matrix.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W1/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W1/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "M-ERROR",
+        "owner": "W1",
+        "inputs": [
+          {
+            "ref": "inputs/W1.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W1/wire/M-ERROR.json",
+            "format": "json"
+          },
+          {
+            "ref": "W1/carrier-matrix.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W1/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W1/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "M-SURFACES",
+        "owner": "W1",
+        "inputs": [
+          {
+            "ref": "inputs/W1.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W1/wire/M-SURFACES.json",
+            "format": "json"
+          },
+          {
+            "ref": "W1/carrier-matrix.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W1/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W1/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "M-RELOAD",
+        "owner": "W1",
+        "inputs": [
+          {
+            "ref": "inputs/W1.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W1/wire/M-RELOAD.json",
+            "format": "json"
+          },
+          {
+            "ref": "W1/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W1/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "M-COMPAT",
+        "owner": "W1",
+        "inputs": [
+          {
+            "ref": "inputs/W1.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W1/wire/M-COMPAT.json",
+            "format": "json"
+          },
+          {
+            "ref": "W1/carrier-matrix.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W1/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W1/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      }
+    ],
+    "W2": [
+      {
+        "id": "I-ERAS",
+        "owner": "W2",
+        "inputs": [
+          {
+            "ref": "inputs/W2.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W2/identity/I-ERAS.json",
+            "format": "json"
+          },
+          {
+            "ref": "W2/identity-matrix.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W2/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W2/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "I-HEADERS",
+        "owner": "W2",
+        "inputs": [
+          {
+            "ref": "inputs/W2.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W2/identity/I-HEADERS.json",
+            "format": "json"
+          },
+          {
+            "ref": "W2/identity-matrix.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W2/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W2/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "I-TURN",
+        "owner": "W2",
+        "inputs": [
+          {
+            "ref": "inputs/W2.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W2/identity/I-TURN.json",
+            "format": "json"
+          },
+          {
+            "ref": "W2/identity-matrix.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W2/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W2/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "I-SPOOF",
+        "owner": "W2",
+        "inputs": [
+          {
+            "ref": "inputs/W2.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W2/identity/I-SPOOF.json",
+            "format": "json"
+          },
+          {
+            "ref": "W2/identity-matrix.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W2/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W2/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "I-RECONNECT",
+        "owner": "W2",
+        "inputs": [
+          {
+            "ref": "inputs/W2.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W2/identity/I-RECONNECT.json",
+            "format": "json"
+          },
+          {
+            "ref": "W2/identity-matrix.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W2/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W2/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "I-AUTH",
+        "owner": "W2",
+        "inputs": [
+          {
+            "ref": "inputs/W2.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W2/identity-provenance.md",
+            "format": "md"
+          },
+          {
+            "ref": "W2/identity/I-AUTH.json",
+            "format": "json"
+          },
+          {
+            "ref": "W2/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W2/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "I-LEAK",
+        "owner": "W2",
+        "inputs": [
+          {
+            "ref": "inputs/W2.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W2/identity/I-LEAK.json",
+            "format": "json"
+          },
+          {
+            "ref": "W2/identity-matrix.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W2/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W2/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "I-REAL",
+        "owner": "W2",
+        "inputs": [
+          {
+            "ref": "inputs/W2.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W2/identity/I-REAL.json",
+            "format": "json"
+          },
+          {
+            "ref": "W2/identity-matrix.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W2/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W2/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      }
+    ],
+    "W3": [
+      {
+        "id": "R-STATE",
+        "owner": "W3",
+        "inputs": [
+          {
+            "ref": "inputs/W3.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W3/receipt/R-STATE.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/receipt-transitions.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W3/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "R-UNFETCHED",
+        "owner": "W3",
+        "inputs": [
+          {
+            "ref": "inputs/W3.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W3/receipt/R-UNFETCHED.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/receipt-transitions.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W3/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "R-CURSOR",
+        "owner": "W3",
+        "inputs": [
+          {
+            "ref": "inputs/W3.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W3/receipt/R-CURSOR.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/receipt-transitions.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W3/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "R-REPLAY",
+        "owner": "W3",
+        "inputs": [
+          {
+            "ref": "inputs/W3.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W3/receipt/R-REPLAY.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/receipt-transitions.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W3/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "R-LOSS",
+        "owner": "W3",
+        "inputs": [
+          {
+            "ref": "inputs/W3.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W3/receipt/R-LOSS.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/receipt-transitions.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W3/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "R-ACK",
+        "owner": "W3",
+        "inputs": [
+          {
+            "ref": "inputs/W3.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W3/receipt/R-ACK.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/receipt-transitions.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W3/receipt-verdict.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "R-ISOLATION",
+        "owner": "W3",
+        "inputs": [
+          {
+            "ref": "inputs/W3.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W3/receipt/R-ISOLATION.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/receipt-transitions.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W3/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "R-RETENTION",
+        "owner": "W3",
+        "inputs": [
+          {
+            "ref": "inputs/W3.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W3/receipt/R-RETENTION.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/receipt-transitions.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W3/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W3/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      }
+    ],
+    "W4": [
+      {
+        "id": "P-BASE",
+        "owner": "W4",
+        "inputs": [
+          {
+            "ref": "inputs/W4.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W4/perf/P-BASE.json",
+            "format": "json"
+          },
+          {
+            "ref": "W4/latency-samples.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W4/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W4/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "P-CARRIERS",
+        "owner": "W4",
+        "inputs": [
+          {
+            "ref": "inputs/W4.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W4/perf/P-CARRIERS.json",
+            "format": "json"
+          },
+          {
+            "ref": "W4/latency-samples.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W4/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W4/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "P-SIZE",
+        "owner": "W4",
+        "inputs": [
+          {
+            "ref": "inputs/W4.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W4/perf/P-SIZE.json",
+            "format": "json"
+          },
+          {
+            "ref": "W4/latency-samples.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W4/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W4/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "P-TOKENS",
+        "owner": "W4",
+        "inputs": [
+          {
+            "ref": "inputs/W4.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W4/perf/P-TOKENS.json",
+            "format": "json"
+          },
+          {
+            "ref": "W4/latency-samples.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W4/metrics.json",
+            "format": "json"
+          },
+          {
+            "ref": "W4/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W4/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "P-LATENCY",
+        "owner": "W4",
+        "inputs": [
+          {
+            "ref": "inputs/W4.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W4/perf/P-LATENCY.json",
+            "format": "json"
+          },
+          {
+            "ref": "W4/latency-samples.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W4/metrics.json",
+            "format": "json"
+          },
+          {
+            "ref": "W4/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W4/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "P-SCHEMA",
+        "owner": "W4",
+        "inputs": [
+          {
+            "ref": "inputs/W4.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W4/perf/P-SCHEMA.json",
+            "format": "json"
+          },
+          {
+            "ref": "W4/latency-samples.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W4/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W4/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "P-LOAD",
+        "owner": "W4",
+        "inputs": [
+          {
+            "ref": "inputs/W4.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W4/perf/P-LOAD.json",
+            "format": "json"
+          },
+          {
+            "ref": "W4/latency-samples.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W4/results.json",
+            "format": "json"
+          },
+          {
+            "ref": "W4/events.jsonl",
+            "format": "jsonl"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      }
+    ],
+    "W5": [
+      {
+        "id": "U-CANARY",
+        "owner": "W5",
+        "inputs": [
+          {
+            "ref": "inputs/W5.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W5/ui/U-CANARY.json",
+            "format": "json"
+          },
+          {
+            "ref": "W5/events.jsonl",
+            "format": "jsonl"
+          },
+          {
+            "ref": "W5/surface-capability.json",
+            "format": "json"
+          },
+          {
+            "ref": "W5/results.json",
+            "format": "json"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "U-VISIBLE",
+        "owner": "W5",
+        "inputs": [
+          {
+            "ref": "inputs/W5.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W5/ui/U-VISIBLE.json",
+            "format": "json"
+          },
+          {
+            "ref": "W5/events.jsonl",
+            "format": "jsonl"
+          },
+          {
+            "ref": "W5/results.json",
+            "format": "json"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "U-RUNNING",
+        "owner": "W5",
+        "inputs": [
+          {
+            "ref": "inputs/W5.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W5/ui/U-RUNNING.json",
+            "format": "json"
+          },
+          {
+            "ref": "W5/events.jsonl",
+            "format": "jsonl"
+          },
+          {
+            "ref": "W5/results.json",
+            "format": "json"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "U-FINISHED",
+        "owner": "W5",
+        "inputs": [
+          {
+            "ref": "inputs/W5.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W5/ui/U-FINISHED.json",
+            "format": "json"
+          },
+          {
+            "ref": "W5/events.jsonl",
+            "format": "jsonl"
+          },
+          {
+            "ref": "W5/results.json",
+            "format": "json"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "U-ISOLATION",
+        "owner": "W5",
+        "inputs": [
+          {
+            "ref": "inputs/W5.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W5/ui/U-ISOLATION.json",
+            "format": "json"
+          },
+          {
+            "ref": "W5/events.jsonl",
+            "format": "jsonl"
+          },
+          {
+            "ref": "W5/results.json",
+            "format": "json"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "U-RECEIPT",
+        "owner": "W5",
+        "inputs": [
+          {
+            "ref": "inputs/W5.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W5/ui/U-RECEIPT.json",
+            "format": "json"
+          },
+          {
+            "ref": "W5/events.jsonl",
+            "format": "jsonl"
+          },
+          {
+            "ref": "W5/results.json",
+            "format": "json"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "U-PAIR",
+        "owner": "W5",
+        "inputs": [
+          {
+            "ref": "inputs/W5.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W5/ui/U-PAIR.json",
+            "format": "json"
+          },
+          {
+            "ref": "W5/events.jsonl",
+            "format": "jsonl"
+          },
+          {
+            "ref": "W5/trials.csv",
+            "format": "csv"
+          },
+          {
+            "ref": "W5/results.json",
+            "format": "json"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      },
+      {
+        "id": "U-TURN-END",
+        "owner": "W5",
+        "inputs": [
+          {
+            "ref": "inputs/W5.input.json",
+            "format": "json"
+          },
+          {
+            "ref": "fixtures/fixture-manifest.json",
+            "format": "json"
+          }
+        ],
+        "outputs": [
+          {
+            "ref": "W5/ui/U-TURN-END.json",
+            "format": "json"
+          },
+          {
+            "ref": "W5/events.jsonl",
+            "format": "jsonl"
+          },
+          {
+            "ref": "W5/results.json",
+            "format": "json"
+          }
+        ],
+        "depends_on": [
+          "S0.5"
+        ]
+      }
+    ]
+  },
+  "supervisor_steps": [
+    {
+      "id": "M0",
+      "owner": "SUPERVISOR",
+      "inputs": [
+        {
+          "ref": "run-manifest.json",
+          "format": "json"
+        },
+        {
+          "ref": "S0/preflight.json",
+          "format": "json"
+        },
+        {
+          "ref": "inputs/W1.input.json",
+          "format": "json"
+        },
+        {
+          "ref": "inputs/W2.input.json",
+          "format": "json"
+        },
+        {
+          "ref": "inputs/W3.input.json",
+          "format": "json"
+        },
+        {
+          "ref": "inputs/W4.input.json",
+          "format": "json"
+        },
+        {
+          "ref": "inputs/W5.input.json",
+          "format": "json"
+        }
+      ],
+      "outputs": [
+        {
+          "ref": "supervisor/dispatch-ledger.json",
+          "format": "json"
+        }
+      ],
+      "depends_on": [
+        "S0.5"
+      ]
+    },
+    {
+      "id": "M1",
+      "owner": "SUPERVISOR",
+      "inputs": [
+        {
+          "ref": "W1/results.json",
+          "format": "json"
+        },
+        {
+          "ref": "W2/results.json",
+          "format": "json"
+        },
+        {
+          "ref": "W3/results.json",
+          "format": "json"
+        },
+        {
+          "ref": "W4/results.json",
+          "format": "json"
+        },
+        {
+          "ref": "W5/results.json",
+          "format": "json"
+        },
+        {
+          "ref": "W1/evidence-index.json",
+          "format": "json"
+        },
+        {
+          "ref": "W2/evidence-index.json",
+          "format": "json"
+        },
+        {
+          "ref": "W3/evidence-index.json",
+          "format": "json"
+        },
+        {
+          "ref": "W4/evidence-index.json",
+          "format": "json"
+        },
+        {
+          "ref": "W5/evidence-index.json",
+          "format": "json"
+        }
+      ],
+      "outputs": [
+        {
+          "ref": "supervisor/collection-report.json",
+          "format": "json"
+        }
+      ],
+      "depends_on": [
+        "M0"
+      ]
+    },
+    {
+      "id": "M2",
+      "owner": "SUPERVISOR",
+      "inputs": [
+        {
+          "ref": "supervisor/collection-report.json",
+          "format": "json"
+        },
+        {
+          "ref": "W1/events.jsonl",
+          "format": "jsonl"
+        },
+        {
+          "ref": "W2/events.jsonl",
+          "format": "jsonl"
+        },
+        {
+          "ref": "W3/events.jsonl",
+          "format": "jsonl"
+        },
+        {
+          "ref": "W4/events.jsonl",
+          "format": "jsonl"
+        },
+        {
+          "ref": "W5/events.jsonl",
+          "format": "jsonl"
+        }
+      ],
+      "outputs": [
+        {
+          "ref": "supervisor/reconciliation.md",
+          "format": "md"
+        }
+      ],
+      "depends_on": [
+        "M1"
+      ]
+    },
+    {
+      "id": "M3",
+      "owner": "SUPERVISOR",
+      "inputs": [
+        {
+          "ref": "supervisor/reconciliation.md",
+          "format": "md"
+        },
+        {
+          "ref": "supervisor/collection-report.json",
+          "format": "json"
+        }
+      ],
+      "outputs": [
+        {
+          "ref": "decision.json",
+          "format": "json"
+        }
+      ],
+      "depends_on": [
+        "M2"
+      ]
+    },
+    {
+      "id": "M4",
+      "owner": "SUPERVISOR",
+      "inputs": [
+        {
+          "ref": "decision.json",
+          "format": "json"
+        },
+        {
+          "ref": "supervisor/reconciliation.md",
+          "format": "md"
+        }
+      ],
+      "outputs": [
+        {
+          "ref": "MANAGER-SUMMARY.md",
+          "format": "md"
+        }
+      ],
+      "depends_on": [
+        "M3"
+      ]
+    }
+  ],
+  "notes": [
+    "All paths relative to RUN_ROOT unless repo:// or plan://.",
+    "Each worker also produces common results.json/findings.md/events.jsonl/evidence-index.json/model-selection.json.",
+    "The execution of any scenario is not proof of the claimed design; raw evidence layers must be checked."
+  ]
+}

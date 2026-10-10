@@ -28,7 +28,7 @@ Every worker writes under the run-scoped path:
 
 Required:
 
-- results.json (machine-readable, validates against the schema below);
+- model-selection.json (model and effort handoff receipt, schema-validated);\n- results.json (machine-readable, validates against schemas/worker-result.schema.json);
 - findings.md (short factual interpretation, limitations, no production recommendation);
 - evidence-index.json (paths, SHA-256, source class, redaction and permissions);
 - one or more redacted raw evidence logs, captured fixtures, wire envelopes or trace excerpts.
@@ -37,51 +37,25 @@ Do not include access tokens, client secrets, raw Authorization or session heade
 
 A recorded session key must be a carefully chosen non-reversible label with RUN_ID scope, not the original header value. A hash of a header is useful for equality evidence but does not convert it into an authenticated identity.
 
-## 3. Minimum results.json shape
+## 3. Exact required worker-result format
 
-Worker authors create the actual JSON. The following is a normative example of its structure, not a completed report:
+The authoritative output JSON Schema is [schemas/worker-result.schema.json](schemas/worker-result.schema.json). The full input/output field dictionary and lane-specific CSV headers are in [I-O-FORMATS.md](I-O-FORMATS.md), and the scenario-specific input/output locations in [STEP-IO-MATRIX.md](STEP-IO-MATRIX.md). Do not use an informal JSON example instead of the authoritative schema.
 
-~~~json
-{
-  "schema": "binnacle-job-awareness-feasibility-worker-v1",
-  "run_id": "RUN_ID",
-  "worker": "W1",
-  "assignment": "fastmcp-carrier",
-  "source_sha": "EXACT_40_HEX",
-  "fixture_sha256": "EXACT_64_HEX",
-  "executor": {
-    "surface": "codex-cli",
-    "version": "MEASURED_VERSION",
-    "model_requested": "EXPLICIT_MODEL",
-    "effort_requested": "EXPLICIT_EFFORT",
-    "model_effective": null,
-    "effort_effective": null,
-    "host": "raspberry-pi",
-    "session_ref": "OPAQUE_WORKER_SESSION"
-  },
-  "started_at": "ISO8601",
-  "finished_at": "ISO8601",
-  "state": "INCONCLUSIVE",
-  "scenarios": [
-    {
-      "id": "M-META",
-      "status": "INCONCLUSIVE",
-      "expected": "reminder travels on wire without schema drift",
-      "observed": "verbatim factual result with evidence reference",
-      "evidence_refs": ["wire-meta.json"],
-      "duration_ms": 0,
-      "blocking_reason": null
-    }
-  ],
-  "metrics": {},
-  "limitations": [],
-  "artifact_index": "evidence-index.json"
-}
-~~~
+The mandatory worker artifacts are:
+
+- model-selection.json (schemas/model-selection.schema.json), emitted **before** case execution and recording requested/actual operator and subject model/effort;
+- results.json (schemas/worker-result.schema.json), containing exactly one row for each assigned scenario, with explicit INPUT references, expected and observed behavior, evidence paths, event IDs and proof layers;
+- events.jsonl, with one object per line validated against schemas/event.schema.json and no invented client-receipt evidence;
+- evidence-index.json (schemas/evidence-index.schema.json), containing actual byte sizes and SHA-256 values of every raw evidence file;
+- findings.md, plus the lane-specific CSV/JSON/Markdown reports in [I-O-FORMATS.md](I-O-FORMATS.md).
+
+The runnable **synthetic, explicitly unexecuted** complete format example is generated solely in an isolated temporary test directory by tests/job_awareness_feasibility/sample_builder.py and exercised by tests/job_awareness_feasibility/contract_suite.py. It labels all worker scenarios NOT_RUN, does not call ChatGPT or any MCP endpoint and must never be presented as real experiment evidence.
+
+Each worker-model field must match its frozen worker input and model-selection.json. A worker-level PASS also requires actual model-selector proof. W5 has separate Desktop operator and real ChatGPT Chat subject model/effort fields, both explicitly pinned.
 
 Allowed worker and case states are **PASS**, **FAIL**, **INCONCLUSIVE**, **BLOCKED** and **NOT_RUN**. PASS requires scenario-local evidence; NOT_RUN is honest if a subset was not executed. The global worker state aggregates only its own assigned scenarios, not other workers or the programme decision.
 
-Each evidence-index.json item records relative path, SHA-256, file size, evidence type, original source/transport, visibility layer, and whether content was redacted. Include host-local timestamp with offset and monotonic elapsed times where meaningful.
+Each evidence-index.json artifacts[] item records a safe relative path, SHA-256, file size, MIME type, originating source, visibility layer, privacy_checked and redacted flags. Include host-local timestamp with offset and monotonic elapsed times where meaningful.
 
 ## 4. Immutable run preflight and code constraints (G0)
 

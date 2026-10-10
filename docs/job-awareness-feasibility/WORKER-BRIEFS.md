@@ -4,9 +4,9 @@ Status: **dispatch-ready instructions, no trials executed**. Each worker consume
 
 ## Common worker contract
 
-You are one read-only-evidence worker for Binnacle Job Awareness feasibility. You may build disposable test fixtures/prototypes only inside your own isolated workspace. Never edit, commit to, push, merge or deploy production Binnacle source. Do not use user secrets, live job content, credentials, browser data or another lane's workspace. Do not contact the ChatGPT user for incremental supervision. Run your prescribed cases, verify actual responses, and output results.json, findings.md and a file-hash evidence index under your owned results directory. Every case must have actual versus expected, PASS/FAIL/INCONCLUSIVE/BLOCKED, elapsed time, provenance and a reproducible command or supported GUI event trail. End when your bounded work is done. Do not interpret another lane's results or author the combined decision.
+You are one read-only-evidence worker for Binnacle Job Awareness feasibility. You may build disposable test fixtures/prototypes only inside your own isolated workspace. Never edit, commit to, push, merge or deploy production Binnacle source. Do not use user secrets, live job content, credentials, browser data or another lane's workspace. Do not contact the ChatGPT user for incremental supervision. Start by validating inputs/Wn.input.json and selecting the **exact** requested model and effort in the local CLI/approved UI. Emit model-selection.json with runtime evidence before any case. Run your prescribed cases, verify actual responses, and output results.json, findings.md, events.jsonl, the lane-specific CSV/JSON and a file-hash evidence index under your owned results directory. Every case must have actual versus expected, PASS/FAIL/INCONCLUSIVE/BLOCKED, elapsed time, provenance and a reproducible command or supported GUI event trail. End when your bounded work is done. Do not interpret another lane's results or author the combined decision.
 
-Read [EVIDENCE-AND-GATES.md](EVIDENCE-AND-GATES.md) and [PARALLEL-EXECUTION.md](PARALLEL-EXECUTION.md) before beginning. Do not reinterpret an unsupported server/client feature as functioning simply because FastMCP has a type for it.
+Read [EVIDENCE-AND-GATES.md](EVIDENCE-AND-GATES.md), [STEP-IO-MATRIX.md](STEP-IO-MATRIX.md), [I-O-FORMATS.md](I-O-FORMATS.md) and [HANDOFF-MODEL-AND-EFFORT.md](HANDOFF-MODEL-AND-EFFORT.md) before beginning. Do not reinterpret an unsupported server/client feature as functioning simply because FastMCP has a type for it.
 
 ## W1 — Codex CLI: FastMCP native carrier/wire compatibility
 
@@ -87,11 +87,11 @@ Independent test matrix:
 2. P-CARRIERS: benchmark _meta, short text content and structured extension if protocol-compliant; unsupported formats counted as FAIL, not silently removed.
 3. P-SIZE: cap hint list, truncate/job-count bound and no stdout/command leakage. Initial target 512 UTF-8 bytes total per added reminder, configured/frozen before test.
 4. P-TOKENS: report actual measured tokenizer counts where available, otherwise explicitly labeled conservative estimates, for each carrier and job-count cohort.
-5. P-LATENCY: P50/P95/P99 extra latency, CPU/memory and throughput for at least three randomized baseline/candidate rounds; record raw samples, not one unrepresentative aggregate. Provisional target P95 incremental ≤5 ms on a reasonably quiet host; if load is unstable, report INCONCLUSIVE rather than PASS.
+5. P-LATENCY: P50/P95/P99 extra latency, CPU/memory and throughput for at least three randomized baseline/candidate rounds with explicit pair_id; record raw samples, not one unrepresentative aggregate. Provisional target P95 incremental ≤5 ms on a reasonably quiet host; if load is unstable, report INCONCLUSIVE rather than PASS.
 6. P-SCHEMA: unmodified tool contracts, output-size bounds, errors, rejected tool calls and old-client behavior; no positive hint on an authorization failure.
 7. P-LOAD: 100 jobs and pathological output titles, oversized IDs/Unicode, bounded work and memory, no unbounded full-spool scans on ordinary calls.
 
-Outputs: fixture-by-carrier measurements, raw timestamped samples, cost table, non-regression findings and provisional limits. W4 does not decide whether ChatGPT will act on a reminder.
+Outputs: fixture-by-carrier measurements, raw timestamped samples with pair_id, signed candidate-minus-control nearest-rank P50/P95/P99, cost table, non-regression findings and provisional limits. W4 does not decide whether ChatGPT will act on a reminder.
 
 ## W5 — ChatGPT Desktop: live Chat mode observations
 

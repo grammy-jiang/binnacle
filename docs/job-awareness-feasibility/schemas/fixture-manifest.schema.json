@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "source_sha",
+    "seed",
+    "carriers",
+    "fixtures",
+    "trial_schedule",
+    "limits"
+  ],
+  "properties": {
+    "schema": {
+      "const": "job-awareness-fixtures-v1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^JA-[A-Za-z0-9_-]{8,60}$"
+    },
+    "source_sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "carriers": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "CONTROL",
+          "META",
+          "TEXT",
+          "STRUCT"
+        ]
+      },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "fixtures": {
+      "type": "array",
+      "minItems": 10,
+      "items": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "owner",
+          "nonce_hash",
+          "initial_state",
+          "stdout_sha256",
+          "stdout_bytes",
+          "page_boundaries",
+          "scenario_tags"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owner": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C",
+              "none"
+            ]
+          },
+          "nonce_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "initial_state": {
+            "type": "string",
+            "enum": [
+              "running",
+              "exited",
+              "unknown"
+            ]
+          },
+          "stdout_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "stdout_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page_boundaries": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "scenario_tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "trial_schedule": {
+      "type": "array",
+      "items": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pair_id",
+          "carrier",
+          "fixture_id",
+          "chat_label",
+          "arm_order"
+        ],
+        "properties": {
+          "pair_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "carrier": {
+            "type": "string",
+            "enum": [
+              "META",
+              "TEXT",
+              "STRUCT"
+            ]
+          },
+          "fixture_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "chat_label": {
+            "enum": [
+              "A",
+              "B",
+              "C"
+            ]
+          },
+          "arm_order": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "enum": [
+                  "CONTROL",
+                  "CANDIDATE"
+                ]
+              },
+              {
+                "enum": [
+                  "CONTROL",
+                  "CANDIDATE"
+                ]
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      }
+    },
+    "limits": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hint_max_bytes",
+        "latency_p95_ms",
+        "paired_trials_per_viable_carrier"
+      ],
+      "properties": {
+        "hint_max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
+        },
+        "latency_p95_ms": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "paired_trials_per_viable_carrier": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

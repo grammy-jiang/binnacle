@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "worker",
+    "cohorts",
+    "carriers",
+    "measurements",
+    "source_samples"
+  ],
+  "properties": {
+    "schema": {
+      "const": "job-awareness-performance-metrics-v1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^JA-[A-Za-z0-9_-]{8,60}$"
+    },
+    "worker": {
+      "const": "W4"
+    },
+    "cohorts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          0,
+          1,
+          10,
+          100
+        ]
+      },
+      "minItems": 4
+    },
+    "carriers": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "CONTROL",
+          "META",
+          "TEXT",
+          "STRUCT"
+        ]
+      }
+    },
+    "measurements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "cohort_jobs",
+          "carrier",
+          "sample_count",
+          "p50_ms",
+          "p95_ms",
+          "p99_ms",
+          "max_reminder_bytes",
+          "token_method",
+          "token_count",
+          "host_load_details",
+          "inconclusive_reason"
+        ],
+        "properties": {
+          "cohort_jobs": {
+            "enum": [
+              0,
+              1,
+              10,
+              100
+            ]
+          },
+          "carrier": {
+            "enum": [
+              "CONTROL",
+              "META",
+              "TEXT",
+              "STRUCT"
+            ]
+          },
+          "sample_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "p50_ms": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "p95_ms": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "p99_ms": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "max_reminder_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "token_method": {
+            "enum": [
+              "MEASURED",
+              "ESTIMATED",
+              "UNAVAILABLE"
+            ]
+          },
+          "token_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "host_load_details": {
+            "type": "string",
+            "minLength": 1
+          },
+          "inconclusive_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "source_samples": {
+      "const": "latency-samples.csv"
+    }
+  }
+}

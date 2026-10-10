@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "at",
+    "app_status",
+    "protocol_version",
+    "client_surface",
+    "owned_test_app_ref",
+    "approved_supported_interface",
+    "nonce_tool_call_verified",
+    "redacted_evidence_refs",
+    "blocking_reason"
+  ],
+  "properties": {
+    "schema": {
+      "const": "job-awareness-connection-v1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^JA-[A-Za-z0-9_-]{8,60}$"
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "app_status": {
+      "enum": [
+        "READY",
+        "UNVERIFIED",
+        "BLOCKED"
+      ]
+    },
+    "protocol_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "client_surface": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "owned_test_app_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "approved_supported_interface": {
+      "type": "boolean"
+    },
+    "nonce_tool_call_verified": {
+      "type": "boolean"
+    },
+    "redacted_evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "blocking_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

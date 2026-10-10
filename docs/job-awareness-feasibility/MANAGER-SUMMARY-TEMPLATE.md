@@ -29,7 +29,7 @@ The supervisor should state any observed difference between the frozen source an
 | W4 cost and compatibility | Claude Code CLI | sonnet/medium → unverified | NOT_RUN | — | — |
 | W5 actual ChatGPT interaction | ChatGPT Desktop | operator gpt-6-astra/high; subject GPT-6/Medium → both unverified | NOT_RUN | — | — |
 
-List active, blocked and unstarted lanes honestly. The manager may not label an alive process as PASS or repeat a worker's confident prose without corresponding scenario evidence.
+Each row must be backed by the source SHA, fixture SHA, worker-input SHA and Wn/model-selection.json. A requested model flag is not proof the actual model ran; show effective/verified model and effort or INCONCLUSIVE/BLOCKED. List active, blocked and unstarted lanes honestly. The manager may not label an alive process as PASS or repeat a worker's confident prose without corresponding scenario evidence.
 
 ## 3. Gates
 

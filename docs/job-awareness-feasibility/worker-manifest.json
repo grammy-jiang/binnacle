@@ -27,14 +27,48 @@
     "prompts/W2.md",
     "prompts/W3.md",
     "prompts/W4.md",
-    "prompts/W5.md"
+    "prompts/W5.md",
+    "STEP-IO-MATRIX.md",
+    "I-O-FORMATS.md",
+    "HANDOFF-MODEL-AND-EFFORT.md",
+    "step-io.json",
+    "tests/job_awareness_feasibility/validate_contracts.py",
+    "tests/job_awareness_feasibility/validation_lib.py",
+    "tests/job_awareness_feasibility/plan_validation.py",
+    "schemas/model-selection.schema.json",
+    "PRELAUNCH-REVIEW.md",
+    "tests/job_awareness_feasibility/semantic_evidence.py",
+    "tests/job_awareness_feasibility/contract_suite.py",
+    "schemas/step-io.schema.json",
+    "validator-requirements.txt"
   ],
   "supervisor": {
     "executor": "ChatGPT conversation",
     "responsibility": "read-only dispatch, reconcile SHA evidence, summarize; no worker coding/tests/UI",
     "may_edit_worker_files": false,
     "may_operate_desktop": false,
-    "may_deploy": false
+    "may_deploy": false,
+    "required_input_files": [
+      "run-manifest.json",
+      "S0/preflight.json",
+      "W1/results.json",
+      "W2/results.json",
+      "W3/results.json",
+      "W4/results.json",
+      "W5/results.json",
+      "W1/evidence-index.json",
+      "W2/evidence-index.json",
+      "W3/evidence-index.json",
+      "W4/evidence-index.json",
+      "W5/evidence-index.json"
+    ],
+    "required_output_files": [
+      "supervisor/dispatch-ledger.json",
+      "supervisor/collection-report.json",
+      "supervisor/reconciliation.md",
+      "decision.json",
+      "MANAGER-SUMMARY.md"
+    ]
   },
   "s0": {
     "executor": "codex-cli",
@@ -54,7 +88,22 @@
       "W4",
       "W5"
     ],
-    "go_no_go_if_desktop_blocked": "W1-W4 still proceed"
+    "go_no_go_if_desktop_blocked": "W1-W4 still proceed",
+    "required_output_files": [
+      "run-manifest.json",
+      "fixtures/fixture-manifest.json",
+      "S0/preflight.json",
+      "S0/provenance.json",
+      "S0/resource-ledger.json",
+      "S0/connection-evidence.json",
+      "S0/fixture-index.json",
+      "S0/readiness.md",
+      "inputs/W1.input.json",
+      "inputs/W2.input.json",
+      "inputs/W3.input.json",
+      "inputs/W4.input.json",
+      "inputs/W5.input.json"
+    ]
   },
   "parallelism": {
     "target_worker_count": 5,
@@ -104,7 +153,19 @@
       ],
       "depends_on_worker_results": [],
       "desktop_ui_permission": false,
-      "output_dir": "W1"
+      "output_dir": "W1",
+      "required_input_packet": "inputs/W1.input.json",
+      "model_selection_receipt": "model-selection.json",
+      "required_output_files": [
+        "model-selection.json",
+        "results.json",
+        "findings.md",
+        "evidence-index.json",
+        "events.jsonl",
+        "carrier-matrix.csv"
+      ],
+      "step_io_manifest": "step-io.json",
+      "step_io_prose": "STEP-IO-MATRIX.md"
     },
     {
       "id": "W2",
@@ -130,7 +191,20 @@
       ],
       "depends_on_worker_results": [],
       "desktop_ui_permission": false,
-      "output_dir": "W2"
+      "output_dir": "W2",
+      "required_input_packet": "inputs/W2.input.json",
+      "model_selection_receipt": "model-selection.json",
+      "required_output_files": [
+        "model-selection.json",
+        "results.json",
+        "findings.md",
+        "evidence-index.json",
+        "events.jsonl",
+        "identity-matrix.csv",
+        "identity-provenance.md"
+      ],
+      "step_io_manifest": "step-io.json",
+      "step_io_prose": "STEP-IO-MATRIX.md"
     },
     {
       "id": "W3",
@@ -156,7 +230,20 @@
       ],
       "depends_on_worker_results": [],
       "desktop_ui_permission": false,
-      "output_dir": "W3"
+      "output_dir": "W3",
+      "required_input_packet": "inputs/W3.input.json",
+      "model_selection_receipt": "model-selection.json",
+      "required_output_files": [
+        "model-selection.json",
+        "results.json",
+        "findings.md",
+        "evidence-index.json",
+        "events.jsonl",
+        "receipt-transitions.csv",
+        "receipt-verdict.json"
+      ],
+      "step_io_manifest": "step-io.json",
+      "step_io_prose": "STEP-IO-MATRIX.md"
     },
     {
       "id": "W4",
@@ -181,7 +268,20 @@
       ],
       "depends_on_worker_results": [],
       "desktop_ui_permission": false,
-      "output_dir": "W4"
+      "output_dir": "W4",
+      "required_input_packet": "inputs/W4.input.json",
+      "model_selection_receipt": "model-selection.json",
+      "required_output_files": [
+        "model-selection.json",
+        "results.json",
+        "findings.md",
+        "evidence-index.json",
+        "events.jsonl",
+        "latency-samples.csv",
+        "metrics.json"
+      ],
+      "step_io_manifest": "step-io.json",
+      "step_io_prose": "STEP-IO-MATRIX.md"
     },
     {
       "id": "W5",
@@ -220,7 +320,34 @@
         "no supported ChatGPT Chat surface",
         "no approved Desktop interaction or test app connection",
         "model/effort cannot be pinned"
-      ]
+      ],
+      "required_input_packet": "inputs/W5.input.json",
+      "model_selection_receipt": "model-selection.json",
+      "required_output_files": [
+        "model-selection.json",
+        "results.json",
+        "findings.md",
+        "evidence-index.json",
+        "events.jsonl",
+        "trials.csv",
+        "surface-capability.json"
+      ],
+      "step_io_manifest": "step-io.json",
+      "step_io_prose": "STEP-IO-MATRIX.md"
     }
-  ]
+  ],
+  "contracts": {
+    "version": "job-awareness-io-v1",
+    "authoritative_step_io": "step-io.json",
+    "authoritative_io_format": "I-O-FORMATS.md",
+    "model_handoff": "HANDOFF-MODEL-AND-EFFORT.md",
+    "schema_directory": "schemas/",
+    "input_packet_schema": "schemas/worker-input.schema.json",
+    "worker_result_schema": "schemas/worker-result.schema.json",
+    "model_selection_schema": "schemas/model-selection.schema.json",
+    "evidence_index_schema": "schemas/evidence-index.schema.json",
+    "event_schema": "schemas/event.schema.json",
+    "manager_decision_schema": "schemas/manager-decision.schema.json",
+    "validator": "tests/job_awareness_feasibility/validate_contracts.py"
+  }
 }

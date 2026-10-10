@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "worker",
+    "observed_at",
+    "launcher",
+    "surface",
+    "operator",
+    "subject",
+    "chat_model_locked",
+    "chat_mcp_tool_invoked",
+    "nonce_verified",
+    "evidence_refs",
+    "limitation"
+  ],
+  "properties": {
+    "schema": {
+      "const": "job-awareness-desktop-surface-v1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^JA-[A-Za-z0-9_-]{8,60}$"
+    },
+    "worker": {
+      "const": "W5"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "launcher": {
+      "type": "string",
+      "minLength": 1
+    },
+    "surface": {
+      "type": "string",
+      "enum": [
+        "VERIFIED_CHAT_MODE",
+        "VERIFIED_CODEX_DESKTOP_ONLY",
+        "VERIFIED_WORK_ONLY",
+        "CHAT_MODE_NOT_VERIFIED",
+        "SURFACE_UNAVAILABLE"
+      ]
+    },
+    "operator": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requested_model",
+        "requested_effort",
+        "effective_model",
+        "effective_effort",
+        "verification",
+        "verification_evidence_ref",
+        "fallback_used",
+        "model_match_verified",
+        "effort_match_verified"
+      ],
+      "properties": {
+        "requested_model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requested_effort": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effective_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "effective_effort": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verification": {
+          "type": "string",
+          "enum": [
+            "VERIFIED",
+            "UNVERIFIED",
+            "UNAVAILABLE"
+          ]
+        },
+        "verification_evidence_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fallback_used": {
+          "type": "boolean"
+        },
+        "model_match_verified": {
+          "type": "boolean"
+        },
+        "effort_match_verified": {
+          "type": "boolean"
+        }
+      }
+    },
+    "subject": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requested_model",
+        "requested_effort",
+        "effective_model",
+        "effective_effort",
+        "verification",
+        "verification_evidence_ref",
+        "fallback_used",
+        "model_match_verified",
+        "effort_match_verified"
+      ],
+      "properties": {
+        "requested_model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requested_effort": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effective_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "effective_effort": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verification": {
+          "type": "string",
+          "enum": [
+            "VERIFIED",
+            "UNVERIFIED",
+            "UNAVAILABLE"
+          ]
+        },
+        "verification_evidence_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fallback_used": {
+          "type": "boolean"
+        },
+        "model_match_verified": {
+          "type": "boolean"
+        },
+        "effort_match_verified": {
+          "type": "boolean"
+        }
+      }
+    },
+    "chat_model_locked": {
+      "type": "boolean"
+    },
+    "chat_mcp_tool_invoked": {
+      "type": "boolean"
+    },
+    "nonce_verified": {
+      "type": "boolean"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "limitation": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}
