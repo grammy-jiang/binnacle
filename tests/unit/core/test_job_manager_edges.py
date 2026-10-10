@@ -133,3 +133,28 @@ def test_shutdown_without_server_is_noop_and_main_uses_configured_socket(
     monkeypatch.setattr(job_manager, "JobManager", FakeManager)
     job_manager.main()
     assert called == [socket_path, "served"]
+
+
+def test_partial_native_signal_failure_returns_controlled_rpc_error(
+    tmp_path, monkeypatch
+):
+    from binnacle.features.commands import job_owner, jobs
+    from binnacle.platform.contracts.process_contracts import JobSignalDeliveryError
+
+    manager = _runtime(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        job_owner, "mark_stop_requested", lambda job_id: calls.append(job_id)
+    )
+
+    def rejected(job_id):
+        raise JobSignalDeliveryError(
+            "1 verified process target(s) could not receive terminate"
+        )
+
+    monkeypatch.setattr(jobs, "stop_job_embedded", rejected)
+    result = manager._stop({"job_id": "123456789abc", "call_id": "partial-case"})
+    assert result["ok"] is False
+    assert result["error"].startswith("job stop partially failed:")
+    assert "internal job-manager error" not in result["error"]
+    assert calls == ["123456789abc"]

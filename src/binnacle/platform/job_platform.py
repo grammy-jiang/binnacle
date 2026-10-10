@@ -1,16 +1,8 @@
-"""Explicit Linux defaults selected only by job-engine/manager composition."""
+"""Compatibility entrypoints delegating OS selection to one composition boundary."""
 
-from binnacle.platform.contracts.process_contracts import ProcessBackend
-from binnacle.platform.contracts.resource_contracts import ResourceAccounting
+from binnacle.platform.composition import (
+    create_process_backend,
+    create_resource_accounting,
+)
 
-
-def create_process_backend() -> ProcessBackend:
-    from binnacle.platform.linux.job_process import LinuxProcessBackend
-
-    return LinuxProcessBackend()
-
-
-def create_resource_accounting() -> ResourceAccounting:
-    from binnacle.platform.linux.job_cgroup import CgroupResourceAccounting
-
-    return CgroupResourceAccounting()
+__all__ = ("create_process_backend", "create_resource_accounting")

@@ -1,0 +1,14 @@
+{
+  "alias": {
+    "error_type": "CodedToolError",
+    "message": "Path outside allowed roots (/tmp/binnacle-os0-roots-4pd26lup/allowed-alias): /tmp/binnacle-os0-roots-4pd26lup/real/file.txt"
+  },
+  "relative": {
+    "error_type": "CodedToolError",
+    "message": "Path outside allowed roots (/tmp/binnacle-os0-roots-4pd26lup/allowed-alias): /tmp/binnacle-os0-roots-4pd26lup/real/file.txt"
+  },
+  "outside": {
+    "error_type": "CodedToolError",
+    "message": "Path outside allowed roots (/tmp/binnacle-os0-roots-4pd26lup/allowed-alias): /tmp/binnacle-os0-roots-4pd26lup/nonroot"
+  }
+}

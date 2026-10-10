@@ -20,7 +20,6 @@ import re
 from collections import defaultdict, deque
 
 from binnacle.observability.logstats_adaptive import analyze_adaptive_discovery
-from binnacle.observability.logstats_io import fetch_journal
 from binnacle.observability.logstats_jobs import analyze_job_telemetry
 from binnacle.observability.logstats_models import Record, Stats
 from binnacle.observability.logstats_parse import (
@@ -44,6 +43,20 @@ from binnacle.observability.logstats_tools import (
     analyze_tool_config,
     analyze_tool_result,
 )
+
+
+def fetch_journal(
+    unit: str | list[str] | tuple[str, ...], since: str, until: str | None = None
+) -> str:
+    """Deprecated Linux CLI compatibility accessor, never used by pure parsing.
+
+    Import only when a caller explicitly requests a Linux journal read.
+    Parsing, analysis and rendering never load a platform adapter.
+    """
+    from binnacle.observability.logstats_io import fetch_journal as linux_fetch
+
+    return linux_fetch(unit, since, until)
+
 
 # Helper-level aliases remain for this canonical parser's tests and consumers.
 # The retired binnacle.logstats module path is intentionally not restored.

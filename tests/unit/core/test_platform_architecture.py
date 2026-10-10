@@ -10,6 +10,8 @@ MODULE_PATHS = {
     "process_contracts": "platform/contracts/process_contracts.py",
     "resource_contracts": "platform/contracts/resource_contracts.py",
     "job_process": "platform/linux/job_process.py",
+    "job_identity": "platform/linux/job_identity.py",
+    "job_stop": "features/commands/job_stop.py",
     "job_cgroup": "platform/linux/job_cgroup.py",
     "job_platform": "platform/job_platform.py",
     "job_resource_history": "features/commands/job_resource_history.py",
@@ -20,18 +22,16 @@ MODULE_PATHS = {
 }
 EDGES = {
     "process_contracts": set(),
+    "job_identity": {"process_contracts"},
+    "job_stop": {"process_contracts"},
     "resource_contracts": set(),
-    "job_process": {"process_contracts"},
+    "job_process": {"process_contracts", "job_identity"},
     "job_cgroup": set(),
-    "job_platform": {
-        "process_contracts",
-        "resource_contracts",
-        "job_process",
-        "job_cgroup",
-    },
+    "job_platform": {"composition"},
     "job_resource_history": {"resource_contracts"},
     "job_store": set(),
     "jobs": {
+        "job_stop",
         "job_resource_history",
         "job_store",
         "callctx",
@@ -40,14 +40,17 @@ EDGES = {
         "job_platform",
         "process_contracts",
     },
-    "job_owner": {"callctx", "job_client", "jobs", "job_store"},
+    "job_owner": {"callctx", "job_client", "jobs", "job_store", "job_stop"},
     "job_manager": {
         "job_owner",
+        "job_stop",
         "jobs",
         "callctx",
         "config",
         "job_client",
         "job_platform",
+        "process_contracts",
+        "composition",
         "provenance",
     },
 }
@@ -58,6 +61,9 @@ MODULE_OWNERS = {
     "binnacle.platform.contracts.resource_contracts": "resource_contracts",
     "binnacle.platform.linux.job_process": "job_process",
     "binnacle.platform.linux.job_cgroup": "job_cgroup",
+    "binnacle.platform.linux.job_identity": "job_identity",
+    "binnacle.platform.composition": "composition",
+    "binnacle.features.commands.job_stop": "job_stop",
     "binnacle.platform.job_platform": "job_platform",
     "binnacle.features.commands.job_resource_history": "job_resource_history",
     "binnacle.features.commands.job_store": "job_store",
@@ -84,6 +90,7 @@ ORCHESTRATION = {
     "job_manager",
     "job_resource_history",
     "job_store",
+    "job_stop",
 }
 FORBIDDEN_CALLS = {
     "os.kill",
@@ -131,6 +138,7 @@ def violations(source, owner):
                 "typing",
                 "pathlib",
                 "collections",
+                "dataclasses",
             }:
                 found.append(name)
 
@@ -248,28 +256,30 @@ def test_owner_rejects_private_storage(member, import_statement):
     assert violations(f"{import_statement}; j.{member}", "job_owner")
 
 
-def test_platform_contains_only_two_explicit_lazy_constructors():
-    tree = ast.parse((SOURCE / MODULE_PATHS["job_platform"]).read_text())
-    functions = [node for node in tree.body if isinstance(node, ast.FunctionDef)]
-    assert [node.name for node in functions] == [
-        "create_process_backend",
-        "create_resource_accounting",
+def test_platform_selection_is_exactly_one_composition_boundary():
+    """Selection moved from legacy file placement to one explicit OS resolver."""
+    source = (SOURCE / MODULE_PATHS["job_platform"]).read_text()
+    tree = ast.parse(source)
+    assert not any(isinstance(node, ast.FunctionDef) for node in tree.body)
+    selected = [
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.module == "binnacle.platform.composition"
+        for alias in node.names
     ]
-    assert all(
-        isinstance(node, (ast.Expr, ast.ImportFrom, ast.FunctionDef))
-        for node in tree.body
-    )
-    for function, concrete in zip(
-        functions, ["LinuxProcessBackend", "CgroupResourceAccounting"], strict=True
-    ):
-        assert len(function.body) == 2
-        assert isinstance(function.body[0], ast.ImportFrom)
-        result = function.body[1]
-        assert isinstance(result, ast.Return) and isinstance(result.value, ast.Call)
-        assert (
-            isinstance(result.value.func, ast.Name) and result.value.func.id == concrete
-        )
-        assert not result.value.args and not result.value.keywords
+    assert selected == ["create_process_backend", "create_resource_accounting"]
+    composition = (SOURCE / "platform/composition.py").read_text()
+    parsed = ast.parse(composition)
+    resolvers = [
+        n
+        for n in ast.walk(parsed)
+        if isinstance(n, ast.FunctionDef) and n.name == "host_os_family"
+    ]
+    assert len(resolvers) == 1
+    for module in ("job_platform", "job_stop", "jobs", "job_owner"):
+        path = SOURCE / MODULE_PATHS.get(module, f"{module}.py")
+        assert "import binnacle.platform.linux" not in path.read_text()
 
 
 def test_only_job_engine_and_manager_select_platform():

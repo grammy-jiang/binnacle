@@ -6,7 +6,6 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
-from binnacle.features.commands import jobs
 from binnacle.observability import logstats
 from binnacle.platform.contracts.service_lifecycle_contracts import (
     ManagedServiceInspector,
@@ -16,6 +15,8 @@ from binnacle.platform.deployment_platform import create_service_inspector
 
 
 def _job_state_safe(job_id: str) -> dict | None:
+    from binnacle.features.commands import jobs
+
     try:
         return jobs.job_state(job_id)
     except (KeyError, OSError):

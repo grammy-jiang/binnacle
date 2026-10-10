@@ -1,0 +1,19 @@
+Usage: binnacle mode [ARGS]
+
+Switch the unit between development (checkout + reload) and production
+(installed, no reload), then restart it at a quiet moment.
+
+The unit keeps its name, so the tunnel, the journal readers and the watchdog
+need no change and the mode survives a reboot. status reports the mode the
+unit's marker line records and the unit's state. repo is needed for dev only
+when the unit has never been in development mode. With durable manager
+ownership, background commands do not block an MCP restart; recent tool calls
+still do. If the local rollback setting explicitly selects the embedded owner,
+running jobs remain blockers because they share the MCP cgroup. --force
+overrides.
+
+╭─ Parameters ─────────────────────────────────────────────────────────────────╮
+│ TARGET --target           [choices: dev, prod, status] [default: status]     │
+│ REPO --repo                                                                  │
+│ FORCE --force --no-force  [default: False]                                   │
+╰──────────────────────────────────────────────────────────────────────────────╯

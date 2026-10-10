@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import signal
+from types import SimpleNamespace
 
 import pytest
 
@@ -117,17 +118,30 @@ def test_stop_whose_group_vanished_before_sigterm_falls_through_to_the_record(
         jobstore._PROCESS_BACKEND, "alive", lambda pid, starttime=None: True
     )
     signals: list[str] = []
+    closes: list[bool] = []
 
-    def gone(pgid: int, strays: set[int], sig: str) -> None:
-        signals.append(sig)
+    def gone(intent: str) -> None:
+        signals.append(intent)
         raise ProcessLookupError
 
-    monkeypatch.setattr(jobstore._PROCESS_BACKEND, "signal_job", gone)
+    monkeypatch.setattr(
+        jobstore._PROCESS_BACKEND,
+        "identity_from_record",
+        lambda meta: object(),
+    )
+    monkeypatch.setattr(
+        jobstore._PROCESS_BACKEND,
+        "open_job_signals",
+        lambda identity: SimpleNamespace(
+            signal=gone, close=lambda: closes.append(True)
+        ),
+    )
     waits: list[float] = []
     settled = {"state": "exited", "signal": 15}
     monkeypatch.setattr(jobstore, "await_exit", _fake_await(waits, settled))
     assert jobstore.stop_job_embedded("racing000001") is settled
     assert signals == ["terminate"]
+    assert closes == [True]
     assert waits == [jobstore.STOP_SIGKILL_GRACE_S]
 
 
@@ -139,13 +153,25 @@ def test_stop_escalates_to_sigkill_and_tolerates_a_group_that_died_meanwhile(
         jobstore._PROCESS_BACKEND, "alive", lambda pid, starttime=None: True
     )
     signals: list[str] = []
+    closes: list[bool] = []
 
-    def signal_job(pgid: int, strays: set[int], sig: str) -> None:
-        signals.append(sig)
-        if sig == "kill":
-            raise ProcessLookupError  # died between the SIGTERM grace and now
+    def signal_owned(intent: str) -> None:
+        signals.append(intent)
+        if intent == "kill":
+            raise ProcessLookupError
 
-    monkeypatch.setattr(jobstore._PROCESS_BACKEND, "signal_job", signal_job)
+    monkeypatch.setattr(
+        jobstore._PROCESS_BACKEND,
+        "identity_from_record",
+        lambda meta: object(),
+    )
+    monkeypatch.setattr(
+        jobstore._PROCESS_BACKEND,
+        "open_job_signals",
+        lambda identity: SimpleNamespace(
+            signal=signal_owned, close=lambda: closes.append(True)
+        ),
+    )
     waits: list[float] = []
     settled = {"state": "exited", "signal": 9}
     answers = iter(({"state": "running"}, settled))
@@ -158,6 +184,7 @@ def test_stop_escalates_to_sigkill_and_tolerates_a_group_that_died_meanwhile(
     with caplog.at_level(logging.WARNING, logger="binnacle.jobs"):
         assert jobstore.stop_job_embedded("stubborn0001") is settled
     assert signals == ["terminate", "kill"]
+    assert closes == [True]
     assert waits == [jobstore.STOP_SIGTERM_GRACE_S, jobstore.STOP_SIGKILL_GRACE_S]
     assert any("event=job_stop_escalate" in r.getMessage() for r in caplog.records)
 

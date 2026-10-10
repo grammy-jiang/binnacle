@@ -9,9 +9,6 @@ import logging
 import os
 
 from fastmcp import FastMCP
-from fastmcp.server.auth import StaticTokenVerifier
-from starlette.requests import Request
-from starlette.responses import JSONResponse
 
 from binnacle.config import get_settings
 from binnacle.features.commands import jobs
@@ -23,14 +20,6 @@ from binnacle.features.commands.run_command_telemetry import (
 )
 from binnacle.features.files.files_server import create_files_server
 from binnacle.features.search.search_server import create_search_server
-from binnacle.mcp.identity import ClientIdentity
-from binnacle.mcp.logging_middleware import (
-    RequestLoggingMiddleware,
-    ToolLoggingMiddleware,
-)
-from binnacle.mcp.tool_order import PublicToolOrder
-from binnacle.mcp.visibility import ClientToolVisibility, ClientToolVisibilityTransform
-from binnacle.observability.log_safety import safe_request_payload
 from binnacle.provenance import runtime_provenance
 
 # binnacle's own lines (event=tool_call/tool_result/job_*/config) go through
@@ -174,73 +163,18 @@ def _load_token() -> str:
 
 
 def create_server() -> FastMCP:
-    """Build a fresh root with the existing auth, middleware, and tool surface."""
-    settings = get_settings().model_copy(deep=True)
-    root = FastMCP(
-        "binnacle",
-        on_duplicate="error",
-        # A tool map only. Workflow rules live in the ChatGPT Project's
-        # instructions (the single client in use); tool contracts live in the
-        # tool descriptions. First 512 chars self-contained (OpenAI guidance).
-        instructions=(
-            "binnacle: a Raspberry Pi 5 development workstation. Paths live under "
-            "~/Projects and /tmp. list_files (browse or glob), search_text (regex "
-            "over contents), read_file, edit_file (exact-string replace), "
-            "write_file (whole file), run_command (shell; long commands become "
-            "jobs for job_status/stop_job). Pi hardware and health: run_command "
-            "(vcgencmd, pinctrl, i2cdetect, libcamera-still)."
-        ),
-        auth=StaticTokenVerifier(
-            tokens={_load_token(): {"client_id": "binnacle-tunnel"}},
-        ),
-    )
-    identity = ClientIdentity()
-    root.add_middleware(
-        RequestLoggingMiddleware(
-            identity,
-            include_payloads=True,
-            max_payload_length=500,
-            payload_serializer=safe_request_payload,
-        )
-    )
-    root.add_middleware(
-        ToolLoggingMiddleware(identity, tokenizer=settings.telemetry.tokenizer)
-    )
-    root.add_middleware(ClientToolVisibility(settings.client_tools, identity))
-    root.add_transform(PublicToolOrder())
-    root.add_transform(ClientToolVisibilityTransform())
-    root.mount(
-        create_files_server(
-            roots=settings.roots,
-            read_settings=settings.read_file,
-            list_settings=settings.list_files,
-            edit_settings=settings.edit_file,
-            rg_bin=settings.rg_bin,
-        )
-    )
-    root.mount(
-        create_search_server(
-            roots=settings.roots,
-            search_settings=settings.search_text,
-            rg_bin=settings.rg_bin,
-        )
-    )
-    root.mount(
-        create_commands_server(
-            roots=settings.roots,
-            run_settings=settings.run_command,
-            quiet_after_s=settings.jobs.quiet_after_s,
-            listing_history_limit=settings.jobs.listing_history_limit,
-            listing_command_preview_chars=settings.jobs.listing_command_preview_chars,
-        )
-    )
+    """Maintain the Linux production factory contract and its token bootstrap."""
+    from binnacle.application import create_application
+    from binnacle.features.commands.command_backend import create_command_backend
 
-    @root.custom_route("/healthz", methods=["GET"], include_in_schema=False)
-    async def healthz(request: Request) -> JSONResponse:
-        """Process liveness only; no auth, readiness, or host-state disclosure."""
-        return JSONResponse({"status": "ok"})
-
-    return root
+    return create_application(
+        settings=get_settings(),
+        token=_load_token(),
+        backend=create_command_backend(),
+        files_factory=create_files_server,
+        search_factory=create_search_server,
+        commands_factory=create_commands_server,
+    )
 
 
 mcp = create_server()

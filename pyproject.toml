@@ -433,3 +433,19 @@ name = "Only the resource history composition selects Webmin"
 type = "protected"
 protected_modules = ["binnacle.observability.linux.webminstats"]
 allowed_importers = ["binnacle.observability.system_resource_history"]
+
+[[tool.importlinter.contracts]]
+id = "native-platform-adapters-protected"
+name = "Only explicit platform composition and Linux compatibility IO may import native adapter packages"
+type = "protected"
+protected_modules = [
+    "binnacle.platform.linux",
+    "binnacle.observability.linux",
+    "binnacle.deployment.linux",
+]
+allowed_importers = [
+    "binnacle.platform.composition",
+    "binnacle.observability.logstats_io",
+    "binnacle.observability.system_resource_history",
+    "binnacle.deployment.units",
+]

@@ -23,7 +23,7 @@ jobs.JOBS_DIR = spool
 job_cgroup.prepare = lambda **kwargs: None
 job_cgroup.create = lambda job: None
 job_manager._notify_systemd_ready = lambda: print(json.dumps({"source": jobs.__file__}), flush=True)
-job_manager.JobManager(socket, owner_instance_id="reload-owner", boot_id="reload-boot").serve_forever()
+job_manager.JobManager(socket, owner_instance_id="reload-owner", boot_id=getattr(job_manager, "_boot_id", lambda: "reload-boot")()).serve_forever()
 """
 
 WORKER = """

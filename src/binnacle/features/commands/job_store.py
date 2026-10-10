@@ -50,6 +50,21 @@ def write_meta(root: Path, job_id: str, meta: dict) -> None:
         temp.unlink(missing_ok=True)
 
 
+def mark_signal_delivery_partial(root: Path, job_id: str) -> bool:
+    """Persist native stop failure without altering schema version or exit status.
+
+    The same storage lock protects the reaper's final status update, so a
+    subsequent record_exit cannot silently overwrite this failure marker.
+    """
+    with STORE_LOCK:
+        meta = read_meta(root, job_id)
+        if meta is None:
+            return False
+        meta["stop_signal_partial"] = True
+        write_meta(root, job_id, meta)
+        return True
+
+
 def remove_job_dir(path: Path) -> bool:
     """Best-effort removal; concurrent disappearance is not an error."""
     try:

@@ -40,7 +40,7 @@ def test_fake_status_does_not_read_store_or_scan_processes(monkeypatch):
         ("state", "fixed"),
         ("wait", "fixed", 2),
         ("log", "fixed"),
-        ("processes", 42, 200),
+        ("processes", "fixed", 200),
     ]
     assert reply.payload["quiet"] is True
     assert reply.payload["wait_requested_s"] == 9

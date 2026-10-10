@@ -17,7 +17,9 @@ def manager(tmp_path, monkeypatch):
     socket_path = tmp_path / "run" / "jobs.sock"
     monkeypatch.setattr(jobs, "JOBS_DIR", store)
     runtime = JobManager(
-        socket_path, owner_instance_id="owner-new", boot_id="boot-current"
+        socket_path,
+        owner_instance_id="owner-new",
+        boot_id=jobs._PROCESS_BACKEND.boot_id(),
     )
     thread = threading.Thread(target=runtime.serve_forever, daemon=True)
     thread.start()

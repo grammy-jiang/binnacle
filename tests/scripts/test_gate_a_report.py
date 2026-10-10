@@ -66,7 +66,18 @@ def test_platform_default_composition_is_not_a_command_feature():
     assert groups["platform_composition"] == {
         "platform/deployment_platform.py",
         "platform/job_platform.py",
+        "platform/composition.py",
     }
+    assert groups["deployment_linux"] == {
+        "deployment/linux/__init__.py",
+        "deployment/linux/unit_inspection.py",
+    }
+    assert groups["diagnostics_linux"] == {"diagnostics/linux_checks.py"}
+    assert "features/commands/job_stop.py" in groups["commands"]
+    assert {
+        "platform/linux/job_identity.py",
+        "platform/linux/notify_systemd.py",
+    } <= groups["platform_linux"]
     assert "platform/job_platform.py" not in groups["commands"]
     assert "platform/deployment_platform.py" not in groups["deployment"]
 

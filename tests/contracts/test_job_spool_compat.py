@@ -21,6 +21,7 @@ import asyncio
 import json
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -94,7 +95,16 @@ def test_running_record_of_a_live_process_reads_as_running(spool):
     try:
         path = spool / RUNNING / "meta.json"
         meta = json.loads(path.read_text())
-        meta.update(pid=proc.pid, pgid=proc.pid, starttime=_proc_starttime(proc.pid))
+        # The captured record's original boot token and timestamp are from
+        # another synthetic host. Only this disposable copy represents a
+        # *live* locally owned process; never edit the dated fixture.
+        meta.update(
+            pid=proc.pid,
+            pgid=proc.pid,
+            starttime=_proc_starttime(proc.pid),
+            started_at=time.time(),
+            boot_id=jobs._PROCESS_BACKEND.boot_id(),
+        )
         path.write_text(json.dumps(meta))
         status, _ = call("job_status", job_id=RUNNING)
         assert status["state"] == "running"

@@ -1,0 +1,18 @@
+Usage: binnacle COMMAND
+
+MCP server that lets AI agents work on a Raspberry Pi.
+
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ doctor       Check the deployment end to end and exit 1 on any FAIL.         │
+│ mode         Switch the unit between development (checkout + reload) and     │
+│              production (installed, no reload), then restart it at a quiet   │
+│              moment.                                                         │
+│ serve        Run the MCP server in the foreground (what the systemd unit     │
+│              runs).                                                          │
+│ setup        Provision the server side: token, MCP unit, and stable jobs     │
+│              unit.                                                           │
+│ stats        Usage statistics from the server journal.                       │
+│ token        Bearer token operations.                                        │
+│ --help (-h)  Display this message and exit.                                  │
+│ --version    Display application version.                                    │
+╰──────────────────────────────────────────────────────────────────────────────╯

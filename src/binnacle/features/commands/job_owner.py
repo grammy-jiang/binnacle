@@ -117,6 +117,9 @@ def stop_job(job_id: str) -> dict | None:
     if state is None:
         return None
     meta = job_store.read_meta(jobs.JOBS_DIR, job_id)
+    from binnacle.features.commands.job_stop import raise_if_partial_signal
+
+    raise_if_partial_signal(meta)
     if state["state"] == "unknown" and meta is not None and meta.get("stop_requested"):
         # Another concurrent stop may have killed the process just before its
         # reaper persisted the terminal state. Wait for that durable record

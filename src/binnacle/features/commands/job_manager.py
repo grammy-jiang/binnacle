@@ -21,6 +21,7 @@ from binnacle.config import get_settings
 from binnacle.features.commands import job_owner, jobs
 from binnacle.features.commands.job_client import PROTOCOL_VERSION
 from binnacle.mcp.callctx import current_call
+from binnacle.platform.contracts.process_contracts import JobSignalDeliveryError
 from binnacle.platform.job_platform import create_process_backend
 from binnacle.provenance import runtime_provenance
 
@@ -33,17 +34,10 @@ log = logging.getLogger("binnacle.job_manager")
 
 
 def _notify_systemd_ready() -> None:
-    """Tell a Type=notify user unit that recovery and socket bind completed."""
-    target = os.environ.get("NOTIFY_SOCKET")
-    if not target:
-        return
-    address = "\0" + target[1:] if target.startswith("@") else target
-    try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notifier:
-            notifier.connect(address)
-            notifier.sendall(b"READY=1\nSTATUS=Binnacle job manager ready")
-    except OSError:
-        log.exception("event=job_manager_notify_error")
+    """Compatibility entry point; Linux owns the unit notification socket."""
+    from binnacle.platform.composition import notify_job_manager_ready
+
+    notify_job_manager_ready(lambda: log.exception("event=job_manager_notify_error"))
 
 
 def _boot_id() -> str:
@@ -191,8 +185,22 @@ class JobManager:
             raise TypeError("job_id must be a string")
         token = current_call.set(call_id)
         try:
-            job_owner.mark_stop_requested(job_id)
-            state = jobs.stop_job_embedded(job_id)
+            try:
+                from binnacle.features.commands.job_stop import raise_if_partial_signal
+
+                # Direct owner RPC also needs the persisted failure gate.
+                raise_if_partial_signal(jobs._read_meta(job_id))
+                job_owner.mark_stop_requested(job_id)
+                state = jobs.stop_job_embedded(job_id)
+            except JobSignalDeliveryError as exc:
+                # Controlled RPC error, not an opaque manager-internal failure.
+                # We cannot promise successful termination of every descendant.
+                log.warning(
+                    "event=job_manager_stop_partial job_id=%s call=%s",
+                    job_id,
+                    call_id,
+                )
+                return {"ok": False, "error": f"job stop partially failed: {exc}"}
         finally:
             current_call.reset(token)
         if state is None:
@@ -259,6 +267,8 @@ class JobManager:
 
 def main() -> None:
     settings = get_settings()
+    if settings.jobs.socket_path is None:
+        raise RuntimeError("host composition did not resolve the jobs socket")
     JobManager(settings.jobs.socket_path).serve_forever()
 
 

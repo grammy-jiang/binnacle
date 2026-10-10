@@ -18,11 +18,9 @@ tunnel or the watchdog; each owner supplies its template and parameters.
 """
 
 import difflib
-import os
 import re
 import shlex
 import shutil
-import subprocess
 import sys
 import time
 from collections.abc import Callable, Mapping
@@ -160,72 +158,43 @@ def write_unit(
     return backup
 
 
+def _linux_unit_inspection():
+    """Only this explicitly Linux-compatible legacy API selects unit mechanics."""
+    from binnacle.deployment.linux.unit_inspection import LinuxUnitInspection
+
+    return LinuxUnitInspection()
+
+
 def resolve_executable(
     name: str,
     argv0: str | None = None,
     which: Callable[[str], str | None] | None = None,
 ) -> Path:
-    """The absolute path a unit may start: `name` on PATH, else the script
-    running now. systemd rejects a relative ExecStart as a fatal unit error
-    ("Neither a valid executable name nor an absolute path", measured
-    2026-09-20) and never even tries to start the unit, so a candidate that
-    does not resolve to an executable file is refused here instead.
-    Symlinks are kept, not followed: `~/.local/bin/tunnel-client` is the
-    stable name an upgrade repoints, the versioned target behind it is not."""
-    finder = which or shutil.which
-    candidate = finder(name) or argv0 or sys.argv[0]
-    path = Path(os.path.abspath(Path(candidate).expanduser()))
-    if not (path.is_file() and os.access(path, os.X_OK)):
-        raise UnitError(
-            f"cannot resolve the {name} executable from {candidate!r}; run setup "
-            f"through the installed command, for example <venv>/bin/{name} setup"
+    """Compatibility facade for Linux's verified systemd ExecStart path."""
+    try:
+        return _linux_unit_inspection().resolve_executable(
+            name, argv0 or sys.argv[0], which
         )
-    return path
+    except ValueError as exc:
+        raise UnitError(str(exc)) from None
 
 
 def exec_start_argv(value: str) -> list[str]:
-    """The argv[] of a `systemctl show -p ExecStart --value` line, such as
-    `{ path=/x/binnacle-watchdog ; argv[]=/x/binnacle-watchdog run ; ... }`."""
-    for part in value.strip().strip("{}").split(";"):
-        part = part.strip()
-        if part.startswith("argv[]="):
-            return part[len("argv[]=") :].split()
-    return []
+    """Compatibility facade for systemctl's exact ExecStart serialization."""
+    return _linux_unit_inspection().exec_start_argv(value)
 
 
 def proc_cmdline(pid: int) -> list[str]:
-    """The command line of a running process, from procfs."""
-    raw = Path(f"/proc/{pid}/cmdline").read_bytes()
-    return [a.decode(errors="replace") for a in raw.split(b"\0") if a]
+    """Compatibility facade for Linux procfs process command lines."""
+    return _linux_unit_inspection().proc_cmdline(pid)
 
 
-def unit_property(
-    unit: str,
-    prop: str,
-    run: Systemctl | None = None,
-) -> str:
-    """Read one Linux unit-definition property for compatibility diagnostics."""
-    if run is None:
-        try:
-            proc = subprocess.run(
-                ["systemctl", "--user", "show", unit, "-p", prop, "--value"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-        except OSError:
-            return ""
-        return proc.stdout.strip() if proc.returncode == 0 else ""
-    result = run("show", unit, "-p", prop, "--value")
-    return getattr(result, "stdout", "").strip()
+def unit_property(unit: str, prop: str, run: Systemctl | None = None) -> str:
+    """Compatibility facade for Linux managed-unit inspection."""
+    return _linux_unit_inspection().unit_property(unit, prop, run)
 
 
-def unit_waits_for_ready(
-    unit: str,
-    run: Systemctl | None = None,
-) -> bool:
-    """Whether the Linux systemd unit waits for readiness after ExecStart."""
-
+def unit_waits_for_ready(unit: str, run: Systemctl | None = None) -> bool:
     return bool(unit_property(unit, "ExecStartPost", run))
 
 
@@ -237,49 +206,27 @@ def check_unit_process(
     run: Systemctl | None = None,
     cmdline: Callable[[int], list[str]] = proc_cmdline,
 ) -> list[Check]:
-    """Does the unit's ExecStart name an executable that exists, and is the
-    running process that command? A process started from a different
-    command than the unit's runs the code installed when it started, so it
-    is reported until the unit is restarted."""
-    argv = exec_start_argv(unit_property(unit, "ExecStart", run))
-    if not argv:
-        reason = unit_property(unit, "LoadError", run)
-        return [
-            fail(
-                group,
-                f"{unit} has no ExecStart" + (f": {reason}" if reason else ""),
-                setup_hint,
-            )
-        ]
-    exe, shown = argv[0], " ".join(argv)
-    if not (Path(exe).is_file() and os.access(exe, os.X_OK)):
-        return [
-            fail(
-                group,
-                f"{unit} starts {exe}, which is missing or not executable",
-                setup_hint,
-            )
-        ]
-    try:
-        pid = int(unit_property(unit, "MainPID", run) or 0)
-    except ValueError:
-        pid = 0
-    if pid <= 0:
-        return [ok(group, f"{unit} starts {shown}")]
-    try:
-        running = cmdline(pid)
-    except OSError as e:
-        return [warn(group, f"cannot read the command line of pid {pid}: {e}")]
-    if running[-len(argv) :] == argv:
-        return [ok(group, f"{unit} starts {shown}; pid {pid} is that command")]
-    return [
-        warn(
-            group,
-            f"pid {pid} was started as `{' '.join(running)}`, not the unit's "
-            f"`{shown}`: it runs the code installed when it started",
-            restart_hint,
-        )
-    ]
+    """Convert Linux process facts to the existing generic diagnostics contract."""
+    facts = _linux_unit_inspection().inspect_process(
+        unit,
+        group,
+        setup_hint,
+        restart_hint,
+        property_reader=lambda service, property_name: unit_property(
+            service, property_name, run
+        ),
+        cmdline=cmdline,
+        parse_exec=exec_start_argv,
+    )
+    out: list[Check] = []
+    for level, category, description, hint in facts:
+        if level == "ok":
+            out.append(ok(category, description))
+        elif level == "warn":
+            out.append(warn(category, description, hint or ""))
+        else:
+            out.append(fail(category, description, hint or ""))
+    return out
 
 
 def check_unit_drift(

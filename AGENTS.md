@@ -43,6 +43,21 @@ development contract.
   local variables such as `GIT_DIR` or `GIT_WORK_TREE` point that Git command
   back at Binnacle.
 
+## Stage 1 OS-independent design rules
+
+The native FastMCP server still owns all MCP lifecycle, Provider,
+Transform and Middleware responsibility. Portable Binnacle Core and
+Linux platform implementations are separated by explicit ordinary
+Python contracts. See `docs/os-independent-stage1-architecture.md`.
+Never add a FeatureRegistry/Provider router, replace durable jobs with
+FastMCP Tasks or infer macOS support from the new boundaries.
+
+Process identity, native signals, cgroups, systemd provisioning,
+service deployment and accepted parity require real independent
+source-bound review; self-tests are not review approval. Preserve
+Linux v1.0.1 MCP/RPC records, unit templates and the stable Job Manager
+active-job restart gate. Run the OS6 inventory before integration.
+
 ## Deployment boundary
 
 - Development completion is not deployment. Never substitute a direct push to
