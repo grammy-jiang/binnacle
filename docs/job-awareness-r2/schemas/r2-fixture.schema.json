@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "r2_run_id",
+    "source_sha",
+    "r1_fixture_sha256",
+    "generated_at",
+    "seed",
+    "carriers",
+    "jobs",
+    "trial_schedule",
+    "limits",
+    "notes"
+  ],
+  "properties": {
+    "schema": {
+      "const": "job-awareness-r2-fixtures-v1"
+    },
+    "r2_run_id": {
+      "type": "string",
+      "pattern": "^R2-[A-Za-z0-9_-]{8,70}$"
+    },
+    "source_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "r1_fixture_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "carriers": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "CONTROL",
+          "META",
+          "TEXT",
+          "STRUCT"
+        ]
+      },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "jobs": {
+      "type": "array",
+      "minItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "owner",
+          "nonce_sha256",
+          "lifecycle",
+          "result_sha256",
+          "pages"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owner": {
+            "enum": [
+              "A",
+              "B",
+              "C",
+              "unknown"
+            ]
+          },
+          "nonce_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "lifecycle": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "pending",
+                "running",
+                "exited",
+                "failed",
+                "unknown"
+              ]
+            },
+            "minItems": 1
+          },
+          "result_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "trial_schedule": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pair_id",
+          "carrier",
+          "job_id",
+          "chat",
+          "arm_order"
+        ],
+        "properties": {
+          "pair_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "carrier": {
+            "enum": [
+              "META",
+              "TEXT",
+              "STRUCT"
+            ]
+          },
+          "job_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "chat": {
+            "enum": [
+              "A",
+              "B",
+              "C"
+            ]
+          },
+          "arm_order": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "enum": [
+                "CONTROL",
+                "CANDIDATE"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reminder_max_bytes",
+        "paired_trials_per_carrier",
+        "max_jobs"
+      ],
+      "properties": {
+        "reminder_max_bytes": {
+          "const": 512
+        },
+        "paired_trials_per_carrier": {
+          "const": 12
+        },
+        "max_jobs": {
+          "type": "integer",
+          "minimum": 10
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

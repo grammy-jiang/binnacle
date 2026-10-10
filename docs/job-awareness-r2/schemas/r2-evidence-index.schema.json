@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "job-awareness-r2-evidence-index-v1"
+    },
+    "r2_run_id": {
+      "type": "string",
+      "pattern": "^R2-[A-Za-z0-9_-]{8,70}$"
+    },
+    "lane": {
+      "type": "string",
+      "enum": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E0",
+        "E1",
+        "E2"
+      ]
+    },
+    "source_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "r2_docs_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "media_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "redacted": {
+            "type": "boolean"
+          },
+          "privacy_checked": {
+            "const": true
+          },
+          "proof_layer": {
+            "type": "string",
+            "enum": [
+              "synthetic_generated",
+              "server_serialized",
+              "server_sent",
+              "client_received",
+              "model_used",
+              "workflow_continued"
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "sha256",
+          "size_bytes",
+          "media_type",
+          "redacted",
+          "privacy_checked",
+          "proof_layer"
+        ]
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "r2_run_id",
+    "lane",
+    "source_sha",
+    "r2_docs_sha",
+    "artifacts"
+  ]
+}

@@ -1,0 +1,296 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "job-awareness-r2-input-v1"
+    },
+    "r2_run_id": {
+      "type": "string",
+      "pattern": "^R2-[A-Za-z0-9_-]{8,70}$"
+    },
+    "lane": {
+      "type": "string",
+      "enum": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E0",
+        "E1",
+        "E2"
+      ]
+    },
+    "source_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "r1_docs_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "r2_docs_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "r1_fixture_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "r2_fixture_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "model_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effort": {
+          "type": "string",
+          "minLength": 1
+        },
+        "surface": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "model",
+        "effort",
+        "surface"
+      ]
+    },
+    "r1_evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "absolute_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "role": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "ref",
+          "absolute_path",
+          "sha256",
+          "role"
+        ]
+      }
+    },
+    "r2_fixture_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "worktree_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "output_dir": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "format": {
+            "enum": [
+              "json",
+              "jsonl",
+              "csv",
+              "md",
+              "text",
+              "binary",
+              "url",
+              "mcp",
+              "source"
+            ]
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "ref",
+          "format",
+          "sha256",
+          "purpose"
+        ]
+      }
+    },
+    "required_outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "format": {
+            "enum": [
+              "json",
+              "jsonl",
+              "csv",
+              "md",
+              "text",
+              "binary",
+              "url",
+              "mcp",
+              "source"
+            ]
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "ref",
+          "format",
+          "sha256",
+          "purpose"
+        ]
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_runtime_s": {
+          "type": "integer",
+          "minimum": 60
+        },
+        "max_spend_usd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "memory_safety_margin_mb": {
+          "type": "integer",
+          "minimum": 512
+        }
+      },
+      "required": [
+        "max_runtime_s",
+        "max_spend_usd",
+        "memory_safety_margin_mb"
+      ]
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "production_writes": {
+          "const": false
+        },
+        "cross_worker_writes": {
+          "const": false
+        },
+        "gui_access": {
+          "type": "boolean"
+        },
+        "account_changes": {
+          "const": false
+        }
+      },
+      "required": [
+        "production_writes",
+        "cross_worker_writes",
+        "gui_access",
+        "account_changes"
+      ]
+    },
+    "blocking_prerequisites": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "r2_run_id",
+    "lane",
+    "source_sha",
+    "r1_docs_sha",
+    "r2_docs_sha",
+    "r1_fixture_sha256",
+    "r2_fixture_sha256",
+    "generated_at",
+    "model_request",
+    "r1_evidence",
+    "r2_fixture_path",
+    "worktree_path",
+    "output_dir",
+    "scenarios",
+    "inputs",
+    "required_outputs",
+    "limits",
+    "permissions",
+    "blocking_prerequisites"
+  ]
+}

@@ -1,0 +1,632 @@
+{
+  "schema": "job-awareness-r2-plan-v1",
+  "status": "PLAN_ONLY",
+  "prepared_on": "2026-10-10",
+  "source_sha": "d61761356ee0fce8ea6d73b0c3043b4881c5645e",
+  "r1_docs_sha": "62a677b83f5b3a34dddc7fd23595f00ffe89159a",
+  "r1_run_id": "JA-20261010-174301-ead99b0c",
+  "r1_fixture_sha256": "e1c35bda430a2e8e3794d51032cf827afec7bfa451887731918b7fd529970d41",
+  "r2_docs_sha": null,
+  "r2_run_id": null,
+  "r2_fixture_sha256": null,
+  "r2_output_root": "~/Projects/binnacle-job-awareness-r2-results/R2_RUN_ID",
+  "shared_preflight": {
+    "lane": "R2-0",
+    "executor": "codex-cli",
+    "requested_model": "gpt-6-sol",
+    "requested_effort": "medium",
+    "inputs": [
+      "R1 frozen evidence+indexes",
+      "R1 frozen source/docs+fixture",
+      "R2 approved docs SHA",
+      "host read-only resource baseline"
+    ],
+    "outputs": [
+      "run-manifest.json",
+      "r2-0/preflight.json",
+      "r2-0/r1-evidence-index.json",
+      "r2-0/model-selection.json",
+      "r2-0/host-baseline.json",
+      "r2-0/model-capabilities.json",
+      "fixtures/fixture-manifest.json",
+      "fixtures/fixture-index.json",
+      "inputs/A.input.json",
+      "inputs/B.input.json",
+      "inputs/C.input.json",
+      "inputs/D.input.json",
+      "inputs/E0.input.json",
+      "r2-0/readiness.md",
+      "r2-0/events.jsonl"
+    ]
+  },
+  "parallelism": {
+    "cli_fanout_after_preflight": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E0"
+    ],
+    "max_cli_workers": 5,
+    "single_chat_ui_owner": true,
+    "E1_requires": [
+      "A",
+      "E0",
+      "approved-real-Chat-app"
+    ],
+    "E2_requires": [
+      "B",
+      "C",
+      "E1"
+    ],
+    "no_cross_lane_writes": true
+  },
+  "lanes": [
+    {
+      "lane": "A",
+      "executor": "codex-cli",
+      "requested_model": "gpt-6-sol",
+      "requested_effort": "medium",
+      "title": "independent genuine ChatGPT test connection capability",
+      "hypotheses": [
+        "H2-connection"
+      ],
+      "depends_on": [
+        "R2-0"
+      ],
+      "input_refs": [
+        "R1/W1/results.json",
+        "R1/W1/carrier-matrix.csv",
+        "R1/S0/connection-evidence.json",
+        "docs/job-awareness-feasibility/DESKTOP-OPERATOR.md",
+        "fixtures/fixture-manifest.json"
+      ],
+      "required_common_outputs": [
+        "results.json",
+        "findings.md",
+        "model-selection.json",
+        "events.jsonl",
+        "evidence-index.json"
+      ],
+      "steps": [
+        {
+          "id": "A1",
+          "input_refs": [
+            "R1/W1/results.json",
+            "R1/W1/carrier-matrix.csv",
+            "R1/S0/connection-evidence.json",
+            "docs/job-awareness-feasibility/DESKTOP-OPERATOR.md",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "connection-options.json"
+          ],
+          "expected": "Official Plugin/secure tunnel routes, permissions and available/blocked verdict"
+        },
+        {
+          "id": "A2",
+          "input_refs": [
+            "R1/W1/results.json",
+            "R1/W1/carrier-matrix.csv",
+            "R1/S0/connection-evidence.json",
+            "docs/job-awareness-feasibility/DESKTOP-OPERATOR.md",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "synthetic-app.json",
+            "local-canary.json"
+          ],
+          "expected": "Isolated read-only mock tool/schema and native local nonce call"
+        },
+        {
+          "id": "A3",
+          "input_refs": [
+            "R1/W1/results.json",
+            "R1/W1/carrier-matrix.csv",
+            "R1/S0/connection-evidence.json",
+            "docs/job-awareness-feasibility/DESKTOP-OPERATOR.md",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "transport-evidence.json",
+            "account-action-required.json"
+          ],
+          "expected": "Separate endpoint/auth proof, exact external permission blocker"
+        },
+        {
+          "id": "A4",
+          "input_refs": [
+            "R1/W1/results.json",
+            "R1/W1/carrier-matrix.csv",
+            "R1/S0/connection-evidence.json",
+            "docs/job-awareness-feasibility/DESKTOP-OPERATOR.md",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "chat-handoff.json"
+          ],
+          "expected": "Real ChatGPT Chat E1 plugin nonce handoff and gate"
+        }
+      ],
+      "output_root": "R2_RUN_ROOT/A",
+      "may_modify_product_source": false,
+      "may_connect_account_or_plugin": false,
+      "may_interact_chat_ui": false
+    },
+    {
+      "lane": "B",
+      "executor": "codex-cli",
+      "requested_model": "gpt-6-astra",
+      "requested_effort": "xhigh",
+      "title": "authenticated chat identity and adversarial isolation",
+      "hypotheses": [
+        "H3-chat-identity"
+      ],
+      "depends_on": [
+        "R2-0"
+      ],
+      "input_refs": [
+        "R1/W2/results.json",
+        "R1/W2/identity-matrix.csv",
+        "R1/W2/identity-provenance.md",
+        "R1/W2/source-evidence.json",
+        "fixtures/fixture-manifest.json"
+      ],
+      "required_common_outputs": [
+        "results.json",
+        "findings.md",
+        "model-selection.json",
+        "events.jsonl",
+        "evidence-index.json"
+      ],
+      "steps": [
+        {
+          "id": "B1",
+          "input_refs": [
+            "R1/W2/results.json",
+            "R1/W2/identity-matrix.csv",
+            "R1/W2/identity-provenance.md",
+            "R1/W2/source-evidence.json",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "trust-boundary.md",
+            "identity-sources.json"
+          ],
+          "expected": "Authenticated identity chain vs header correlation"
+        },
+        {
+          "id": "B2",
+          "input_refs": [
+            "R1/W2/results.json",
+            "R1/W2/identity-matrix.csv",
+            "R1/W2/identity-provenance.md",
+            "R1/W2/source-evidence.json",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "identity-cases.csv",
+            "attacks.json"
+          ],
+          "expected": "90+ synthetic interleaved negative identity/leak tests"
+        },
+        {
+          "id": "B3",
+          "input_refs": [
+            "R1/W2/results.json",
+            "R1/W2/identity-matrix.csv",
+            "R1/W2/identity-provenance.md",
+            "R1/W2/source-evidence.json",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "candidate-comparison.json"
+          ],
+          "expected": "Authorized chat grant options vs narrower fail-closed scope"
+        },
+        {
+          "id": "B4",
+          "input_refs": [
+            "R1/W2/results.json",
+            "R1/W2/identity-matrix.csv",
+            "R1/W2/identity-provenance.md",
+            "R1/W2/source-evidence.json",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "identity-verdict.json"
+          ],
+          "expected": "Real Chat-specific trust and E2 isolation GO/BLOCKED verdict"
+        }
+      ],
+      "output_root": "R2_RUN_ROOT/B",
+      "may_modify_product_source": false,
+      "may_connect_account_or_plugin": false,
+      "may_interact_chat_ui": false
+    },
+    {
+      "lane": "C",
+      "executor": "codex-cli",
+      "requested_model": "gpt-6-astra",
+      "requested_effort": "xhigh",
+      "title": "authenticated consumer receipt and page replay",
+      "hypotheses": [
+        "H4-result-receipt"
+      ],
+      "depends_on": [
+        "R2-0"
+      ],
+      "input_refs": [
+        "R1/W3/results.json",
+        "R1/W3/receipt-verdict.json",
+        "R1/W3/receipt-transitions.csv",
+        "fixtures/fixture-manifest.json"
+      ],
+      "required_common_outputs": [
+        "results.json",
+        "findings.md",
+        "model-selection.json",
+        "events.jsonl",
+        "evidence-index.json"
+      ],
+      "steps": [
+        {
+          "id": "C1",
+          "input_refs": [
+            "R1/W3/results.json",
+            "R1/W3/receipt-verdict.json",
+            "R1/W3/receipt-transitions.csv",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "receipt-state-machine.md",
+            "receipt-candidates.json"
+          ],
+          "expected": "Formal explicit vs later-call receipt and consumer trust assumptions"
+        },
+        {
+          "id": "C2",
+          "input_refs": [
+            "R1/W3/results.json",
+            "R1/W3/receipt-verdict.json",
+            "R1/W3/receipt-transitions.csv",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "receipt-events.jsonl",
+            "receipt-transitions.csv",
+            "negative-cases.json"
+          ],
+          "expected": "Loss/duplicate/restart/concurrent-reader fault injection"
+        },
+        {
+          "id": "C3",
+          "input_refs": [
+            "R1/W3/results.json",
+            "R1/W3/receipt-verdict.json",
+            "R1/W3/receipt-transitions.csv",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "replay.json",
+            "compatibility.json"
+          ],
+          "expected": "Exact retained output replay and schema parity"
+        },
+        {
+          "id": "C4",
+          "input_refs": [
+            "R1/W3/results.json",
+            "R1/W3/receipt-verdict.json",
+            "R1/W3/receipt-transitions.csv",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "receipt-verdict.json"
+          ],
+          "expected": "Defensible receipt verdict without server-fetch-only ACK"
+        }
+      ],
+      "output_root": "R2_RUN_ROOT/C",
+      "may_modify_product_source": false,
+      "may_connect_account_or_plugin": false,
+      "may_interact_chat_ui": false
+    },
+    {
+      "lane": "D",
+      "executor": "codex-cli",
+      "requested_model": "gpt-6-astra",
+      "requested_effort": "high",
+      "title": "full local MCP transport, compatibility and cost",
+      "hypotheses": [
+        "H1-wire-compat",
+        "H5-overhead"
+      ],
+      "depends_on": [
+        "R2-0"
+      ],
+      "input_refs": [
+        "R1/W1/results.json",
+        "R1/W1/carrier-matrix.csv",
+        "R1/W4/results.json",
+        "R1/W4/metrics.json",
+        "R1/W4/latency-samples.csv",
+        "fixtures/fixture-manifest.json"
+      ],
+      "required_common_outputs": [
+        "results.json",
+        "findings.md",
+        "model-selection.json",
+        "events.jsonl",
+        "evidence-index.json"
+      ],
+      "steps": [
+        {
+          "id": "D1",
+          "input_refs": [
+            "R1/W1/results.json",
+            "R1/W1/carrier-matrix.csv",
+            "R1/W4/results.json",
+            "R1/W4/metrics.json",
+            "R1/W4/latency-samples.csv",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "wire-matrix.csv",
+            "wire/"
+          ],
+          "expected": "Local isolated TCP/HTTP native FastMCP wire parity"
+        },
+        {
+          "id": "D2",
+          "input_refs": [
+            "R1/W1/results.json",
+            "R1/W1/carrier-matrix.csv",
+            "R1/W4/results.json",
+            "R1/W4/metrics.json",
+            "R1/W4/latency-samples.csv",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "compatibility.json"
+          ],
+          "expected": "Protocol-era, error, authorization, output schema compatibility"
+        },
+        {
+          "id": "D3",
+          "input_refs": [
+            "R1/W1/results.json",
+            "R1/W1/carrier-matrix.csv",
+            "R1/W4/results.json",
+            "R1/W4/metrics.json",
+            "R1/W4/latency-samples.csv",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "latency-samples.csv",
+            "metrics.json"
+          ],
+          "expected": "Reproducible full local path paired P50/P95/P99 with raw load"
+        },
+        {
+          "id": "D4",
+          "input_refs": [
+            "R1/W1/results.json",
+            "R1/W1/carrier-matrix.csv",
+            "R1/W4/results.json",
+            "R1/W4/metrics.json",
+            "R1/W4/latency-samples.csv",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "token-cost.json",
+            "budget-verdict.json"
+          ],
+          "expected": "Measured/estimated token attribution and 512 byte hint cap"
+        }
+      ],
+      "output_root": "R2_RUN_ROOT/D",
+      "may_modify_product_source": false,
+      "may_connect_account_or_plugin": false,
+      "may_interact_chat_ui": false
+    },
+    {
+      "lane": "E0",
+      "executor": "codex-cli",
+      "requested_model": "gpt-6-sol",
+      "requested_effort": "medium",
+      "title": "offline genuine ChatGPT Chat trial preparation only",
+      "hypotheses": [
+        "H2-model-visible",
+        "H6-workflow"
+      ],
+      "depends_on": [
+        "R2-0"
+      ],
+      "input_refs": [
+        "R1/S0/connection-evidence.json",
+        "docs/job-awareness-feasibility/DESKTOP-OPERATOR.md",
+        "fixtures/fixture-manifest.json"
+      ],
+      "required_common_outputs": [
+        "results.json",
+        "findings.md",
+        "model-selection.json",
+        "events.jsonl",
+        "evidence-index.json"
+      ],
+      "steps": [
+        {
+          "id": "E0",
+          "input_refs": [
+            "R1/S0/connection-evidence.json",
+            "docs/job-awareness-feasibility/DESKTOP-OPERATOR.md",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "trial-manifest.json",
+            "readiness.json"
+          ],
+          "expected": "Freeze 12-pair schedule and account/connection prerequisites; NO actual ChatGPT interaction"
+        }
+      ],
+      "output_root": "R2_RUN_ROOT/E0",
+      "may_modify_product_source": false,
+      "may_connect_account_or_plugin": false,
+      "may_interact_chat_ui": false
+    },
+    {
+      "lane": "E1",
+      "executor": "chatgpt-chat-ui",
+      "requested_model": "GPT-6",
+      "requested_effort": "Medium",
+      "title": "real ChatGPT Chat client visibility canary",
+      "hypotheses": [
+        "H2-model-visible"
+      ],
+      "depends_on": [
+        "A",
+        "E0"
+      ],
+      "input_refs": [
+        "A/chat-handoff.json",
+        "E0/trial-manifest.json",
+        "A/synthetic-app.json",
+        "fixtures/fixture-manifest.json"
+      ],
+      "required_common_outputs": [
+        "results.json",
+        "findings.md",
+        "model-selection.json",
+        "events.jsonl",
+        "evidence-index.json"
+      ],
+      "steps": [
+        {
+          "id": "E1",
+          "input_refs": [
+            "A/chat-handoff.json",
+            "E0/trial-manifest.json",
+            "A/synthetic-app.json",
+            "fixtures/fixture-manifest.json"
+          ],
+          "outputs": [
+            "client-surface.json",
+            "visibility-trace.jsonl",
+            "visibility-verdict.json"
+          ],
+          "expected": "Separate genuine Chat mode nonce/tool use from mere server response"
+        }
+      ],
+      "output_root": "R2_RUN_ROOT/E1",
+      "may_modify_product_source": false,
+      "may_connect_account_or_plugin": false,
+      "may_interact_chat_ui": true
+    },
+    {
+      "lane": "E2",
+      "executor": "chatgpt-chat-ui",
+      "requested_model": "GPT-6",
+      "requested_effort": "Medium",
+      "title": "genuine ChatGPT Chat behavior and isolation",
+      "hypotheses": [
+        "H3-chat-identity",
+        "H4-result-receipt",
+        "H6-workflow"
+      ],
+      "depends_on": [
+        "B",
+        "C",
+        "E1"
+      ],
+      "input_refs": [
+        "B/identity-verdict.json",
+        "C/receipt-verdict.json",
+        "E1/visibility-verdict.json",
+        "E0/trial-manifest.json"
+      ],
+      "required_common_outputs": [
+        "results.json",
+        "findings.md",
+        "model-selection.json",
+        "events.jsonl",
+        "evidence-index.json"
+      ],
+      "steps": [
+        {
+          "id": "E2",
+          "input_refs": [
+            "B/identity-verdict.json",
+            "C/receipt-verdict.json",
+            "E1/visibility-verdict.json",
+            "E0/trial-manifest.json"
+          ],
+          "outputs": [
+            "trials.csv",
+            "workflow-trace.jsonl",
+            "isolation.json",
+            "behavior-verdict.json"
+          ],
+          "expected": "12 randomized pairs per carrier, same-turn continuation and 3-chat isolation after B/C gate"
+        },
+        {
+          "id": "E3",
+          "input_refs": [
+            "B/identity-verdict.json",
+            "C/receipt-verdict.json",
+            "E1/visibility-verdict.json",
+            "E0/trial-manifest.json"
+          ],
+          "outputs": [
+            "turn-end.json",
+            "final-findings.md"
+          ],
+          "expected": "Document finished-turn cannot self-wake, final client result"
+        }
+      ],
+      "output_root": "R2_RUN_ROOT/E2",
+      "may_modify_product_source": false,
+      "may_connect_account_or_plugin": false,
+      "may_interact_chat_ui": true
+    }
+  ],
+  "supervisor": {
+    "lane": "F",
+    "role": "read-only evidence audit and decision",
+    "inputs": [
+      "A/results.json",
+      "B/results.json",
+      "C/results.json",
+      "D/results.json",
+      "E0/results.json",
+      "E1/results.json if run else BLOCKED",
+      "E2/results.json if run else BLOCKED"
+    ],
+    "outputs": [
+      "supervisor/collection-report.json",
+      "supervisor/contradictions.md",
+      "supervisor/decision.json",
+      "supervisor/FINAL-SUMMARY.md"
+    ],
+    "may_implement_or_run_worker_cases": false,
+    "may_deploy": false
+  },
+  "real_chat_model_fixed": {
+    "model": "GPT-6",
+    "effort": "Medium",
+    "surface": "ChatGPT Chat",
+    "alternates_silently_forbidden": true
+  },
+  "allowed_worker_state": [
+    "PASS",
+    "FAIL",
+    "INCONCLUSIVE",
+    "BLOCKED",
+    "NOT_RUN"
+  ],
+  "allowed_hypothesis_verdict": [
+    "SUPPORTED",
+    "REFUTED",
+    "UNRESOLVED"
+  ]
+}
