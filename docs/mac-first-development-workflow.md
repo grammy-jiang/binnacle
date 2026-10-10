@@ -65,7 +65,8 @@ unique ticket, branch and worktree path:
 repo="$HOME/Projects/binnacle"
 branch="feature/<ticket>"
 worktree="$HOME/Projects/binnacle-worktrees/<ticket>"
-git -C "$repo" fetch --no-tags origin master
+git -C "$repo" fetch --no-tags --refmap= origin \
+  refs/heads/master:refs/remotes/origin/master
 git -C "$repo" worktree add -b "$branch" "$worktree" origin/master
 cd "$worktree"
 
@@ -81,6 +82,147 @@ Pin the initial commit SHA and model/effort. The first `uv sync` creates a
 project-local pinned `uv` executable; the subsequent `PATH` must prefer it.
 Do not edit global shell profiles or install project packages globally.
 A Git worktree requires its **own** `.venv`, not a copied Pi virtualenv.
+
+### Keep the Mac development branch synchronized
+
+Run the stdlib helper **on the Mac development clone**, never against the Pi
+production checkout. Check before dispatch, after an upstream change, after a
+worker commits, before feature push/CI, and at periodic check-ins during long
+jobs. Check mode is the default: it queries and explicitly fetches both master
+and the published feature into isolated temporary refs, validates advertised
+SHAs and history, then atomically updates their remote-tracking refs and reports
+JSON. It updates tracking refs/object storage, but leaves local branches and
+worktree files alone. It never pushes, deploys, or installs a background job.
+
+The supervising Pi must hold its **exclusive** `mac-session.lock` for the
+entire check/apply session, after coordinating all other writers. Use the
+existing lock path from step 1 with `flock -w 12 -x`, not the shared `-s`
+observation lock. Every writer must participate; the Mac cannot verify a Pi
+lock remotely. `--session-lock-held` explicitly attests to this precondition.
+The helper also takes a cooperative stdlib `fcntl.flock` on the persistent
+`binnacle-dev-sync.lock` in the Git common directory, covering fetch, tracking
+updates, validation and apply. It waits at most 12 seconds by default
+(`--lock-timeout` accepts 0–60 seconds). Never delete or steal this lock file;
+ordinary Git commands do not acquire it.
+
+~~~bash
+# On Mac, while the supervising Pi holds the exclusive session lock:
+cd "$worktree"
+export PATH="$PWD/.venv/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH"
+./.venv/bin/python scripts/dev_branch_sync.py \
+  --repo "$repo" --worktree "$worktree" --branch "$branch" \
+  --session-lock-held --check
+
+# Only the exclusive owner, with a clean worktree, may apply.
+./.venv/bin/python scripts/dev_branch_sync.py \
+  --repo "$repo" --worktree "$worktree" --branch "$branch" \
+  --session-lock-held --apply
+~~~
+
+`--remote origin` and `--base master` are the defaults. Both paths must be
+worktree roots sharing the same Git common directory, and `--branch` must
+identify the selected development branch. Do not use this on a production
+clone. Protected names are rejected case-insensitively; casing aliases across
+refs, ref directories, advertised heads and worktree ownership fail closed,
+including on case-sensitive filesystems. Inherited `GIT_NAMESPACE` and
+`GIT_CONFIG*` overrides are refused, except disabling global/system config
+with `/dev/null` and `GIT_CONFIG_NOSYSTEM=1`. Hook-local repository variables
+are removed; Git fixture identity and transport settings are retained.
+
+**Tracking caveat:** single-branch clones can have a narrow `remote.origin.fetch`
+refspec. A plain `git fetch origin master` can leave only `FETCH_HEAD` updated
+without maintaining `origin/master`. The explicit destination above and in the
+helper handles this without changing clone configuration. Feature publication
+is queried through `git ls-remote` and fetched with an explicit refspec even
+when no feature mapping exists. Accepted history is retained in
+`refs/remotes/origin/<feature-branch>`. Non-fast-forward changes relative to
+previously observed remote history are rejected before replacing tracking refs.
+Deletion of a previously tracked feature requires owner-reviewed resolution;
+the stale tracking SHA is retained as evidence, never used as a current remote
+head or treated as permission to rebase an unpublished branch.
+
+Apply performs two distinct operations:
+
+- **Local master fast-forward:** move only an unchecked-out local base whose
+  old SHA is an ancestor of the fetched target (or create a missing local base).
+  Refuse a divergent/ahead local base, or a stale base owned by another
+  worktree, including a temporarily detached rebase/bisect. Coordinate that
+  owner's workflow separately; never switch, reset, or clean their worktree.
+- **Feature synchronization:** compare local HEAD with the fetched published
+  feature. If remote advanced alone, check reports `needs-sync` with its SHA;
+  apply fast-forwards to that SHA when it contains local HEAD. Divergence fails
+  closed for owner-reviewed resolution. If local is ahead, report `local-ahead`
+  without publishing it. When master also advances, first prove that the entire
+  planned fast-forward preserves both local and published feature commits and
+  includes master; otherwise refuse before moving either local branch.
+  **No automatic rebase is permitted**, even for a branch absent from the
+  selected remote. The report says `not-observed-on-selected-remote`, never
+  globally “unpublished”. Fork/differently named upstreams, differing
+  `pushRemote`/`remote.pushDefault`, explicit selected-remote push refspecs or
+  push URLs block apply. Explicit `push.default` must be `simple`; multiple or
+  URL-rewritten selected-remote URLs are conservatively refused too. Ignored
+  paths colliding with incoming tracked files (including case aliases and file/directory swaps) also block
+  apply before local master moves. Feature fast-forward uses
+  `git merge --ff-only --no-squash --no-autostash --no-overwrite-ignore`; Git versions
+  without the guard fail closed. Nonempty effective feature `mergeOptions`
+  refuse before either local branch moves. Every inventory worktree's symbolic
+  HEAD and alias chain are checked, including remote tracking ownership, before
+  fetching or updating tracking refs (also in check mode); unavailable or invalid
+  ownership fails closed. Local base ownership is rechecked before advancing it.
+
+When a feature needs history reconciliation, the refusal includes
+`manual-rebase-required`, its exact source SHA and the fetched base SHA. A
+single supervising owner must review publication/ownership separately before
+any manual rebase. While holding the exclusive session lock:
+
+1. Stop all writers, inspect every worktree and the clean feature, and record
+   exact source/base/published SHAs. Review all remotes, upstreams, push settings
+   and collaborators; absence on `origin` is not proof of non-publication.
+2. Fetch through helper check again and verify the reported SHAs have not moved.
+   Independently review the intended history change. Preserve a named backup
+   ref under an unambiguous name. If the branch contains merges, inspect their
+   resolutions explicitly: `--rebase-merges` alone cannot preserve manual
+   merge-only edits. Choose a reviewed merge instead when appropriate.
+3. Only after separate rewrite authorization, run `git rebase <exact-base-SHA>`
+   in that exclusively owned feature worktree. Resolve conflicts through source
+   review, stage the resolutions and `git rebase --continue`; do not blindly
+   accept either side. A merge-containing history needs an explicitly reviewed
+   topology/resolution plan before choosing any rebase options.
+4. Compare the resulting trees and commits against the recorded source and
+   backup, checking merge-only edits. Rerun focused tests and required quality
+   gates, obtain independent review, then rerun helper check. Publication is a
+   separate authorized workflow.
+
+JSON records source/target SHAs, selected-remote feature observations, planned
+feature target, safety refusals, actions and post-apply state. Exit status is
+`0` for current/successful apply, `1` for a safe check needing sync or
+`local-ahead` (publication pending), and `2` for refusal/error. A feature behind
+master is never reported synchronized. A failed apply may already have
+fast-forwarded local master; inspect `actions` and `after`. Command errors
+retain both stdout and stderr; cleanup diagnostics and failed post-error
+snapshots cannot replace the primary error. Temporary-ref cleanup failures
+are reported, with refs retained for owner inspection. The helper never
+stashes, resets, cleans, rebases, or silently aborts another operation.
+
+The helper re-queries remote heads after fetching, before mutations and after
+applying, detecting advancement, deletion and new publication races. Tracking
+refs update in one compare-and-swap transaction; the local base also uses a
+compare-and-swap update. Temporary fetch refs are cleaned on success or refusal;
+cleanup failures remain visible.
+Git offers no transaction spanning a remote and every local worktree: another
+writer can still race the final check. Exclusive ownership is a precondition,
+not something these checks can establish. Rewrites predating the first observed
+tracking SHA, or an intervening change that returns to the same SHA between
+observations, cannot be detected. Shallow clones and unknown/prunable
+worktree ownership are refused, even when local master is already current.
+Only selected-remote observations are compared; publication on an unconfigured
+fork or under an unknown name cannot be discovered by this helper.
+
+Published branch coordination, independent review and normal pre-push/CI gates
+remain required. `--force-with-lease` belongs only to a later, separately
+approved workflow if a public rewrite is explicitly authorized. **This helper
+has no push command and never force-pushes.** Synchronizing local Mac master is
+not permission to update Pi production master or bypass the deployment gate.
 
 ### 3. Author on Mac with Mac-local Codex
 
