@@ -382,11 +382,27 @@ def test_merge_options_refuse_before_local_mutations(
     git(case.repo, "config", key, "--squash")
     index = Path(git(case.wt, "rev-parse", "--git-path", "index"))
     before = index.read_bytes(), (case.wt / "shared").read_bytes()
-    code, report = case.run(capsys, "--apply")
-    assert code == 2 and "mergeOptions refused" in str(report["refusals"])
-    case.unchanged()
-    assert (index.read_bytes(), (case.wt / "shared").read_bytes()) == before
-    assert not (case.wt / "upstream").exists()
+    tracking_before = git(
+        case.repo,
+        "for-each-ref",
+        "--format=%(refname):%(objectname)",
+        "refs/remotes/origin",
+    )
+    for mode in ("--check", "--apply"):
+        code, report = case.run(capsys, mode)
+        assert code == 2 and "mergeOptions refused" in str(report["refusals"])
+        case.unchanged()
+        assert (
+            git(
+                case.repo,
+                "for-each-ref",
+                "--format=%(refname):%(objectname)",
+                "refs/remotes/origin",
+            )
+            == tracking_before
+        )
+        assert (index.read_bytes(), (case.wt / "shared").read_bytes()) == before
+        assert not (case.wt / "upstream").exists()
     git(case.repo, "config", "--unset-all", key)
     code, report = case.run(capsys, "--apply")
     assert code == 0 and report["result"] == "synced"

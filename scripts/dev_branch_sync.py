@@ -135,6 +135,23 @@ class Sync(SyncCore):
         target = heads[f"refs/heads/{self.base}"]
         published = heads.get(f"refs/heads/{self.branch}")
         report.update(published_feature_sha=published, target_sha=target)
+        # A nonempty branch mergeOptions can turn even --ff-only into a squash
+        # that alters the index without advancing HEAD. Refuse before tracking
+        # refs change, including in the fetch-only --check mode.
+        for checkout in (self.repo, self.wt):
+            options = self.git(
+                checkout,
+                "config",
+                "--get-all",
+                f"branch.{self.branch}.mergeOptions",
+                ok=(0, 1),
+            ).splitlines()
+            if options:
+                report["refusals"] = [
+                    "Nonempty feature mergeOptions refused before tracking update"
+                ]
+                report["result"] = "refused"
+                return 2
         self.fetch_heads(heads)
         before = self.snapshot(target, published)
         report["before"] = asdict(before)
