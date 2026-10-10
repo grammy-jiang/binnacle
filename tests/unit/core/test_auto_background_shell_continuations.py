@@ -5,7 +5,7 @@ import pytest
 from binnacle.auto_background_shell import shell_policy_code
 from binnacle.config import AutoBackgroundMatch, RunCommandSettings
 
-RULES = {"openai-mcp": (r"(?i)(?<![\\w-])pytest(?![\\w-])",)}
+RULES = {"openai-mcp": (r"(?i)(?<![\w-])pytest(?![\w-])",)}
 
 
 def match(script: str) -> AutoBackgroundMatch | None:
@@ -132,3 +132,9 @@ def test_tab_stripped_heredoc_terminator_can_be_joined():
     script = f"cat <<-EOF\n\tEO{slash}\nF\nuv run pytest -q\n"
     found = match(script)
     assert found is not None and found.match_start == script.rfind("pytest")
+
+
+def test_word_boundary_is_consistent_with_main_policy():
+    assert match("xpytest") is None
+    assert match("pytest123") is None
+    assert match("uv run pytest -q") is not None
