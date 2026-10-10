@@ -121,3 +121,32 @@ def test_run_command_tool_config_fingerprints_effective_policy(caplog):
     assert fields["auto_background_evidence_dir"] == str(
         settings.auto_background_evidence_dir
     )
+
+
+def test_real_tool_ignores_pytest_only_inside_generated_source(
+    monkeypatch, tmp_path, run_policy
+):
+    """Do not auto-background a normal, short write because of import pytest."""
+    info = mcp.types.Implementation(name="openai-mcp-test", version="1")
+    run_policy(
+        RunCommandSettings(
+            auto_background_patterns={"openai-mcp": (r"(?i)\bpytest\b",)}
+        )
+    )
+    monkeypatch.setattr(jobs, "WARMUP_S", 0.03)
+    source = tmp_path / "sample.py"
+    script = (
+        f"set -e\ncat > '{source}' <<'PY'\n"
+        "import pytest\n\ndef test_example():\n    assert True\n"
+        "PY\nsleep 0.15\nprintf finished\n"
+    )
+    result = _run(
+        "run_command", {"command": script, "workdir": "/tmp", "wait_seconds": 5}, info
+    )
+    payload = result.structured_content
+    assert payload is not None
+    assert payload["state"] == "exited"
+    assert payload["background_job"] is False
+    assert payload["exit_code"] == 0
+    assert payload["output"] == "finished"
+    assert source.read_text().startswith("import pytest\n")

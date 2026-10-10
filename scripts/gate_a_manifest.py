@@ -145,6 +145,7 @@ def manifest_groups() -> dict[str, set[str]]:
         },
         "application_shell": {
             "__init__.py",
+            "auto_background_shell.py",
             "cli.py",
             "config.py",
             "errors.py",

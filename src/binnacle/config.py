@@ -37,6 +37,7 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 
+from binnacle.auto_background_shell import shell_policy_code
 from binnacle.platform.deployment_platform import create_runtime_paths
 
 CONFIG_FILE_ENV = "BINNACLE_CONFIG_FILE"
@@ -261,8 +262,17 @@ class RunCommandSettings(BaseModel):
             return None
         for prefix, patterns in self.auto_background_patterns.items():
             if client.startswith(prefix):
+                # Avoid shell lexing when no configured regex matches the
+                # original source. This is the common fast path.
+                searchable: str | None = None
                 for pattern in patterns:
-                    matched = re.search(pattern, command)
+                    if re.search(pattern, command) is None:
+                        continue
+                    # Here-doc data and comments are not executable shell
+                    # commands. Keep offsets for the existing evidence log.
+                    if searchable is None:
+                        searchable = shell_policy_code(command)
+                    matched = re.search(pattern, searchable)
                     if matched is not None:
                         start, end = matched.span()
                         return AutoBackgroundMatch(prefix, pattern, start, end)
