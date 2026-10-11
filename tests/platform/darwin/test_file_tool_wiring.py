@@ -179,7 +179,7 @@ def test_failed_read_hint_stays_inside_grant_and_edit_conflict_is_preserved(
         capability=Capability(CapabilityState.LIMITED, "test_only", "opened-object"),
     )
     try:
-        with pytest.raises(CodedToolError, match="Nearby: file.txt"):
+        with pytest.raises(CodedToolError, match="Files in .*: file.txt"):
             access.read("missing.txt", 1024)
         read = access.read
 
@@ -353,7 +353,7 @@ def test_a6_service_output_uses_a5_redacted_epochs(tmp_path, monkeypatch):
                 )
 
 
-def test_search_summary_names_per_file_limit_without_schema_change(tmp_path):
+def test_search_reads_files_over_the_budget_whole_without_schema_change(tmp_path):
     from binnacle.features.search.tools.search_text import search_text_impl
 
     (tmp_path / "small.txt").write_text("needle\n")
@@ -379,11 +379,11 @@ def test_search_summary_names_per_file_limit_without_schema_change(tmp_path):
             roots=roots,
             file_access=access,
         )
+        # Linux searches the >16 MiB file whole (Pi CASES.json st.basic, fx.big).
         assert result.structured_content["count"] == 1
-        assert result.structured_content["truncated"]
+        assert result.structured_content["truncated"] is False
         assert (
-            "1 file(s) skipped: larger than the per-file limit"
-            in result.content[0].text
+            result.content[0].text == f"Found 1 matches for 'needle' under {tmp_path}."
         )
         assert set(result.structured_content) == {
             "path",

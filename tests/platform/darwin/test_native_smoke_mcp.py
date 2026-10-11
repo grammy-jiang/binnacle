@@ -33,7 +33,7 @@ FULL_PARITY = "FULL_PARITY_NO_GO"
 TOOLS = "read_file list_files search_text edit_file write_file run_command job_status stop_job"
 REGISTERED_TOOLS = tuple(TOOLS.split())
 LIMITED_TOOLS = tuple(t for t in REGISTERED_TOOLS if t != "stop_job")
-PER_FILE_LIMIT = 16 * 1024 * 1024
+PER_FILE_LIMIT = 16 * 1024 * 1024  # big.txt = Pi LINUX-AGG-CAP one_long_line bytes
 STOP_JOB_TEXT = (
     "stop_job is unavailable on macOS. "
     "run_command is available in foreground mode only (no background jobs)."
@@ -289,7 +289,7 @@ def test_file_tools_happy_paths_and_denials(endpoint: Endpoint) -> None:
     assert "hello e0" in json.dumps(out["read"]["data"]) + out["read"]["text"]
     assert (root / "w.txt").read_text() == "edited\n"
     assert all(o["error"] for k, o in out.items() if k.startswith("deny_")), out
-    assert "secret" not in out["deny_root_escape"]["text"]
+    assert out["deny_root_escape"]["text"] == f"Path outside allowed roots ({root}): {sec}"  # fmt: skip
     assert (outside / "secret.txt").read_text() == "hello secret\n"
     assert not (outside / "x.txt").exists() and not (outside / "y").exists()
 
@@ -363,10 +363,10 @@ def test_list_files_and_search_text_on_fixture(endpoint: Endpoint) -> None:
     assert rel("list_all", "path") >= {"docs", "hello.txt", "big.txt"}
     assert rel("list_glob_md", "path") == {"docs/note.md"}
     assert rel("search_glob_py", "file") == {"docs/a.py"}
-    assert rel("search_all", "file") == {"hello.txt", "docs/note.md", "docs/a.py"}
-    assert out["search_all"]["data"]["truncated"] is True
-    assert "larger than the per-file limit" in out["search_all"]["text"]
-    assert "truncated=true" in out["search_all"]["text"]
+    d, names = out["search_all"]["data"], {"hello.txt", "docs/note.md", "docs/a.py"}
+    assert rel("search_all", "file") == {*names, "big.txt"}
+    assert d["truncated"] is False and "note" not in d
+    assert out["search_all"]["text"] == f"Found 4 matches for 'hello' under {r}."
     for label, o in out.items():
         if label.startswith("deny_"):
             assert o["error"] and "secret" not in o["text"], (label, o)
