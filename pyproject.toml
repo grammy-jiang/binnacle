@@ -68,6 +68,7 @@ binnacle = ["py.typed"]
 test = [
     "httpx2>=2.12.0",
     "hypothesis>=6.167.1",
+    "pathspec>=1.1,<2", # Darwin platform tests import it on every host; runtime keeps the darwin marker
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "pytest-randomly>=4.1.0",
