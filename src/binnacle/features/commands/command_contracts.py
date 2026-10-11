@@ -49,6 +49,33 @@ class CommandBackend(Protocol):
     def max_output_chars(self) -> int: ...
 
 
+def snapshot_size(state: dict | None) -> int | None:
+    """The log size a job state measured, passed explicitly to its log read.
+
+    r6 W2 X1e (SD-74): a reply's text and byte count describe one append-only
+    snapshot. The size travels from the state call to the read call as a
+    value; no backend keeps it per thread or per instance.
+    """
+    size = state.get("log_bytes") if isinstance(state, dict) else None
+    return size if isinstance(size, int) else None
+
+
+def read_log_snapshot(backend: CommandBackend, job_id: str, size: int | None) -> bytes:
+    """The log prefix ``size`` measured; the whole log when no size was measured."""
+    data = backend.read_log(job_id)
+    return data if size is None else data[:size]
+
+
+def read_log_range_snapshot(
+    backend: CommandBackend, job_id: str, start: int, max_bytes: int, size: int | None
+) -> tuple[bytes, int]:
+    """A range read clamped to ``size`` while the log is still append-only."""
+    data, size_at_open = backend.read_log_range(job_id, start, max_bytes)
+    if size is None or not start <= size <= size_at_open:
+        return data, size_at_open  # unmeasured, or truncated: never invent a prefix
+    return data[: size - start], size
+
+
 def require_command_available(backend: CommandBackend) -> None:
     """Optional refusal gate before paths, telemetry or any operation is touched."""
     check = getattr(backend, "require_available", None)

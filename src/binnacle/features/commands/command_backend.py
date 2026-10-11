@@ -1,7 +1,6 @@
 """Stateless bridge to the existing process-owned durable job engine."""
 
 import platform
-import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -20,26 +19,12 @@ from binnacle.features.commands.command_contracts import (
 class DurableCommandBackend:
     """Delegate without owning configuration, processes, caches, or resources.
 
-    r6 X1 (SD-67): the only state is the r5 L2c pairing below. A job state's
-    log size pins this thread's next log read of that job to the same
-    append-only prefix, so a reply's text and byte count are one snapshot.
+    r6 W2 X1e (SD-74): no per-thread or per-instance state. The callers pass
+    a state's ``log_bytes`` to the snapshot reads in command_contracts, so a
+    reply's text and byte count are one snapshot.
     """
 
-    __slots__ = ("_snapshot",)
-
-    def __init__(self) -> None:
-        self._snapshot = threading.local()
-
-    def _pin(self, job_id: str, state: dict | None) -> dict | None:
-        size = state.get("log_bytes") if isinstance(state, dict) else None
-        self._snapshot.last = (job_id, size) if isinstance(size, int) else None
-        return state
-
-    def _snapshot_bytes(self, job_id: str) -> int | None:
-        """Consume the log size the paired job state measured, if any."""
-        last = getattr(self._snapshot, "last", None)
-        self._snapshot.last = None
-        return last[1] if last is not None and last[0] == job_id else None
+    __slots__ = ()
 
     def start_and_wait(
         self, command: str, workdir: Path, stdin: str | None, wait_seconds: float
@@ -56,7 +41,7 @@ class DurableCommandBackend:
     def job_state(self, job_id: str) -> dict | None:
         from binnacle.features.commands import jobs
 
-        return self._pin(job_id, jobs.job_state(job_id))
+        return jobs.job_state(job_id)
 
     def list_jobs(self) -> list[dict]:
         from binnacle.features.commands import jobs
@@ -66,25 +51,19 @@ class DurableCommandBackend:
     def await_exit(self, job_id: str, timeout: float) -> dict | None:
         from binnacle.features.commands import jobs
 
-        return self._pin(job_id, jobs.await_exit(job_id, timeout))
+        return jobs.await_exit(job_id, timeout)
 
     def read_log(self, job_id: str) -> bytes:
         from binnacle.features.commands import jobs
 
-        size = self._snapshot_bytes(job_id)
-        data = jobs.read_log(job_id)
-        return data if size is None else data[:size]
+        return jobs.read_log(job_id)
 
     def read_log_range(
         self, job_id: str, start: int, max_bytes: int
     ) -> tuple[bytes, int]:
         from binnacle.features.commands import jobs
 
-        size = self._snapshot_bytes(job_id)
-        read = jobs.read_log_range(job_id, start, max_bytes)
-        if size is None or not start <= size <= read[1]:
-            return read  # unpinned, or no longer append-only: never invent one
-        return read[0][: size - start], size
+        return jobs.read_log_range(job_id, start, max_bytes)
 
     def job_processes(self, job_id: str, max_cmd_chars: int = 200) -> list[dict]:
         from binnacle.features.commands import jobs
@@ -174,10 +153,6 @@ class DarwinManagerCommandBackend:
         # composition.create_job_client(): features never import platform.darwin.
         self.client = client
         self.bindings = bindings
-        # r5 L2c: (job_id, log_bytes) of this thread's latest state. The next
-        # log read of that job returns exactly that append-only prefix, so a
-        # reply's text and byte count describe one snapshot (no ping between).
-        self._snapshot = threading.local()
 
     @property
     def socket_path(self) -> Path:
@@ -250,7 +225,6 @@ class DarwinManagerCommandBackend:
             log_bytes, last_output_age = stat.st_size, now - stat.st_mtime
         except OSError:
             log_bytes, last_output_age = 0, None
-        self._snapshot.last = (job_id, log_bytes)
         note = None
         if meta.get("authority") == "UNKNOWN":
             state, note = "unknown", DARWIN_OWNER_LOST_NOTE  # D-1: never exited
@@ -313,28 +287,16 @@ class DarwinManagerCommandBackend:
             state = self._state(job_id, None)
         return state
 
-    def _snapshot_bytes(self, job_id: str) -> int | None:
-        """Consume the log size the paired ``_state`` measured, if any."""
-        last = getattr(self._snapshot, "last", None)
-        self._snapshot.last = None
-        return last[1] if last is not None and last[0] == job_id else None
-
     def read_log(self, job_id: str) -> bytes:
-        size = self._snapshot_bytes(job_id)
-        data = self.bindings.store.read_log(self.jobs_dir, job_id)
-        return data if size is None else data[:size]
+        return self.bindings.store.read_log(self.jobs_dir, job_id)
 
     def read_log_range(
         self, job_id: str, start: int, max_bytes: int
     ) -> tuple[bytes, int]:
-        size = self._snapshot_bytes(job_id)
-        store = self.bindings.store
-        data, size_at_open = store.read_log_range(
+        # The store's size_at_open; read_log_range_snapshot clamps it (r5 L2c).
+        return self.bindings.store.read_log_range(
             self.jobs_dir, job_id, start, max_bytes
         )
-        if size is None or not start <= size <= size_at_open:
-            return data, size_at_open
-        return data[: size - start], size
 
     def job_processes(self, job_id: str, max_cmd_chars: int = 200) -> list[dict]:
         # JCRP-F6: the manager lists its own verified, running group read-only;

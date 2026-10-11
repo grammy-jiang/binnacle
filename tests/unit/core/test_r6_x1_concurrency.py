@@ -1,16 +1,17 @@
-"""r6 X1-t: the X1 snapshot pin under real concurrency (R-X1 RX1-F2).
+"""r6 X1-t: one output snapshot per reply under real concurrency (R-X1 RX1-F2).
 
-``DurableCommandBackend`` pins a thread's next log read of a job to the size
-that job's state measured. The X1 tests are single-threaded, so a pin kept in
-plain instance state would pass them. Here ONE shared backend serves two
+Since r6 W2 X1e (SD-74) each call passes the size its job state measured
+explicitly to its log read; ``DurableCommandBackend`` keeps no per-thread or
+per-instance pin. The X1 tests are single-threaded, so a size kept in plain
+instance state would pass them. Here ONE shared backend serves two
 spooled jobs that two writer threads keep growing; every size read appends
 once more, and short delays inside the state and after the pin let other
 calls interleave between each call's state and its log read. Calls run from a thread pool and through FastMCP's
 async dispatch (``asyncio.gather`` over the in-memory client), and every
 reply must be the snapshot of its own job: byte counts equal the bytes of the
 returned text, which is the exact prefix or cursor slice of that job's
-append-only log. The stale-thread test fixes what a reused worker thread does
-with a pin that no read of the same job consumed.
+append-only log. The reused-thread test fixes that a state no read of the
+same job followed leaves nothing on a worker thread.
 """
 
 import asyncio
@@ -29,6 +30,10 @@ from fastmcp import Client
 from binnacle.config import RootsSettings, RunCommandSettings
 from binnacle.features.commands import job_owner, jobs
 from binnacle.features.commands.command_backend import DurableCommandBackend
+from binnacle.features.commands.command_contracts import (
+    read_log_snapshot,
+    snapshot_size,
+)
 from binnacle.features.commands.commands_server import create_commands_server
 from binnacle.features.commands.tools import job_status as job_status_tool
 from binnacle.features.commands.tools import run_command as run_command_tool
@@ -124,9 +129,9 @@ class Bursts:
         monkeypatch.setattr(jobs, "job_state", racing_state)
         monkeypatch.setattr(jobs, "read_log", slow_read)
         monkeypatch.setattr(jobs, "read_log_range", slow_range)
-        # The backend pins after the engine returns and consumes the pin before
-        # it reads, so the delays above lie outside the pin's lifetime. Delay
-        # after the real state methods too: other calls then pin in between.
+        # The size leaves the backend with the state and reaches the read as a
+        # value, so the delays above lie outside that hand-over. Delay after
+        # the real state methods too: other calls then measure in between.
         for name in ("job_state", "await_exit"):
             monkeypatch.setattr(
                 DurableCommandBackend,
@@ -326,15 +331,13 @@ def test_one_shared_backend_keeps_every_reply_its_own_snapshot(bursts, spool_roo
     assert overlap["threads"] >= 2 and overlap["fastmcp"] >= 2, overlap
 
 
-def test_stale_pin_on_a_reused_thread_never_sizes_another_job(spool_root):
-    """What a pin that no read of its job consumed does on a reused thread.
+def test_a_reused_thread_carries_no_size_between_calls(spool_root):
+    """A state that no read of its job followed leaves nothing behind.
 
-    A state pins (job, size) on the calling thread. The next log read on that
-    thread consumes the pin whatever job it reads, and applies the size only
-    when the read is of the same job. So a read of another job that no state
-    of its own preceded returns that job's whole log, never a prefix cut at
-    the stale pin's size, and it clears the stale pin. A pin is invisible to
-    every other thread.
+    Before X1e a state pinned (job, size) on the calling thread until the next
+    log read consumed it. Now the size is a value the caller passes on, so on
+    one reused worker thread every plain read is the whole log, whatever state
+    calls preceded it, and only an explicit size cuts a prefix.
     """
     root = spool_root / "jobs"
     a, b = JOB["A"], JOB["B"]
@@ -356,31 +359,23 @@ def test_stale_pin_on_a_reused_thread_never_sizes_another_job(spool_root):
 
             return worker.submit(call).result()
 
-        # Control: the pin is active on this thread for the same job.
+        # A state of A that no read of A follows (as when a call fails after
+        # its state): before X1e it left A's pin (3 bytes) on the worker.
         assert on_worker(backend.job_state, a)["log_bytes"] == 3
         grow(log_a, b"a2\n")
-        assert on_worker(backend.read_log, a) == b"a1\n"
-
-        # A state of A that no read of A follows (as when a call fails after
-        # its state) leaves A's pin (6 bytes) on the worker thread.
-        assert on_worker(backend.job_state, a)["log_bytes"] == 6
-        grow(log_a, b"a3\n")
         grow(log_b, b"b5\n")
-        # B was never measured on this thread: its whole log, not 6 bytes.
         assert on_worker(backend.read_log, b) == log_b.read_bytes()
-        # That read consumed the stale pin, so A's next read is unpinned.
-        assert on_worker(backend.read_log, a) == b"a1\na2\na3\n"
-
-        # The same for range reads, the cursor path.
-        assert on_worker(backend.job_state, a)["log_bytes"] == 9
-        grow(log_a, b"a4\n")
+        assert on_worker(backend.read_log, a) == b"a1\na2\n"
         whole_b = log_b.read_bytes()
         assert on_worker(backend.read_log_range, b, 0, BIG) == (whole_b, len(whole_b))
-        assert on_worker(backend.read_log_range, a, 0, BIG) == (log_a.read_bytes(), 12)
+        assert on_worker(backend.read_log_range, a, 0, BIG) == (log_a.read_bytes(), 6)
 
-        # A pin on the worker thread never reaches another thread.
-        assert on_worker(backend.job_state, a)["log_bytes"] == 12
-        grow(log_a, b"a5\n")
-        assert backend.read_log(a) == b"a1\na2\na3\na4\na5\n"
-        assert on_worker(backend.read_log, a) == b"a1\na2\na3\na4\n"
+        # The explicit size cuts the prefix on any thread, as often as asked.
+        size = snapshot_size(on_worker(backend.job_state, a))
+        assert size == 6
+        grow(log_a, b"a3\n")
+        assert on_worker(read_log_snapshot, backend, a, size) == b"a1\na2\n"
+        assert read_log_snapshot(backend, a, size) == b"a1\na2\n"
+        assert on_worker(backend.read_log, a) == b"a1\na2\na3\n"
+        assert backend.read_log(a) == b"a1\na2\na3\n"
     assert len(threads) == 1  # every on_worker call ran on one reused thread
