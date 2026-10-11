@@ -1,6 +1,7 @@
 """Descriptor tool integration: moved roots, refusal and deterministic teardown."""
 
 import asyncio
+from pathlib import Path
 
 import pytest
 from fastmcp import Client
@@ -393,3 +394,107 @@ def test_search_summary_names_per_file_limit_without_schema_change(tmp_path):
         }
     finally:
         access.close()
+
+
+def _symlink_app(tmp_path):
+    """Granted root with every symlink shape; Linux-measured expectations below."""
+    import os
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("outside-secret\n")
+    (outside / "dir").mkdir()
+    root = tmp_path / "root"
+    (root / "docs").mkdir(parents=True)
+    (root / "docs" / "sub").mkdir()
+    (root / "hello.txt").write_text("hello\n")
+    (root / "docs" / "note.md").write_text("hi")
+    links = {
+        "filelink": "hello.txt",
+        "dirlink": "docs",
+        "docs/uplink": "../hello.txt",
+        "chain": "filelink",
+        "outfile": "../outside/secret.txt",
+        "outdir": "../outside/dir",
+        "abs_out": str(outside / "secret.txt"),
+        "abs_in": str(root / "hello.txt"),
+        "dangling": "missing",
+        "loop": "loop",
+        "docs/escape": "../../outside/secret.txt",
+    }
+    for name, target in links.items():
+        (root / name).symlink_to(target)
+    os.mkfifo(root / "fifo")
+    settings = Settings(roots=RootsSettings(default_root=root, extra_roots=()))
+    files = DarwinFileAccess()
+    access = paths.FileToolAccess(
+        roots=settings.roots,
+        files=files,
+        search=DarwinSearchAccess(files, rg_bin="rg"),
+        generation="test-generation",
+        capability=Capability(CapabilityState.LIMITED, "test_only", "opened-object"),
+    )
+    app = create_application(
+        settings=settings,
+        token="test",
+        backend=RestrictedCommandBackend(),
+        file_access=access,
+    )
+    return app, root, files
+
+
+def _list(app, *calls):
+    """One client session per app: closing it releases the opened root grants."""
+
+    async def call():
+        async with Client(app) as client:
+            return [
+                (await client.call_tool("list_files", args)).structured_content
+                for args in calls
+            ]
+
+    return asyncio.run(call())
+
+
+def test_list_files_symlinks_match_linux_for_in_root_and_omit_the_rest(tmp_path):
+    app, root, files = _symlink_app(tmp_path)
+    try:
+        listing, sub = _list(app, {"path": str(root)}, {"path": str(root / "docs")})
+        assert listing["mode"] == "list"
+        # Linux types a symlink by its target. Outside-root, absolute, dangling,
+        # looping and special entries are omitted (deliberate divergence).
+        assert [(e["path"], e["type"], e.get("bytes")) for e in listing["entries"]] == [
+            (str(root / "dirlink"), "dir", None),
+            (str(root / "docs"), "dir", None),
+            (str(root / "chain"), "file", 6),
+            (str(root / "filelink"), "file", 6),
+            (str(root / "hello.txt"), "file", 6),
+        ]
+        for entry in listing["entries"] + sub["entries"]:  # never mistyped
+            if (link := Path(entry["path"])).is_symlink():
+                assert link.resolve().is_relative_to(root.resolve()), entry
+                assert entry["type"] == ("dir" if link.is_dir() else "file")
+        assert {(e["path"], e["type"]) for e in sub["entries"]} == {
+            (str(root / "docs/note.md"), "file"),
+            (str(root / "docs/sub"), "dir"),
+            (str(root / "docs/uplink"), "file"),
+        }
+    finally:
+        files.close()
+
+
+@pytest.mark.parametrize("glob", ["*", "**/*", "*link"])
+def test_list_files_glob_omits_symlinks_and_special_files(tmp_path, glob):
+    app, root, files = _symlink_app(tmp_path)
+    try:
+        (listing,) = _list(app, {"path": str(root), "glob": glob})
+        assert listing["mode"] == "glob"
+        names = {e["path"] for e in listing["entries"]}
+        assert all(e["type"] == "file" for e in listing["entries"])
+        for omitted in ("filelink", "dirlink", "chain", "fifo", "dangling", "outfile"):
+            assert str(root / omitted) not in names
+            assert not any(n.startswith(str(root / "dirlink") + "/") for n in names)
+        if glob != "*link":
+            assert str(root / "hello.txt") in names
+    finally:
+        files.close()
