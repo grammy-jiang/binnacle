@@ -13,6 +13,7 @@ returned a job_id" (50 blind listings), read_file's no-paging rule.
 
 import asyncio
 import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -28,8 +29,13 @@ LINUX_ONLY = pytest.mark.skipif(
     ),
 )
 
+# R4 J4 (STEER-04): Darwin serves the Linux job_status text byte for byte.
 DARWIN_JOB_STATUS_SHA256 = (
-    "3381fe4e272af99f22657d3b5b2a9d00026834516de82fa1b7ef3280058274a3"
+    "c85835995e1aa52bbc459b0cae1dc8d054e7c47dac1b179a639ab1e84f4945de"
+)
+LINUX_SURFACE = (
+    Path(__file__).resolve().parents[2]
+    / "docs/os-independent-stage1-evidence/os0-raw-mcp-surface.json"
 )
 
 PROJECT_RULES = (
@@ -72,12 +78,34 @@ def test_search_text_keeps_grep_equivalence():
     assert "prefer this over grep" in d
 
 
+def linux_equal_part(name: str, text: str) -> str:
+    """Darwin text minus its declared disclosure; Linux text unchanged.
+
+    STEER-04 (amended JCR-4): command tools carry no disclosure suffix.
+    """
+    if sys.platform == "linux":
+        return text
+    linux = {
+        tool["name"]: " ".join(tool["description"].split())
+        for tool in json.loads(LINUX_SURFACE.read_text())["profile_surfaces"][
+            "default"
+        ]["tools"]
+    }[name]
+    assert text.startswith(linux), name  # the rest equals the Linux text
+    suffix = text[len(linux) :].strip()
+    if name == "search_text":  # J6's declared Darwin size-limit difference
+        assert suffix.startswith("Darwin per-file size limit: 16 MiB"), suffix
+    else:
+        assert suffix == "", name
+    return linux
+
+
 def test_job_status_keeps_the_only_needed_clause_and_wait_contract():
-    if sys.platform != "linux":  # Darwin serves its own text (35cafac); exact pin
-        digest = hashlib.sha256(descriptions()["job_status"].encode()).hexdigest()
+    full = descriptions()["job_status"]
+    if sys.platform != "linux":  # the Linux text exactly; exact pin
+        digest = hashlib.sha256(full.encode()).hexdigest()
         assert digest == DARWIN_JOB_STATUS_SHA256
-        return
-    d = descriptions()["job_status"].lower()
+    d = linux_equal_part("job_status", full).lower()
     assert "only needed when run_command returned a job_id" in d
     assert "positive wait blocks up to the requested duration (max 50 seconds)" in d
     assert "turn budget" not in d  # the blocking-wall guard was removed 2026-09-27
@@ -124,7 +152,7 @@ def test_descriptions_keep_generic_handoff_small_and_avoid_project_planning():
     ):
         assert "plan first" not in d[name].lower(), name
     assert (
-        sum(tokens(v) for v in d.values()) < 700
+        sum(tokens(linux_equal_part(k, v)) for k, v in d.items()) < 700
     )  # was ~650 tokens of description text before the review
 
 

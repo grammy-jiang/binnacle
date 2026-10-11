@@ -124,11 +124,11 @@ def open_service_lease(*, root: Path, label: str, generation: str) -> ServiceLea
         os.close(fd)
 
 
-def discover_service_lease(*, root: Path, label: str) -> ServiceLease:
+def discover_service_lease(*, root: Path, label: str, name: str) -> ServiceLease:
     """Lease for the published generation; connect still proves peer and HMAC."""
     fd = open_private_root(root)
     try:
-        key_fd = private_file(fd, "jobs.sock.auth")
+        key_fd = private_file(fd, name + ".auth")  # name: the socket basename
     except OSError as exc:
         raise _refuse("ipc_endpoint_unpublished") from exc
     finally:

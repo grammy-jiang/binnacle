@@ -144,12 +144,29 @@ def _log_jobs_config(s) -> None:
 
     if host_os_family() == "darwin":
         from binnacle.platform.contracts.darwin_release_scope import (
-            DARWIN_RELEASE_SCOPE,
+            release_scope_for_owner,
+            resolve_darwin_job_owner,
         )
 
+        owner = resolve_darwin_job_owner(s.jobs.owner)
+        scope = release_scope_for_owner(owner)
         for tool in ("run_command", "job_status", "stop_job"):
-            _log_tool_config(
-                tool, capability=DARWIN_RELEASE_SCOPE[tool].capability.state.value
+            _log_tool_config(tool, capability=scope[tool].capability.state.value)
+        if owner == "manager":
+            # CR0-1.2.0 point 4: auto means manager on Darwin; say it at startup.
+            logger.info(
+                "event=jobs_owner configured_owner=%s effective_owner=manager "
+                "service=com.binnacle.jobs socket=%s note=%s",
+                s.jobs.owner,
+                s.jobs.socket_path or "runtime-default",
+                "command tools need the com.binnacle.jobs service; when it is "
+                "absent they fail closed with 'job manager unavailable' and "
+                "never fall back to embedded execution",
+            )
+        else:
+            logger.info(
+                "event=jobs_owner configured_owner=%s effective_owner=embedded",
+                s.jobs.owner,
             )
         return
     from binnacle.features.commands import jobs

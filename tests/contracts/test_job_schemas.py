@@ -81,7 +81,46 @@ def test_positive_wait_job_status_validates_without_guard_fields():
     call("stop_job", job_id=p["job_id"])
 
 
-def test_cursor_job_status_validates_and_omits_log_tail():
+def _darwin_manager_server(jobs_dir):
+    """R4 J4: the manager-composed path with test-only AVAILABLE command rows.
+
+    The committed rows stay UNAVAILABLE until J-CR; the release_scope argument
+    is the test-only seam (SD-16 item 3). A spool stand-in replaces the
+    unreachable com.binnacle.jobs client, so the strict client validates the
+    manager backend's structured output against the Linux schemas.
+    """
+    from dataclasses import replace
+
+    from binnacle.application import compose_native_tools, create_application
+    from binnacle.config import Settings
+    from binnacle.platform.contracts.capability_contracts import (
+        Capability,
+        CapabilityState,
+    )
+    from binnacle.platform.contracts.darwin_release_scope import (
+        COMMAND_TOOLS,
+        release_scope_for_owner,
+    )
+    from tests.platform.darwin.test_durable_tool_wiring import _SpoolClient
+
+    scope = dict(release_scope_for_owner("manager"))
+    for tool in COMMAND_TOOLS:
+        available = Capability(CapabilityState.AVAILABLE, "test", tool)
+        scope[tool] = replace(scope[tool], capability=available)
+    settings = Settings()
+    settings.jobs.dir, settings.jobs.socket_path = jobs_dir, jobs_dir / "jobs.sock"
+    access, backend = compose_native_tools(
+        settings=settings, release_scope=scope, owner="manager"
+    )
+    backend.client = _SpoolClient(jobs_dir)
+    return create_application(
+        settings=settings, token="test", backend=backend, file_access=access
+    )
+
+
+def test_cursor_job_status_validates_and_omits_log_tail(monkeypatch, tmp_path):
+    if sys.platform == "darwin":
+        monkeypatch.setattr(server, "mcp", _darwin_manager_server(tmp_path))
     p = call("run_command", command="printf cursor-schema", workdir="/tmp")
     s = call("job_status", job_id=p["job_id"], cursor="start")
     assert s["log_delta"] == "cursor-schema"

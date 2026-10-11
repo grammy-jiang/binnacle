@@ -256,10 +256,7 @@ def serve_native_channel(
 
 
 def validate_native_command_states(
-    states: Mapping[str, str],
-    *,
-    execution: ForegroundExecution | None = None,
-    owner: JobOwnerKind = "embedded",
+    states: Mapping[str, str], *, owner: JobOwnerKind, execution=None
 ) -> None:
     """Reject contradictory scopes; the stop_job rule is owner-conditioned (1.2.0)."""
     rows.validate_owner_command_states(states, owner, execution)
@@ -273,14 +270,20 @@ def validate_native_command_states(
         DarwinProcessBackend().validate_release_states(states)
 
 
-def native_file_capability(*, release_scope=None, execution=None, owner="embedded"):
+def create_job_client():
+    """The A3 manager client (R4 J4); never an embedded fallback."""
+    if host_os_family() != "darwin":
+        raise UnsupportedHostOS("Darwin job manager client requires Darwin")
+    from binnacle.platform.darwin.job_manager_client import DarwinJobClient
+
+    return DarwinJobClient()
+
+
+def native_file_capability(*, owner: JobOwnerKind, release_scope=None, execution=None):
     """Read the composed owner's committed rows; alternatives are test inputs."""
     release_scope = release_scope or rows.release_scope_for_owner(owner)
-    validate_native_command_states(
-        {tool: row.capability.state.value for tool, row in release_scope.items()},
-        execution=execution,
-        owner=owner,
-    )
+    states = {tool: row.capability.state.value for tool, row in release_scope.items()}
+    validate_native_command_states(states, execution=execution, owner=owner)
     rows.validate_release_rows(release_scope, owner)
     if host_os_family() == "linux":
         return None
@@ -412,7 +415,7 @@ class _ObservedForegroundExecution:
 
 
 def create_foreground_execution(
-    *, command_states=None, foreground_limit_s=50, wait_max_s=50, owner="embedded"
+    *, owner: JobOwnerKind, command_states=None, foreground_limit_s=50, wait_max_s=50
 ) -> ForegroundExecution:
     """Inject A2 only for the composed LIMITED row; bind its sole reaper to A5."""
     if host_os_family() != "darwin":
@@ -424,11 +427,8 @@ def create_foreground_execution(
     from binnacle.platform.darwin.resource_accounting import DarwinResourceAccounting
 
     states = command_states or {}
-    runner = (
-        _ForegroundRunner(foreground_limit_s, wait_max_s)
-        if states.get("run_command") == "LIMITED"
-        else None
-    )
+    limited = states.get("run_command") == "LIMITED"
+    runner = _ForegroundRunner(foreground_limit_s, wait_max_s) if limited else None
     execution = _ObservedForegroundExecution(
         DarwinProcessBackend(foreground_runner=runner), DarwinResourceAccounting()
     )

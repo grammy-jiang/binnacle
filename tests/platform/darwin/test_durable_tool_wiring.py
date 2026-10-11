@@ -1,0 +1,500 @@
+"""R4 J4: Darwin command tools wired to the com.binnacle.jobs manager owner.
+
+The manager rows stay UNAVAILABLE in the committed scope until J-CR, so the
+manager-composed paths run here with test-only AVAILABLE rows and a fake
+client that writes the J2 spool contract (meta.json + out.log).
+"""
+
+import asyncio
+import functools
+import json
+import os
+import platform
+import signal
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+from contextlib import contextmanager
+from pathlib import Path
+
+import pytest
+from fastmcp import Client
+from fastmcp.exceptions import ToolError
+
+from binnacle.config import RootsSettings, Settings
+from binnacle.features.commands import command_backend as cb
+from binnacle.features.commands.tools import job_status as js
+from binnacle.features.commands.tools import run_command as rc
+from binnacle.features.commands.tools import stop_job as sj
+from binnacle.platform.contracts.process_contracts import (
+    JOB_MANAGER_UNAVAILABLE,
+    OWNER_LOST_STOP_REFUSED,
+)
+
+_DARWIN = pytest.mark.skipif(
+    platform.system() != "Darwin", reason="native Darwin composition"
+)
+
+AVAILABLE = dict.fromkeys(("run_command", "job_status", "stop_job"), "AVAILABLE")
+
+
+class _SpoolClient:
+    """Stand-in for DarwinJobClient that honours the J2 spool contract."""
+
+    def __init__(self, jobs_dir: Path):
+        self.jobs_dir = jobs_dir
+        self.stops: list[str] = []
+        # LATE jobs: persist the exit record only after this event is set.
+        self.persist_late = threading.Event()
+        self.late_persisted = threading.Event()
+
+    def _write(self, job_id, meta):
+        # Atomic like job_store.write_meta: a reader never sees a partial record.
+        target = self.jobs_dir / job_id / "meta.json"
+        partial = target.with_suffix(".tmp")
+        partial.write_text(json.dumps(meta))
+        os.replace(partial, target)
+
+    def _persist_when_released(self, job_id, final):
+        self.persist_late.wait()
+        self._write(job_id, final)
+        self.late_persisted.set()
+
+    def start(self, socket_path, *, command, workdir, stdin, wait_seconds, call_id):
+        job_id = f"{len(list(self.jobs_dir.iterdir())):012x}"
+        directory = self.jobs_dir / job_id
+        directory.mkdir()
+        meta = {"schema_version": 2, "owner": "manager", "boot_id": "test-boot"}
+        meta.update(owner_instance_id="test-incarnation", command=command, pid=4242)
+        meta.update(workdir=str(workdir), pgid=4242, starttime=1)
+        meta["started_at"] = time.time()
+        if command.startswith("LATE"):  # reaped, record not yet persisted
+            (directory / "out.log").write_bytes(b"late\n")
+            self._write(job_id, meta)
+            final = {**meta, "exit_code": 0, "signal": None, "ended_at": time.time()}
+            final["termination_reason"] = "normal_exit"
+            threading.Thread(
+                target=self._persist_when_released, args=(job_id, final), daemon=True
+            ).start()
+            return {"ok": True, "job_id": job_id, "state": "unknown"}
+        if command.startswith("RUNNING"):
+            (directory / "out.log").write_bytes(b"partial\n")
+            self._write(job_id, meta)
+            return {"ok": True, "job_id": job_id, "state": "running"}
+        with open(directory / "out.log", "wb") as out:
+            done = subprocess.run(
+                ["/bin/sh", "-c", command],
+                cwd=workdir,
+                stdout=out,
+                stderr=out,
+                check=False,
+            )
+        meta.update(exit_code=done.returncode, signal=None, ended_at=time.time())
+        meta["termination_reason"] = "normal_exit"
+        self._write(job_id, meta)
+        return {"ok": True, "job_id": job_id, "state": "exited"}
+
+    def stop(self, socket_path, job_id, *, call_id="-"):
+        self.stops.append(job_id)
+        meta = json.loads((self.jobs_dir / job_id / "meta.json").read_text())
+        meta.update(exit_code=None, signal=15, ended_at=time.time())
+        meta["termination_reason"] = "stop_requested"
+        self._write(job_id, meta)
+        return {"ok": True, "job_id": job_id, "state": "exited"}
+
+    def lose_owner(self, job_id):
+        meta = json.loads((self.jobs_dir / job_id / "meta.json").read_text())
+        meta.update(authority="UNKNOWN", exit_code=None, signal=None)
+        meta.update(ended_at=time.time(), termination_reason="owner_restart")
+        self._write(job_id, meta)
+
+
+def _settings(tmp_path):
+    root = (tmp_path / "root").resolve()
+    root.mkdir(exist_ok=True)
+    settings = Settings(roots=RootsSettings(default_root=root))
+    settings.jobs.dir = tmp_path / "jobs"
+    settings.jobs.dir.mkdir(exist_ok=True)
+    settings.jobs.socket_path = tmp_path / "jobs.sock"
+    return settings, root
+
+
+def _manager(tmp_path, states=AVAILABLE, client=None):
+    from binnacle.application import manager_bindings
+
+    settings, root = _settings(tmp_path)
+    backend = cb.DarwinManagerCommandBackend(
+        jobs_dir=settings.jobs.dir,
+        socket_path=settings.jobs.socket_path,
+        release_states=states,
+        warmup_s=settings.jobs.warmup_s,
+        max_output_chars=settings.jobs.max_output_chars,
+        client=client or _SpoolClient(settings.jobs.dir),
+        bindings=manager_bindings(),
+    )
+    return settings, root, backend
+
+
+def _run(settings, root, backend, command, wait):
+    return rc.run_command_impl(
+        command, str(root), wait, False, None, roots=settings.roots, backend=backend
+    )
+
+
+def _tools(app):
+    async def listing():
+        async with Client(app) as client:
+            return {tool.name: tool for tool in await client.list_tools()}
+
+    return asyncio.run(listing())
+
+
+def _o200k():
+    from binnacle.observability.token_telemetry import _load_encoding
+
+    return _load_encoding("o200k_base")  # the test_surface_tokens tokenizer
+
+
+def _app(settings, backend):
+    from binnacle.application import create_application
+
+    return create_application(settings=settings, token="t", backend=backend)
+
+
+@_DARWIN
+def test_production_composes_manager_owner_and_fails_closed(tmp_path):
+    from binnacle.application import (
+        DARWIN_JOBS_DISCLOSURE,
+        DARWIN_MANAGER_REQUIREMENT,
+        _server_instructions,
+        compose_native_tools,
+    )
+
+    settings, root = _settings(tmp_path)
+    assert settings.jobs.owner == "auto"  # CR0 point 4: auto is manager on Darwin
+    _, backend = compose_native_tools(settings=settings)
+    assert isinstance(backend, cb.DarwinManagerCommandBackend)
+    assert type(backend.client).__name__ == "DarwinJobClient"
+    # The committed rows stay UNAVAILABLE until J-CR; no embedded fallback.
+    assert set(backend.release_states.values()) == {"UNAVAILABLE"}
+    instructions = _server_instructions("manager")
+    assert "com.binnacle.jobs" in instructions and len(instructions) <= 512
+    assert DARWIN_MANAGER_REQUIREMENT in instructions
+    assert "fail closed" in DARWIN_MANAGER_REQUIREMENT
+    # STEER-04 2(a): one short D-1 sentence of at most 35 tokens (measured: 19).
+    assert instructions.endswith(DARWIN_JOBS_DISCLOSURE)
+    assert len(_o200k().encode(DARWIN_JOBS_DISCLOSURE)) <= 35
+    app = _app(settings, backend)
+    assert "com.binnacle.jobs" in app.instructions
+    with pytest.raises(ToolError, match="no embedded fallback"):
+        _run(settings, root, backend, "echo hi", 5)
+    with pytest.raises(ToolError, match="no embedded fallback"):
+        js.job_status_impl(None, 10, backend=backend)
+    with pytest.raises(ToolError, match="no embedded fallback"):
+        sj.stop_job_impl("000000000000", backend=backend)
+
+
+@_DARWIN
+def test_explicit_embedded_owner_keeps_limited_composition(tmp_path):
+    from binnacle.application import _DARWIN_INSTRUCTIONS, compose_native_tools
+
+    settings, _ = _settings(tmp_path)
+    settings.jobs.owner = "embedded"
+    _, backend = compose_native_tools(settings=settings)
+    assert backend.release_states["run_command"] == "LIMITED"
+    assert _app(settings, backend).instructions == _DARWIN_INSTRUCTIONS
+
+
+@_DARWIN
+def test_unreachable_manager_is_the_linux_per_call_error(tmp_path):
+    from binnacle.platform.composition import create_job_client
+
+    settings, root, backend = _manager(tmp_path, client=create_job_client())
+    with pytest.raises(ToolError, match=JOB_MANAGER_UNAVAILABLE):
+        _run(settings, root, backend, "echo hi", 5)
+    assert list(settings.jobs.dir.iterdir()) == []  # nothing ran locally
+
+
+@_DARWIN
+def test_manager_descriptions_are_byte_identical_to_linux(tmp_path):
+    """STEER-04 (amended JCR-4): no description-level disclosure on Darwin."""
+    settings, _, backend = _manager(tmp_path)
+    darwin = _tools(_app(settings, backend))
+
+    class _LinuxShape:  # the Linux tool path: a non-restricted backend
+        owner_mode, warmup_s, max_output_chars = "manager", 1.0, 1000
+
+    linux = _tools(_app(settings, _LinuxShape()))
+    for name in ("run_command", "job_status", "stop_job"):
+        assert darwin[name].description.encode() == linux[name].description.encode()
+        assert darwin[name].input_schema == linux[name].input_schema
+        assert darwin[name].output_schema == linux[name].output_schema
+
+
+@_DARWIN
+def test_embedded_limited_text_does_not_advertise_refused_jobs(tmp_path):
+    from binnacle.application import compose_native_tools
+
+    settings, _ = _settings(tmp_path)
+    settings.jobs.owner = "embedded"
+    _, backend = compose_native_tools(settings=settings)
+    tools = _tools(_app(settings, backend))
+    run = tools["run_command"]
+    assert run.description.startswith("Foreground only on macOS")
+    props = run.input_schema["properties"]
+    assert "refused" in props["background"]["description"]
+    assert "job_id" not in props["background"]["description"]
+    assert "job_id" not in props["wait_seconds"]["description"]
+    assert "Unavailable on macOS" in tools["stop_job"].description
+
+
+@_DARWIN
+def test_large_output_returns_the_true_tail(tmp_path):
+    """PARITY-INVENTORY high gap: seq 1 20000 must end at 20000 like Linux."""
+    settings, root, backend = _manager(tmp_path)
+    result = _run(settings, root, backend, "seq 1 20000", 30)
+    payload = result.structured_content
+    assert payload["state"] == "exited" and payload["exit_code"] == 0
+    assert payload["background_job"] is False
+    assert payload["output"].rstrip().endswith("\n20000")
+    assert payload["truncated"] is True
+    assert "elided" in payload["output"]
+    # STEER-04 2(b): the result text keeps the descendants disclosure.
+    assert str(result.content).count("descendants_unverified=true") == 1
+    assert "descendants_unverified" not in payload
+
+
+@_DARWIN
+def test_start_reply_state_is_not_final(tmp_path, monkeypatch):
+    """R-J2-F4: a start reply of 'unknown' waits for the persisted record.
+
+    Events order the steps: the exit record is persisted only after the
+    backend has read the not-yet-final record, so no wall-clock race decides
+    the result. The grace is only an upper bound for a broken backend.
+    """
+    monkeypatch.setattr(cb, "EXIT_RECORD_GRACE_S", 60.0)
+    settings, root, backend = _manager(tmp_path)
+    client, read_state = backend.client, backend.job_state
+    reads_before_record: list[str] = []
+
+    def job_state(job_id):
+        state = read_state(job_id)
+        if not client.late_persisted.is_set():
+            reads_before_record.append(state["state"])
+            client.persist_late.set()  # handshake: release the manager's write
+        return state
+
+    monkeypatch.setattr(backend, "job_state", job_state)
+    payload = _run(settings, root, backend, "LATE exit", 5).structured_content
+    assert reads_before_record[0] == "running"  # the reply state was not final
+    assert client.late_persisted.is_set()
+    assert payload["state"] == "exited" and payload["exit_code"] == 0
+    assert payload["output"] == "late\n"
+
+
+@_DARWIN
+def test_mcp_side_never_constructs_a_job_manager(tmp_path, monkeypatch):
+    """R-J2-F5: the one-writer guarantee lives only in serve_job_manager."""
+    import ast
+
+    from binnacle.application import compose_native_tools
+    from binnacle.features.commands.commands_server import create_commands_server
+    from binnacle.platform.darwin import job_manager_entry as entry
+    from binnacle.platform.darwin import job_manager_service as jm
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("MCP composition touched the job manager")
+
+    for name in ("__init__", "recover", "handle", "record_exit"):
+        monkeypatch.setattr(jm.DarwinJobManager, name, forbidden)
+    monkeypatch.setattr(entry, "serve_job_manager", forbidden)  # J2r home
+    settings, _ = _settings(tmp_path)
+    _, backend = compose_native_tools(settings=settings)
+    app = _app(settings, backend)
+    assert len(_tools(app)) == 8 and len(_tools(create_commands_server())) == 3
+    src = Path(__file__).parents[3] / "src/binnacle"
+    for path in (
+        src / "application.py",
+        src / "server.py",
+        *src.glob("features/**/*.py"),
+    ):
+        names = {
+            getattr(node, "id", None) or getattr(node, "attr", None)
+            for node in ast.walk(ast.parse(path.read_text()))
+        }
+        assert not names & {"DarwinJobManager", "serve_job_manager"}, path
+
+
+@_DARWIN
+def test_owner_lost_job_renders_unknown_and_refuses_stop(tmp_path):
+    settings, root, backend = _manager(tmp_path)
+    started = _run(settings, root, backend, "RUNNING sleep", 1)
+    job_id = started.structured_content["job_id"]
+    assert started.structured_content["state"] == "running"
+    backend.client.lose_owner(job_id)
+    result = js.job_status_impl(job_id, 10, backend=backend)
+    status = result.structured_content
+    assert status["state"] == "unknown"  # D-1: never exited
+    assert status["exit_code"] is None
+    # STEER-04 2(b): the result text states the owner loss where it occurs.
+    assert "owner lost; process not tracked" in str(result.content)
+    assert status["note"] == cb.DARWIN_OWNER_LOST_NOTE
+    state = backend.job_state(job_id)
+    assert state["note"] == cb.DARWIN_OWNER_LOST_NOTE
+    with pytest.raises(ToolError, match=OWNER_LOST_STOP_REFUSED):
+        sj.stop_job_impl(job_id, backend=backend)
+    assert backend.client.stops == []
+
+
+@_DARWIN
+def test_d2_sampled_resources_are_marked_in_job_status(tmp_path):
+    """STEER-04 2(b): D-2 appears where resource values occur, as sampled."""
+    settings, root, backend = _manager(tmp_path)
+    job_id = _run(settings, root, backend, "true", 5).structured_content["job_id"]
+    plain = js.job_status_impl(job_id, 10, backend=backend)
+    assert "resource_usage" not in plain.structured_content
+    assert "sampled" not in str(plain.content)
+    meta_path = settings.jobs.dir / job_id / "meta.json"
+    meta = json.loads(meta_path.read_text())
+    meta["resource_usage"] = {"cpu_s": 0.01, "max_rss_bytes": 1024}
+    backend.client._write(job_id, meta)
+    result = js.job_status_impl(job_id, 10, backend=backend)
+    usage = result.structured_content["resource_usage"]
+    assert usage == {"cpu_s": 0.01, "max_rss_bytes": 1024, "accounting": "sampled"}
+    assert "Resource usage is sampled." in str(result.content)
+
+
+# J2r frozen ping fields (jobs/J2r-a2/INTERFACE-FROZEN.md, D3).
+PING_FIELDS = {"ok", "version", "owner_instance_id", "boot_id", "pid"}
+PING_FIELDS |= {"package_version", "revision", "running_jobs", "unknown_jobs"}
+
+
+@contextmanager
+def _real_manager():
+    """The real com.binnacle.jobs entry point; only its own child is signalled."""
+    with tempfile.TemporaryDirectory(prefix="r4-j4e-", dir="/tmp") as value:
+        base = Path(value).resolve()
+        (base / "rt").mkdir(mode=0o700)
+        sock, jobs = base / "rt" / "jobs.sock", base / "jobs"
+        toml = f'[jobs]\nsocket_path = "{sock}"\ndir = "{jobs}"\n'
+        (base / "config.toml").write_text(toml)
+        env = {"BINNACLE_CONFIG_FILE": str(base / "config.toml"), "HOME": str(base)}
+        env["PATH"] = "/usr/bin:/bin"
+        argv = [sys.executable, "-m", "binnacle.platform.darwin.job_manager_service"]
+        with open(base / "manager.log", "wb") as log:
+            child = subprocess.Popen(argv, env=env, cwd=base, stdout=log, stderr=log)
+        try:
+            yield child, sock, jobs, base / "manager.log"
+        finally:
+            if child.poll() is None:
+                child.kill()  # exact pid of the child this fixture spawned
+                child.wait(timeout=30)
+
+
+def _available_manager_backend(tmp_path, sock, jobs):
+    """Production composition with test-only AVAILABLE rows (SD-16 item 3)."""
+    from dataclasses import replace
+
+    from binnacle.application import compose_native_tools
+    from binnacle.platform.contracts import capability_contracts as cc
+    from binnacle.platform.contracts import darwin_release_scope as drs
+
+    scope = dict(drs.release_scope_for_owner("manager"))
+    for tool in drs.COMMAND_TOOLS:
+        available = cc.Capability(cc.CapabilityState.AVAILABLE, "test", tool)
+        scope[tool] = replace(scope[tool], capability=available)
+    settings, root = _settings(tmp_path)
+    settings.jobs.dir, settings.jobs.socket_path = jobs, sock
+    _, backend = compose_native_tools(
+        settings=settings, release_scope=scope, owner="manager"
+    )
+    return settings, root, backend
+
+
+def _ping_when_ready(backend, child):
+    deadline = time.monotonic() + 30
+    while True:
+        try:
+            return backend.client.ping(backend.socket_path)
+        except RuntimeError:
+            if child.poll() is not None or time.monotonic() > deadline:
+                raise
+            time.sleep(0.05)
+
+
+@_DARWIN
+def test_tools_run_end_to_end_through_the_real_job_manager(tmp_path):
+    """STEER-07 item 5: J4 tools -> DarwinJobClient -> com.binnacle.jobs -> J1."""
+    with _real_manager() as (child, sock, jobs, log):
+        settings, root, backend = _available_manager_backend(tmp_path, sock, jobs)
+        assert type(backend.client).__name__ == "DarwinJobClient"
+        assert backend.client.label == "com.binnacle.jobs"  # production label
+        pong = _ping_when_ready(backend, child)
+        assert PING_FIELDS <= set(pong) and pong["pid"] == child.pid
+        assert pong["version"] == 1 and pong["unknown_jobs"] == 0
+        assert pong["running_jobs"] == 0
+        owner_id = pong["owner_instance_id"]
+
+        run = functools.partial(_run, settings, root, backend)
+        done = run("echo hi; exit 3", 10)
+        payload = done.structured_content
+        assert payload["state"] == "exited" and payload["exit_code"] == 3
+        assert payload["output"] == "hi\n" and payload["background_job"] is False
+        assert str(done.content).count("descendants_unverified=true") == 1
+        status = js.job_status_impl(payload["job_id"], 10, backend=backend)
+        assert status.structured_content["state"] == "exited"
+        record = backend.job_state(payload["job_id"])  # the J2 spool record
+        assert record["owner_instance_id"] == owner_id and record["owner"] == "manager"
+        assert record["termination_reason"] == "normal_exit"
+        tail = run("seq 1 20000", 30).structured_content  # PARITY-INVENTORY gap
+        assert tail["state"] == "exited" and tail["truncated"] is True
+        assert tail["output"].rstrip().endswith("\n20000")
+        assert "elided" in tail["output"] and tail["background_job"] is False
+        job = run("sleep 60", 1).structured_content
+        assert job["state"] == "running" and job["background_job"] is True
+        assert backend.client.ping(sock)["running_jobs"] == 1
+        # An MCP restart is only a new client: a fresh composition reads the job.
+        _, _, again = _available_manager_backend(tmp_path, sock, jobs)
+        assert len(_tools(_app(settings, again))) == 8
+        assert again.job_state(job["job_id"])["state"] == "running"
+        stopped = sj.stop_job_impl(job["job_id"], backend=again).structured_content
+        assert stopped["state"] == "exited" and stopped["signal"] == 15
+        assert again.job_state(job["job_id"])["termination_reason"] == "stop_requested"
+        assert again.job_processes(job["job_id"]) == []  # no pid adoption
+        pong = backend.client.ping(sock)
+        assert (pong["running_jobs"], pong["unknown_jobs"]) == (0, 0)
+        with pytest.raises(ToolError, match="No job with id"):
+            sj.stop_job_impl("0" * 12, backend=backend)
+
+        # Provisioner quiet-window stop (ENTRY-CONTRACT): marker, then SIGTERM.
+        marker = sock.with_name("jobs.sock.stop")
+        marker.write_text(json.dumps({"owner_instance_id": owner_id}))
+        marker.chmod(0o600)
+        child.send_signal(signal.SIGTERM)
+        assert child.wait(timeout=30) == 0, log.read_text()
+    with pytest.raises(ToolError, match=JOB_MANAGER_UNAVAILABLE):
+        run("echo after", 5)  # no embedded fallback once the manager is gone
+
+
+def test_every_production_owner_call_site_passes_owner():
+    """CR0-1.2.0 point 2: no production call relies on an owner default."""
+    import ast
+
+    names = {"validate_native_command_states", "native_file_capability"}
+    names.add("create_foreground_execution")
+    src = Path(__file__).parents[3] / "src/binnacle"
+    calls = []
+    for path in sorted(src.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(), str(path))):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = getattr(func, "id", None) or getattr(func, "attr", None)
+            if name in names:
+                keywords = {k.arg for k in node.keywords}
+                calls.append((path.name, node.lineno, name, "owner" in keywords))
+    assert {c[0] for c in calls} >= {"application.py", "composition.py"}
+    missing = [c[:3] for c in calls if not c[3]]
+    assert missing == [], f"production call sites omit owner=: {missing}"

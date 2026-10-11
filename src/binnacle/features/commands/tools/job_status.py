@@ -11,7 +11,10 @@ from pydantic import Field
 
 from binnacle.config import get_settings
 from binnacle.features.commands import command_status
-from binnacle.features.commands.command_backend import create_command_backend
+from binnacle.features.commands.command_backend import (
+    DarwinManagerCommandBackend,
+    create_command_backend,
+)
 from binnacle.features.commands.command_contracts import (
     CommandBackend,
     CommandFailure,
@@ -83,6 +86,9 @@ def job_status_impl(
         wait_max = get_settings().run_command.wait_max_s
     backend = create_command_backend() if backend is None else backend
     try:
+        if cursor is not None and job_id is None:
+            # Pure argument validation answers first, as on Linux, on every host.
+            raise CommandFailure("cursor requires job_id")
         require_command_available(backend)
         reply = command_status.job_status(
             job_id,
@@ -98,6 +104,9 @@ def job_status_impl(
         )
     except CommandFailure as exc:
         raise ToolError(str(exc)) from exc.__cause__
+    if isinstance(backend, DarwinManagerCommandBackend) and job_id is not None:
+        # JCR-4 as amended (STEER-04): disclose D-1/D-2 where they occur.
+        reply = backend.disclose_status(job_id, reply)
     return ToolResult(content=reply.summary, structured_content=reply.payload)
 
 
