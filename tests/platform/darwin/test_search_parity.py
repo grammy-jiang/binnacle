@@ -77,7 +77,7 @@ def baseline(root, rg, req):
     if req.context_lines:
         argv += ["--context", str(req.context_lines)]
     result = subprocess.run(
-        argv + ["--regexp", req.pattern, "."],
+        argv + ["--regexp", req.pattern, req.relative_path],
         cwd=root,
         capture_output=True,
         check=False,
@@ -145,37 +145,67 @@ def test_native_local_ignore_and_glob_parity(tree):
     assert {e.relative_path for e in listing.entries} == {"keep.txt", "nested/good.txt"}
 
 
-@pytest.mark.parametrize(
-    "name,data",
-    [(".gitignore", "*.log"), (".ignore", "!keep.txt"), (".rgignore", "[abc].txt")],
-)
-def test_unsupported_ignore_policy_is_explicit_not_empty_success(tree, name, data):
-    root, _, grant, search, _ = tree
-    (root / name).write_text(data)
-    (root / "keep.txt").write_text("needle")
-    with pytest.raises(CapabilityUnavailable, match="ignore_policy"):
-        search.search(grant, request())
-
-
-def test_git_repository_policy_refuses_external_discovery(tree):
-    root, _, grant, search, _ = tree
+def make_repository_fixture(root):
+    """Portable tree for the Pi equality receipt; no git subprocess or config."""
     (root / ".git").mkdir()
-    with pytest.raises(CapabilityUnavailable, match="git_ignore_policy"):
-        search.search(grant, request())
+    files = {
+        ".git/config": "needle\n",
+        ".gitignore": "node_modules/\n*.log\n*.tmp\n",
+        ".ignore": "*.ignored\n!priority.log\n",
+        ".rgignore": "*.rg\n!override.ignored\n",
+        "nested/.gitignore": "!keep.tmp\n!priority.ignored\n",
+        "node_modules/dependency": "needle\n",
+        "ignored.log": "needle\n",
+        "dropped.tmp": "needle\n",
+        "drop.ignored": "needle\n",
+        "drop.rg": "needle\n",
+        "nested/drop.tmp": "needle\n",
+        "nested/keep.tmp": "needle\n",
+        "nested/priority.ignored": "needle\n",
+        "priority.log": "needle\n",
+        "override.ignored": "needle\n",
+        "keep.txt": "needle\n",
+        ".hidden": "needle\n",
+        "nested/good.txt": "needle\n",
+    }
+    for name, data in files.items():
+        target = root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(data)
+    (root / "binary").write_bytes(b"\0needle\n")
 
 
-def test_direct_file_search_and_glob(tree):
+@pytest.mark.parametrize("hidden", [False, True])
+def test_repository_ignore_and_binary_equality_with_rg(tree, hidden):
+    root, files, grant, search, rg = tree
+    make_repository_fixture(root)
+    batch = search.search(grant, request())
+    assert content(batch.events) == content(baseline(root, rg, request()))
+    assert batch.events[-1]["data"]["stats"]["binary_files_skipped"] == 1
+    argv = [rg, "--no-config", "--files"]
+    if hidden:
+        argv += ["--hidden", "--glob", "!**/.git/**"]
+    expected = subprocess.run(
+        argv, cwd=root, capture_output=True, text=True, check=True
+    )
+    listing = files.list_entries(grant, ListRequest(".", "**/*", hidden, 100, 1000, 5))
+    assert {e.relative_path for e in listing.entries} == set(
+        expected.stdout.splitlines()
+    )
+
+
+@pytest.mark.parametrize("glob", ["*.py", "*.hidden", ".hidden", "**/*", "sub/*"])
+def test_direct_file_search_and_glob(tree, glob):
     root, _, grant, search, _ = tree
     (root / ".hidden").write_text("needle\n")
     result = search.search(grant, request(relative_path=".hidden"))
     assert result.files_searched == 1
     assert content(result.events)[0][1] == ".hidden"
-    assert (
-        search.search(
-            grant, request(relative_path=".hidden", glob="*.py")
-        ).files_searched
-        == 0
-    )
+    from binnacle.features.search.search_text_collect import matches_glob
+
+    expected = matches_glob(str(root / ".hidden"), root / ".hidden", glob)
+    filtered = search.search(grant, request(relative_path=".hidden", glob=glob))
+    assert filtered.files_searched == int(expected)
 
 
 def test_native_rg_bad_pattern_empty_tree_and_missing_binary(tree):
@@ -192,7 +222,9 @@ def test_search_budgets_report_truncation_without_partial_line_matches(tree):
     root, _, grant, search, _ = tree
     (root / "file").write_text("needle\n" * 100)
     result = search.search(grant, request(max_bytes=10))
-    assert result.truncated and not result.events and result.files_searched == 0
+    assert (
+        result.truncated and not content(result.events) and result.files_searched == 0
+    )
     (root / "file").write_text("needle\n")
     result = search.search(grant, request(max_bytes=100))
     assert result.truncated  # JSON output budget, not just input bytes.
@@ -286,9 +318,9 @@ def test_non_utf8_filename_remapped_as_rg_bytes(tree):
     try:
         fd = os.open(os.fsencode(root) + b"/bad-\xff", os.O_WRONLY | os.O_CREAT, 0o600)
     except OSError as exc:
-        if sys.platform == "darwin" and exc.errno == errno.EPERM:
+        if sys.platform == "darwin" and exc.errno in (errno.EPERM, errno.EILSEQ):
             pytest.skip(
-                "Darwin filesystem rejects invalid UTF-8 names; pure remapping tested separately"
+                "APFS rejects non-UTF-8 names (EPERM/EILSEQ); A4 owns this skip; pure remapping tested separately"
             )
         raise
     os.write(fd, b"needle\n")
@@ -298,27 +330,41 @@ def test_non_utf8_filename_remapped_as_rg_bytes(tree):
     assert match["data"]["path"] == {"bytes": "YmFkLf8="}
 
 
-def test_binary_policy_is_explicit(tree):
-    root, _, grant, search, _ = tree
+def test_binary_files_are_skipped_and_counted(tree):
+    root, files, grant, search, _ = tree
     (root / "binary").write_bytes(b"needle\0binary\n")
+    (root / "text").write_text("needle\n")
     for req in (request(), request(relative_path="binary")):
-        with pytest.raises(CapabilityUnavailable, match="binary_search_unavailable"):
-            search.search(grant, req)
+        batch = search.search(grant, req)
+        assert batch.events[-1]["data"]["stats"]["binary_files_skipped"] == 1
+        assert all(e[1] != "binary" for e in content(batch.events))
+    with pytest.raises(CapabilityUnavailable, match="rg_rejected"):
+        search.search(grant, request(relative_path="binary", pattern="["))
+    assert {
+        e.relative_path
+        for e in files.list_entries(
+            grant, ListRequest(".", "**/*", False, 100, 1000, 5)
+        ).entries
+    } == {"binary", "text"}
 
 
-def test_surrogate_filename_remapping_without_filesystem_support():
-    raw = b'{"type":"begin","data":{"path":{"text":"<stdin>"}}}\n'
-    events = search_access._events(raw, os.fsdecode(b"bad-\xff"), False)
-    assert events[0]["data"]["path"] == {"bytes": "YmFkLf8="}
-
-
-def test_subdirectory_ancestor_ignore_policy_refused(tree):
+def test_subdirectory_inherits_only_ignore_files_within_grant(tree, monkeypatch):
     root, _, grant, search, _ = tree
+    (root.parent / ".ignore").write_text("*\n")
     (root / ".ignore").write_text("*.txt\n")
     (root / "sub").mkdir()
     (root / "sub/file.txt").write_text("needle")
-    with pytest.raises(CapabilityUnavailable, match="ancestor_ignore_policy"):
-        search.search(grant, request(relative_path="sub"))
+    (root / "sub/keep").write_text("needle")
+    real_open = os.open
+
+    def scoped(path, flags, *args, **kwargs):
+        assert kwargs.get("dir_fd") is not None
+        assert not os.path.isabs(path) and ".." not in path.split("/")
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", scoped)
+    result = search.search(grant, request(relative_path="sub"))
+    assert {e[1] for e in content(result.events)} == {"sub/keep"}
 
 
 def test_rg_configuration_cannot_inject_path_or_preprocessor(tree, monkeypatch):
@@ -359,3 +405,89 @@ def test_real_ripgrep_child_cleanup_on_expired_deadline_and_cancel(tree, monkeyp
     for child in children:
         assert child.returncode is not None
         assert all(pipe.closed for pipe in (child.stdin, child.stdout, child.stderr))
+
+
+def test_pump_oserror_is_typed_and_reaps_child(tree, monkeypatch):
+    from binnacle.platform.contracts.capability_contracts import AuthorityUnknown
+
+    root, _, grant, search, _ = tree
+    (root / "file").write_text("needle")
+    real_popen = subprocess.Popen
+    children = []
+
+    def capture(*args, **kwargs):
+        child = real_popen(*args, **kwargs)
+        children.append(child)
+        return child
+
+    def failed(*args):
+        raise OSError(errno.EIO, "secret error")
+
+    monkeypatch.setattr(subprocess, "Popen", capture)
+    monkeypatch.setattr(search_access, "_pump", failed)
+    with pytest.raises(AuthorityUnknown, match="file_io_failed"):
+        search.search(grant, request())
+    assert children[0].returncode is not None
+    assert all(
+        p.closed for p in (children[0].stdin, children[0].stdout, children[0].stderr)
+    )
+
+
+def test_rg_path_is_captured_at_composition(tree, monkeypatch):
+    root, files, grant, _, rg = tree
+    (root / "file").write_text("needle")
+    search = DarwinSearchAccess(files, rg_bin="rg")
+    assert os.path.isabs(search._rg_bin)
+    assert search._rg_bin == os.path.abspath(rg)
+    monkeypatch.setenv("PATH", str(root))
+    assert search.search(grant, request()).files_searched == 1
+
+
+def test_event_stream_shape_multi_file(tree):
+    root, _, grant, search, rg = tree
+    for index, name in enumerate(("z", "a", "m")):
+        (root / name).write_text("needle\nneedle needle\n")
+        os.utime(root / name, (100 + index, 100 + index))
+    result = search.search(grant, request())
+    summaries = [e for e in result.events if e["type"] == "summary"]
+    assert len(summaries) == 1 and result.events[-1] == summaries[0]
+    expected = next(e for e in baseline(root, rg, request()) if e["type"] == "summary")
+    for key in (
+        "searches",
+        "searches_with_match",
+        "matched_lines",
+        "matches",
+        "bytes_searched",
+    ):
+        assert summaries[0]["data"]["stats"][key] == expected["data"]["stats"][key]
+    assert [
+        e["data"]["path"]["text"] for e in result.events if e["type"] == "begin"
+    ] == ["a", "m", "z"]
+
+
+@pytest.mark.parametrize(
+    "policy", ["!sub/\n", "sub/\n*.txt\n", "!sub/**\n", "!.hidden\n"]
+)
+def test_ignore_explicit_scope_and_hidden_negation(tree, policy):
+    root, _, grant, search, rg = tree
+    (root / ".ignore").write_text(policy)
+    (root / "sub").mkdir()
+    for name in ("sub/file", "sub/file.txt", "sub/.hidden", ".hidden"):
+        (root / name).write_text("needle\n")
+    for scope in (".", "sub"):
+        req = request(relative_path=scope)
+        assert content(search.search(grant, req).events) == content(
+            baseline(root, rg, req)
+        )
+
+
+@pytest.mark.parametrize("error", [errno.EPERM, errno.EILSEQ])
+def test_non_utf8_skip_guard_is_specific(tree, monkeypatch, error):
+    monkeypatch.setattr(sys, "platform", "darwin")  # Test the APFS guard on Linux too.
+
+    def rejected(*args, **kwargs):
+        raise OSError(error, "invalid filename")
+
+    monkeypatch.setattr(os, "open", rejected)
+    with pytest.raises(pytest.skip.Exception, match="APFS"):
+        test_non_utf8_filename_remapped_as_rg_bytes(tree)

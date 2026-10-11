@@ -73,7 +73,8 @@ def test_native_unreadable_file_and_unauthorized_write(tmp_path):
                 files.write_bytes(grant, "denied", b"bad")
             with pytest.raises(PermissionDenied):
                 DarwinSearchAccess(files, rg_bin="rg").search(
-                    grant, SearchRequest(".", "secret", True, 0, None, 1, 10000, 10)
+                    grant,
+                    SearchRequest("denied", "secret", True, 0, None, 1, 10000, 10),
                 )
             target.chmod(0o444)
             with pytest.raises(PermissionDenied):
@@ -88,3 +89,85 @@ def test_native_unreadable_file_and_unauthorized_write(tmp_path):
             target.chmod(0o600)
     assert target.read_bytes() == b"secret"
     assert not list(root.glob(".binnacle-write-*"))
+
+
+@pytest.mark.parametrize("error", [errno.EACCES, errno.EPERM])
+@pytest.mark.parametrize("directory", [False, True])
+def test_denied_child_listed_without_descent_and_siblings_continue(
+    tmp_path, monkeypatch, error, directory
+):
+    root = tmp_path.resolve()
+    target = root / "denied"
+    if directory:
+        target.mkdir()
+        (target / "secret").write_text("needle")
+    else:
+        target.write_text("needle")
+    (root / "good").write_text("needle")
+    real_open = os.open
+
+    def deny_child(path, flags, *args, **kwargs):
+        if path == "denied":
+            raise OSError(error, "denied")
+        return real_open(path, flags, *args, **kwargs)
+
+    with closing(DarwinFileAccess()) as files:
+        grant = files.grant(root, generation="g")
+        monkeypatch.setattr(os, "open", deny_child)
+        result = files.list_entries(grant, ListRequest(".", "**/*", False, 100, 100, 5))
+        assert {e.relative_path for e in result.entries} == {"denied", "good"}
+        search = DarwinSearchAccess(files, rg_bin="rg")
+        batch = search.search(
+            grant, SearchRequest(".", "needle", True, 0, None, 5, 10000, 100)
+        )
+        assert batch.files_searched == 1
+        with pytest.raises(PermissionDenied):
+            search.search(
+                grant, SearchRequest("denied", "needle", True, 0, None, 5, 10000, 100)
+            )
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses POSIX mode denials")
+def test_native_unreadable_directory_is_listed_not_descended(tmp_path):
+    root = tmp_path.resolve()
+    denied = root / "denied"
+    denied.mkdir()
+    (denied / "secret").write_text("needle")
+    (root / "good").write_text("needle")
+    with closing(DarwinFileAccess()) as files:
+        grant = files.grant(root, generation="g")
+        try:
+            denied.chmod(0)
+            result = files.list_entries(
+                grant, ListRequest(".", "**/*", False, 100, 100, 5)
+            )
+            assert {(e.relative_path, e.kind) for e in result.entries} == {
+                ("denied", "directory"),
+                ("good", "file"),
+            }
+            with pytest.raises(PermissionDenied):
+                files.list_entries(
+                    grant, ListRequest("denied", None, False, 100, 100, 5)
+                )
+        finally:
+            denied.chmod(0o700)
+
+
+def test_symlink_ignore_file_never_opens_external_policy(tmp_path, monkeypatch):
+    root = tmp_path.resolve() / "root"
+    root.mkdir()
+    outside = root.parent / "external-ignore"
+    outside.write_text("*\n")
+    (root / ".ignore").symlink_to(outside)
+    (root / "good").write_text("needle")
+    real_open = os.open
+
+    def guarded(path, flags, *args, **kwargs):
+        assert path != ".ignore"
+        return real_open(path, flags, *args, **kwargs)
+
+    with closing(DarwinFileAccess()) as files:
+        grant = files.grant(root, generation="g")
+        monkeypatch.setattr(os, "open", guarded)
+        result = files.list_entries(grant, ListRequest(".", "**/*", False, 100, 100, 5))
+        assert [e.relative_path for e in result.entries] == ["good"]

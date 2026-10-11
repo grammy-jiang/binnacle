@@ -1,10 +1,12 @@
 """Bounded ripgrep stdin search over opened Files capabilities.
 
-Only root-local .ignore/.rgignore positive excludes are supported. Git/global
-and ancestor ignore discovery is unavailable, never performed outside a grant.
-NUL-containing input is explicitly unsupported: rg stdin binary semantics differ
-from recursive-file search. The helper owns one direct rg child, closes pipes and reaps on every exit. This
-is not general process-tree control. B0 alone enables reviewed tool wiring.
+Ignore discovery is confined to the grant: .gitignore/.ignore/.rgignore above
+it and global policies are never read. Search skips NUL-containing files and
+reports binary_files_skipped in its single aggregate summary event's stats.
+Files use deterministic path order (rg --sort path); default rg order is unspecified. Listing includes
+binary files, matching rg --files. The helper owns one direct rg child, closes
+pipes and reaps on every exit. This is not general process-tree control.
+B0 alone enables reviewed tool wiring; full macOS parity remains unavailable.
 """
 
 from __future__ import annotations
@@ -13,12 +15,17 @@ import base64
 import json
 import os
 import selectors
+import shutil
 import subprocess
 import time
 from collections.abc import Mapping
 from contextlib import closing
 
-from binnacle.platform.contracts.capability_contracts import BudgetExceeded, UnsafePath
+from binnacle.platform.contracts.capability_contracts import (
+    BudgetExceeded,
+    PermissionDenied,
+    UnsafePath,
+)
 from binnacle.platform.contracts.file_access_contracts import (
     FileAccess,
     ListRequest,
@@ -32,6 +39,7 @@ from binnacle.platform.darwin.file_traversal import (
     capability,
     deadline_after,
     glob_matches,
+    native_errors,
     require_positive,
     unavailable,
     validate_relative_path,
@@ -47,6 +55,7 @@ def _command(rg_bin: str, request: SearchRequest) -> list[str]:
     return [*argv, "--regexp", request.pattern, "--", "-"]
 
 
+@native_errors()
 def _pump(
     child: subprocess.Popen[bytes], data: bytes, deadline: float, max_output: int
 ) -> tuple[bytes, bool]:
@@ -91,6 +100,7 @@ def _pump(
     return bytes(output), False
 
 
+@native_errors()
 def _run_rg(
     argv: list[str], data: bytes, deadline: float, max_output: int
 ) -> tuple[bytes, bool]:
@@ -155,10 +165,69 @@ def _events(output: bytes, display: str, truncated: bool) -> list[Mapping[str, o
     return events
 
 
+def _duration(nanos: int) -> dict[str, int | str]:
+    return {
+        "secs": nanos // 10**9,
+        "nanos": nanos % 10**9,
+        "human": f"{nanos / 10**9:.6f}s",
+    }
+
+
+def _aggregate(
+    events: list[Mapping[str, object]], elapsed: int, counts: dict[str, int]
+) -> list[Mapping[str, object]]:
+    """Reduce child summaries once; match/context/end records retain rg shape."""
+    totals = dict.fromkeys(
+        (
+            "searches",
+            "searches_with_match",
+            "bytes_searched",
+            "bytes_printed",
+            "matched_lines",
+            "matches",
+        ),
+        0,
+    )
+    kept: list[Mapping[str, object]] = []
+    search_nanos = 0
+    for event in events:
+        if event["type"] != "summary":
+            kept.append(event)
+            continue
+        payload = event["data"]
+        if not isinstance(payload, dict) or not isinstance(payload.get("stats"), dict):
+            raise unavailable("rg_invalid_output")
+        stats = payload["stats"]
+        for key in totals:
+            value = stats.get(key)
+            if not isinstance(value, int) or value < 0:
+                raise unavailable("rg_invalid_output")
+            totals[key] += value
+        duration = stats.get("elapsed", {})
+        if isinstance(duration, dict):
+            search_nanos += int(duration.get("secs", 0)) * 10**9 + int(
+                duration.get("nanos", 0)
+            )
+    kept.append(
+        {
+            "type": "summary",
+            "data": {
+                "elapsed_total": _duration(elapsed),
+                "stats": {**totals, "elapsed": _duration(search_nanos), **counts},
+            },
+        }
+    )
+    return kept
+
+
 class DarwinSearchAccess:
     def __init__(self, files: FileAccess, *, rg_bin: str) -> None:
         self._files = files
-        self._rg_bin = rg_bin
+        resolved = rg_bin if os.path.isabs(rg_bin) else shutil.which(rg_bin)
+        if resolved is None:
+            raise unavailable("rg_unavailable")
+        # Composition captures PATH once; calls never resolve it again.
+        self._rg_bin = os.path.abspath(resolved)
 
     def _paths(
         self, grant: RootGrant, request: SearchRequest
@@ -180,18 +249,23 @@ class DarwinSearchAccess:
                 request.relative_path,
                 request.glob or "**/*",
                 False,
-                request.max_files,
+                MAX_VISITED,
                 MAX_VISITED,
                 request.timeout_s,
             ),
         )
-        return [
-            entry.relative_path for entry in listing.entries if entry.kind == "file"
-        ], listing.truncated
+        paths = sorted(
+            (entry.relative_path for entry in listing.entries if entry.kind == "file"),
+            key=os.fsencode,
+        )
+        return paths[: request.max_files], listing.truncated or len(
+            paths
+        ) > request.max_files
 
     def search(self, grant: RootGrant, request: SearchRequest) -> SearchBatch:
         require_positive(request.max_bytes, MAX_BYTES)
         require_positive(request.max_files, MAX_VISITED)
+        started = time.monotonic_ns()
         deadline = deadline_after(request.timeout_s)
         if not 0 <= request.context_lines <= 10000 or len(request.pattern) > 65536:
             raise BudgetExceeded(
@@ -202,25 +276,32 @@ class DarwinSearchAccess:
         argv = _command(self._rg_bin, request)
         paths, truncated = self._paths(grant, request)
         events: list[Mapping[str, object]] = []
-        files_searched = 0
+        files_searched = binary_files_skipped = unreadable_files_skipped = 0
         input_left = output_left = request.max_bytes
-        # Invalid expressions and missing rg must fail even for an empty tree.
-        if not paths:
-            _run_rg(argv, b"", deadline, output_left)
         for path in paths:
             if time.monotonic() >= deadline:
                 raise BudgetExceeded("rg_timeout", capability("rg_timeout"))
             if input_left <= 0 or output_left <= 0:
                 truncated = True
                 break
-            with closing(self._files.open_read(grant, path)) as opened:
-                data = opened.read(input_left + 1)
+            try:
+                with closing(self._files.open_read(grant, path)) as opened:
+                    data = opened.read(min(input_left + 1, 65536))
+                    if b"\0" not in data and len(data) <= input_left:
+                        data += opened.read(input_left + 1 - len(data))
+            except PermissionDenied:
+                if path == request.relative_path:
+                    raise
+                unreadable_files_skipped += 1
+                continue
+            if b"\0" in data:
+                binary_files_skipped += 1
+                input_left -= min(len(data), input_left)
+                continue
             if len(data) > input_left:
                 # Never search a cut line and report a false regex/end anchor hit.
                 truncated = True
                 break
-            if b"\0" in data:
-                raise unavailable("darwin_binary_search_unavailable")
             input_left -= len(data)
             output, capped = _run_rg(argv, data, deadline, output_left)
             output_left -= len(output)
@@ -229,6 +310,18 @@ class DarwinSearchAccess:
             if capped:
                 truncated = True
                 break
+        # Binary-only, unreadable-only and empty trees still validate rg/pattern.
+        if files_searched == 0:
+            _run_rg(argv, b"", deadline, max(1, output_left))
+        events = _aggregate(
+            events,
+            time.monotonic_ns() - started,
+            {
+                "files_searched": files_searched,
+                "binary_files_skipped": binary_files_skipped,
+                "unreadable_files_skipped": unreadable_files_skipped,
+            },
+        )
         return SearchBatch(
             events, truncated, files_searched, capability("darwin_search_limited")
         )

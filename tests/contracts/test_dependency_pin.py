@@ -29,6 +29,7 @@ RUNTIME_DEPENDENCIES = {
     "mcp==2.3.0": "exact validated latest MCP protocol SDK for the public API",
     "mcp-types==2.3.0": "exact validated latest modern MCP protocol types and schemas",
     "orjson>=3.11.3": "search_text parses ripgrep's JSON stream and sizes results with it",
+    "pathspec>=1.1,<2; sys_platform == 'darwin'": "Darwin search/list ignore-file matching (A4-SUP-01)",
     "pydantic>=2.13.5": "the settings models and the tool parameter validation",
     "pydantic-settings>=2.15.0": "loads config.toml and the BINNACLE_ environment variables",
     "starlette>=1.6.0": "request/response types for native FastMCP custom HTTP routes",
