@@ -74,14 +74,17 @@ def _flock(path: Path, operation: int, busy: str = "") -> Iterator[None]:
 
 
 def _exit_meta(meta: dict[str, Any], exited: OwnedJobExit) -> dict[str, Any]:
-    if exited.signal is not None:
+    if exited.termination_reason == "owner_restart":
+        # job_owner._record_interruption: the owner stop ended it; no exit status.
+        meta.update(exit_code=None, signal=None)
+        reason = "owner_restart"
+    elif exited.signal is not None:
         meta.update(signal=exited.signal, exit_code=None)
+        reason = "signal"
     else:
         meta["exit_code"] = exited.exit_code
+        reason = "normal_exit"
     meta["ended_at"] = time.time()
-    reason = "signal" if exited.signal is not None else "normal_exit"
-    if exited.termination_reason == "owner_restart":
-        reason = "owner_restart"
     stopped = meta.get("stop_requested")
     meta["termination_reason"] = "stop_requested" if stopped else reason
     return meta

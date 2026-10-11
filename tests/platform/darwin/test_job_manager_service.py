@@ -386,7 +386,9 @@ def test_manager_stop_kills_and_records_owned_groups_no_orphans(runtime, tmp_pat
         assert client().ping(sock)["owner_instance_id"] == manager.owner_instance_id
         assert manager.state(job["job_id"]) == "running"
     meta = meta_of(manager.jobs_dir, job["job_id"])
-    assert (meta["signal"], meta["termination_reason"]) == (15, "owner_restart")
+    # Linux job_owner._record_interruption: no exit status, reason owner_restart.
+    got = (meta["exit_code"], meta["signal"], meta["termination_reason"])
+    assert got == (None, None, "owner_restart")
     assert "authority" not in meta and not errors
     assert group_gone(pgid)  # no untracked survivor in the owned group
 

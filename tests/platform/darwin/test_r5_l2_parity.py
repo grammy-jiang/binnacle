@@ -1,6 +1,8 @@
 """r5 L2: Darwin manager job semantics equal Linux (P5-L2, SD-50, SD-41).
 
-* Authority-UNKNOWN records keep the D-1 text (SD-41).
+* An owner stop (manager restart) records no exit status, like Linux
+  ``job_owner._record_interruption``: job_status and stop_job read
+  "interrupted (owner_restart)". Authority-UNKNOWN records keep D-1.
 * The job workdir is echoed in the caller's form (L3's ``caller_form`` rule,
   imported, no firmlink table) while the job spawns in the resolved directory.
 * Also hosts L1's routine-text pin, moved here at the module-size limit.
@@ -19,6 +21,7 @@ from binnacle.config import RootsSettings
 from binnacle.features.commands import command_backend as cb
 from binnacle.features.commands.tools import job_status as js
 from binnacle.features.commands.tools import run_command as rc
+from binnacle.features.commands.tools import stop_job as sj
 from binnacle.platform import composition
 from binnacle.platform.contracts.process_contracts import OwnedJobExit
 from binnacle.platform.darwin import job_manager_service as svc
@@ -44,6 +47,17 @@ def _record(**extra):
         "started_at": 1.0,
         **extra,
     }
+
+
+@pytest.mark.parametrize("code,number", [(None, 15), (None, 9), (0, None)])
+def test_owner_restart_records_no_exit_status_like_linux(code, number):
+    meta = svc._exit_meta(_record(), OwnedJobExit("j", code, number, "owner_restart"))
+    got = (meta["exit_code"], meta["signal"], meta["termination_reason"])
+    assert got == (None, None, "owner_restart")
+    stopped = _record(stop_requested=True)
+    meta = svc._exit_meta(stopped, OwnedJobExit("j", code, number, "owner_restart"))
+    got = (meta["exit_code"], meta["signal"], meta["termination_reason"])
+    assert got == (None, None, "stop_requested")  # recover_previous_owner order
 
 
 @pytest.mark.parametrize(
@@ -124,6 +138,32 @@ def test_manager_job_echoes_caller_form_workdir(tmp_path, monkeypatch, host):
     assert payload["output"].strip() == str(real / "sub")  # ran in the real dir
     status = js.job_status_impl(payload["job_id"], 10, backend=backend)
     assert status.structured_content["workdir"] == shown
+
+
+@_DARWIN
+def test_owner_restart_record_renders_linux_text(tmp_path):
+    settings, root, backend = _manager(tmp_path)
+    started = rc.run_command_impl(
+        "RUNNING", str(root), 1, False, None, roots=settings.roots, backend=backend
+    )
+    job_id = started.structured_content["job_id"]
+    meta = meta_of(settings.jobs.dir, job_id)
+    exited = OwnedJobExit(job_id, None, 15, "owner_restart")  # close() TERM
+    backend.client._write(job_id, svc._exit_meta(meta, exited))
+    status = js.job_status_impl(job_id, 10, backend=backend)
+    text = status.content[0].text
+    assert text.startswith(f"Job {job_id} interrupted (owner_restart) after ")
+    assert status.structured_content["state"] == "exited"
+    assert status.structured_content["signal"] is None
+    stopped = sj.stop_job_impl(job_id, backend=backend)
+    assert stopped.content[0].text == f"Job {job_id} was interrupted (owner_restart)."
+    assert stopped.structured_content == {
+        "job_id": job_id,
+        "state": "exited",
+        "exit_code": None,
+        "signal": None,
+    }
+    assert backend.client.stops == []  # terminal: nothing signalled
 
 
 @_DARWIN
