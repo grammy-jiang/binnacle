@@ -28,15 +28,49 @@ def _pending(tool: str, gate: str) -> ReleaseDecision:
     )
 
 
+def _limited(tool: str, gate: str, scope: str, reference: str) -> ReleaseDecision:
+    return ReleaseDecision(
+        Capability(CapabilityState.LIMITED, "reviewed_limited", scope),
+        "limited",
+        gate,
+        reference,
+    )
+
+
 DARWIN_RELEASE_SCOPE: Mapping[str, ReleaseDecision] = MappingProxyType(
     {
-        "read_file": _pending("read_file", "CR2"),
+        "read_file": _limited(
+            "read_file",
+            "CR2",
+            "descriptor-contained read_file; replacement metadata limits",
+            "reviews/cr2/CR2-SUPERVISOR-REVIEW-PART1.json; A4=ad5f22ff992c071769a68d0dfedbbc1bb2c0eac2; A5=e1c625086628e6d91f094f649ea7012216a64050; A6=989b69e38c48c73d39994aa021e4ecf79ccd8cb4; T0=6904a71a6093e04d9ed2c230df15f60195b6fd1a; B0=fd7343b3c30afbba503454a391bc034415eba8ff",
+        ),
         "list_files": _pending("list_files", "CR2"),
         "search_text": _pending("search_text", "CR2"),
-        "edit_file": _pending("edit_file", "CR2"),
-        "write_file": _pending("write_file", "CR2"),
-        "run_command": _pending("run_command", "CR1a"),
-        "job_status": _pending("job_status", "CR1a"),
+        "edit_file": _limited(
+            "edit_file",
+            "CR2",
+            "descriptor-contained edit_file; replacement metadata limits",
+            "reviews/cr2/CR2-SUPERVISOR-REVIEW-PART1.json; A4=ad5f22ff992c071769a68d0dfedbbc1bb2c0eac2; A5=e1c625086628e6d91f094f649ea7012216a64050; A6=989b69e38c48c73d39994aa021e4ecf79ccd8cb4; T0=6904a71a6093e04d9ed2c230df15f60195b6fd1a; B0=fd7343b3c30afbba503454a391bc034415eba8ff",
+        ),
+        "write_file": _limited(
+            "write_file",
+            "CR2",
+            "descriptor-contained write_file; replacement metadata limits",
+            "reviews/cr2/CR2-SUPERVISOR-REVIEW-PART1.json; A4=ad5f22ff992c071769a68d0dfedbbc1bb2c0eac2; A5=e1c625086628e6d91f094f649ea7012216a64050; A6=989b69e38c48c73d39994aa021e4ecf79ccd8cb4; T0=6904a71a6093e04d9ed2c230df15f60195b6fd1a; B0=fd7343b3c30afbba503454a391bc034415eba8ff",
+        ),
+        "run_command": _limited(
+            "run_command",
+            "CR1a",
+            "foreground owned-child only; max 50 s; descendants_unverified",
+            "reviews/cr1/CR1A-SUPERVISOR-REVIEW.json; A2=b4946ec1b1a3aadbae55005aeb0314a14e9a5790; A2/FU1=0e23f9977fbaa70a04a0636ec267749fdf8ba9b3; A3=a1f91b7f2e39bcef5173858115fc6a31bb5f3400; B0=fd7343b3c30afbba503454a391bc034415eba8ff",
+        ),
+        "job_status": _limited(
+            "job_status",
+            "CR1a",
+            "completed foreground history/output in memory; lost on restart",
+            "reviews/cr1/CR1A-SUPERVISOR-REVIEW.json; A2=b4946ec1b1a3aadbae55005aeb0314a14e9a5790; A2/FU1=0e23f9977fbaa70a04a0636ec267749fdf8ba9b3; A3=a1f91b7f2e39bcef5173858115fc6a31bb5f3400; B0=fd7343b3c30afbba503454a391bc034415eba8ff",
+        ),
         "stop_job": _pending("stop_job", "never"),
     }
 )

@@ -17,6 +17,7 @@ import platform
 platform.system = lambda: "Darwin"
 import sys
 import binnacle.server
+from binnacle.platform.contracts.darwin_release_scope import DARWIN_RELEASE_SCOPE
 assert not any(m.startswith("binnacle.platform.linux") for m in sys.modules)
 assert "binnacle.features.commands.jobs" not in sys.modules
 import asyncio
@@ -43,8 +44,12 @@ async def check():
         assert {t.name: digest(surface(t)) for t in normalized} == SURFACE_SHA256["default"]
         for name, arguments in calls.items():
             result = await client.call_tool(name, arguments, raise_on_error=False)
-            assert result.is_error, name
-            assert "UNAVAILABLE" in str(result.content), (name, result)
+            if DARWIN_RELEASE_SCOPE[name].capability.state.value == "UNAVAILABLE":
+                assert result.is_error and "UNAVAILABLE" in str(result.content), (name, result)
+            elif name == "job_status":
+                assert not result.is_error, result
+            else:
+                assert result.is_error and "UNAVAILABLE" not in str(result.content), (name, result)
 asyncio.run(check())
 """
     result = subprocess.run(

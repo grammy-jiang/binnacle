@@ -66,7 +66,7 @@ def test_native_wire_schema_preserves_v101_with_declared_description_exception(
     assert actual == baseline["tools"]
 
 
-def test_release_scope_is_committed_unavailable_and_production_cannot_override():
+def test_release_scope_requires_review_and_production_cannot_override():
     import ast
 
     from binnacle.platform.contracts.capability_contracts import CapabilityState
@@ -82,15 +82,37 @@ def test_release_scope_is_committed_unavailable_and_production_cannot_override()
         "job_status",
         "stop_job",
     }
+    approved = {"read_file", "edit_file", "write_file", "run_command", "job_status"}
+    enabled = {
+        tool
+        for tool, row in DARWIN_RELEASE_SCOPE.items()
+        if row.capability.state == CapabilityState.LIMITED
+    }
+    assert enabled == approved
     for tool, row in DARWIN_RELEASE_SCOPE.items():
-        assert row.capability.state == CapabilityState.UNAVAILABLE
+        assert row.capability.state in (
+            CapabilityState.UNAVAILABLE,
+            CapabilityState.LIMITED,
+        )
         assert row.decision_target == (
             "unavailable" if tool == "stop_job" else "limited"
         )
-        assert (
-            row.decision_reference
-            == f"CAPABILITY-DECISION.json#/scope_decision/tool_by_tool/{tool}"
-        )
+        if tool in enabled:
+            verdict = (
+                "CR1A-SUPERVISOR-REVIEW.json"
+                if tool in ("run_command", "job_status")
+                else "CR2-SUPERVISOR-REVIEW-PART1.json"
+            )
+            assert verdict in row.decision_reference
+            assert "fd7343b" in row.decision_reference
+            assert (
+                "0e23f99" if tool in ("run_command", "job_status") else "ad5f22f"
+            ) in row.decision_reference
+        else:
+            assert (
+                row.decision_reference
+                == f"CAPABILITY-DECISION.json#/scope_decision/tool_by_tool/{tool}"
+            )
         assert row.enabling_gate == (
             "never"
             if tool == "stop_job"
@@ -159,3 +181,102 @@ def test_linux_file_lookup_skips_only_darwin_runtime_requirement(monkeypatch):
     assert (
         composition.native_file_capability(release_scope=scope, execution=None) is None
     )
+
+
+def test_production_scope_controls_real_server_without_test_override(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    token = tmp_path / "token"
+    token.write_text("test-token")
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f'[auth]\ntoken_file = "{token}"\n'
+        f'[roots]\ndefault_root = "{tmp_path}"\nextra_roots = []\n'
+    )
+    script = """
+import asyncio, sys
+from pathlib import Path
+from fastmcp import Client
+from binnacle.server import mcp
+from binnacle.platform.contracts.darwin_release_scope import DARWIN_RELEASE_SCOPE
+if sys.platform != "darwin":
+    assert not any(m.startswith("binnacle.platform.darwin") for m in sys.modules)
+    sys.exit(0)
+assert not any(m.startswith("binnacle.platform.linux") for m in sys.modules)
+root = Path(sys.argv[1])
+async def check():
+    async with Client(mcp) as client:
+        for name, args in (
+            ("write_file", {"path": str(root / "sample"), "content": "before"}),
+            ("edit_file", {"path": str(root / "sample"), "old_string": "before", "new_string": "after"}),
+            ("read_file", {"path": str(root / "sample")}),
+            ("run_command", {"command": "printf production", "workdir": str(root)}),
+            ("job_status", {}),
+            ("list_files", {"path": str(root)}),
+            ("search_text", {"path": str(root), "pattern": "after"}),
+            ("stop_job", {"job_id": "foreign"}),
+        ):
+            result = await client.call_tool(name, args, raise_on_error=False)
+            enabled = DARWIN_RELEASE_SCOPE[name].capability.state.value == "LIMITED"
+            assert result.is_error != enabled, (name, result)
+            if not enabled:
+                assert "UNAVAILABLE" in str(result.content), (name, result)
+            elif name == "read_file":
+                assert result.structured_content["content"] == "after"
+            elif name == "run_command":
+                assert result.structured_content["output"] == "production"
+                assert "descendants_unverified=true" in str(result.content)
+                assert "descendants_unverified" not in result.structured_content
+asyncio.run(check())
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(tmp_path)],
+        env={**os.environ, "BINNACLE_CONFIG_FILE": str(config)},
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_linux_startup_with_flipped_scope_preserves_surface_hashes(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    token = tmp_path / "token"
+    token.write_text("test-token")
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f'[auth]\ntoken_file = "{token}"\n'
+        f'[jobs]\nowner = "embedded"\ndir = "{tmp_path / "jobs"}"\n'
+        f'socket_path = "{tmp_path / "jobs.sock"}"\n'
+    )
+    script = """
+import hashlib, platform
+# Composition/schema check on any host; on the Pi this also uses real Linux imports.
+platform.system = lambda: "Linux"
+from binnacle.platform.contracts.darwin_release_scope import DARWIN_RELEASE_SCOPE
+assert DARWIN_RELEASE_SCOPE["run_command"].capability.state.value == "LIMITED"
+from binnacle.server import mcp
+from tests.contracts.surface_support import PROFILES, digest, served, surface
+from tests.contracts.test_tool_surface import SURFACE_SHA256, INSTRUCTIONS_SHA256
+for profile, name in PROFILES.items():
+    tools, instructions = served(name, mcp_server=mcp)
+    hashes = {tool.name: digest(surface(tool)) for tool in tools}
+    assert list(hashes) == list(SURFACE_SHA256[profile])
+    assert hashes == SURFACE_SHA256[profile], (profile, hashes)
+    assert hashlib.sha256(instructions.encode()).hexdigest() == INSTRUCTIONS_SHA256
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        env={**os.environ, "BINNACLE_CONFIG_FILE": str(config)},
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
