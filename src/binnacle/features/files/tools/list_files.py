@@ -102,7 +102,7 @@ def _glob_mode(
     # Python: rg's --glob "always overrides any other ignore logic", so a
     # positive --glob would whitelist gitignored files (found by the gate).
     pattern = glob if "/" in glob else f"**/{glob}"
-    cmd = [rg_bin, "--files", "--no-require-git", "--sortr", "modified"]
+    cmd = [rg_bin, "--files", "--sortr", "modified"]
     if include_hidden:
         cmd += ["--hidden", "--glob", "!**/.git/**"]
     try:

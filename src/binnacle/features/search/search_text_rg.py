@@ -20,7 +20,7 @@ def run_rg(
     timeout_s: int,
     metrics: ExactSearchMetrics | None = None,
 ) -> tuple[list[dict], bool]:
-    cmd = [rg_bin, "--json", "--smart-case", "--no-require-git"]
+    cmd = [rg_bin, "--json", "--smart-case"]
     if fixed_strings:
         cmd.append("--fixed-strings")
     if context > 0:

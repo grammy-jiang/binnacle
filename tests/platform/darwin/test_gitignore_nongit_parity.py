@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import shutil
+import subprocess
 from contextlib import closing
 
 import pytest
@@ -26,9 +28,25 @@ POLICIES = {
 }
 
 
+ALL = {"keep.txt", "noise.log", "skip/inner.txt", "sub/deep.txt"}
+HONORED = {"keep.txt", "sub/deep.txt"}
+
+
+def assert_no_git_above(root):
+    for parent in root.parents:
+        assert not (parent / ".git").exists(), f"stray .git above test root: {parent}"
+
+
+def git_init(root):
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    subprocess.run(
+        ["git", "init", "-q", str(root)], check=True, env=env, capture_output=True
+    )
+
+
 def populate(root, policy, git):
     if git:
-        (root / ".git").mkdir()
+        git_init(root)
     name, body = POLICIES[policy]
     (root / name).write_text(body)
     (root / "skip").mkdir()
@@ -59,8 +77,10 @@ def linux_search(root):
 def test_ignore_files_listing_and_search_equal_on_both_paths(tmp_path, policy, git):
     root = tmp_path.resolve() / "root"
     root.mkdir()
+    assert_no_git_above(root)
     populate(root, policy, git)
-    expected = {"keep.txt", "sub/deep.txt"}
+    # rg defaults: .ignore/.rgignore always apply; .gitignore only inside a git repo.
+    expected = ALL if (policy == "gitignore" and not git) else HONORED
     with closing(DarwinFileAccess()) as files:
         grant = files.grant(root, generation="g")
         search = DarwinSearchAccess(files, rg_bin=RG)
@@ -83,6 +103,7 @@ def test_ignore_file_above_grant_stays_out(tmp_path):
     outer = tmp_path.resolve() / "outer"
     root = outer / "grant"
     root.mkdir(parents=True)
+    assert_no_git_above(root)
     (outer / ".gitignore").write_text("*.txt\n")
     (root / "keep.txt").write_text("needle\n")
     with closing(DarwinFileAccess()) as files:
