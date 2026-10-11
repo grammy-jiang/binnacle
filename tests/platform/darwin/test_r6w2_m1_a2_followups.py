@@ -1,16 +1,19 @@
-"""r6 W2 M1-a2 (R-M1 review N1, N2): held jobs dir and socket-path reasons.
+"""r6 W2 M1-a2 (R-M1 review N1, N2, N5): held jobs dir, path reasons, default root.
 
 N1: the ping ``jobs_dir`` is the realpath only when that dir's ``.manager.lock``
 is the inode whose writer flock this manager holds (st_dev, st_ino). A symlinked
 jobs dir retargeted between the lock and the realpath is refused, fail closed,
 with ``event=job_manager_jobs_dir_mismatch``, before recovery and binding.
 N2: an unusable socket path names its actual reason (not absolute vs too long).
+N5: removing the DEFAULT Application Support root of a test HOME while a job
+runs keeps the job, the manager rebinds, and a later default-root request works.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -23,6 +26,8 @@ import pytest
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 from binnacle.platform.darwin import generation_runtime as runtime
 from binnacle.platform.darwin import job_manager_entry as entry
+from tests.platform.darwin.test_job_manager_entry import ping_when_ready
+from tests.platform.darwin.test_job_manager_resilience import wait_for
 from tests.platform.darwin.test_job_manager_service import (
     ReferenceOwner,
     manager_for,
@@ -31,9 +36,17 @@ from tests.platform.darwin.test_job_manager_service import (
     wait_published,
     write_record,
 )
+from tests.platform.darwin.test_r6_d1_runtime_rebind import (
+    alive,
+    finish,
+    generation,
+    reap_exact,
+)
+from tests.platform.darwin.test_r6_d2_stop_marker_start import start_entry
 from tests.platform.darwin.test_r6w2_m1_ping_jobs_dir import lock_is_held
 
 NATIVE = pytest.mark.skipif(sys.platform != "darwin", reason="Darwin manager entry")
+DEFAULT_ROOT = Path("Library/Application Support/Binnacle/r3")
 
 
 @contextmanager
@@ -194,3 +207,44 @@ def test_a_relative_runtime_dir_names_the_reason(monkeypatch):
         "darwin_socket_path_not_absolute: relative-runtime/jobs.sock"
     )
     assert not Path("relative-runtime").exists()
+
+
+# --- N5 -------------------------------------------------------------------
+
+
+@NATIVE
+def test_removing_the_default_root_keeps_the_job_and_rebinds(monkeypatch):
+    """Test HOME only: the real ~/Library/Application Support is never used."""
+    with base_dir() as base:
+        (base / "bin").mkdir()
+        jobs = base / "jobs"
+        (base / "config.toml").write_text(f'[jobs]\ndir = "{jobs}"\n')  # no socket
+        sock = base / DEFAULT_ROOT / "jobs.sock"
+        assert " " in str(sock) and len(os.fsencode(sock)) < entry.SUN_PATH_MAX
+        child = start_entry(base)  # HOME=base: the default root is under base
+        try:
+            client, pong = ping_when_ready(sock, child)
+            me, before = pong["owner_instance_id"], generation(sock)
+            kw = {"workdir": base, "stdin": None, "call_id": "n5"}
+            started = client.start(sock, command="sleep 60", wait_seconds=0, **kw)
+            job_id = started["job_id"]
+            leader = meta_of(jobs, job_id)["pid"]
+            shutil.rmtree(base / "Library" / "Application Support")  # the space
+            assert wait_for(lambda: generation(sock) not in (None, before), 20)
+            client, pong = ping_when_ready(sock, child)
+            assert (pong["pid"], pong["owner_instance_id"]) == (child.pid, me)
+            assert (pong["running_jobs"], pong["unknown_jobs"]) == (1, 0)
+            assert alive(leader) and "exit_code" not in meta_of(jobs, job_id)
+            # A later request through the client's DEFAULT root resolution.
+            monkeypatch.delenv("BINNACLE_RUNTIME_DIR", raising=False)
+            monkeypatch.setenv("HOME", str(base))
+            default = runtime.resolve_runtime_paths().jobs_socket
+            assert default == sock
+            done = client.start(default, command="exit 0", wait_seconds=10, **kw)
+            assert done["state"] == "exited"
+            assert client.stop(default, job_id)["state"] == "exited"
+            assert meta_of(jobs, job_id)["termination_reason"] == "stop_requested"
+            err = finish(child, sock, me)
+            assert "event=job_manager_endpoint_lost" in err
+        finally:
+            reap_exact(child)
