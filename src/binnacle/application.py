@@ -116,11 +116,15 @@ def create_application(
 
     @asynccontextmanager
     async def lifespan(server):
+        # Each lifespan is an application generation: grants open on the first
+        # entry and close on the last exit; the next entry reopens them.
+        if file_access is not None:
+            file_access.enter()
         try:
             yield {}
         finally:
             if file_access is not None:
-                file_access.close()
+                file_access.exit()
 
     native_options = {"file_access": file_access} if file_access is not None else {}
     root = FastMCP(
@@ -203,6 +207,7 @@ def compose_native_tools(
 
     from binnacle.features.files.paths import FileToolAccess
     from binnacle.platform.composition import (
+        UnsupportedHostOS,
         create_file_access,
         create_foreground_execution,
         create_search_access,
@@ -222,14 +227,18 @@ def compose_native_tools(
     capability = native_file_capability(
         release_scope=release_scope, execution=execution
     )
-    files = create_file_access()
-    search = (
-        create_search_access(files=files, rg_bin=settings.rg_bin) if files else None
-    )
+
+    def open_providers():
+        files = create_file_access()
+        if files is None:
+            raise UnsupportedHostOS("Opened Files/Search composition requires Darwin")
+        return files, create_search_access(files=files, rg_bin=settings.rg_bin)
+
     access = FileToolAccess(
         roots=settings.roots,
-        files=files,
-        search=search,
+        files=None,
+        search=None,
+        provider_factory=open_providers,
         generation=uuid4().hex,
         capability=capability,
         capabilities={tool: release_scope[tool].capability for tool in FILE_TOOLS},
