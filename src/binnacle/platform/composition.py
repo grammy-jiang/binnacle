@@ -6,6 +6,7 @@ This module is normal Python composition, not a FastMCP Provider or registry.
 """
 
 import platform
+from collections.abc import Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from threading import Event
@@ -252,8 +253,24 @@ def serve_native_channel(
     serve_authenticated(socket_path, lease=lease, handler=handler, stop=stop)
 
 
-def native_file_capability(*, release_scope=DARWIN_RELEASE_SCOPE):
+def validate_native_command_states(
+    states: Mapping[str, str], *, execution: ForegroundExecution | None = None
+) -> None:
+    """Reject contradictory scopes, including explicit candidate test mappings."""
+    from binnacle.platform.darwin.process_backend import DarwinProcessBackend
+
+    if isinstance(execution, _ObservedForegroundExecution):
+        execution.process.validate_release_states(states)
+    else:
+        DarwinProcessBackend().validate_release_states(states)
+
+
+def native_file_capability(*, release_scope=DARWIN_RELEASE_SCOPE, execution=None):
     """Read the committed scope; explicit alternatives are test harness inputs."""
+    validate_native_command_states(
+        {tool: row.capability.state.value for tool, row in release_scope.items()},
+        execution=execution,
+    )
     if host_os_family() == "linux":
         return None
     from binnacle.platform.contracts.capability_contracts import CapabilityState
@@ -375,8 +392,7 @@ class _ObservedForegroundExecution:
     def __init__(
         self, process: "DarwinProcessBackend", accounting: "DarwinResourceAccounting"
     ) -> None:
-        self.process = process
-        self.accounting = accounting
+        self.process, self.accounting = process, accounting
 
     def run_foreground(
         self, request: ForegroundRequest, *, cancel: Event
@@ -395,16 +411,29 @@ class _ObservedForegroundExecution:
         return replace(result, execution_id=observation_id)
 
 
-def create_foreground_execution() -> ForegroundExecution:
-    """Bind public A2 and A5; the A2 entrypoint still refuses all execution."""
+def create_foreground_execution(
+    *, command_states=None, foreground_limit_s=50, wait_max_s=50
+) -> ForegroundExecution:
+    """Inject A2 only for the composed LIMITED row; bind its sole reaper to A5."""
     if host_os_family() != "darwin":
         raise UnsupportedHostOS("Native foreground execution requires Darwin")
-    from binnacle.platform.darwin.process_backend import DarwinProcessBackend
+    from binnacle.platform.darwin.process_backend import (
+        DarwinProcessBackend,
+        _ForegroundRunner,
+    )
     from binnacle.platform.darwin.resource_accounting import DarwinResourceAccounting
 
-    return _ObservedForegroundExecution(
-        DarwinProcessBackend(), DarwinResourceAccounting()
+    states = command_states or {}
+    runner = (
+        _ForegroundRunner(foreground_limit_s, wait_max_s)
+        if states.get("run_command") == "LIMITED"
+        else None
     )
+    execution = _ObservedForegroundExecution(
+        DarwinProcessBackend(foreground_runner=runner), DarwinResourceAccounting()
+    )
+    validate_native_command_states(states, execution=execution)
+    return execution
 
 
 @contextmanager
