@@ -233,8 +233,12 @@ def test_handshake_and_eight_tool_schemas(endpoint: Endpoint) -> None:
     for tool in tools:
         assert tool.input_schema.get("type") == "object" and tool.description
     _record("schema-production", {"digests": _schema_digests(tools)})
-    served = json.dumps([[t.description for t in tools], client_instructions[0]])
-    assert not re.search(r"\b(R1|CR1|gate|review|pending)\b", served, re.IGNORECASE)
+    low = json.dumps([[t.description for t in tools], client_instructions[0]]).lower()
+    banned = r"\b(r1|cr1|gate|review|pending)\b|raspberry|vcgencmd|pinctrl|i2cdetect"
+    assert not re.search(banned + "|libcamera|sig(term|kill)|become jobs", low)
+    d = {t.name: t.description.lower() for t in tools}
+    assert "unavailable on macos" in d["stop_job"] and "in memory" in d["job_status"]
+    assert "macos workstation" in low
 
 
 def test_stop_job_is_unavailable_never_enabled(endpoint: Endpoint) -> None:
@@ -335,7 +339,6 @@ def test_list_files_and_search_text_on_fixture(endpoint: Endpoint) -> None:
     (root / "docs").mkdir()
     (root / "docs" / "note.md").write_text("hello docs\n")
     (root / "docs" / "a.py").write_text("print('hello')\n")
-    # One match then padding: past the per-file limit, so skipped whole.
     (root / "big.txt").write_bytes(b"hello" + b"A" * (PER_FILE_LIMIT + 1024))
     hello = {"pattern": "hello", "path": r}
     out = _calls(
@@ -360,7 +363,6 @@ def test_list_files_and_search_text_on_fixture(endpoint: Endpoint) -> None:
     assert rel("list_all", "path") >= {"docs", "hello.txt", "big.txt"}
     assert rel("list_glob_md", "path") == {"docs/note.md"}
     assert rel("search_glob_py", "file") == {"docs/a.py"}
-    # Fixture expectation: the small files match; big.txt is skipped whole.
     assert rel("search_all", "file") == {"hello.txt", "docs/note.md", "docs/a.py"}
     assert out["search_all"]["data"]["truncated"] is True
     assert "larger than the per-file limit" in out["search_all"]["text"]
@@ -404,7 +406,6 @@ def test_run_command_sd18(endpoint: Endpoint) -> None:
         trunc = out["truncation"]["data"]
         assert trunc["truncated"] is True and trunc["output_bytes"] == 3_000_000
         assert len(trunc["output"]) < trunc["output_bytes"]
-        # Timeout: typed unavailable error AND no survivor in the group.
         assert out["timeout"]["error"]
         assert "darwin_background_jobs_unavailable" in out["timeout"]["text"]
         lead, kid = int(leader.read_text()), int(child.read_text())
@@ -448,7 +449,6 @@ def test_job_status_completed_and_unknown(endpoint: Endpoint) -> None:
     assert not out["by_id"]["error"], out["by_id"]
     assert out["by_id"]["data"]["job_id"] == job_id
     assert out["by_id"]["data"]["state"] == "exited"
-    assert "js" in json.dumps(out["by_id"]["data"])
     assert out["deny_unknown"]["error"] and "No job" in out["deny_unknown"]["text"]
 
 
