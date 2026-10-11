@@ -111,7 +111,6 @@
         "src/binnacle/deployment/darwin/provisioner.py": 89.5,
         "src/binnacle/features/commands/command_contracts.py": 81.5,
         "src/binnacle/platform/composition.py": 69.0,
-        "src/binnacle/platform/darwin/file_access.py": 89.5,
         "src/binnacle/platform/darwin/generation_runtime.py": 35.5,
         "src/binnacle/platform/darwin/ipc_transport.py": 15.0,
         "src/binnacle/platform/darwin/job_group_fence.py": 15.0,
