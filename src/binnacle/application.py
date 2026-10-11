@@ -6,9 +6,10 @@ or import durable jobs / Linux adapters. Normal production composition remains
 in binnacle.server for backward-compatible CLI and ASGI exports.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import asynccontextmanager
 from functools import partial
+from threading import Event
 
 from fastmcp import FastMCP
 from fastmcp.server.auth import StaticTokenVerifier
@@ -16,7 +17,12 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from binnacle.config import Settings
-from binnacle.features.commands.command_contracts import CommandBackend
+from binnacle.features.commands.command_contracts import (
+    CommandBackend,
+    CommandFailure,
+    ForegroundRequest,
+    ForegroundResult,
+)
 from binnacle.features.commands.commands_server import create_commands_server
 from binnacle.features.files.files_server import create_files_server
 from binnacle.features.files.paths import FileToolAccess
@@ -29,6 +35,18 @@ from binnacle.mcp.logging_middleware import (
 from binnacle.mcp.tool_order import PublicToolOrder
 from binnacle.mcp.visibility import ClientToolVisibility, ClientToolVisibilityTransform
 from binnacle.observability.log_safety import safe_request_payload
+from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
+from binnacle.platform.contracts.darwin_contracts import (
+    ForegroundExecution as NativeForegroundExecution,
+)
+from binnacle.platform.contracts.darwin_contracts import (
+    ForegroundRequest as NativeForegroundRequest,
+)
+from binnacle.platform.contracts.darwin_release_scope import (
+    DARWIN_RELEASE_SCOPE,
+    FILE_TOOLS,
+    ReleaseDecision,
+)
 
 
 def create_application(
@@ -131,3 +149,81 @@ def create_application(
         return JSONResponse({"status": "ok"})
 
     return root
+
+
+def compose_native_tools(
+    *,
+    settings: Settings,
+    release_scope: Mapping[str, ReleaseDecision] = DARWIN_RELEASE_SCOPE,
+):
+    """Compose reviewed mechanisms; release_scope replacement is for TESTS only."""
+    from uuid import uuid4
+
+    from binnacle.features.commands.command_contracts import RestrictedCommandBackend
+    from binnacle.features.files.paths import FileToolAccess
+    from binnacle.platform.composition import (
+        create_file_access,
+        create_foreground_execution,
+        create_search_access,
+        native_file_capability,
+    )
+
+    files = create_file_access()
+    search = (
+        create_search_access(files=files, rg_bin=settings.rg_bin) if files else None
+    )
+    capability = native_file_capability(release_scope=release_scope)
+    access = FileToolAccess(
+        roots=settings.roots,
+        files=files,
+        search=search,
+        generation=uuid4().hex,
+        capability=capability,
+        capabilities={tool: release_scope[tool].capability for tool in FILE_TOOLS},
+    )
+    # Commands remain inert even in a candidate scope until A2 opens its public
+    # reviewed entrypoint. No private runner or second waiter is selected here.
+    backend = RestrictedCommandBackend(
+        foreground_execution=_ForegroundDomainAdapter(create_foreground_execution()),
+        release_states={
+            tool: release_scope[tool].capability.state.value
+            for tool in ("run_command", "job_status", "stop_job")
+        },
+    )
+    backend.max_output_chars = settings.jobs.max_output_chars
+    return access, backend
+
+
+class _ForegroundDomainAdapter:
+    """Map native values/errors to the portable Commands execution protocol."""
+
+    def __init__(self, execution: NativeForegroundExecution) -> None:
+        self.execution = execution
+
+    def run_foreground(
+        self, request: ForegroundRequest, *, cancel: Event
+    ) -> ForegroundResult:
+        native = NativeForegroundRequest(
+            request.command,
+            request.workdir,
+            request.stdin,
+            request.wait_seconds,
+            request.background,
+            request.foreground_limit_s,
+            request.max_output_bytes,
+        )
+        try:
+            result = self.execution.run_foreground(native, cancel=cancel)
+        except NativeCapabilityError as exc:
+            raise CommandFailure(f"{exc.code}: {exc.capability.state.value}") from exc
+        return ForegroundResult(
+            result.execution_id,
+            result.owner_generation,
+            result.exit_code,
+            result.signal,
+            result.output,
+            result.output_bytes,
+            result.truncated,
+            result.duration_s,
+            result.descendants_unverified,
+        )

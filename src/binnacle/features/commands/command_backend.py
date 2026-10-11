@@ -1,9 +1,13 @@
 """Stateless bridge to the existing process-owned durable job engine."""
 
+import platform
 from importlib import import_module
 from pathlib import Path
 
-from binnacle.features.commands.command_contracts import CommandBackend
+from binnacle.features.commands.command_contracts import (
+    CommandBackend,
+    RestrictedCommandBackend,
+)
 
 
 class DurableCommandBackend:
@@ -76,17 +80,10 @@ class DurableCommandBackend:
 
 def create_command_backend() -> CommandBackend:
     """Capture engine settings at default selection, before accepting requests."""
-    from binnacle.platform.composition import host_os_family
-
-    if host_os_family() == "darwin":
-        from binnacle.features.commands.restricted_backend import (
-            RestrictedCommandBackend,
-        )
-        from binnacle.platform.composition import create_foreground_execution
-
-        return RestrictedCommandBackend(
-            foreground_execution=create_foreground_execution()
-        )
+    # Uncomposed callers on other hosts get an inert backend, never Linux jobs.
+    # Native executors are injected by the application composition root.
+    if platform.system() != "Linux":
+        return RestrictedCommandBackend()
     import_module("binnacle.features.commands.jobs")
     import_module("binnacle.features.commands.job_owner")
     return DurableCommandBackend()

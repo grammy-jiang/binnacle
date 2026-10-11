@@ -385,3 +385,81 @@ def test_native_mcp_foreground_uses_worker_and_cancels_owned_event(tmp_path):
             assert cancelled.is_set()
 
     asyncio.run(exercise())
+
+
+def test_owned_reaper_metrics_wiring_and_no_competing_async_waiter(tmp_path):
+    """R1P-A2-05: real MCP worker + native owner; all child waits are PID-specific."""
+    import pytest
+
+    if sys.platform != "darwin":
+        pytest.skip("Real Darwin owned-child process and stdlib event-loop contract")
+    script = """
+import asyncio, dataclasses, os, signal, sys, threading
+from pathlib import Path
+waited = []
+for name in ("waitpid", "wait4"):
+    original = getattr(os, name)
+    def guarded(pid, options, _original=original):
+        assert pid > 0, "foreign wildcard waiter"
+        waited.append(pid)
+        return _original(pid, options)
+    setattr(os, name, guarded)
+original_signal = signal.signal
+def reserve(sig, handler):
+    assert sig != signal.SIGCHLD, "foreign SIGCHLD watcher"
+    return original_signal(sig, handler)
+signal.signal = reserve
+from fastmcp import Client
+from binnacle.application import compose_native_tools, create_application
+from binnacle.config import Settings, RootsSettings
+from binnacle.platform import composition as c
+from binnacle.platform.contracts.capability_contracts import Capability, CapabilityState
+from binnacle.platform.contracts.darwin_release_scope import DARWIN_RELEASE_SCOPE
+from binnacle.platform.darwin.process_backend import DarwinProcessBackend, _ForegroundRunner
+# Test-only substitution at the PUBLIC observer seam. Production stays disabled.
+DarwinProcessBackend.run_foreground = _ForegroundRunner(5, 5).run_foreground
+settings = Settings(roots=RootsSettings(default_root=Path(sys.argv[1]), extra_roots=()))
+settings.run_command.wait_max_s = 5
+scope = dict(DARWIN_RELEASE_SCOPE)
+scope["run_command"] = dataclasses.replace(scope["run_command"], capability=Capability(CapabilityState.LIMITED, "test_only", "foreground"))
+access, backend = compose_native_tools(settings=settings, release_scope=scope)
+backend.max_output_chars = 1024
+app = create_application(settings=settings, token="test", backend=backend, file_access=access)
+async def exercise():
+    async with Client(app) as client:
+        result = await client.call_tool("run_command", {"command": "printf ok", "workdir": sys.argv[1], "wait_seconds": 5})
+        data = result.structured_content
+        assert data["output"] == "ok" and data["exit_code"] == 0
+        metrics = backend.foreground_execution.execution.accounting.snapshot_scoped(data["job_id"])
+        assert metrics["direct_child.cpu.user_usec"].final
+        assert metrics["direct_child.cpu.user_usec"].capability.state == CapabilityState.LIMITED
+        assert metrics["job.cpu.usage_usec"].value is None
+        assert signal.getsignal(signal.SIGCHLD) == signal.SIG_DFL
+        timeout = await client.call_tool("run_command", {"command": "trap '' TERM; while :; do sleep 0.05; done", "workdir": sys.argv[1], "wait_seconds": 1}, raise_on_error=False)
+        assert timeout.is_error and "darwin_background_jobs_unavailable" in str(timeout.content)
+asyncio.run(exercise())
+assert waited and len(set(waited)) == 2
+assert signal.getsignal(signal.SIGCHLD) == signal.SIG_DFL
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(tmp_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_cli_preserves_linux_loop_and_reserves_darwin_sigchld(monkeypatch):
+    from binnacle import cli
+    from binnacle.platform import composition
+
+    called = []
+    monkeypatch.delenv("BINNACLE_SERVICE_ROLE", raising=False)
+    monkeypatch.setattr("uvicorn.run", lambda *args, **kwargs: called.append(kwargs))
+    for host, loop in (("Darwin", "asyncio"), ("Linux", "uvloop")):
+        monkeypatch.setattr(composition.platform, "system", lambda host=host: host)
+        cli.serve()
+        assert called[-1]["loop"] == loop
+        assert called[-1]["http"] == "httptools"

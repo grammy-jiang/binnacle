@@ -225,10 +225,12 @@ class FileToolAccess:
         search: SearchAccess | None,
         generation: str,
         capability: Capability,
+        capabilities: Mapping[str, Capability] | None = None,
     ) -> None:
         self.files = files
         self.search = search
         self.capability = capability
+        self.capabilities = dict(capabilities) if capabilities is not None else None
         self.default_root = roots.default_root.expanduser()
         self.grants: dict[Path, RootGrant] = {}
         self.closed = False
@@ -244,6 +246,16 @@ class FileToolAccess:
         except BaseException:
             self.close()
             raise
+
+    def require(self, tool: str) -> None:
+        capability = (
+            self.capability if self.capabilities is None else self.capabilities[tool]
+        )
+        if capability.state != CapabilityState.LIMITED:
+            raise CodedToolError(
+                "native_capability_unavailable",
+                f"{tool}: {capability.state.value}; {capability.reason_code}. FULL_PARITY_NO_GO.",
+            )
 
     @property
     def provider(self) -> FileAccess:

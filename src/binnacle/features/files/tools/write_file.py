@@ -36,6 +36,7 @@ def write_file_impl(
     file_access: FileToolAccess | None = None,
 ) -> ToolResult:
     if file_access is not None:
+        file_access.require("write_file")
         with file_access.operation(path) as (grant, relative, resolved):
             data = content.encode("utf-8")
             receipt = file_access.provider.write_bytes(

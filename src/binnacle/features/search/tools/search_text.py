@@ -408,6 +408,7 @@ def search_text_impl(
             "empty_pattern", "The 'pattern' parameter must be non-empty."
         )
     if file_access is not None:
+        file_access.require("search_text")
         return search_opened(
             file_access,
             pattern,
