@@ -12,16 +12,18 @@ cases, not defenses against hostile code in the same interpreter.
 import asyncio
 
 import pytest
+from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware import Middleware
-from fastmcp.tools.base import ToolResult
+from fastmcp.tools.base import Tool, ToolResult
 from mcp.types import TextContent
 
 from binnacle.mcp import job_awareness_hint_identity as identity
-from binnacle.mcp.job_awareness_hint import witnessed_tool
+from binnacle.mcp.job_awareness_hint import witnessed_call, witnessed_tool
 from tests.contracts.job_awareness.synthetic_app import SCHEMA, Lab, in_loop
 from tests.contracts.job_awareness.test_hint_identity_witness import (
     Keep,
+    Twice,
     _app,
     _hinted,
     _sealed,
@@ -122,7 +124,7 @@ async def test_body_exception_issues_no_receipt(rescued):
         inner = (Keep(receipts), Rescue()) if rescued else (Keep(receipts),)
         app, _, adapter = _app(lab, bound, *inner, carrier=False)
         app.add_tool(bound)
-        issued = len(identity._ISSUED)
+        issued = set(identity._ISSUED)  # strong refs: GC may shrink the WeakSet
         if rescued:
             await app.call_tool("synthetic", {})
             assert receipts[0][1] is None  # nosec B101 - pytest assertion
@@ -132,7 +134,7 @@ async def test_body_exception_issues_no_receipt(rescued):
             with pytest.raises(ToolError):
                 await app.call_tool("synthetic", {})
             assert receipts == []  # nosec B101 - the exception propagated
-        assert ran == ["raised"] and len(identity._ISSUED) == issued  # nosec B101 - pytest assertion
+        assert ran == ["raised"] and set(identity._ISSUED) <= issued  # nosec B101 - none added
         _no_reads(lab, adapter)
 
 
@@ -158,7 +160,7 @@ async def test_cancelled_body_issues_no_receipt(path):
         )
         app, _, adapter = _app(lab, bound, *inner, carrier=False)
         app.add_tool(bound)
-        issued = len(identity._ISSUED)
+        issued = set(identity._ISSUED)  # strong refs: GC may shrink the WeakSet
         if path == "inner_deadline":
             await app.call_tool("synthetic", {})
             assert receipts[0][1] is None  # nosec B101 - pytest assertion
@@ -169,7 +171,7 @@ async def test_cancelled_body_issues_no_receipt(path):
             with pytest.raises(asyncio.CancelledError):
                 await task
             assert receipts == []  # nosec B101 - pytest assertion
-        assert ran == [] and len(identity._ISSUED) == issued  # nosec B101 - pytest assertion
+        assert ran == [] and set(identity._ISSUED) <= issued  # nosec B101 - none added
         _no_reads(lab, adapter)
 
 
@@ -190,12 +192,12 @@ async def test_late_task_completion_is_not_witnessed():
         tasks: list[asyncio.Task] = []
         app, _, adapter = _app(lab, bound, Keep(receipts), Detach(tasks), carrier=False)
         app.add_tool(bound)
-        issued = len(identity._ISSUED)
+        issued = set(identity._ISSUED)  # strong refs: GC may shrink the WeakSet
         await app.call_tool("synthetic", {})
         assert receipts[0][1] is None  # nosec B101 - nothing completed in time
         release.set()
         late_result = await tasks[0]
-        assert ran == ["late"] and len(identity._ISSUED) == issued  # nosec B101 - pytest assertion
+        assert ran == ["late"] and set(identity._ISSUED) <= issued  # nosec B101 - none added
         for value in (receipts[0][0], late_result):
             assert await adapter.adapt(value, execution=receipts[0][1]) is value  # nosec B101 - pytest assertion
         _no_reads(lab, adapter)
@@ -268,3 +270,97 @@ async def test_receipt_copy_preserves_the_result_exactly():
         assert copy.model_dump_json() == returned.model_dump_json()  # nosec B101 - pytest assertion
         assert identity.claim(receipt, returned) is None  # nosec B101 - the copy is bound
         assert identity.claim(receipt, copy) is bound  # nosec B101 - pytest assertion
+
+
+class CachePreviouslyWitnessed(Middleware):
+    """An inner cache that answers call B with the copy call A already emitted."""
+
+    def __init__(self, receipts):
+        self.receipts = receipts
+
+    async def on_call_tool(self, context, call_next):
+        if self.receipts:
+            return self.receipts[0][0]
+        return await call_next(context)
+
+
+@in_loop
+async def test_previously_emitted_copy_cannot_carry_its_receipt_to_another_call():
+    """CHATGPT-ADV-G4-01-R3-G3-01: B returns A's emitted copy without a body run."""
+    with Lab() as lab:
+        ran: list[str] = []
+        bound = _sealed(ran, "bound")
+        receipts: list[tuple[ToolResult, object]] = []
+        inner = CachePreviouslyWitnessed(receipts)
+        app, _, adapter = _app(lab, bound, Keep(receipts), inner, carrier=False)
+        app.add_tool(bound)
+        await app.call_tool("synthetic", {})
+        await app.call_tool("synthetic", {})
+        (a, receipt_a), (b, receipt_b) = receipts
+        assert ran == ["bound"] and receipt_b is None  # nosec B101 - B ran no body
+        assert a is not b and a == b  # nosec B101 - B got its own copy
+        assert await adapter.adapt(b, execution=receipt_a) is b  # nosec B101 - pytest assertion
+        _no_reads(lab, adapter)
+        assert _hinted(await adapter.adapt(a, execution=receipt_a))  # nosec B101 - not consumed
+
+
+class Spy(Middleware):
+    """Innermost middleware: keeps each object the dispatch produced."""
+
+    def __init__(self, produced):
+        self.produced = produced
+
+    async def on_call_tool(self, context, call_next):
+        self.produced.append(await call_next(context))
+        return self.produced[-1]
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["issued", "zero_records", "two_records", "transform", "mounted", "no_server"],
+)
+@in_loop
+async def test_every_exact_tool_result_is_a_fresh_per_call_copy(path):
+    with Lab() as lab:
+        bound = _sealed([], "bound")
+        receipts: list[tuple[ToolResult, object]] = []
+        produced: list[ToolResult] = []
+        served = _fake()
+        if path == "no_server":
+
+            async def serve(_):
+                produced.append(served)
+                return served
+
+            receipts.append(await witnessed_call(serve, None))
+        else:
+            inner = (
+                (Twice(), Spy(produced)) if path == "two_records" else (Spy(produced),)
+            )
+            app, _, _ = _app(lab, bound, Keep(receipts), *inner, carrier=False)
+            if path == "transform":
+                app.add_tool(Tool.from_tool(bound))
+            elif path == "mounted":
+                child = FastMCP("R3-G3-01 child")
+                child.add_tool(bound)
+                app.mount(child)
+            elif path == "zero_records":
+                app.add_tool(Tool.from_function(lambda: served, name="synthetic"))
+            else:
+                app.add_tool(bound)
+            await app.call_tool("synthetic", {})
+        result, receipt = receipts[0]
+        assert (receipt is not None) is (path == "issued")  # nosec B101 - pytest assertion
+        assert type(result) is ToolResult and result == produced[-1]  # nosec B101 - pytest assertion
+        assert all(result is not each for each in produced)  # nosec B101 - fresh copy
+
+
+@in_loop
+async def test_non_tool_result_passes_through_unchanged():
+    value = {"ok": True}
+
+    async def serve(_):
+        return value
+
+    assert await witnessed_call(serve, None) == (value, None)  # nosec B101 - pytest assertion
+    assert (await witnessed_call(serve, None))[0] is value  # nosec B101 - pytest assertion

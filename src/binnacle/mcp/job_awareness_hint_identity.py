@@ -189,9 +189,11 @@ async def witnessed_call(
     exception propagates), when no body or more than one body completed, when
     a body completed on another (mounted) server or under a tool transform,
     when there is no dispatching server, or when the result is not an exact
-    ToolResult. With a receipt, the caller gets a per-call shallow copy of
-    the result: a body or a caching middleware may return one ToolResult
-    object for several calls, and the receipt binds this call's object only.
+    ToolResult. Every exact ToolResult that passes through, with or without
+    a receipt, is returned as a fresh per-call shallow copy: a body or a
+    caching middleware may return one ToolResult object (even one emitted
+    by an earlier call) for several calls, and a receipt binds this call's
+    copy only.
     """
     dispatch = _Dispatch(_server())
     token = _DISPATCH.set(dispatch)
@@ -201,14 +203,14 @@ async def witnessed_call(
         _DISPATCH.reset(token)
         with _LOCK:
             records = tuple(dispatch.records)
-    if type(result) is not ToolResult or dispatch.server is None:
-        return result, None
-    if len(records) != 1:
-        return result, None
-    tool, poisoned = records[0]
-    if poisoned or tool is None or not native_tool(tool):
+    if type(result) is not ToolResult:
         return result, None
     fresh = cast(R, cast(ToolResult, result).model_copy())
+    if dispatch.server is None or len(records) != 1:
+        return fresh, None
+    tool, poisoned = records[0]
+    if poisoned or tool is None or not native_tool(tool):
+        return fresh, None
     execution = Execution(tool, fresh)
     with _LOCK:
         _ISSUED.add(execution)
