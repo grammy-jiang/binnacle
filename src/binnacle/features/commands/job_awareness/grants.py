@@ -149,6 +149,11 @@ class SyntheticAuthority:
             path, clock=clock.now, resolve=self.resolve, limits=limits
         )
 
+    @property
+    def epoch(self) -> str | None:
+        """Committed controller epoch; None before a successful cold start."""
+        return self._epoch
+
     def start(self) -> Result[None]:
         """Commit a never-reused random epoch before publishing readiness."""
         with self._lock:
@@ -203,8 +208,13 @@ class SyntheticAuthority:
         scopes: frozenset[Scope],
         *,
         ttl_ms: int = 3600000,
+        consent_version: str = "lab-user-run-v1",
     ) -> Result[bytes]:
-        """Controller-only explicit run consent; generation never updated in place."""
+        """Controller-only explicit run consent; generation never updated in place.
+
+        ``consent_version`` must be allowlisted (CA-1); the E2 lab session route
+        passes ``lab-session-route-v1``. Unknown versions deny.
+        """
         with self._lock:
             binding = next(
                 (p for p in self._principals.values() if p.handle is principal), None
@@ -230,6 +240,7 @@ class SyntheticAuthority:
                 now,
                 now + ttl_ms,
                 1,
+                consent_version,
             )
         except (ValueError, StoreFailure):
             return DENIED

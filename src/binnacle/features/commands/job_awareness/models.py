@@ -21,6 +21,8 @@ from binnacle.features.commands.job_awareness.identifiers import (
 MAX_INTEGER = 9007199254740991
 MAX_SNAPSHOT_BYTES = 1048576
 PAGE_BYTES = 16384
+# CA-1: the E2 lab session route is a separate, explicit consent version.
+CONSENT_VERSIONS = frozenset({"lab-user-run-v1", "lab-session-route-v1"})
 T_co = TypeVar("T_co", covariant=True)
 
 
@@ -158,7 +160,7 @@ class RunGrantClaims:
         bounded_int(self.authority_revision, 1, MAX_INTEGER)
         require(
             type(self.consent_version) is str
-            and self.consent_version == "lab-user-run-v1"
+            and self.consent_version in CONSENT_VERSIONS
         )
 
 

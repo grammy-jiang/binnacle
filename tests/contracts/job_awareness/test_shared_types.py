@@ -7,11 +7,15 @@ from pathlib import Path
 import pytest
 
 from binnacle.features.commands.job_awareness import models, ports
+from tests.contracts.job_awareness.session_import_allowlist import (
+    SESSION_LOCAL_FROM_IMPORTS,
+    SESSION_MODULES,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 LOCAL_PACKAGE = "binnacle.features.commands.job_awareness."
 FROZEN_MODULES = {"__init__.py", "identifiers.py", "models.py", "ports.py"}
-OPTIONAL_MODULES = {
+OPTIONAL_MODULES = SESSION_MODULES | {
     "grants.py",
     "hint_policy.py",
     "hint_render.py",
@@ -21,7 +25,6 @@ OPTIONAL_MODULES = {
     "receipt_schema.py",
     "receipt_store.py",
     "receipts.py",
-    "session_route.py",
     "snapshots.py",
 }
 FROZEN_IMPORTS = {
@@ -47,6 +50,7 @@ FROZEN_FROM_IMPORTS = {
     "hashlib",
 }
 OPTIONAL_STDLIB_IMPORTS = {
+    "asyncio",
     "collections",
     "contextlib",
     "hmac",
@@ -59,12 +63,19 @@ OPTIONAL_STDLIB_IMPORTS = {
 }
 OPTIONAL_STDLIB_FROM_IMPORTS = {
     "collections": {"OrderedDict"},
-    "collections.abc": {"Callable", "Iterator", "Mapping", "Sequence"},
-    "contextlib": {"contextmanager"},
+    "collections.abc": {
+        "AsyncIterator",
+        "Awaitable",
+        "Callable",
+        "Iterator",
+        "Mapping",
+        "Sequence",
+    },
+    "contextlib": {"asynccontextmanager", "contextmanager"},
     "pathlib": {"Path"},
     "threading": {"BoundedSemaphore", "Lock", "RLock", "get_ident", "local"},
 }
-OPTIONAL_LOCAL_FROM_IMPORTS = {
+OPTIONAL_LOCAL_FROM_IMPORTS = SESSION_LOCAL_FROM_IMPORTS | {
     "grants.py": {
         "identifiers": {"bounded_int", "canonical_hex"},
         "models": {
@@ -241,10 +252,6 @@ OPTIONAL_LOCAL_FROM_IMPORTS = {
             "OutputSnapshot",
             "ReceiptState",
         },
-    },
-    "session_route.py": {
-        "identifiers": {"canonical_hex", "require"},
-        "models": {"JobRef", "PrincipalClaims", "VerifiedRunGrant"},
     },
     "snapshots.py": {
         "models": {

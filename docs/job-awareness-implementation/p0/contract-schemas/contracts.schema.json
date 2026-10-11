@@ -201,7 +201,10 @@
           "maximum": 9007199254740991
         },
         "consent_version": {
-          "const": "lab-user-run-v1"
+          "enum": [
+            "lab-user-run-v1",
+            "lab-session-route-v1"
+          ]
         },
         "authority_revision": {
           "type": "integer",

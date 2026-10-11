@@ -62,6 +62,36 @@
       }
     },
     {
+      "type": "RunGrantClaims",
+      "value": {
+        "principal": {
+          "issuer_id": "44444444444444444444444444444444",
+          "tenant_id": "55555555555555555555555555555555",
+          "subject_id": "66666666666666666666666666666666",
+          "consumer_id": "77777777777777777777777777777777",
+          "audience": "binnacle-ja-lab-v1"
+        },
+        "issuer_epoch": "88888888888888888888888888888888",
+        "grant_id": "99999999999999999999999999999999",
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "jobs": [
+          {
+            "run_namespace": "ja1_11111111111111111111111111111111",
+            "job_id": "abcdef012345",
+            "incarnation": "g1_22222222222222222222222222222222"
+          }
+        ],
+        "scopes": [
+          "observe",
+          "read"
+        ],
+        "issued_at_ms": 1000,
+        "expires_at_ms": 3601000,
+        "consent_version": "lab-session-route-v1",
+        "authority_revision": 1
+      }
+    },
+    {
       "type": "PageEnvelope",
       "value": {
         "snapshot": {
@@ -318,6 +348,37 @@
         "carrier": "STRUCT",
         "text": "x",
         "utf8_bytes": 1
+      }
+    },
+    {
+      "type": "RunGrantClaims",
+      "value": {
+        "principal": {
+          "issuer_id": "44444444444444444444444444444444",
+          "tenant_id": "55555555555555555555555555555555",
+          "subject_id": "66666666666666666666666666666666",
+          "consumer_id": "77777777777777777777777777777777",
+          "audience": "binnacle-ja-lab-v1"
+        },
+        "issuer_epoch": "88888888888888888888888888888888",
+        "grant_id": "99999999999999999999999999999999",
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "jobs": [
+          {
+            "run_namespace": "ja1_11111111111111111111111111111111",
+            "job_id": "abcdef012345",
+            "incarnation": "g1_22222222222222222222222222222222"
+          }
+        ],
+        "scopes": [
+          "observe",
+          "read",
+          "ack"
+        ],
+        "issued_at_ms": 1000,
+        "expires_at_ms": 3601000,
+        "consent_version": "chat-session-v1",
+        "authority_revision": 1
       }
     }
   ]

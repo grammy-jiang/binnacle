@@ -179,7 +179,13 @@
       "binnacle.features.commands.job_awareness.proofs",
       "binnacle.features.commands.job_awareness.hint_policy",
       "binnacle.features.commands.job_awareness.hint_render",
-      "binnacle.features.commands.job_awareness.session_route"
+      "binnacle.features.commands.job_awareness.session_binding",
+      "binnacle.features.commands.job_awareness.session_emission",
+      "binnacle.features.commands.job_awareness.session_fence",
+      "binnacle.features.commands.job_awareness.session_lab",
+      "binnacle.features.commands.job_awareness.session_route",
+      "binnacle.features.commands.job_awareness.session_serving",
+      "binnacle.features.commands.job_awareness.session_snapshot"
     ],
     "rollout_note": "Linux deployment.unit compatibility methods explicitly own platform-specific mechanics while generic planning remains mockable. Direct Linux imports from CLI are prohibited."
   }
