@@ -71,8 +71,11 @@ INSTRUCTIONS_SHA256 = "55cafa03a706b86aaab8d53b45030a76177f9da70767ca09de608d205
 # R4 J4 (CR0-1.2.0 point 4; JCR-4 as amended by STEER-04): Darwin composes the
 # com.binnacle.jobs manager; the Linux tool map, the fail-closed service note
 # and one D-1 sentence (19 o200k tokens).
+# r5 L1b (SD-52): the disclosure gains "Processes that start a new session or
+# process group are not tracked." (with D-1: 32 of 35 o200k tokens);
+# was ac089c87f1a6bf721cbd5d17ce16edca174e52163688146b125bf8c7c2375e38.
 DARWIN_INSTRUCTIONS_SHA256 = (
-    "ac089c87f1a6bf721cbd5d17ce16edca174e52163688146b125bf8c7c2375e38"
+    "aa38380c68165ce2f55d34cbce49544c626717ebb587ed664a54383a21297acf"
 )
 
 

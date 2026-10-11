@@ -108,6 +108,35 @@ def assert_within_budget(counts: dict[str, int]) -> None:
     )
 
 
+#: SD-33: the Darwin disclosure that follows the fail-closed service note in
+#: the owner=manager instructions; SD-52 added the untracked-session clause.
+DARWIN_DISCLOSURE_BUDGET = 35
+SD52_CLAUSE = "Processes that start a new session or process group are not tracked."
+
+
+def darwin_manager_disclosure() -> str:
+    from binnacle.application import (
+        _DARWIN_MANAGER_INSTRUCTIONS,
+        DARWIN_MANAGER_REQUIREMENT,
+    )
+
+    _, note, disclosure = _DARWIN_MANAGER_INSTRUCTIONS.partition(
+        DARWIN_MANAGER_REQUIREMENT
+    )
+    assert note, "the fail-closed service note is part of the manager instructions"
+    return disclosure.strip()
+
+
+def test_darwin_manager_disclosure_sentence_is_within_35_tokens():
+    disclosure = darwin_manager_disclosure()
+    assert SD52_CLAUSE in disclosure
+    count = len(_load_encoding(ENCODING).encode(disclosure))
+    assert count <= DARWIN_DISCLOSURE_BUDGET, (
+        f"the Darwin disclosure is {count} o200k tokens, over SD-33's "
+        f"{DARWIN_DISCLOSURE_BUDGET}: {disclosure!r}"
+    )
+
+
 def test_every_budget_change_is_documented():
     date, budget, reason = BUDGET_CHANGES[-1]
     assert budget == TOKEN_BUDGET, "record the new budget in BUDGET_CHANGES"

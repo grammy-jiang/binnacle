@@ -155,7 +155,8 @@ _DARWIN_MANAGER_INSTRUCTIONS = (
     "list_files (browse or glob), search_text (regex over contents), read_file, "
     "edit_file (exact-string replace), write_file (whole file), run_command "
     "(shell; long commands become jobs for job_status/stop_job). "
-    f"{DARWIN_MANAGER_REQUIREMENT} {DARWIN_JOBS_DISCLOSURE}"
+    f"{DARWIN_MANAGER_REQUIREMENT} Processes that start a new session or "
+    f"process group are not tracked. {DARWIN_JOBS_DISCLOSURE}"
 )
 
 
