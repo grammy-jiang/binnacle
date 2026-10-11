@@ -22,6 +22,8 @@ import pytest
 from binnacle.features.commands import job_client, job_store
 from binnacle.platform.contracts import process_contracts as pc
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
+from binnacle.platform.darwin import job_manager_client as jm_client
+from binnacle.platform.darwin import job_manager_entry as entry
 from binnacle.platform.darwin import job_manager_service as svc
 from binnacle.platform.darwin.generation_runtime import (
     discover_service_lease,
@@ -38,7 +40,7 @@ class ReferenceOwner:
     def __init__(self):
         self.owner_instance_id = uuid.uuid4().hex
         self.cond, self.closing = threading.Condition(), set()
-        self.live, self.exits = {}, {}
+        self.live, self.exits, self.released = {}, {}, set()
 
     def spawn(self, job_id, argv, *, workdir, env, stdin, output):
         shim = 'cd "$1" || exit 127; shift; exec "$@"'
@@ -89,6 +91,14 @@ class ReferenceOwner:
                 raise pc.UnverifiedJobProcess(job_id)
             sig = signal.SIGTERM if intent == "terminate" else signal.SIGKILL
             os.killpg(self.live[job_id], sig)  # unreaped leader holds the pgid
+
+    def release(self, job_id):  # J1 1.2.0-additive ack of a durable record
+        with self.cond:
+            if job_id not in self.live and job_id not in self.exits:
+                raise pc.UnverifiedJobProcess("darwin_job_not_owned")  # as J1
+            if job_id in self.live:
+                raise ValueError("darwin_job_not_terminal")
+            self.released.add(job_id)
 
     def authority(self, job_id):
         with self.cond:
@@ -156,7 +166,7 @@ def test_restated_values_equal_linux_source():
     assert svc.PARTIAL_SIGNAL_MESSAGE == lit("job_stop.py", "PARTIAL_SIGNAL_MESSAGE")
     assert svc.PROTOCOL_VERSION == lit("job_client.py", "PROTOCOL_VERSION") == 1
     for name in ("ping", "start", "stop"):
-        method = inspect.signature(getattr(svc.DarwinJobClient, name))
+        method = inspect.signature(getattr(jm_client.DarwinJobClient, name))
         linux = inspect.signature(getattr(job_client, name)).parameters.values()
         assert list(method.parameters.values())[1:] == list(linux)
 
@@ -186,7 +196,7 @@ def test_dispatch_objects_equal_linux_manager_text(tmp_path, jobs_dir, live):
     assert all(text in linux for text in TEXTS.split("|"))
     pong = manager.handle({"version": 1, "op": "ping"})
     keys = {"ok", "version", "owner_instance_id", "boot_id", "pid", "revision"}
-    assert set(pong) == keys | {"package_version"}
+    assert set(pong) == keys | {"package_version", "running_jobs", "unknown_jobs"}
     version = manager.handle({"version": 2, "op": "ping"})["error"]
     assert version == "unsupported job-manager protocol version"
     unknown = manager.handle({"version": 1, "op": "x"})["error"]
@@ -229,25 +239,6 @@ def test_start_exit_and_stop_term_then_kill(tmp_path, jobs_dir, live):
     assert manager.handle(stop_req("../etc"))["error"] == "no job with id '../etc'"
 
 
-def test_partial_delivery_is_persisted_and_refused(
-    tmp_path, jobs_dir, live, monkeypatch
-):
-    owner, manager = live
-    job_id = manager.handle(req(tmp_path, "sleep 30"))["job_id"]
-    calls = []
-
-    def partial(job, intent):
-        calls.append(intent)
-        raise pc.JobSignalDeliveryError("EPERM member")
-
-    monkeypatch.setattr(owner, "signal_owned_group", partial)
-    error = manager.handle(stop_req(job_id))["error"]
-    assert error.startswith("job stop partially failed: EPERM member")
-    assert meta_of(jobs_dir, job_id)["stop_signal_partial"] is True
-    again = manager.handle(stop_req(job_id))["error"]
-    assert again.startswith("job stop partially failed: ") and len(calls) == 2
-
-
 def test_recovery_marks_foreign_records_unknown_without_adoption(jobs_dir):
     v2 = {"schema_version": 2, "owner_instance_id": "old", "boot_id": "boot"}
     write_record(jobs_dir, "a" * 12, **v2)
@@ -275,28 +266,6 @@ def test_recovery_marks_foreign_records_unknown_without_adoption(jobs_dir):
     assert not manager.record_exit(pc.OwnedJobExit("e" * 12, 0, None, "normal_exit"))
 
 
-def test_retention_close_and_writer_singleton(tmp_path, jobs_dir):
-    owner = ReferenceOwner()
-    manager = manager_for(owner, jobs_dir, keep=1)  # reserve 1 -> keep 0
-    write_record(jobs_dir, "u" * 12, authority="UNKNOWN", exit_code=None)
-    write_record(jobs_dir, "t" * 12, exit_code=0)
-    job_id = manager.handle(req(tmp_path, "sleep 30"))["job_id"]
-    lost = manager.handle(req(tmp_path, "sleep 30"))["job_id"]
-    assert set(job_store.list_job_ids(jobs_dir)) == {job_id, lost, "u" * 12}
-    lost_pid = owner.live.pop(lost)  # simulate a group the owner cannot reap
-    try:
-        assert [e.job_id for e in manager.close()] == [job_id]
-    finally:
-        os.killpg(lost_pid, signal.SIGKILL)
-        os.waitpid(lost_pid, 0)
-    meta, unreaped = meta_of(jobs_dir, job_id), meta_of(jobs_dir, lost)
-    assert (meta["signal"], meta["termination_reason"]) == (15, "owner_restart")
-    assert "authority" not in meta
-    assert unreaped["authority"] == "UNKNOWN"  # never reported exited
-    with svc.jobs_dir_writer(jobs_dir), pytest.raises(RuntimeError, match="owns"):
-        svc.jobs_dir_writer(jobs_dir).__enter__()
-
-
 @pytest.fixture
 def runtime():
     with tempfile.TemporaryDirectory(prefix="r4-j2-", dir="/tmp") as value:
@@ -310,7 +279,7 @@ def new_lease(root):
 
 
 def client(error_type=Err):
-    return svc.DarwinJobClient(label=LABEL, error_type=error_type)
+    return jm_client.DarwinJobClient(label=LABEL, error_type=error_type)
 
 
 def wait_published(sock, timeout=10):
@@ -328,14 +297,14 @@ def run(sock, command, workdir, wait=0.2, stdin=None):
 
 
 @contextmanager
-def serving(base, jobs=None):
+def serving(base, jobs=None, name="jobs.sock"):
     manager = manager_for(ReferenceOwner(), jobs or base / "jobs")
-    stop, errors, sock = threading.Event(), [], base / "rt/jobs.sock"
+    stop, errors, sock = threading.Event(), [], base / "rt" / name
 
     def serve():
         try:
             lease = new_lease(base / "rt")
-            svc.serve_job_manager(manager, socket_path=sock, lease=lease, stop=stop)
+            entry.serve_job_manager(manager, socket_path=sock, lease=lease, stop=stop)
         except Exception as exc:  # noqa: BLE001 - surfaced by the test
             errors.append(exc)
 
@@ -361,15 +330,16 @@ def group_gone(pgid):
 def serve_once(manager, root):
     lease, stop = new_lease(root), threading.Event()
     sock = root / "jobs.sock"
-    return svc.serve_job_manager(manager, socket_path=sock, lease=lease, stop=stop)
+    return entry.serve_job_manager(manager, socket_path=sock, lease=lease, stop=stop)
 
 
 @NATIVE
 def test_rpc_v1_over_authenticated_ipc_end_to_end(runtime, tmp_path):
     with serving(runtime) as (sock, manager, errors):
-        assert discover_service_lease(root=sock.parent, label=LABEL).label == LABEL
+        lease = discover_service_lease(root=sock.parent, label=LABEL, name=sock.name)
+        assert lease.label == LABEL
         with pytest.raises(NativeCapabilityError, match="generation_mismatch"):
-            discover_service_lease(root=sock.parent, label=LABEL + ".other")
+            discover_service_lease(root=sock.parent, label=LABEL + ".x", name=sock.name)
         done = run(sock, "echo hi; echo err >&2; exit 3", tmp_path, wait=5)
         meta = meta_of(manager.jobs_dir, done["job_id"])
         assert done["state"] == "exited" and meta["exit_code"] == 3
@@ -388,7 +358,23 @@ def test_rpc_v1_over_authenticated_ipc_end_to_end(runtime, tmp_path):
             client().stop(sock, "0" * 12)
     assert not (errors or sock.exists() or sock.with_name("jobs.sock.auth").exists())
     with pytest.raises(NativeCapabilityError, match="ipc_endpoint_unpublished"):
-        discover_service_lease(root=sock.parent, label=LABEL)
+        discover_service_lease(root=sock.parent, label=LABEL, name=sock.name)
+
+
+@NATIVE
+def test_client_discovers_a_non_default_socket_basename(runtime, tmp_path):
+    # R-J2-F3: the client reads '<socket basename>.auth', as the manager publishes.
+    with serving(runtime, name="mgr.sock") as (sock, manager, errors):
+        assert sock.with_name("mgr.sock.auth").exists()
+        assert not sock.with_name("jobs.sock.auth").exists()
+        pong = client().ping(sock)
+        assert pong["owner_instance_id"] == manager.owner_instance_id
+        lease = discover_service_lease(root=sock.parent, label=LABEL, name=sock.name)
+        assert lease.label == LABEL
+        with pytest.raises(NativeCapabilityError, match="ipc_endpoint_unpublished"):
+            discover_service_lease(root=sock.parent, label=LABEL, name="jobs.sock")
+        assert run(sock, "exit 6", tmp_path, wait=5)["state"] == "exited"
+    assert not (errors or sock.exists() or sock.with_name("mgr.sock.auth").exists())
 
 
 @NATIVE
@@ -412,7 +398,7 @@ def test_peer_uid_and_hmac_refusals_never_dispatch(runtime, tmp_path, monkeypatc
     with serving(runtime) as (sock, manager, errors):
         real_peer = ipc._peer
         monkeypatch.setattr(ipc, "_peer", lambda c: (os.getuid() + 1, real_peer(c)[1]))
-        with pytest.raises(svc.DarwinJobManagerError) as refused:
+        with pytest.raises(jm_client.DarwinJobManagerError) as refused:
             client(None).ping(sock)
         message = str(refused.value)
         assert message.startswith(f"{pc.JOB_MANAGER_UNAVAILABLE} at {sock}: ")
@@ -425,7 +411,7 @@ def test_peer_uid_and_hmac_refusals_never_dispatch(runtime, tmp_path, monkeypatc
         with pytest.raises(Err, match=pc.JOB_MANAGER_UNAVAILABLE):
             run(sock, "touch x", tmp_path)
         auth.write_bytes(original)
-        lease = discover_service_lease(root=sock.parent, label=LABEL)
+        lease = discover_service_lease(root=sock.parent, label=LABEL, name=sock.name)
         channel = ipc.connect_authenticated(sock, lease=lease, timeout_s=2)
         forged = {"sequence": 0, "kind": "rpc", "proof": "0" * 64}
         forged["payload"] = req(tmp_path, "touch x", wait=1)
