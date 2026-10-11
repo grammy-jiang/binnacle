@@ -174,17 +174,17 @@ def aged(marker: Path, age_s: float) -> None:
 
 
 def test_marker_counts_only_while_fresh_and_a_stale_own_marker_is_removed(caplog):
-    """SR6-F1: honored only for -5 s <= now - st_mtime < 120 s (format unchanged)."""
+    """SR6-F1: honored only for -5 s <= now - st_mtime < 300 s (format unchanged)."""
     with tempfile.TemporaryDirectory(prefix="r6-d21a3-", dir="/tmp") as value:
         sock = Path(value).resolve() / "jobs.sock"
         marker = sock.with_name("jobs.sock.stop")
-        for age in (0.0, 119.0, -4.0):  # fresh, near expiry, small clock skew
+        for age in (0.0, 120.0, 299.0, -4.0):  # fresh, near expiry, clock skew
             write_marker(marker, "me")
             aged(marker, age)
             assert entry.stop_pending_refusal(sock, "me")["code"] == "manager_stopping"
             assert marker.exists()  # a fresh marker is only peeked
         caplog.clear()
-        for age in (121.0, 120.0, -6.0, -3600.0):  # expired, or future beyond -5 s
+        for age in (301.0, 300.0, -6.0, -3600.0):  # expired, or future beyond -5 s
             write_marker(marker, "me")
             aged(marker, age)
             with caplog.at_level("WARNING", logger="binnacle.job_manager"):
@@ -242,7 +242,8 @@ def test_quiet_window_exit_honors_only_a_fresh_marker():
         marker = sock.with_name("jobs.sock.stop")
         for owner_id, age, expected in (
             ("me", 1.0, True),
-            ("me", 121.0, False),
+            ("me", 299.0, True),  # fresh near the 300 s bound
+            ("me", 301.0, False),
             ("me", -60.0, False),
             ("previous", 1.0, False),
         ):
@@ -308,7 +309,7 @@ def test_entry_ignores_a_stale_own_marker_and_its_stop_is_unrequested(tmp_path):
                 client.start(sock, command="echo never", wait_seconds=0, **kw)
             assert job_dirs(jobs) == [] and marker.exists()
             # Stale own marker (the gate died before bootout): start works.
-            aged(marker, 121.0)
+            aged(marker, 301.0)
             done = client.start(sock, command="exit 0", wait_seconds=10, **kw)
             assert done["state"] == "exited" and job_dirs(jobs) == [done["job_id"]]
             assert not marker.exists()
@@ -319,7 +320,7 @@ def test_entry_ignores_a_stale_own_marker_and_its_stop_is_unrequested(tmp_path):
             assert again["state"] == "exited" and not marker.exists()
             # A stale marker never turns a TERM into the quiet-window exit 0.
             write_marker(marker, me)
-            aged(marker, 121.0)
+            aged(marker, 301.0)
             child.send_signal(signal.SIGTERM)
             _, err = child.communicate(timeout=30)
             assert child.returncode == entry.EX_FAILED, err

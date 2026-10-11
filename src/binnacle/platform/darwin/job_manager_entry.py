@@ -66,7 +66,7 @@ log = logging.getLogger("binnacle.job_manager")
 EX_FAILED, EX_USAGE, EX_TEMPFAIL, EX_CONFIG = 1, 64, 75, 78  # sysexits.h
 STOP_MARKER_SUFFIX = ".stop"
 STOP_PENDING_CODE = "manager_stopping"  # D2: typed, retryable start refusal
-STOP_MARKER_AGE_S = (-5.0, 120.0)  # SR6-F1: honored only for -5 s <= age < 120 s
+STOP_MARKER_AGE_S = (-5.0, 300.0)  # SR6-F1: honored only for -5 s <= age < 300 s
 CONFIG_FILE_ENV = "BINNACLE_CONFIG_FILE"
 # env_nested_delimiter overrides, and the runtime root the client would not share
 _OVERRIDES = ("BINNACLE_JOBS__", "BINNACLE_RUN_COMMAND__", "BINNACLE_RUNTIME_DIR")
