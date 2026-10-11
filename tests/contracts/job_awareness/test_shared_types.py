@@ -21,6 +21,7 @@ OPTIONAL_MODULES = {
     "receipt_schema.py",
     "receipt_store.py",
     "receipts.py",
+    "session_route.py",
     "snapshots.py",
 }
 FROZEN_IMPORTS = {
@@ -58,7 +59,7 @@ OPTIONAL_STDLIB_IMPORTS = {
 }
 OPTIONAL_STDLIB_FROM_IMPORTS = {
     "collections": {"OrderedDict"},
-    "collections.abc": {"Callable", "Iterator"},
+    "collections.abc": {"Callable", "Iterator", "Mapping", "Sequence"},
     "contextlib": {"contextmanager"},
     "pathlib": {"Path"},
     "threading": {"BoundedSemaphore", "Lock", "RLock", "get_ident", "local"},
@@ -240,6 +241,10 @@ OPTIONAL_LOCAL_FROM_IMPORTS = {
             "OutputSnapshot",
             "ReceiptState",
         },
+    },
+    "session_route.py": {
+        "identifiers": {"canonical_hex", "require"},
+        "models": {"JobRef", "PrincipalClaims", "VerifiedRunGrant"},
     },
     "snapshots.py": {
         "models": {
