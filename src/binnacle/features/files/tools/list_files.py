@@ -58,11 +58,33 @@ def _file_entry(p: Path) -> dict | None:
         return None
 
 
-def _list_mode(root: Path, max_results: int, include_hidden: bool) -> ToolResult:
+def _link_escapes(p: Path, allowed: tuple[Path, ...]) -> bool:
+    """True for a symlink whose target is outside every root, dangling or looping.
+
+    Such a link is omitted, as on Darwin (SD-60): its target's kind and size are
+    outside-root metadata. A link resolving inside any root is typed by target.
+    """
+    try:
+        if not p.is_symlink():
+            return False
+    except OSError:
+        return False  # Not known to be a link: _file_entry decides, as before.
+    try:
+        target = p.resolve(strict=True)
+    except (OSError, RuntimeError):  # RuntimeError: a loop before Python 3.13
+        return True
+    return not any(target.is_relative_to(root) for root in allowed)
+
+
+def _list_mode(
+    root: Path, max_results: int, include_hidden: bool, allowed: tuple[Path, ...]
+) -> ToolResult:
     children = [
         p
         for p in root.iterdir()
-        if p.name != ".git" and (include_hidden or not p.name.startswith("."))
+        if p.name != ".git"
+        and (include_hidden or not p.name.startswith("."))
+        and not _link_escapes(p, allowed)
     ]
     children.sort(key=lambda p: (0 if p.is_dir() else 1, p.name.lower()))
     truncated = len(children) > max_results
@@ -294,7 +316,8 @@ def list_files_impl(
             rg_bin=rg_bin,
             timeout_s=settings.rg_timeout_s,
         )
-    return _list_mode(resolved, max_results, include_hidden)
+    allowed = (get_settings().roots if roots is None else roots).canonical_allowed
+    return _list_mode(resolved, max_results, include_hidden, allowed)
 
 
 def register(
