@@ -6,6 +6,7 @@ gitignore respected. Uses the system ripgrep on purpose: bundled
 jemalloc builds abort on this Pi's 16 KB kernel pages (Copilot lesson).
 """
 
+import errno
 import os
 import stat
 import subprocess
@@ -171,6 +172,49 @@ def _list_mode(
     return ToolResult(content=summary, structured_content=payload)
 
 
+def _glob_entries(root: Path, lines: list[str]) -> list[dict]:
+    """Size each listed file by ONE no-follow lstat (r6 W2 X3c, SD-76).
+
+    rg lists by path string and never lists a symlink, so every component
+    from '/' to the file's directory is opened no-follow (O_PATH on Linux),
+    and the file is lstat-ed relative to that descriptor. A path whose
+    directory is no longer a directory (swapped for a symlink or a file) or
+    whose final component is now a symlink is omitted: no outside object is
+    typed or sized. Any other failure keeps the entry without bytes, as r6
+    did when p.stat() failed.
+    """
+    entries: list[dict] = []
+    with ExitStack() as stack:
+        fds: dict[tuple[str, ...], int] = {}
+
+        def directory(parts: tuple[str, ...]) -> int:
+            if parts not in fds:
+                if parts:
+                    parent = directory(parts[:-1])
+                    fd = os.open(parts[-1], fd_walk.TRAVERSE_FLAGS, dir_fd=parent)
+                else:
+                    fd = os.open("/", fd_walk.TRAVERSE_FLAGS)
+                stack.callback(os.close, fd)
+                fds[parts] = fd
+            return fds[parts]
+
+        for line in lines:
+            p = root / line
+            entry: dict = {"path": str(p), "type": "file"}
+            try:
+                info = os.lstat(p.name, dir_fd=directory(p.parent.parts[1:]))
+            except OSError as exc:
+                if exc.errno in (errno.ENOTDIR, errno.ELOOP):
+                    continue
+                entries.append(entry)
+                continue
+            if stat.S_ISLNK(info.st_mode):
+                continue
+            entry["bytes"] = info.st_size
+            entries.append(entry)
+    return entries
+
+
 def _glob_mode(
     root: Path,
     glob: str,
@@ -231,13 +275,7 @@ def _glob_mode(
             "invalid_glob", f"Invalid glob pattern {glob!r}: {e}"
         ) from e
     truncated = len(lines) > max_results
-    entries = []
-    for line in lines[:max_results]:
-        p = root / line
-        try:
-            entries.append({"path": str(p), "type": "file", "bytes": p.stat().st_size})
-        except OSError:
-            entries.append({"path": str(p), "type": "file"})
+    entries = _glob_entries(root, lines[:max_results])
     payload = {
         "path": str(root),
         "mode": "glob",

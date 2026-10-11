@@ -106,6 +106,36 @@ fallback hint.
 path (nearby-siblings hint); outside roots; timeout (narrow-scope
 message).
 
+**Verify-after-open (Linux path, r6 W2 X3c, SD-76)**: ripgrep walks and
+opens files by path string, so descriptor containment cannot reach rg's own
+traversal: a same-uid swap of a file or a directory for a symlink between
+rg's directory read and its open can make rg read an object outside the
+roots. Before a match is reported, its file is opened again. Each component
+from `/` to the file's directory is opened no-follow relative to its opened
+parent (O_PATH on Linux), and the file itself is opened relative to that
+descriptor with O_NOFOLLOW and O_NONBLOCK. It must be a regular file. Every
+reported line (match and context lines, after the same UTF-8 BOM, UTF-16
+BOM and invalid-UTF-8 handling that rg applies) is then read from that
+descriptor and must equal the line that rg reported. The reported path is
+canonical and lies below the resolved search base, so the opened object is
+the one at that in-root path. A file that fails any step (swapped, removed,
+changed, or no longer a regular file) is omitted with all its lines, and
+its retained matches are subtracted from `count`. Adaptive discovery
+verifies every file in its final entries the same way; a clipped snippet
+must be a prefix of the line read. Benign results are unchanged, including
+a search base reached through a cross-root link or `..` into an outer root
+(the base is resolved before rg runs).
+
+Residuals (documented, not verified per match): matches beyond
+`max_results` that are only counted, the adaptive totals in `count` and
+`note` and the per-file `count` of an omitted file are derived from rg's
+path walk; they report numbers, never outside content or paths. A hard link
+to an outside file that already exists inside a root is an in-root path, as
+in r6. ripgrep is run without `--follow`; a user `RIPGREP_CONFIG_PATH`
+that adds `--follow` is unsupported, because a file reached through an
+in-root directory symlink then fails the no-follow walk and is omitted. On
+macOS the tool uses the native search adapter, not this path.
+
 ## 4. Test checklist (tests/unit/tools/test_search_text.py)
 
 Match basics (file/line/text, no number prefix); smart-case both ways;
