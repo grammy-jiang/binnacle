@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import platform
 from pathlib import Path
 
 from fastmcp import Client
@@ -42,9 +43,12 @@ def test_native_wire_schema_preserves_v101_with_declared_description_exception(
 
     tools, instructions = asyncio.run(inspect())
     actual = [tool.model_dump(mode="json", by_alias=True) for tool in tools]
-    assert "Raspberry Pi" not in instructions and "vcgencmd" not in instructions
-    assert "stop_job is unavailable" in instructions
-    assert "jobs for job_status/stop_job" not in instructions
+    if platform.system() == "Darwin":
+        assert "Raspberry Pi" not in instructions and "vcgencmd" not in instructions
+        assert "stop_job is unavailable" in instructions
+        assert "jobs for job_status/stop_job" not in instructions
+    else:
+        assert instructions == baseline["instructions"]
     assert len(actual) == 8
     native = next(tool for tool in actual if tool["name"] == "run_command")
     description = native["description"].lower()
