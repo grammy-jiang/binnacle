@@ -71,6 +71,7 @@ scripts/test_macos_collection_native.py | T0: Darwin host probe (sw_vers); the r
 platform/darwin/test_foreground_commands.py | A2: per-test Darwin posix_spawn owned-child mechanism
 platform/darwin/test_process_native.py | A2: per-test Darwin kqueue/posix_spawn child and witness probes
 platform/darwin/test_ipc_generation.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID contract
+platform/darwin/test_job_manager_service.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID job-manager IPC (R4 J2, A3 successor)
 platform/darwin/test_ipc_launchd.py | A3: per-test opt-in real launchd bootstrap (BINNACLE_A3_LAUNCHD=1)
 platform/darwin/test_search_parity.py | A4: in-body skip when APFS rejects a non-UTF-8 filename
 platform/darwin/test_package_install.py | A6: per-test Apple-silicon (arm64) native package install
@@ -107,6 +108,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_foreground_commands.py": 1,
     "tests/platform/darwin/test_process_native.py": 1,
     "tests/platform/darwin/test_ipc_generation.py": 1,
+    "tests/platform/darwin/test_job_manager_service.py": 1,
     "tests/platform/darwin/test_ipc_launchd.py": 3,
     "tests/platform/darwin/test_search_parity.py": 1,
     "tests/platform/darwin/test_package_install.py": 1,
