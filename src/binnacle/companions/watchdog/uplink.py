@@ -261,8 +261,11 @@ class ProbeUnavailable(Exception):
 
 def _bind_device(sock: socket.socket, dev: str | None) -> None:
     if dev:
+        bind_to_device: int | None = getattr(socket, "SO_BINDTODEVICE", None)
+        if bind_to_device is None:
+            raise ProbeUnavailable(f"cannot bind to {dev}: SO_BINDTODEVICE unavailable")
         try:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, dev.encode())
+            sock.setsockopt(socket.SOL_SOCKET, bind_to_device, dev.encode())
         except PermissionError as e:
             raise ProbeUnavailable(f"cannot bind to {dev}: {e}") from e
 

@@ -106,8 +106,16 @@ class LinuxJobSignalLease:
         sig = {"terminate": signal.SIGTERM, "kill": signal.SIGKILL}[intent]
         failed = 0
         for _, fd in self._targets:
+            # Linux-only capability; never fall back to a numeric-PID signal.
+            send_signal: Callable[[int, int], None] | None = getattr(
+                signal, "pidfd_send_signal", None
+            )
+            if send_signal is None:
+                raise JobSignalDeliveryError(
+                    "pidfd support is required for safe signaling"
+                )
             try:
-                signal.pidfd_send_signal(fd, sig)
+                send_signal(fd, sig)
             except ProcessLookupError:
                 # A pinned process exited; do not redirect to its reused PID.
                 continue

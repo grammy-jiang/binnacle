@@ -9,6 +9,8 @@ still carries nothing.
 import json
 import subprocess
 
+import pytest
+
 from binnacle.companions.watchdog import uplink
 
 ROUTE_JSON = json.dumps(
@@ -159,3 +161,55 @@ def test_probe_gateway_binds_to_the_device():
 
     uplink.probe_gateway(ROUTE, run=run)
     assert "-I" in seen[0] and "wlan1" in seen[0]
+
+
+@pytest.mark.parametrize("denied", [False, True])
+def test_bind_device_uses_available_socket_option(monkeypatch, denied):
+    calls = []
+
+    class Sock:
+        def setsockopt(self, *args):
+            calls.append(args)
+            if denied:
+                raise PermissionError("binding denied")
+
+    # Synthetic option is passed only to this fake, never to a kernel socket.
+    monkeypatch.setattr(uplink.socket, "SO_BINDTODEVICE", 12345, raising=False)
+    if denied:
+        with pytest.raises(uplink.ProbeUnavailable, match="binding denied"):
+            uplink._bind_device(Sock(), "wlan1")
+    else:
+        uplink._bind_device(Sock(), "wlan1")
+    assert calls == [(uplink.socket.SOL_SOCKET, 12345, b"wlan1")]
+
+
+@pytest.mark.parametrize("layer", ["dns", "tcp", "probe"])
+def test_missing_bind_device_is_unavailable_and_closes_socket(monkeypatch, layer):
+    closed = []
+
+    class Sock:
+        def settimeout(self, timeout):
+            pass
+
+        def setsockopt(self, *args):
+            pytest.fail("missing device binding must never reach setsockopt")
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.delattr(uplink.socket, "SO_BINDTODEVICE", raising=False)
+    monkeypatch.setattr(uplink.socket, "socket", lambda *args: Sock())
+    uplink._bind_device(Sock(), None)  # No device requested: still a no-op.
+    if layer == "probe":
+        probe = uplink.probe(ROUTE, nameserver="127.0.0.1", run=fake_run(code=1))
+        assert probe.layers == {}
+        assert "SO_BINDTODEVICE" in probe.errors["probe"]
+        assert probe.unavailable
+        assert not probe.healthy and not probe.wedged and not probe.dead_end
+    else:
+        with pytest.raises(uplink.ProbeUnavailable, match="SO_BINDTODEVICE"):
+            if layer == "dns":
+                uplink.probe_dns(ROUTE.src, "127.0.0.1", dev=ROUTE.dev)
+            else:
+                uplink.probe_tcp(ROUTE.src, dev=ROUTE.dev, address="127.0.0.1")
+    assert closed == [True]

@@ -3,12 +3,27 @@
 import json
 
 import orjson
+import pytest
 
 from binnacle.features.search import search_text_adaptive, search_text_budget
 
 
 def compact_stdlib(payload: dict) -> bytes:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ({}, 0),
+        ({"entries": None}, 0),
+        ({"entries": "ab"}, 0),
+        ({"entries": {}}, 0),
+        ({"entries": [{}, {}]}, 2),
+    ],
+)
+def test_entry_count(payload: dict, expected: int):
+    assert search_text_budget.entry_count(payload) == expected
 
 
 def test_orjson_compact_size_matches_existing_budget_representation():

@@ -257,6 +257,7 @@ Keep volatile operational facts in one place:
 | Topic | Canonical source |
 | --- | --- |
 | Clone/bootstrap/hooks/worktrees/dev loop | DEVELOPMENT.md |
+| Mac-first remote native development, SSH, and Pi quality-gate handoff | docs/mac-first-development-workflow.md |
 | Product quick start and user configuration | README.md |
 | Test layout, semantics and commands | docs/testing.md |
 | Pre-commit/pre-push/CI/security gate policy | docs/quality-gates.md |
