@@ -130,6 +130,9 @@ def test_manager_instructions_disclose_service_requirement():
     assert application.DARWIN_MANAGER_REQUIREMENT in text
     assert application.DARWIN_JOBS_DISCLOSURE in text
     assert "com.binnacle.jobs" in application.DARWIN_MANAGER_REQUIREMENT
+    # r5 L1b (SD-52): untracked new sessions/process groups are disclosed here.
+    assert "start a new session or process group are not tracked." in text
+    assert text.endswith(application.DARWIN_JOBS_DISCLOSURE)
 
 
 def test_create_application_validates_manager_backend(
