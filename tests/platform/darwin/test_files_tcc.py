@@ -229,7 +229,7 @@ def test_glob_listing_filters_special_and_unreadable_entries(
         }
 
 
-def _search_text(root, pattern, context_lines, *, darwin=True):
+def _search_text(root, pattern, context_lines, *, darwin=True, max_results=100, **cfg):
     """search_text_impl via the Darwin adapter, or the shared Linux rg path."""
     from binnacle.config import RootsSettings, SearchTextSettings
     from binnacle.features.files.paths import FileToolAccess
@@ -249,12 +249,13 @@ def _search_text(root, pattern, context_lines, *, darwin=True):
         capability=Capability(CapabilityState.LIMITED, "test_only", "opened-object"),
     )
     try:
-        args = (pattern, str(root), None, False, context_lines, False, 100)
+        args = (pattern, str(root), None, False, context_lines, False, max_results)
+        settings = SearchTextSettings(**cfg)
         if not darwin:
-            return search_text_impl(
-                *args, roots=roots, settings=SearchTextSettings(), rg_bin="rg"
-            )
-        return search_text_impl(*args, roots=roots, file_access=access)
+            return search_text_impl(*args, roots=roots, settings=settings, rg_bin="rg")
+        return search_text_impl(
+            *args, roots=roots, file_access=access, settings=settings
+        )
     finally:
         access.close()
 
@@ -363,8 +364,57 @@ def test_search_over_16_mib_of_rg_output_equals_linux(tmp_path, case, context_li
     assert sorted(entries, key=key) == sorted(
         linux.structured_content["entries"], key=key
     )
-    found = f"Found {count} matches for {pattern!r} under {root}"
-    if truncated:  # Linux's note and '; showing first 100.' live in the shared layer.
-        assert text.startswith(found + ".")
-    else:
-        assert text == found + "." and "note" not in payload
+    if not truncated:  # Capped-result note/wording belong to the shared layer (J8).
+        assert text == f"Found {count} matches for {pattern!r} under {root}."
+        assert "note" not in payload
+
+
+LONG = b"x" * 8200 + b"\n"
+# Pi LINUX-MEMLIMIT.json (re-review R-J6b-a2, memlimit_linux.py sha256 278bb7ce...):
+# byte-identical fixtures; Linux count, truncated, entry count, entry text length
+# (none empty) for default settings and two larger valid settings.
+LINUX_MEMLIMIT = {
+    "auto_ctx_long_lines": (
+        b"".join(b"needle %02d\n" % i + LONG * 100 for i in range(25)),
+        (None, 100, {}),
+        (25, False, 25, 9),
+    ),
+    "auto_ctx_2000_char_lines": (
+        b"".join(
+            b"needle %03d\n" % i + (b"y" * 2000 + b"\n") * 100 for i in range(120)
+        ),
+        (None, 100, {}),
+        (120, True, 100, 10),
+    ),
+    "explicit_ctx_one_match": (
+        LONG * 2100 + b"needle one\n" + b"tail\n",
+        (2100, 100, {}),
+        (1, True, 1, 10),
+    ),
+    "max_line_chars_9000": (
+        b"needle " + b"z" * 8993 + b"\n",
+        (0, 100, {"max_line_chars": 9000}),
+        (1, False, 1, 9000),
+    ),
+    "max_results_cap_12000": (
+        b"".join(b"needle %05d\n" % i for i in range(12000)),
+        (0, 12000, {"max_results_cap": 12000, "result_max_bytes": 4_000_000}),
+        (12000, False, 12000, 12),
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(LINUX_MEMLIMIT))
+def test_search_never_blanks_a_line_linux_displays(tmp_path, case):
+    data, (ctx, max_results, cfg), expected = LINUX_MEMLIMIT[case]
+    (root := tmp_path.resolve()).joinpath("f.txt").write_bytes(data)
+    kwargs = {"max_results": max_results, **cfg}
+    payload = _search_text(root, "needle", ctx, **kwargs).structured_content
+    entries = payload["entries"]
+    lens = {len(e["text"]) for e in entries}
+    assert (payload["count"], payload["truncated"], len(entries), lens) == (
+        *expected[:3],
+        {expected[3]},
+    )
+    linux = _search_text(root, "needle", ctx, darwin=False, **kwargs)
+    assert entries == linux.structured_content["entries"]  # Context included.

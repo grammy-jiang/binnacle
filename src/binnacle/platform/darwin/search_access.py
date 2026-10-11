@@ -4,11 +4,13 @@ Ignore discovery is confined to the grant: .gitignore/.ignore/.rgignore above
 it and global policies are never read. NUL files are searched as text (rg
 --text, as Linux; binary_files_skipped stays 0). As on Linux every file is
 searched whole and all rg output consumed: bytes stream from the opened
-descriptor into rg stdin by CHUNK, and rg JSON is parsed per line without
-holding an oversize line. Each match yields one event; only the first
-KEEP_MATCHES (and their context window) keep text, clipped to KEEP_CHARS + 1.
-``truncated`` comes only from a capped file list. True limits are explicit
-stats: skipped_io_error and skipped_text_over_memory_limit (text blanked).
+descriptor into rg stdin by CHUNK, and rg JSON is parsed per line. Events keep
+what the Linux path keeps (every match and context line, full text), so the
+shared layer shows identical results; only a JSON line over LINE_LIMIT is
+never held: it keeps type, line_number and the text in its first LINE_LIMIT
+bytes (far beyond any display clip). There is no blanking, no output cap and
+no memory limit Linux lacks; ``truncated`` comes only from a capped file list
+and a mid-stream read failure is the explicit stat skipped_io_error.
 Files use rg --sort path order. The helper owns one direct rg child, closes
 pipes and reaps on every exit. This is not general process-tree control.
 B0 alone enables reviewed tool wiring; full macOS parity remains unavailable.
@@ -66,8 +68,6 @@ def _command(rg_bin: str, request: SearchRequest) -> list[str]:
 
 CHUNK = 65536
 LINE_LIMIT = 1 << 20  # Larger rg JSON lines are scanned, never held whole.
-KEEP_CHARS = 8192  # Retained line text; must exceed the shared max_line_chars.
-KEEP_MATCHES = 10_000  # Must cover the shared max_results cap; later ones count.
 _MARKER = b'"},"line_number":'  # Unique: '"' inside a JSON string is escaped.
 _TEXT = b'"lines":{"text":"'
 _NUMBER = re.compile(rb"(\d+),")
@@ -96,7 +96,7 @@ def _decode(raw: bytes, complete: bool) -> str:
     """Decode a JSON string body; a cut prefix may end in an escape or a pair."""
     for cut in range(len(raw), max(-1, len(raw) - (1 if complete else 12)), -1):
         try:
-            text = str(json.loads(b'"' + raw[:cut] + b'"'))[: KEEP_CHARS + 1]
+            text = str(json.loads(b'"' + raw[:cut] + b'"'))
         except (ValueError, UnicodeError):
             continue
         return text[:-1] if text and "\ud800" <= text[-1] <= "\udbff" else text
@@ -152,8 +152,7 @@ class _Reader:
         start, end = head.find(_TEXT), head.find(_MARKER)
         if start >= 0:
             start += len(_TEXT)
-            body = head[start:end] if end >= 0 else head[start : start + 7 * KEEP_CHARS]
-            self.text = _decode(body, end >= 0)
+            self.text = _decode(head[start:end] if end >= 0 else head[start:], end >= 0)
         self.raw = head[end:] if end >= 0 else head[-64:]
         self._scan(b"")
 
@@ -163,6 +162,8 @@ class _Reader:
             at = window.find(_MARKER)
             found = _NUMBER.match(window, at + len(_MARKER)) if at >= 0 else None
             if found is None:
+                if at >= 0 and len(window) - at > len(_MARKER) + 32:
+                    raise unavailable("rg_invalid_output")  # No line number.
                 self.raw = window[at:] if at >= 0 else window[-64:]
                 return b""
             self.number, data = int(found.group(1)), window[found.end() :]
@@ -177,29 +178,21 @@ class _Reader:
 
 
 class _Collector:
-    """Per-search events: every match counted, text only where it can show."""
+    """Per-search events; a file's events are kept only once rg succeeded."""
 
-    def __init__(self, budget: int, span: int) -> None:
+    def __init__(self) -> None:
         self.events: list[Event] = []
-        self.budget, self.span = budget, span
-        self.matches = self.kept = self.over_limit = 0
 
     def begin(self, display: str) -> _Reader:
         """Start one file; its fresh reader feeds add()."""
         self.pending: list[Event] = []
-        self.saved = (self.matches, self.kept, self.over_limit)
-        self.window = -1  # Last line still shown as context of match KEEP_MATCHES.
         try:
             display.encode("utf-8")
             self.path: dict[str, str] = {"text": display}
         except UnicodeError:
             encoded = base64.b64encode(os.fsencode(display)).decode("ascii")
             self.path = {"bytes": encoded}
-        self.blank = {"path": self.path, "lines": {"text": ""}}
         return _Reader(self.add)
-
-    def rollback(self) -> None:
-        self.matches, self.kept, self.over_limit = self.saved
 
     def commit(self) -> None:
         self.events.extend(self.pending)
@@ -208,40 +201,17 @@ class _Collector:
         data = cast("dict[str, object]", event["data"])  # Checked by _Reader.
         if "path" in data:
             data["path"] = self.path
-        kind, line = event.get("type"), data.get("line_number")
-        if kind in ("match", "context"):
-            if not isinstance(line, int) or not isinstance(data.get("lines"), dict):
-                raise unavailable("rg_invalid_output")
-            if kind == "match":
-                self.matches += 1
-                if self.matches == KEEP_MATCHES:
-                    self.window = line + self.span
-            past = self.matches - (kind == "match") >= KEEP_MATCHES
-            if past and line > self.window:
-                if kind == "context":
-                    return  # Never displayed; Linux keeps it only in memory.
-                event = {"type": kind, "data": {**self.blank, "line_number": line}}
-            else:
-                self._keep(data)
+        if event.get("type") in ("match", "context") and (
+            not isinstance(data.get("line_number"), int)
+            or not isinstance(data.get("lines"), dict)
+        ):
+            raise unavailable("rg_invalid_output")
         self.pending.append(event)
-
-    def _keep(self, data: dict[str, object]) -> None:
-        lines = cast("dict[str, object]", data["lines"])  # Checked by add().
-        for key in ("text", "bytes"):
-            value = lines.get(key)
-            if isinstance(value, str) and len(value) > KEEP_CHARS + 1:
-                data["lines"], data["submatches"] = {key: value[: KEEP_CHARS + 1]}, []
-            if isinstance(value, str):
-                self.kept += min(len(value), KEEP_CHARS + 1)
-        if self.kept > self.budget:
-            # A true memory limit, reported explicitly in the stats.
-            self.over_limit += 1
-            data["lines"], data["submatches"] = {"text": ""}, []
 
 
 def _events(output: bytes, display: str, truncated: bool) -> list[Event]:
     """One file's rg JSON as remapped events; a capped tail line is dropped."""
-    collector = _Collector(MAX_BYTES, 0)
+    collector = _Collector()
     reader = collector.begin(display)
     reader.feed(output)
     if not truncated:
@@ -439,7 +409,7 @@ class DarwinSearchAccess:
             raise unavailable("rg_invalid_pattern")
         argv = _command(self._rg_bin, request)
         paths, truncated = self._paths(grant, request)
-        collector = _Collector(request.max_bytes, request.context_lines)
+        collector = _Collector()
         files_searched = unreadable_files_skipped = 0
         binary_files_skipped = 0  # NUL files are searched as text
         skipped_changed = skipped_io_error = 0
@@ -452,13 +422,11 @@ class DarwinSearchAccess:
                     # The whole file streams through this descriptor (CR2).
                     _run_rg(argv, _descriptor_source(opened), deadline, reader)
             except PermissionDenied:
-                collector.rollback()
                 if path == request.relative_path:
                     raise
                 unreadable_files_skipped += 1
                 continue
             except UnsafePath as exc:
-                collector.rollback()
                 if path == request.relative_path or exc.code not in {
                     "path_not_found",
                     "symlink_or_wrong_path_type",
@@ -471,7 +439,6 @@ class DarwinSearchAccess:
                 continue
             except _SourceReadFailed as exc:
                 # A true I/O limit: rg saw a partial stream, so drop its output.
-                collector.rollback()
                 if path == request.relative_path:
                     code = str(exc)
                     raise AuthorityUnknown(code, capability(code)) from None
@@ -489,7 +456,6 @@ class DarwinSearchAccess:
                 "files_searched": files_searched,
                 "skipped_changed": skipped_changed,
                 "skipped_io_error": skipped_io_error,
-                "skipped_text_over_memory_limit": collector.over_limit,
                 "binary_files_skipped": binary_files_skipped,
                 "unreadable_files_skipped": unreadable_files_skipped,
             },
