@@ -84,6 +84,7 @@ platform/darwin/test_r5_l2_parity.py | B0: per-test Darwin manager composition a
 platform/darwin/test_r5_l2b_strict_client.py | B0: per-test Darwin KERN_PROC_PGRP group_listing through the strict in-memory client (r5 L2b, SD-61 STEER-02b)
 platform/darwin/test_r5_l2c_output_snapshot.py | B0: per-test Darwin real com.binnacle.jobs burst-writer output/output_bytes one-snapshot repro (r5 L2c); the pairing unit test runs everywhere
 platform/darwin/test_r6_d2_stop_marker_start.py | B0: per-test Darwin real com.binnacle.jobs entry start refusal under its own quiet-window stop marker (r6 D2); the in-process and marker-reader tests run everywhere
+platform/darwin/test_r6_d1_runtime_rebind.py | B0: per-test Darwin real com.binnacle.jobs endpoint rebind after socket/runtime-root removal, foreign debris and sun_path overflow (r6 D1); the sun_path and rebind-policy unit tests run everywhere
 platform/darwin/test_ipc_launchd.py | A3: per-test opt-in real launchd bootstrap (BINNACLE_A3_LAUNCHD=1)
 platform/darwin/test_search_parity.py | A4: in-body skip when APFS rejects a non-UTF-8 filename
 platform/darwin/test_package_install.py | A6: per-test Apple-silicon (arm64) native package install
@@ -135,6 +136,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_r5_l2b_strict_client.py": 1,
     "tests/platform/darwin/test_r5_l2c_output_snapshot.py": 1,
     "tests/platform/darwin/test_r6_d2_stop_marker_start.py": 1,
+    "tests/platform/darwin/test_r6_d1_runtime_rebind.py": 1,
     "tests/platform/darwin/test_ipc_launchd.py": 3,
     "tests/platform/darwin/test_search_parity.py": 1,
     "tests/platform/darwin/test_package_install.py": 1,
