@@ -1,6 +1,7 @@
 """Search settings use existing scan seams without global construction state."""
 
 import asyncio
+import sys
 
 import pytest
 from fastmcp import Client
@@ -10,6 +11,14 @@ from binnacle.config import RootsSettings, SearchTextSettings
 from binnacle.features.files import paths
 from binnacle.features.search import search_server
 from binnacle.features.search.tools import search_text
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason=(
+        "Search child over the Linux pathname Core (CR0-06); Darwin counterpart: "
+        "tests/platform/darwin/test_search_parity.py::test_native_local_ignore_and_glob_parity"
+    ),
+)
 
 
 def fail_global():
@@ -101,6 +110,7 @@ def test_explicit_search_auto_context_and_binary(tmp_path, monkeypatch, mode):
         )
 
 
+@LINUX_ONLY
 def test_search_factory_snapshots_caps_roots_and_path_literals(tmp_path, monkeypatch):
     children = []
     for index, cap in enumerate((1, 2)):
@@ -155,6 +165,7 @@ def test_search_factory_snapshots_caps_roots_and_path_literals(tmp_path, monkeyp
     asyncio.run(go())
 
 
+@LINUX_ONLY
 def test_fully_supplied_search_factory_has_no_hidden_loads_on_error_paths(
     tmp_path, monkeypatch
 ):
