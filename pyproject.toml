@@ -38,6 +38,7 @@ dependencies = [
     "mcp==2.3.0", # latest MCP protocol SDK; exact released/tested pairing
     "mcp-types==2.3.0", # latest MCP wire types and schemas; exact paired release
     "orjson>=3.11.3",
+    "pathspec>=1.1,<2; sys_platform == 'darwin'",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "starlette>=1.6.0", # request/response types for native FastMCP custom routes
@@ -440,8 +441,10 @@ name = "Only explicit platform composition and Linux compatibility IO may import
 type = "protected"
 protected_modules = [
     "binnacle.platform.linux",
+    "binnacle.platform.darwin",
     "binnacle.observability.linux",
     "binnacle.deployment.linux",
+    "binnacle.deployment.darwin",
 ]
 allowed_importers = [
     "binnacle.platform.composition",

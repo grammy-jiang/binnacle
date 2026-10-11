@@ -7,7 +7,7 @@ jemalloc builds abort on this Pi's 16 KB kernel pages (Copilot lesson).
 """
 
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Annotated
 
 from fastmcp import FastMCP
@@ -16,7 +16,13 @@ from pydantic import Field
 
 from binnacle.config import ListFilesSettings, RootsSettings, get_settings
 from binnacle.errors import CodedToolError
-from binnacle.features.files.paths import full_match, nearby_hint, resolve_path
+from binnacle.features.files.paths import (
+    FileToolAccess,
+    full_match,
+    nearby_hint,
+    resolve_path,
+)
+from binnacle.platform.contracts.file_access_contracts import ListRequest
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -182,6 +188,7 @@ def list_files_impl(
     include_hidden: bool,
     *,
     roots: RootsSettings | None = None,
+    file_access: FileToolAccess | None = None,
     settings: ListFilesSettings | None = None,
     rg_bin: str | None = None,
 ) -> ToolResult:
@@ -189,6 +196,42 @@ def list_files_impl(
         defaults = get_settings()
         settings = defaults.list_files if settings is None else settings
         rg_bin = defaults.rg_bin if rg_bin is None else rg_bin
+    if file_access is not None:
+        file_access.require("list_files")
+        with file_access.operation(path) as (grant, relative, display):
+            listing = file_access.provider.list_entries(
+                grant,
+                ListRequest(
+                    relative,
+                    glob,
+                    include_hidden,
+                    max(1, min(max_results, settings.max_results_cap)),
+                    10000,
+                    settings.rg_timeout_s,
+                ),
+            )
+            entries = []
+            root_label = display
+            for _ in PurePath(relative).parts:
+                root_label = root_label.parent
+            for entry in listing.entries:
+                item: dict = {
+                    "path": str(root_label / entry.relative_path),
+                    "type": "dir" if entry.kind == "directory" else "file",
+                }
+                if entry.size_bytes is not None:
+                    item["bytes"] = entry.size_bytes
+                entries.append(item)
+            return ToolResult(
+                content=f"Listed {len(entries)} entries in {display}.",
+                structured_content={
+                    "path": str(display),
+                    "mode": "glob" if glob else "list",
+                    "entries": entries,
+                    "count": len(entries),
+                    "truncated": listing.truncated,
+                },
+            )
     resolved = resolve_path(path, roots=roots)
     if not resolved.exists():
         raise CodedToolError(
@@ -217,6 +260,7 @@ def register(
     mcp: FastMCP,
     *,
     roots: RootsSettings | None = None,
+    file_access: FileToolAccess | None = None,
     settings: ListFilesSettings | None = None,
     rg_bin: str | None = None,
 ) -> None:
@@ -266,6 +310,7 @@ def register(
             max_results,
             include_hidden,
             roots=roots,
+            file_access=file_access,
             settings=settings,
             rg_bin=rg_bin,
         )

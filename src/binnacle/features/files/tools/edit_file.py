@@ -7,6 +7,7 @@ the edit, CRLF and typographic quotes are matched byte-for-byte
 (Copilot's normalization bugs are the cautionary tales).
 """
 
+import hashlib
 from typing import Annotated
 
 from fastmcp import FastMCP
@@ -15,7 +16,7 @@ from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
 from binnacle.config import EditFileSettings, RootsSettings, get_settings
-from binnacle.features.files.paths import nearby_hint, resolve_path
+from binnacle.features.files.paths import FileToolAccess, nearby_hint, resolve_path
 
 _BOM_CODECS = (
     (b"\xff\xfe\x00\x00", "utf-32-le"),
@@ -122,17 +123,22 @@ def edit_file_impl(
     replace_all: bool,
     *,
     roots: RootsSettings | None = None,
+    file_access: FileToolAccess | None = None,
     settings: EditFileSettings | None = None,
 ) -> ToolResult:
     settings = get_settings().edit_file if settings is None else settings
-    resolved = resolve_path(path, roots=roots)
-    if not resolved.exists():
-        raise ToolError(
-            f"File not found: {resolved}.{nearby_hint(resolved.parent, roots=roots)} "
-            f"To create a new file, use write_file."
-        )
-    if resolved.is_dir():
-        raise ToolError(f"Path is a directory, not a file: {resolved}.")
+    if file_access is not None:
+        file_access.require("edit_file")
+        resolved, _, original = file_access.read(path, 16 * 1024 * 1024)
+    else:
+        resolved = resolve_path(path, roots=roots)
+        if not resolved.exists():
+            raise ToolError(
+                f"File not found: {resolved}.{nearby_hint(resolved.parent, roots=roots)} "
+                f"To create a new file, use write_file."
+            )
+        if resolved.is_dir():
+            raise ToolError(f"Path is a directory, not a file: {resolved}.")
     if not old_string:
         raise ToolError(
             "old_string must be non-empty. To create or fully rewrite a "
@@ -141,7 +147,9 @@ def edit_file_impl(
     if old_string == new_string:
         raise ToolError("old_string and new_string are identical; nothing to change.")
 
-    text, bom, codec = _decode_for_edit(resolved.read_bytes(), resolved)
+    if file_access is None:
+        original = resolved.read_bytes()
+    text, bom, codec = _decode_for_edit(original, resolved)
 
     match_tier = "exact"
     count = text.count(old_string)
@@ -195,7 +203,17 @@ def edit_file_impl(
 
     data = bom + new_text.encode(codec)
     try:
-        resolved.write_bytes(data)
+        if file_access is None:
+            resolved.write_bytes(data)
+        else:
+            with file_access.operation(path) as (grant, relative, _):
+                file_access.provider.write_bytes(
+                    grant,
+                    relative,
+                    data,
+                    create_parents=False,
+                    expected_sha256=hashlib.sha256(original).hexdigest(),
+                )
     except OSError as e:
         raise ToolError(f"Could not write {resolved}: {e.strerror or e}.") from e
 
@@ -224,6 +242,7 @@ def register(
     mcp: FastMCP,
     *,
     roots: RootsSettings | None = None,
+    file_access: FileToolAccess | None = None,
     settings: EditFileSettings | None = None,
 ) -> None:
     if roots is None or settings is None:
@@ -271,5 +290,11 @@ def register(
         Use write_file to create files.
         """
         return edit_file_impl(
-            path, old_string, new_string, replace_all, roots=roots, settings=settings
+            path,
+            old_string,
+            new_string,
+            replace_all,
+            roots=roots,
+            file_access=file_access,
+            settings=settings,
         )

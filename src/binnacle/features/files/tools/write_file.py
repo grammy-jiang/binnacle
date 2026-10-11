@@ -14,7 +14,7 @@ from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
 from binnacle.config import RootsSettings, get_settings
-from binnacle.features.files.paths import resolve_path
+from binnacle.features.files.paths import FileToolAccess, resolve_path
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -33,19 +33,29 @@ def write_file_impl(
     content: str,
     *,
     roots: RootsSettings | None = None,
+    file_access: FileToolAccess | None = None,
 ) -> ToolResult:
-    resolved = resolve_path(path, roots=roots)
-    if resolved.is_dir():
-        raise ToolError(
-            f"Path is a directory, not a file: {resolved}. Use list_files to browse it."
-        )
-    previous_bytes = resolved.stat().st_size if resolved.exists() else None
-    data = content.encode("utf-8")
-    try:
-        resolved.parent.mkdir(parents=True, exist_ok=True)
-        resolved.write_bytes(data)
-    except OSError as e:
-        raise ToolError(f"Could not write {resolved}: {e.strerror or e}.") from e
+    if file_access is not None:
+        file_access.require("write_file")
+        with file_access.operation(path) as (grant, relative, resolved):
+            data = content.encode("utf-8")
+            receipt = file_access.provider.write_bytes(
+                grant, relative, data, create_parents=True
+            )
+            previous_bytes = receipt.previous_bytes
+    else:
+        resolved = resolve_path(path, roots=roots)
+        if resolved.is_dir():
+            raise ToolError(
+                f"Path is a directory, not a file: {resolved}. Use list_files to browse it."
+            )
+        previous_bytes = resolved.stat().st_size if resolved.exists() else None
+        data = content.encode("utf-8")
+        try:
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            resolved.write_bytes(data)
+        except OSError as e:
+            raise ToolError(f"Could not write {resolved}: {e.strerror or e}.") from e
 
     if previous_bytes is None:
         payload = {"path": str(resolved), "bytes": len(data), "action": "created"}
@@ -61,7 +71,12 @@ def write_file_impl(
     return ToolResult(content=summary, structured_content=payload)
 
 
-def register(mcp: FastMCP, *, roots: RootsSettings | None = None) -> None:
+def register(
+    mcp: FastMCP,
+    *,
+    roots: RootsSettings | None = None,
+    file_access: FileToolAccess | None = None,
+) -> None:
     roots = (get_settings().roots if roots is None else roots).model_copy(deep=True)
 
     @mcp.tool(
@@ -89,4 +104,4 @@ def register(mcp: FastMCP, *, roots: RootsSettings | None = None) -> None:
         provide the COMPLETE file, never placeholders like '... rest
         unchanged'. Prefer edit_file for changing part of an existing file.
         """
-        return write_file_impl(path, content, roots=roots)
+        return write_file_impl(path, content, roots=roots, file_access=file_access)

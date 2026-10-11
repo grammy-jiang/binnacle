@@ -121,3 +121,126 @@ def attach_context(
             match["context"] = "\n".join(
                 clip(lines[n], max_line_chars, clip_mark) for n in nums
             )
+
+
+def search_opened(
+    access,
+    pattern,
+    path,
+    glob,
+    fixed_strings,
+    context_lines,
+    names_only,
+    max_results,
+    line_numbers,
+    settings,
+):
+    """Format authorized adapter events; no filesystem calls or path reopening."""
+    from fastmcp.tools.base import ToolResult
+
+    from binnacle.features.search.search_text_budget import enforce_result_budget
+    from binnacle.platform.contracts.file_access_contracts import SearchRequest
+
+    with access.operation(path) as (grant, relative, display):
+        if access.search is None:
+            raise CodedToolError(
+                "native_capability_unavailable", "Search provider missing."
+            )
+        span = (
+            context_lines if context_lines is not None else settings.auto_context_single
+        )
+        batch = access.search.search(
+            grant,
+            SearchRequest(
+                relative,
+                pattern,
+                fixed_strings,
+                span,
+                glob,
+                settings.timeout_s,
+                16 * 1024 * 1024,  # Aggregate input and rg output caps.
+                10000,
+            ),
+        )
+        # Adapter paths are grant-relative; the label is display-only.
+        root_label = display
+        for _ in PurePath(relative).parts:
+            root_label = root_label.parent
+        events = []
+        for event in batch.events:
+            mapped = dict(event)
+            if mapped.get("type") in ("match", "context"):
+                data = dict(mapped["data"])
+                data["path"] = {"text": str(root_label / data["path"]["text"])}
+                mapped["data"] = data
+            events.append(mapped)
+        matches, line_map, total, capped = collect(
+            events,
+            display,
+            None,
+            max(1, min(max_results, settings.max_results_cap)),
+            None,
+            max_line_chars=settings.max_line_chars,
+            clip_mark="… [line truncated]",
+        )
+        if context_lines is None:
+            span = (
+                settings.auto_context_single
+                if len(matches) == 1
+                else settings.auto_context_few
+                if len(matches) <= 3
+                else 0
+            )
+        if span and not names_only:
+            attach_context(
+                matches,
+                line_map,
+                span,
+                line_numbers,
+                max_line_chars=settings.max_line_chars,
+                clip_mark="… [line truncated]",
+            )
+        entries = matches
+        if names_only:
+            counts: dict[str, int] = {}
+            for match in matches:
+                counts[match["file"]] = counts.get(match["file"], 0) + 1
+            entries = [
+                {"file": name, "count": count} for name, count in sorted(counts.items())
+            ]
+        payload = {
+            "path": str(display),
+            "pattern": pattern,
+            "entries": entries,
+            "count": total,
+            "truncated": capped or batch.truncated,
+        }
+        outcome = enforce_result_budget(
+            payload, names_only=names_only, max_bytes=settings.result_max_bytes
+        )
+        summary = f"Found {total} matches for {pattern!r} under {display}."
+        if outcome.payload["truncated"]:
+            summary += " Results truncated (truncated=true); narrow the path or glob."
+        for event in batch.events:
+            if event.get("type") == "summary":
+                stats = event["data"]["stats"]
+                skipped = [
+                    f"{key}={value}"
+                    for key, value in stats.items()
+                    if (key.endswith("_skipped") or key.startswith("skipped_"))
+                    and value
+                ]
+                if skipped:
+                    summary += " Skipped files: " + ", ".join(skipped) + "."
+                if stats.get("skipped_oversize"):
+                    summary += (
+                        f" {stats['skipped_oversize']} file(s) skipped: larger than the per-file limit"
+                        " (bounded by the remaining input budget)."
+                    )
+                for budget in ("input", "output"):
+                    if stats.get(f"{budget}_budget_exhausted"):
+                        summary += f" Aggregate {budget} budget exhausted."
+        return ToolResult(
+            content=summary,
+            structured_content=outcome.payload,
+        )
