@@ -78,11 +78,32 @@ class Endpoint:
     errors: list[BaseException] = field(default_factory=list)
 
 
-class _StubBackend:
-    """Test-owned CommandBackend: never spawns; every call is a controlled denial."""
+def _real_darwin_wiring(settings: Any) -> dict[str, Any]:
+    """Mirror binnacle.server.create_server's Darwin wiring with test-owned inputs."""
+    from binnacle.features.commands.command_backend import create_command_backend
+    from binnacle.features.files.paths import FileToolAccess
+    from binnacle.platform.composition import create_file_access, create_search_access
+    from binnacle.platform.contracts.capability_contracts import (
+        Capability,
+        CapabilityState,
+    )
 
-    def __getattr__(self, name: str) -> Any:
-        raise RuntimeError(f"darwin_commands_unavailable: {name}")
+    files = create_file_access()
+    search = (
+        create_search_access(files=files, rg_bin=settings.rg_bin)
+        if files is not None
+        else None
+    )
+    access = FileToolAccess(
+        roots=settings.roots,
+        files=files,
+        search=search,
+        generation="unavailable",
+        capability=Capability(
+            CapabilityState.UNAVAILABLE, "review_pending", "darwin_public_tools"
+        ),
+    )
+    return {"file_access": access, "backend": create_command_backend()}
 
 
 def _port_closed(host: str, port: int) -> bool:
@@ -104,9 +125,7 @@ def _start_endpoint(root: Path, token: str) -> Endpoint:
     settings.roots.default_root = root
     settings.roots.extra_roots = ()
     app = create_application(
-        settings=settings,
-        token=token,
-        backend=_StubBackend(),
+        settings=settings, token=token, **_real_darwin_wiring(settings)
     ).http_app()
     config = uvicorn.Config(
         app, host="127.0.0.1", port=0, log_level="warning", lifespan="on"
@@ -218,9 +237,17 @@ def test_supported_and_unsupported_tool_calls_are_reported(
         "unsupported": sorted(n for n, o in outcomes.items() if o["status"] != "ok"),
     }
     print("E0-SMOKE-REPORT " + json.dumps(report, sort_keys=True))
-    # Policy-disabled tools must be denied, never silently succeed.
-    for name in POLICY_DISABLED:
+    # Every unsupported tool must return the typed UNAVAILABLE marker, not a
+    # generic crash (foreground run_command stays disabled; stop_job UNAVAILABLE).
+    for name in POLICY_DISABLED | {"run_command", "job_status"}:
         assert outcomes[name]["status"] == "denied", outcomes[name]
+    for name, outcome in outcomes.items():
+        if outcome["status"] == "denied":
+            assert "native_capability_unavailable" in outcome["detail"], (
+                name,
+                outcome,
+            )
+            assert "darwin_commands_unavailable" not in outcome["detail"], name
     # No fabricated parity: the report must not claim eight working tools.
     assert len([o for o in outcomes.values() if o["status"] == "ok"]) < len(
         REGISTERED_TOOLS
