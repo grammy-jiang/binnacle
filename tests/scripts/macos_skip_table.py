@@ -80,6 +80,8 @@ platform/darwin/test_j1g_e2e_survival.py | B0: per-test Darwin real com.binnacle
 platform/darwin/test_job_manager_resilience.py | A3: per-test Darwin libproc verified-teardown negative test (R4 J2t, RULE-NO-PKILL); the rest of the module runs everywhere
 platform/darwin/test_durable_tool_wiring.py | B0: per-test Darwin manager-owner tool composition (R4 J4); the owner call-site test runs everywhere
 platform/darwin/test_durable_manager_e2e.py | B0: per-test Darwin real com.binnacle.jobs end-to-end for the manager-composed command tools (R4 J4, split from test_durable_tool_wiring.py)
+platform/darwin/test_r5_l2_parity.py | B0: per-test Darwin manager composition and caller_form workdir on the real macOS filesystem (r5 L2, SD-50; STEER-01); the Linux-host cases run everywhere
+platform/darwin/test_r5_l2b_strict_client.py | B0: per-test Darwin KERN_PROC_PGRP group_listing through the strict in-memory client (r5 L2b, SD-61 STEER-02b)
 platform/darwin/test_ipc_launchd.py | A3: per-test opt-in real launchd bootstrap (BINNACLE_A3_LAUNCHD=1)
 platform/darwin/test_search_parity.py | A4: in-body skip when APFS rejects a non-UTF-8 filename
 platform/darwin/test_package_install.py | A6: per-test Apple-silicon (arm64) native package install
@@ -127,6 +129,8 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_job_manager_resilience.py": 1,
     "tests/platform/darwin/test_durable_tool_wiring.py": 1,
     "tests/platform/darwin/test_durable_manager_e2e.py": 1,
+    "tests/platform/darwin/test_r5_l2_parity.py": 1,
+    "tests/platform/darwin/test_r5_l2b_strict_client.py": 1,
     "tests/platform/darwin/test_ipc_launchd.py": 3,
     "tests/platform/darwin/test_search_parity.py": 1,
     "tests/platform/darwin/test_package_install.py": 1,

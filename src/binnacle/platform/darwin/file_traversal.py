@@ -462,7 +462,9 @@ class Listing:
                 )
             )
         else:
-            self.entries.sort(key=lambda e: (-(e.modified_ns or 0), e.relative_path))
+            # Linux rule (rg --sortr modified): newest first; equal mtimes keep
+            # the walk order, so no path tie-break (the sort is stable).
+            self.entries.sort(key=lambda e: -(e.modified_ns or 0))
         prefix = "/".join(base) + "/" if base else ""
         selected = [
             FileEntry(

@@ -274,7 +274,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     return EX_FAILED
 
 
-_STATE_LETTERS = {1: "I", 2: "R", 3: "S", 4: "T", 5: "Z"}  # SIDL..SZOMB
+# SD-59: only p_stat values with one Linux letter. SRUN is kept by XNU for a
+# sleeping process too (R or S needs libproc thread states) and SIDL has no
+# Linux state, so both stay unknown; SSTOP of a traced process may be Linux t.
+_STATE_LETTERS = {3: "S", 4: "T", 5: "Z"}  # SSLEEP, SSTOP, SZOMB
+_UNKNOWN_STATE = "?"  # D-2: not a state letter, never invented
+_P_TRACED = 0x800  # kinfo_proc p_flag (offset 32)
 
 
 def _sysctl(mib: Sequence[int], limit: int) -> bytes:
@@ -332,13 +337,25 @@ def command_line(pid: int, max_cmd_chars: int) -> str | None:
     return " ".join(argv)[:max_cmd_chars]  # bounded after the join
 
 
-def group_listing(pgid: int, max_cmd_chars: int) -> list[dict]:
-    """JCRP-F6 (Linux job_processes shape): pid, ppid, state and cmd.
+def _state_letter(entry: bytes, state: int) -> str:
+    """The Linux /proc state letter kinfo_proc determines, else ``?``."""
+    if state == 4 and int.from_bytes(entry[32:36], sys.byteorder) & _P_TRACED:
+        return _UNKNOWN_STATE
+    return _STATE_LETTERS.get(state, _UNKNOWN_STATE)
 
+
+def group_listing(pgid: int, max_cmd_chars: int) -> list[dict]:
+    """JCRP-F6 (Linux job_processes shape): pid, state, etime_s and cmd.
+
+    ``etime_s`` is the age from kinfo_proc p_starttime, rounded like Linux.
     ``cmd`` is the KERN_PROCARGS2 argv bounded by ``max_cmd_chars``, else the
-    kinfo_proc comm when PROCARGS2 is denied, else omitted: never invented. The
-    owner calls this only for its verified group; it grants no signal right.
+    kinfo_proc comm when PROCARGS2 is denied, else empty like an empty Linux
+    cmdline: never invented. ``cpu_s`` has no public per-process source here
+    (SD-59 ruling 2 is pending). The owner calls this only for its verified
+    group; it grants no signal right.
     """
+    import time
+
     from binnacle.platform.darwin.process_authority import _decode_process_records
 
     try:
@@ -346,6 +363,7 @@ def group_listing(pgid: int, max_cmd_chars: int) -> list[dict]:
     except OSError:
         return []
     listing: list[dict] = []
+    now = time.time()  # p_starttime is wall clock (microtime at fork)
     for offset in range(0, len(raw) - len(raw) % 648, 648):
         entry = raw[offset : offset + 648]
         try:
@@ -356,9 +374,14 @@ def group_listing(pgid: int, max_cmd_chars: int) -> list[dict]:
             continue
         cmd = command_line(member.pid, max_cmd_chars)
         if cmd is None:  # p_comm (MAXCOMLEN + 1) at kinfo_proc offset 243
-            cmd = entry[243:260].split(b"\0", 1)[0].decode(errors="replace") or None
-        state = _STATE_LETTERS.get(member.state, "?")
-        listing.append({"pid": member.pid, "ppid": member.parent, "state": state})
-        if cmd is not None:  # unknown: omitted (job_status schema), never invented
-            listing[-1]["cmd"] = cmd[:max_cmd_chars]
+            cmd = entry[243:260].split(b"\0", 1)[0].decode(errors="replace")
+        started = member.birth[0] + member.birth[1] / 1_000_000
+        listing.append(
+            {
+                "pid": member.pid,
+                "state": _state_letter(entry, member.state),
+                "etime_s": round(max(now - started, 0.0), 1),
+                "cmd": cmd[:max_cmd_chars],
+            }
+        )
     return sorted(listing, key=lambda item: int(item["pid"]))

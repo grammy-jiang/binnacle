@@ -322,7 +322,17 @@ class DarwinManagerCommandBackend:
         except (CommandFailure, RuntimeError, OSError):
             return []
         listing = reply.get("processes")
-        return listing if isinstance(listing, list) else []
+        if not isinstance(listing, list):
+            return []
+        # The A3 reply is sort_keys JSON: rebuild each item in the Linux
+        # job_processes key order (STEER-03); other keys follow, never dropped.
+        order = ("pid", "state", "etime_s", "cpu_s", "cmd")
+        return [
+            {**{key: item[key] for key in order if key in item}, **item}
+            if isinstance(item, dict)
+            else item
+            for item in listing
+        ]
 
     def disclose_status(self, job_id: str, reply: CommandReply) -> CommandReply:
         """Add D-1 (owner lost), SD-41 (unverified) and D-2 (sampled) text."""

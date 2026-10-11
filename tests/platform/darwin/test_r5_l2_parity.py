@@ -101,7 +101,7 @@ def test_manager_records_caller_form_and_spawns_in_resolved_dir(tmp_path):
         manager.close()
 
 
-@pytest.mark.parametrize("host", ["darwin", "linux"])
+@pytest.mark.parametrize("host", [pytest.param("darwin", marks=_DARWIN), "linux"])
 def test_missing_workdir_message_spells_caller_form_on_macos_only(
     tmp_path, monkeypatch, host
 ):

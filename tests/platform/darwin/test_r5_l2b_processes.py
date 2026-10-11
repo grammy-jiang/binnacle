@@ -1,0 +1,194 @@
+"""r5 L2b: Darwin job_status processes[] items take the Linux shape (SD-59).
+
+Linux ``job_processes`` yields ``{pid, state, etime_s, cpu_s, cmd}``. The
+Darwin manager's ``group_listing`` drops ``ppid``, derives ``etime_s`` from
+kinfo_proc p_starttime and emits a state letter only where p_stat alone fixes
+it. ``cpu_s`` has no public per-process source and the Linux outputSchema does
+not allow null, so it stays absent until the Supervisor rules again. The
+kinfo_proc records here are synthetic, so the module runs on every host.
+"""
+
+import json
+import struct
+import time
+from pathlib import Path
+
+import jsonschema  # type: ignore[import-untyped]
+import pytest
+
+from binnacle.features.commands.tools import job_status as js
+from binnacle.platform.darwin import job_manager_entry as entry
+
+LINUX_KEYS = ["pid", "state", "etime_s", "cpu_s", "cmd"]
+NOW = 1_800_000_000.0
+
+
+def kinfo(pid, *, pgid=500, stat=2, flag=0, started=(1_799_999_990, 0), comm=b""):
+    """One LP64 kinfo_proc (SDK offsets: p_starttime 0, p_flag 32, p_stat 36,
+    p_pid 40, p_comm 243, e_ppid 560, e_pgid 564)."""
+    raw = bytearray(648)
+    struct.pack_into("=qi", raw, 0, *started)
+    struct.pack_into("=i", raw, 32, flag)
+    raw[36] = stat
+    struct.pack_into("=i", raw, 40, pid)
+    raw[243 : 243 + len(comm)] = comm
+    struct.pack_into("=ii", raw, 560, 1, pgid)
+    return bytes(raw)
+
+
+@pytest.fixture
+def listing(monkeypatch):
+    """group_listing over synthetic records; argv by pid, None = denied."""
+
+    def run(records, argv=None, max_cmd_chars=200):
+        argv = argv or {}
+        monkeypatch.setattr(entry, "_sysctl", lambda mib, limit: b"".join(records))
+        monkeypatch.setattr(
+            entry, "command_line", lambda pid, n: argv.get(pid) and argv[pid][:n]
+        )
+        monkeypatch.setattr(time, "time", lambda: NOW)
+        return entry.group_listing(500, max_cmd_chars)
+
+    return run
+
+
+@pytest.mark.parametrize(
+    ("stat", "flag", "letter"),
+    [
+        (1, 0, "?"),  # SIDL: no Linux state
+        (2, 0, "?"),  # SRUN: running or sleeping, needs libproc thread states
+        (3, 0, "S"),  # SSLEEP
+        (4, 0, "T"),  # SSTOP
+        (4, 0x800, "?"),  # traced SSTOP may be Linux "t"
+        (5, 0, "Z"),  # SZOMB
+    ],
+)
+def test_state_letter_only_where_p_stat_decides(stat, flag, letter):
+    assert entry._state_letter(kinfo(7, stat=stat, flag=flag), stat) == letter
+
+
+def test_items_take_the_linux_key_order_without_ppid(listing):
+    items = listing(
+        [
+            kinfo(902, stat=5, started=(1_799_999_999, 960_000), comm=b"sleep"),
+            kinfo(901, started=(1_799_999_987, 449_000)),
+            kinfo(903, pgid=777),  # another group: never listed
+        ],
+        argv={901: "bash -c for i in 1 2; do sleep 1; done"},
+    )
+    assert items == [
+        {
+            "pid": 901,
+            "state": "?",
+            "etime_s": 12.6,
+            "cmd": "bash -c for i in 1 2; do sleep 1; done",
+        },
+        {"pid": 902, "state": "Z", "etime_s": 0.0, "cmd": "sleep"},
+    ]
+    # Linux order minus cpu_s, which is pending (no null in the outputSchema).
+    assert all(list(item) == [k for k in LINUX_KEYS if k != "cpu_s"] for item in items)
+
+
+def test_cmd_is_bounded_and_empty_when_kinfo_has_no_comm(listing):
+    (bounded,) = listing([kinfo(11)], argv={11: "sleep 30"}, max_cmd_chars=5)
+    assert bounded["cmd"] == "sleep"
+    (comm,) = listing([kinfo(12, comm=b"python3.13")], max_cmd_chars=6)
+    assert comm["cmd"] == "python"  # comm fallback, bounded
+    (empty,) = listing([kinfo(13)])
+    assert empty["cmd"] == ""  # like an empty Linux cmdline, never invented
+
+
+def test_future_start_never_gives_negative_etime(listing):
+    (item,) = listing([kinfo(14, started=(1_800_000_005, 0))])
+    assert item["etime_s"] == 0.0
+
+
+def test_items_validate_against_the_linux_job_status_schema(listing):
+    items = listing([kinfo(21, stat=3), kinfo(22)], argv={21: "sleep 1"})
+    schema = js.OUTPUT_SCHEMA["properties"]["processes"]
+    assert list(schema["items"]["properties"]) == LINUX_KEYS
+    assert schema["items"]["properties"]["cpu_s"] == {"type": "number"}  # no null
+    jsonschema.validate(items, schema)
+    closed = {**schema["items"], "additionalProperties": False}
+    for item in items:
+        jsonschema.validate(item, closed)  # no key outside the Linux set
+
+
+def test_listing_keeps_the_libproc_ban():
+    source = Path(entry.__file__).read_text()
+    assert "proc_pidinfo" not in source and "libproc.dylib" not in source
+    assert "/usr/lib/libSystem.B.dylib" in source  # public sysctl(3) only
+
+
+def test_denied_sysctl_lists_nothing(monkeypatch):
+    def denied(mib, limit):
+        raise OSError("sysctl read failed")
+
+    monkeypatch.setattr(entry, "_sysctl", denied)
+    assert entry.group_listing(500, 200) == []
+
+
+def linux_builder_keys(tmp_path, monkeypatch):
+    """The key order Linux job_processes builds, from one fake /proc entry."""
+    from types import SimpleNamespace
+
+    from binnacle.platform.linux import job_process
+
+    proc = tmp_path / "proc" / "4242"
+    proc.mkdir(parents=True)
+    rest = ["S", "1", "4242"] + ["0"] * 19  # state ppid pgrp ... starttime
+    (proc / "stat").write_text("4242 (sleep) " + " ".join(rest))
+    (proc / "cmdline").write_bytes(b"sleep\x0030\x00")
+    entry_ = SimpleNamespace(name="4242", path=str(proc))
+    monkeypatch.setattr(job_process.os, "scandir", lambda path: [entry_])
+    monkeypatch.setattr(job_process, "_uptime_s", lambda: 1.0)
+    (item,) = job_process.job_processes(4242)
+    monkeypatch.undo()
+    return list(item)
+
+
+def test_backend_rebuilds_ipc_items_in_the_linux_builder_order(tmp_path, monkeypatch):
+    from unittest import mock
+
+    from binnacle.features.commands.command_backend import (
+        DarwinManagerCommandBackend,
+    )
+
+    linux = linux_builder_keys(tmp_path, monkeypatch)
+    items = [
+        {"pid": 7, "state": "?", "etime_s": 1.5, "cmd": "sleep 1"},
+        {"pid": 8, "state": "S", "etime_s": 0.1, "cpu_s": 0.0, "cmd": "x"},
+        {"pid": 9, "ppid": 1, "state": "S", "cmd": "old manager"},  # version skew
+    ]
+    wire = json.loads(json.dumps({"ok": True, "processes": items}, sort_keys=True))
+    backend = object.__new__(DarwinManagerCommandBackend)
+    backend._socket_path = "/nonexistent/jobs.sock"
+    backend.client = mock.Mock(**{"processes.return_value": wire})
+    listed = backend.job_processes("abc")
+    assert listed == items  # values untouched, nothing dropped
+    for got, sent in zip(listed, items, strict=True):
+        own = [key for key in linux if key in sent]
+        assert list(got)[: len(own)] == own  # Linux order first
+        assert list(got)[len(own) :] == sorted(set(sent) - set(linux))
+
+
+DOCS = Path(__file__).parents[3] / "docs/darwin-investigation/native-architecture"
+
+
+@pytest.mark.parametrize("name", ["api-contract.json", "CAPABILITY-DECISION.json"])
+def test_docs_copies_of_the_d2_disclosure_equal_the_release_scope(name):
+    from binnacle.platform.contracts.darwin_release_scope import MANAGER_DISCLOSURES
+
+    (d2,) = [item for item in MANAGER_DISCLOSURES if item.startswith("D-2:")]
+
+    def strings(node):
+        if isinstance(node, dict):
+            node = list(node.values())
+        if isinstance(node, list):
+            for child in node:
+                yield from strings(child)
+        elif isinstance(node, str):
+            yield node
+
+    copies = [s for s in strings(json.loads((DOCS / name).read_text())) if "D-2:" in s]
+    assert copies and set(copies) == {d2}, copies  # one per command tool row
