@@ -82,7 +82,7 @@ def _start_endpoint(root: Path, token: str) -> Endpoint:
     settings = Settings()
     settings.roots.default_root = root
     settings.roots.extra_roots = ()
-    file_access, backend = compose_native_tools(settings=settings)
+    file_access, backend = compose_native_tools(settings=settings, owner="embedded")
     app = create_application(
         settings=settings, token=token, backend=backend, file_access=file_access
     ).http_app()
