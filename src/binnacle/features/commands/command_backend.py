@@ -83,7 +83,20 @@ def create_command_backend() -> CommandBackend:
     # Uncomposed callers on other hosts get an inert backend, never Linux jobs.
     # Native executors are injected by the application composition root.
     if platform.system() != "Linux":
-        return RestrictedCommandBackend()
+        # Same release states as the composed root, so the focused Commands
+        # child serves identical metadata; no execution is attached here.
+        from binnacle.platform.contracts.darwin_release_scope import (
+            DARWIN_RELEASE_SCOPE,
+        )
+
+        return RestrictedCommandBackend(
+            release_states={
+                tool: DARWIN_RELEASE_SCOPE[tool].capability.state.value
+                for tool in ("run_command", "job_status", "stop_job")
+            }
+            if platform.system() == "Darwin"
+            else None
+        )
     import_module("binnacle.features.commands.jobs")
     import_module("binnacle.features.commands.job_owner")
     return DurableCommandBackend()

@@ -116,3 +116,17 @@ def test_focused_factories_without_file_access_refuse_with_files_error(
     assert "run_command" not in str(caught.value)
     with pytest.raises(RuntimeError, match="runtime gate"):
         c.native_file_capability()
+
+
+def test_server_instructions_are_host_aware(monkeypatch):
+    from binnacle import application
+
+    monkeypatch.setattr(composition.platform, "system", lambda: "Darwin")
+    darwin = application._server_instructions()
+    assert "Raspberry Pi 5" not in darwin and "vcgencmd" not in darwin
+    assert "stop_job is unavailable" in darwin and "jobs for" not in darwin
+    monkeypatch.setattr(composition.platform, "system", lambda: "Linux")
+    assert application._server_instructions().startswith(
+        "binnacle: a Raspberry Pi 5 development workstation. Paths live under "
+        "~/Projects and /tmp."
+    )

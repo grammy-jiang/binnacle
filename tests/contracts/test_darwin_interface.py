@@ -42,7 +42,9 @@ def test_native_wire_schema_preserves_v101_with_declared_description_exception(
 
     tools, instructions = asyncio.run(inspect())
     actual = [tool.model_dump(mode="json", by_alias=True) for tool in tools]
-    assert instructions == baseline["instructions"]
+    assert "Raspberry Pi" not in instructions and "vcgencmd" not in instructions
+    assert "stop_job is unavailable" in instructions
+    assert "jobs for job_status/stop_job" not in instructions
     assert len(actual) == 8
     native = next(tool for tool in actual if tool["name"] == "run_command")
     description = native["description"].lower()
@@ -55,6 +57,16 @@ def test_native_wire_schema_preserves_v101_with_declared_description_exception(
     assert "descendants_unverified=true" in description
     original = next(tool for tool in baseline["tools"] if tool["name"] == "run_command")
     native["description"] = original["description"]
+    for name, needle in (
+        ("stop_job", "unavailable on macos"),
+        ("job_status", "lost on restart"),
+    ):
+        declared = next(tool for tool in actual if tool["name"] == name)
+        assert needle in declared["description"].lower()
+        assert "sigterm" not in declared["description"].lower()
+        declared["description"] = next(
+            tool["description"] for tool in baseline["tools"] if tool["name"] == name
+        )
     search = next(tool for tool in actual if tool["name"] == "search_text")
     assert "per-file size limit: 16 MiB (16,777,216 bytes)" in search["description"]
     assert "remaining aggregate 16 MiB input budget" in search["description"]
