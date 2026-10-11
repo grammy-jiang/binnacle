@@ -47,6 +47,10 @@ class FakeStore:
         return sorted(p.name for p in Path(jobs_dir).iterdir())
 
 
+class ManagerError(RuntimeError):
+    """Mirrors DarwinJobManagerError: the composed DarwinJobClient() error."""
+
+
 class FakeClient:
     def __init__(self, backend_dir, start_reply=None, *, reachable=True):
         self.calls = []
@@ -55,19 +59,32 @@ class FakeClient:
         self.backend_dir = backend_dir
         self.reachable = reachable
 
-    def ping(self, socket_path):
-        self.pings += 1
+    def _require_reachable(self):
         if not self.reachable:
-            raise OSError("connection refused")
-        return {"ok": True}
+            raise ManagerError("job manager unavailable: connection refused")
+
+    def ping(self, socket_path):
+        # J2 frozen ping reply fields (job_manager_service.dispatch "ping").
+        self.pings += 1
+        self._require_reachable()
+        return {
+            "ok": True,
+            "version": 1,
+            "owner_instance_id": "owner-1",
+            "boot_id": "boot-1",
+            "pid": 999,
+            "package_version": "0.0.0",
+            "running_jobs": 0,
+            "unknown_jobs": 0,
+            "revision": "0" * 40,
+        }
 
     def start(self, socket_path, **kwargs):
         self.calls.append(("start", socket_path, kwargs))
         return self.start_reply
 
     def stop(self, socket_path, job_id, *, call_id):
-        if not self.reachable:
-            raise OSError("connection refused")
+        self._require_reachable()
         self.calls.append(("stop", socket_path, job_id, call_id))
         write_meta(self.backend_dir, job_id, exit_code=None, signal=15)
 
@@ -214,7 +231,7 @@ def test_stop_job_unreachable_manager_fails_the_stop(tmp_path):
     write_meta(tmp_path, "live")
     client = FakeClient(tmp_path, reachable=False)
     backend, _ = make_backend(tmp_path, client=client)
-    with pytest.raises(OSError, match="connection refused"):
+    with pytest.raises(ManagerError, match="job manager unavailable"):
         backend.stop_job("live")
     assert client.calls == []
 
