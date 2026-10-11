@@ -18,24 +18,23 @@ from pathlib import Path
 
 import pytest
 
+from binnacle.platform.contracts.capability_contracts import CapabilityUnavailable
 from binnacle.platform.contracts.process_contracts import (
     DarwinJobOwner,
     JobOwnerLost,
+    OwnedJobExit,
     OwnedJobProcess,
     ProcessHandle,
     UnverifiedJobProcess,
 )
+from binnacle.platform.darwin import job_process_owner
+from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
+from binnacle.platform.darwin.process_backend import OwnedProcessHandle
 
+# Per-test gate: the portable contract/handle tests below also run on Linux.
 native = pytest.mark.skipif(
     sys.platform != "darwin", reason="Darwin-native job owner probe"
 )
-
-if sys.platform == "darwin":
-    from binnacle.platform.darwin import job_process_owner
-    from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
-    from binnacle.platform.darwin.process_backend import OwnedProcessHandle
-
-pytestmark = native
 
 
 @pytest.fixture
@@ -101,6 +100,63 @@ def test_linux_stop_grace_constants_are_pinned():
         assert getattr(job_process_owner, name) == float(found.group(1))
 
 
+def test_birth_token_encodes_kinfo_starttime():
+    assert job_process_owner.birth_token((1_700_000_000, 123_456)) == (
+        1_700_000_000_123_456
+    )
+
+
+def test_owner_refuses_off_darwin(monkeypatch):
+    monkeypatch.setattr(job_process_owner, "_is_darwin", lambda: False)
+    with pytest.raises(CapabilityUnavailable, match="native_capability_unavailable"):
+        DarwinJobProcessOwner(boot_id="b", start_reaper=False)
+
+
+class _ExitSource:
+    """Stands in for the owner's reaper condition; no process exists."""
+
+    def __init__(self, result):
+        self.result = result
+        self.calls = []
+
+    def wait(self, job_id, timeout):
+        self.calls.append((job_id, timeout))
+        return self.result
+
+    def exit_for(self, job_id):
+        return self.result
+
+
+@pytest.mark.parametrize(
+    ("result", "code"),
+    [
+        (OwnedJobExit("j", 7, None, "normal_exit"), 7),
+        (OwnedJobExit("j", None, signal.SIGTERM, "stop_requested"), -signal.SIGTERM),
+    ],
+)
+def test_owned_process_handle_maps_reaper_exit(result, code):
+    source = _ExitSource(result)
+    handle = OwnedProcessHandle(source, "j", 4242)
+    assert (handle.pid, handle.returncode, handle.wait(3)) == (4242, code, code)
+    assert source.calls == [("j", 3)]
+
+
+def test_owned_process_handle_timeout_keeps_subprocess_contract():
+    handle = OwnedProcessHandle(_ExitSource(None), "j", 4242)
+    assert handle.returncode is None
+    with pytest.raises(subprocess.TimeoutExpired):
+        handle.wait(0.01)
+
+
+def test_owned_process_handle_never_reports_codeless_exit():
+    handle = OwnedProcessHandle(
+        _ExitSource(OwnedJobExit("j", None, None, "normal_exit")), "j", 4242
+    )
+    with pytest.raises(JobOwnerLost):
+        handle.wait(1)
+
+
+@native
 def test_spawn_sets_session_leader_cwd_and_reaper_serves_wait(owner, spool):
     root, _, output = spool
     started = _spawn(owner, "job-a", 'pwd; echo "$$ $(ps -o pgid= -p $$)"', spool)
@@ -124,6 +180,7 @@ def test_spawn_sets_session_leader_cwd_and_reaper_serves_wait(owner, spool):
         owner.signal_owned_group("job-a", "terminate")
 
 
+@native
 def test_process_handle_wait_is_served_by_reaper_condition(owner, spool):
     _spawn(owner, "job-h", "sleep 0.3; exit 7", spool)
     handle = owner.handle("job-h")
@@ -136,6 +193,7 @@ def test_process_handle_wait_is_served_by_reaper_condition(owner, spool):
     assert handle.returncode == 7
 
 
+@native
 def test_exit_before_registration_is_pending_not_lost(spool, monkeypatch):
     created = DarwinJobProcessOwner(boot_id="b", start_reaper=False)
     try:
@@ -160,6 +218,7 @@ def test_exit_before_registration_is_pending_not_lost(spool, monkeypatch):
         created.close()
 
 
+@native
 def test_stop_signals_only_owned_group_and_records_stop_requested(owner, spool):
     started = _spawn(owner, "job-s", "sleep 30 & sleep 30; wait", spool)
     time.sleep(0.2)
@@ -174,6 +233,7 @@ def test_stop_signals_only_owned_group_and_records_stop_requested(owner, spool):
     assert all(not _alive(m.pid) for m in members if m.pid != started.pid)
 
 
+@native
 def test_unowned_and_disk_identities_are_never_adopted(owner, spool):
     foreign = subprocess.Popen(["/bin/sleep", "5"])
     try:
@@ -191,6 +251,7 @@ def test_unowned_and_disk_identities_are_never_adopted(owner, spool):
     assert not hasattr(owner, "adopt")
 
 
+@native
 def test_duplicate_writer_is_refused(owner, spool):
     _spawn(owner, "job-d", "sleep 5", spool)
     with pytest.raises(ValueError, match="already_owned"):
@@ -198,6 +259,7 @@ def test_duplicate_writer_is_refused(owner, spool):
     assert owner.authority("job-d").authority == "OWNED"
 
 
+@native
 def test_foreign_reap_echild_becomes_unknown_never_exited(spool):
     created = DarwinJobProcessOwner(boot_id="b", start_reaper=False)
     try:
@@ -216,6 +278,7 @@ def test_foreign_reap_echild_becomes_unknown_never_exited(spool):
         assert created.close() == ()
 
 
+@native
 def test_straggler_in_owned_group_is_terminated_before_reap(owner, spool):
     started = _spawn(owner, "job-g", "sleep 30 & exit 0", spool)
     result = owner.wait("job-g", 5)
@@ -224,6 +287,7 @@ def test_straggler_in_owned_group_is_terminated_before_reap(owner, spool):
     assert job_process_owner._process_records(2, started.pid) == []
 
 
+@native
 def test_close_kills_reaps_and_returns_owner_restart(spool):
     created = DarwinJobProcessOwner(
         boot_id="b", stop_sigterm_grace_s=0.5, stop_sigkill_grace_s=1.0
@@ -244,6 +308,7 @@ def test_close_kills_reaps_and_returns_owner_restart(spool):
         _spawn(created, "job-late", "true", spool)
 
 
+@native
 def test_close_without_reaper_thread_drives_sole_reap(spool):
     created = DarwinJobProcessOwner(
         boot_id="b",
@@ -259,6 +324,7 @@ def test_close_without_reaper_thread_drives_sole_reap(spool):
     assert not _alive(started.pid)
 
 
+@native
 @pytest.mark.filterwarnings("ignore:This process .* multi-threaded:DeprecationWarning")
 def test_forked_child_inherits_no_authority(owner, spool):
     _spawn(owner, "job-f", "sleep 5", spool)
@@ -283,6 +349,7 @@ def test_forked_child_inherits_no_authority(owner, spool):
     assert owner.authority("job-f").authority == "OWNED"
 
 
+@native
 def test_refuses_when_sigchld_is_not_default():
     previous = signal.signal(signal.SIGCHLD, lambda *_: None)
     try:
