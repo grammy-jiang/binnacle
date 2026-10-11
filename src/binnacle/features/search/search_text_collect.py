@@ -1,11 +1,37 @@
 """Exact-search event collection, glob filtering and context attachment."""
 
+import os
+import shutil
+import subprocess
 import time
 from pathlib import Path, PurePath
 
 from binnacle.errors import CodedToolError
 from binnacle.features.files.paths import full_match
 from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
+from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
+
+
+def _rg_rejection(access, pattern: str, fixed_strings: bool) -> CodedToolError:
+    """Linux rg_rejected sentence: the adapter drains stderr, so ask rg again
+    about the pattern alone (no files are read) to recover its diagnostic."""
+    rg = getattr(access.search, "_rg_bin", None) or shutil.which("rg") or "rg"
+    cmd = [rg, "--no-config", "--smart-case"]
+    if fixed_strings:
+        cmd.append("--fixed-strings")
+    cmd += ["--regexp", pattern, os.devnull]
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=5, check=False
+        )
+        stderr = proc.stderr.strip()[-300:] if proc.returncode == 2 else ""
+    except (OSError, subprocess.SubprocessError):
+        stderr = ""
+    return CodedToolError(
+        "rg_rejected",
+        f"ripgrep rejected the search: {stderr or 'unknown error'}. "
+        "Fix the pattern, or use fixed_strings for literal text.",
+    )
 
 
 def clip(text: str, max_chars: int, mark: str) -> str:
@@ -149,19 +175,24 @@ def search_opened(
         span = (
             context_lines if context_lines is not None else settings.auto_context_single
         )
-        batch = access.search.search(
-            grant,
-            SearchRequest(
-                relative,
-                pattern,
-                fixed_strings,
-                span,
-                glob,
-                settings.timeout_s,
-                16 * 1024 * 1024,  # Aggregate input and rg output caps.
-                10000,
-            ),
-        )
+        try:
+            batch = access.search.search(
+                grant,
+                SearchRequest(
+                    relative,
+                    pattern,
+                    fixed_strings,
+                    span,
+                    glob,
+                    settings.timeout_s,
+                    16 * 1024 * 1024,  # Aggregate input and rg output caps.
+                    10000,
+                ),
+            )
+        except NativeCapabilityError as exc:
+            if exc.code == "rg_rejected":
+                raise _rg_rejection(access, pattern, fixed_strings) from exc
+            raise
         # Adapter paths are grant-relative; the label is display-only.
         root_label = display
         for _ in PurePath(relative).parts:
@@ -184,8 +215,11 @@ def search_opened(
             clip_mark="… [line truncated]",
         )
         if context_lines is None:
+            # Linux adds automatic context only while the result is complete.
             span = (
-                settings.auto_context_single
+                0
+                if capped
+                else settings.auto_context_single
                 if len(matches) == 1
                 else settings.auto_context_few
                 if len(matches) <= 3
@@ -218,9 +252,43 @@ def search_opened(
         outcome = enforce_result_budget(
             payload, names_only=names_only, max_bytes=settings.result_max_bytes
         )
-        summary = f"Found {total} matches for {pattern!r} under {display}."
-        if outcome.payload["truncated"]:
-            summary += " Results truncated (truncated=true); narrow the path or glob."
+        where = f"{display}" + (f" (glob {glob!r})" if glob else "")
+        payload = outcome.payload
+        if names_only:
+            summary = (
+                f"Found {total} matches for {pattern!r} in {len(entries)} files "
+                f"under {where}."
+                if entries
+                else f"No matches for {pattern!r} under {where}."
+            )
+        elif not matches:
+            payload.setdefault(
+                "note",
+                "No matches (gitignored and hidden files are not searched; "
+                "use run_command rg --no-ignore to include them).",
+            )
+            summary = f"No matches for {pattern!r} under {where}."
+        elif capped:
+            payload.setdefault(
+                "note",
+                f"Showing first {len(matches)} of {total} matches; narrow the "
+                f"pattern, add a glob, or raise max_results.",
+            )
+            summary = (
+                f"Found {total} matches for {pattern!r} under {where}; "
+                f"showing first {len(matches)}."
+            )
+        else:
+            summary = f"Found {total} matches for {pattern!r} under {where}."
+            if payload["truncated"]:
+                summary += (
+                    " Results truncated (truncated=true); narrow the path or glob."
+                )
+        if outcome.hit:
+            summary = (
+                f"Found {total} matches for {pattern!r} under {where}; "
+                f"showing {len(payload['entries'])} within the response budget."
+            )
         for event in batch.events:
             if event.get("type") == "summary":
                 stats = event["data"]["stats"]
@@ -242,5 +310,5 @@ def search_opened(
                         summary += f" Aggregate {budget} budget exhausted."
         return ToolResult(
             content=summary,
-            structured_content=outcome.payload,
+            structured_content=payload,
         )

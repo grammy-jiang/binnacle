@@ -6,6 +6,7 @@ does not) and §7.11. Sanitization details: docs/tools/read_file.md §3.
 
 import fnmatch
 import logging
+import os
 import re
 
 # These bindings contain ordinary injected contracts, never host selection.
@@ -18,6 +19,15 @@ from uuid import uuid4
 
 from binnacle.config import RootsSettings, get_settings
 from binnacle.errors import CodedToolError
+from binnacle.features.files.error_text import (
+    DEFAULT_MISSING,
+    MISSING_ERRORS,
+    TERSE_OUTSIDE,
+    TOOL,
+    linux_error,
+    outside_error,
+)
+from binnacle.features.files.textio import human_size
 from binnacle.platform.contracts.capability_contracts import (
     Capability,
     CapabilityState,
@@ -30,13 +40,6 @@ from binnacle.platform.contracts.file_access_contracts import (
 )
 
 log = logging.getLogger(__name__)
-
-# Linux texts for a request that lands in a missing root, per tool.
-_MISSING_ROOT_ERRORS = {
-    "list_files": ("directory_not_found", "Directory not found"),
-    "search_text": ("path_not_found", "Path not found"),
-}
-_DEFAULT_MISSING = ("file_not_found", "File not found")
 
 
 def _canonical_roots(roots: RootsSettings) -> tuple[Path, ...]:
@@ -323,6 +326,7 @@ class FileToolAccess:
                 self._close_locked()
 
     def require(self, tool: str) -> None:
+        TOOL.set(tool)
         capability = (
             self.capability if self.capabilities is None else self.capabilities[tool]
         )
@@ -346,24 +350,22 @@ class FileToolAccess:
         candidate = Path(cleaned).expanduser()
         if not candidate.is_absolute():
             candidate = self.default_root / candidate
-        display = candidate
+        display = candidate = Path(os.path.normpath(candidate))
         inside = False
         for root, (canonical, _reason) in self.skipped.items():
             if candidate.is_relative_to(root):
                 display = canonical / candidate.relative_to(root)
                 inside = True
                 break
-        if self.grants:
-            if not inside:
-                return None
-            code, text = _MISSING_ROOT_ERRORS.get(tool, _DEFAULT_MISSING)
+        if inside and self.grants:
+            code, text = MISSING_ERRORS.get(tool, DEFAULT_MISSING)
             return CodedToolError(code, f"{text}: {display}.")
-        allowed = ", ".join(str(r) for r in self._allowed)
-        return CodedToolError(
-            "path_outside_root", f"Path outside allowed roots ({allowed}): {display}"
-        )
+        if any(candidate.is_relative_to(root) for root in self.grants):
+            return None  # a `..` that normalizes back inside keeps the terse refusal
+        return outside_error(self._allowed, display)
 
-    def select(self, raw: str, tool: str = "read_file") -> tuple[RootGrant, str, Path]:
+    def select(self, raw: str, tool: str | None = None) -> tuple[RootGrant, str, Path]:
+        tool = TOOL.get() if tool is None else tool
         with self._lock:
             if self.closed:
                 raise CodedToolError(
@@ -380,8 +382,8 @@ class FileToolAccess:
                 )
             except CodedToolError as exc:
                 if (
-                    self.skipped
-                    and str(exc) == "Path outside opened roots."
+                    str(exc) in TERSE_OUTSIDE
+                    and "\0" not in raw
                     and (err := self._unopened_root_error(raw, tool)) is not None
                 ):
                     raise err from None
@@ -389,31 +391,44 @@ class FileToolAccess:
 
     @contextmanager
     def operation(
-        self, raw: str, tool: str = "read_file"
+        self, raw: str, tool: str | None = None
     ) -> Iterator[tuple[RootGrant, str, Path]]:
+        if tool is None:
+            tool = TOOL.get()
         grant, relative, display = self.select(raw, tool)
         try:
             yield grant, relative, display
         except NativeCapabilityError as exc:
-            hint = ""
-            if (
-                exc.code in ("file_not_found", "path_not_found")
-                and self.files is not None
-            ):
-                try:
-                    names = self.files.nearby_hint(grant, relative, max_entries=10)
-                    if names:
-                        hint = " Nearby: " + ", ".join(names)
-                except NativeCapabilityError:
-                    pass
-            raise CodedToolError(exc.code, f"{exc.code}.{hint}") from exc
+            mapped = linux_error(
+                exc,
+                tool,
+                files=self.files,
+                grants=self.grants,
+                allowed=self._allowed,
+                grant=grant,
+                rel=relative,
+                display=display,
+            )
+            if mapped is not None:
+                raise mapped from exc
+            raise CodedToolError(exc.code, f"{exc.code}.") from exc
 
     def read(self, raw: str, max_bytes: int) -> tuple[Path, int, bytes]:
-        with self.operation(raw) as (grant, relative, display):
+        # Only read_file and edit_file read through here; a stale tool name
+        # from another call context must not change the wording.
+        tool = "edit_file" if TOOL.get() == "edit_file" else "read_file"
+        with self.operation(raw, tool) as (grant, relative, display):
             opened = self.provider.open_read(grant, relative)
             try:
                 size = opened.metadata().size_bytes
                 if size > max_bytes:
+                    if tool == "read_file":
+                        raise CodedToolError(
+                            "file_too_large",
+                            f"File is {human_size(size)}; the limit is "
+                            f"{max_bytes // (1024 * 1024)} MB. "
+                            f"Use run_command (tail, sed -n, grep) to sample it.",
+                        )
                     raise CodedToolError(
                         "file_too_large", "File exceeds read byte limit."
                     )
