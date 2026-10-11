@@ -243,19 +243,21 @@ def test_transient_observation_failure_is_retried_then_lost(owned, spool, record
         return real(kind, ident)
 
     with mock.patch.object(jpo, "_process_records", records):
-        for _ in range(fence.OBSERVATION_FAILURE_LIMIT - 1):
+        for _ in range(3 * fence.OBSERVATION_FAILURE_LIMIT):  # F2: request burst
             observed = owner.authority("job-t")
             assert observed.authority == "UNKNOWN"
             assert observed.reason_code == "darwin_job_observation_retry"
+            assert owner.processes("job-t") == []  # request path: never counted
         assert not owner._jobs["job-t"].lost
         failing["on"] = False
         owner.reap_exits(0)  # the next reaper tick retries and recovers
         assert owner.authority("job-t").authority == "OWNED"
         failing["on"] = True
-        owner.authority("job-t")
-        owner.reap_exits(0)
-        assert not owner._jobs["job-t"].lost  # two consecutive failures
-        owner.reap_exits(0)  # third consecutive failure: lost
+        owner.authority("job-t")  # schedules a tick retry; counts nothing
+        for _ in range(fence.OBSERVATION_FAILURE_LIMIT - 1):
+            owner.reap_exits(0)
+        assert not owner._jobs["job-t"].lost  # two consecutive tick failures
+        owner.reap_exits(0)  # third consecutive tick failure: lost
     observed = owner.authority("job-t")
     assert observed.reason_code == "darwin_job_observation_failed"
     assert owner.take_lost() == ["job-t"]
@@ -284,8 +286,8 @@ def test_manager_persists_an_owner_loss_as_unknown(tmp_path, recorded):
             return real(kind, ident)
 
         with mock.patch.object(jpo, "_process_records", records):
-            for _ in range(fence.OBSERVATION_FAILURE_LIMIT):
-                owner.reap_exits(0)
+            for _ in range(fence.OBSERVATION_FAILURE_LIMIT + 1):
+                owner.reap_exits(0)  # only reaper ticks count (PRE-J1g-F2)
                 owner.authority(job_id)
         assert manager.persist_lost() == 1
         meta = svc.read_meta(jobs, job_id)

@@ -38,7 +38,12 @@ from binnacle.platform.contracts.process_contracts import (
     OwnedJobProcess,
     UnverifiedJobProcess,
 )
-from binnacle.platform.darwin.job_group_fence import _SZOMB, _GroupFence
+from binnacle.platform.darwin.job_group_fence import (
+    _SZOMB,
+    WAITID_BACKOFF_MAX_S,
+    WAITID_REQUIRED,
+    _GroupFence,
+)
 from binnacle.platform.darwin.process_authority import (
     _is_darwin,
     _OwnedLeaderWait,
@@ -76,6 +81,8 @@ class DarwinJobProcessOwner(_GroupFence):
     ) -> None:
         if not _is_darwin():
             raise _unavailable("native_capability_unavailable")
+        if not hasattr(os, "waitid"):  # JCR-F1: refuse; never a faulting reaper
+            raise _unavailable(WAITID_REQUIRED)
         if signal.getsignal(signal.SIGCHLD) != signal.SIG_DFL:
             raise _unknown("darwin_exclusive_reaper_required")
         if not boot_id:
@@ -96,6 +103,7 @@ class DarwinJobProcessOwner(_GroupFence):
         self._released: dict[str, _OwnedJob] = {}
         self._acked: set[str] = set()  # released while the group is fenced
         self._failures: dict[str, int] = {}  # consecutive observation failures
+        self._wait_failures: dict[str, int] = {}  # consecutive waitid failures
         self._lost_unreported: list[str] = []  # lost jobs the manager must persist
         self._fault: str | None = None  # reaping failed: unreaped jobs UNKNOWN
         self._closing = self._kill_phase = False
@@ -288,8 +296,8 @@ class DarwinJobProcessOwner(_GroupFence):
                     result = self._reap_locked(job)
                     if result is not None:
                         results.append(result)
-                elif self._failures.get(job.job_id):
-                    self._observe_locked(job)  # JCRP-F3: retried on each tick
+                elif job.job_id in self._failures:
+                    self._observe_locked(job, tick=True)  # JCRP-F3: tick retry
             if results or exited:
                 self._changed.notify_all()
             return results
@@ -301,8 +309,13 @@ class DarwinJobProcessOwner(_GroupFence):
             if job.reaped or job.lost:
                 continue
             if job.exit_seen and job.exit is None:
-                return 0
-            if job.exit_seen or self._failures.get(job.job_id):
+                waits = self._wait_failures.get(job.job_id, 0)
+                if not waits:
+                    return 0
+                backoff = min(_REAPER_POLL_S * 2 ** (waits - 1), WAITID_BACKOFF_MAX_S)
+                timeout = backoff if timeout is None else min(timeout, backoff)
+                continue  # JCR-F4: bounded backoff, never a busy loop
+            if job.exit_seen or job.job_id in self._failures:
                 timeout = _REAPER_POLL_S if timeout is None else timeout
                 timeout = min(timeout, _REAPER_POLL_S)
         return timeout

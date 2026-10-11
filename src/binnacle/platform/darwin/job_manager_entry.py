@@ -44,6 +44,7 @@ from binnacle.platform.darwin.generation_runtime import (
     private_file,
     resolve_runtime_paths,
 )
+from binnacle.platform.darwin.job_group_fence import WAITID_REQUIRED
 from binnacle.platform.darwin.job_manager_service import (
     MANAGER_LABEL,
     DarwinJobManager,
@@ -226,6 +227,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return EX_USAGE
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    if not hasattr(os, "waitid"):  # JCR-F1: refuse before any lease or spawn
+        log.error("event=job_manager_refused reason=%s", WAITID_REQUIRED)
+        return EX_CONFIG
     inherited_fds_cloexec()
     try:
         settings = read_config()
@@ -296,17 +300,36 @@ def _sysctl(mib: Sequence[int], limit: int) -> bytes:
 
 
 def command_line(pid: int, max_cmd_chars: int) -> str | None:
-    """argv from KERN_PROCARGS2 (int argc, exec path, NULs, argv); None if denied."""
+    """argv ONLY from KERN_PROCARGS2, like Linux /proc/<pid>/cmdline (PRE-J1g-F1).
+
+    Layout: int argc, exec path, NUL padding to an 8-byte boundary, argv[argc],
+    then envp, which is never read. Empty argv fields are kept and exactly
+    argc are taken. Any doubt (short buffer, padding that does not match the
+    aligned start, e.g. an empty argv[0], too few fields, undecodable bytes)
+    returns None so the caller falls back to comm: fail closed.
+    """
     try:
         data = _sysctl((1, 49, pid), 1 << 20)
     except OSError:
         return None
     argc = int.from_bytes(data[:4], sys.byteorder) if len(data) >= 4 else 0
     end = data.find(b"\0", 4)
-    fields = [f for f in data[end:].split(b"\0") if f] if end >= 0 else []
-    if argc <= 0 or len(fields) < argc:
+    if argc <= 0 or end < 0:
         return None
-    return " ".join(f.decode(errors="replace") for f in fields[:argc])[:max_cmd_chars]
+    start = 4 + ((end - 4 + 1 + 7) & ~7)  # exec path + NUL, 8-byte aligned
+    skipped = end
+    while skipped < len(data) and data[skipped] == 0:
+        skipped += 1
+    if skipped != start:
+        return None
+    fields = data[start:].split(b"\0", argc)  # [argc fields..., rest: envp]
+    if len(fields) <= argc:  # argv[argc - 1] not NUL-terminated: truncated
+        return None
+    try:
+        argv = [field.decode("utf-8") for field in fields[:argc]]
+    except UnicodeDecodeError:
+        return None
+    return " ".join(argv)[:max_cmd_chars]  # bounded after the join
 
 
 def group_listing(pgid: int, max_cmd_chars: int) -> list[dict]:
