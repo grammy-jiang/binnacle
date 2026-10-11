@@ -12,6 +12,7 @@ killpg is the only group signal; JCRP-N7: ``_released`` is bounded.
 from __future__ import annotations
 
 import errno
+import logging
 import os
 from threading import Condition
 from typing import Literal
@@ -34,7 +35,16 @@ OBSERVATION_FAILURE_LIMIT = 3
 # JCRP-N7: released ids kept for the duplicate-writer check, oldest dropped
 # first; the durable spool record is the lasting guard.
 RELEASED_LIMIT = 1024
+# JCR-F1: waitid(WNOWAIT) is the fence primitive; CPython lacks it on macOS
+# before 3.13, so the owner and the manager entry refuse to start without it.
+WAITID_REQUIRED = "darwin job manager requires os.waitid (Python >= 3.13 on macOS)"
+# JCR-F4: a persistent waitid error backs off (bounded) per reaper tick and,
+# after this many, the job is lost: UNKNOWN per D-1, never signalled.
+WAITID_FAILURE_LIMIT = 6
+WAITID_BACKOFF_MAX_S = 1.0
 _SZOMB = 5
+
+log = logging.getLogger("binnacle.job_manager")
 
 TerminationReason = Literal["normal_exit", "signal", "stop_requested", "owner_restart"]
 
@@ -45,6 +55,7 @@ class _GroupFence(_OwnedExitTable):
     _changed: Condition
     _acked: set[str]  # released while the group is fenced
     _failures: dict[str, int]  # consecutive observation failures
+    _wait_failures: dict[str, int]  # consecutive waitid failures (JCR-F4)
     _lost_unreported: list[str]  # lost jobs the manager must persist
     _fault: str | None
 
@@ -60,11 +71,11 @@ class _GroupFence(_OwnedExitTable):
         Returns the exit once, when first captured. The zombie leader keeps
         the pgid while a live member remains: no signal is sent here (F5).
         """
-        if self._observe_locked(job) is None:
+        if self._observe_locked(job, tick=True) is None:
             return None
         captured = None
         if job.exit is None:
-            captured = self._capture_exit_locked(job)
+            captured = self._capture_exit_locked(job, tick=True)
             if captured is None:
                 return None
         try:
@@ -76,7 +87,9 @@ class _GroupFence(_OwnedExitTable):
         self._reap_leader_locked(job)
         return captured
 
-    def _capture_exit_locked(self, job: _OwnedJob) -> OwnedJobExit | None:
+    def _capture_exit_locked(
+        self, job: _OwnedJob, *, tick: bool = False
+    ) -> OwnedJobExit | None:
         flags = os.WEXITED | os.WNOHANG | os.WNOWAIT
         try:
             # typeshed omits Darwin's waitid(2); CPython provides it there.
@@ -86,7 +99,13 @@ class _GroupFence(_OwnedExitTable):
             self._mark_lost_locked(job, "darwin_exclusive_reaper_required")
             return None
         except OSError:
+            if tick:  # JCR-F4: retried with backoff, then lost (never spins)
+                count = self._wait_failures.get(job.job_id, 0) + 1
+                self._wait_failures[job.job_id] = count
+                if count >= WAITID_FAILURE_LIMIT:
+                    self._mark_lost_locked(job, "darwin_job_exit_unverified")
             return None  # transient; the zombie keeps it pending
+        self._wait_failures.pop(job.job_id, None)
         if info is None or info.si_pid != job.pid:
             return None
         if info.si_code == os.CLD_EXITED:
@@ -130,22 +149,35 @@ class _GroupFence(_OwnedExitTable):
     def _mark_lost_locked(self, job: _OwnedJob, code: str) -> None:
         if not job.lost and job.exit is None:
             self._lost_unreported.append(job.job_id)  # F3: the spool says UNKNOWN
+        elif not job.lost:  # PRE-J1g-F3: fenced; kept UNKNOWN, never signalled
+            log.warning(
+                "event=darwin_fenced_job_lost job_id=%s code=%s", job.job_id, code
+            )
         job.lost = True
         job.reason_code = code
         self._failures.pop(job.job_id, None)
+        self._wait_failures.pop(job.job_id, None)
         self._changed.notify_all()
 
-    def _observe_locked(self, job: _OwnedJob) -> _ProcessRecord | None:
+    def _observe_locked(
+        self, job: _OwnedJob, *, tick: bool = False
+    ) -> _ProcessRecord | None:
         """Our same-birth child, else None.
 
         A proven absence or birth mismatch marks the job lost (another waiter
         reaped it; never adopt). A failed sysctl read is transient (JCRP-F3):
-        lost only after ``OBSERVATION_FAILURE_LIMIT`` consecutive failures.
+        only reaper ticks count it, lost after ``OBSERVATION_FAILURE_LIMIT``
+        consecutive tick failures; a request-path failure answers UNKNOWN for
+        that call and schedules a tick retry (PRE-J1g-F2). Once the leader exit
+        is captured the unreaped zombie pins the pid, so a failure stays
+        transient indefinitely (PRE-J1g-F3).
         """
         try:
             record = self._child_record_or_raise(job.pid)
         except OSError:
-            count = self._failures.get(job.job_id, 0) + 1
+            if job.exit is not None:
+                return None  # zombie-pinned: lost only on a proven change
+            count = self._failures.get(job.job_id, 0) + (1 if tick else 0)
             self._failures[job.job_id] = count
             if count >= OBSERVATION_FAILURE_LIMIT:
                 self._mark_lost_locked(job, "darwin_job_observation_failed")

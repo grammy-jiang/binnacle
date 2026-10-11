@@ -126,3 +126,61 @@ def test_backend_job_processes_degrades_to_empty_without_the_manager():
     )
     backend.client = object()  # a client without the additive op
     assert backend.job_processes("abc") == []
+
+
+# --- R4 J1g-a2 STEER-02 (SD-51): owner-level waitid repairs --------------------
+
+
+@_DARWIN
+def test_owner_refuses_without_waitid(monkeypatch):
+    """JCR-F1: macOS Python < 3.13 lacks os.waitid; refuse, never a fault loop."""
+    from binnacle.platform.contracts.capability_contracts import CapabilityUnavailable
+    from binnacle.platform.darwin import job_group_fence as fence
+    from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
+
+    monkeypatch.delattr("os.waitid", raising=False)
+    spawned = mock.Mock()
+    monkeypatch.setattr(
+        "binnacle.platform.darwin.process_authority.os.posix_spawn", spawned
+    )
+    with pytest.raises(CapabilityUnavailable, match=r"os\.waitid"):
+        DarwinJobProcessOwner(boot_id="b")
+    assert fence.WAITID_REQUIRED.endswith("(Python >= 3.13 on macOS)")
+    assert not spawned.called
+
+
+@_DARWIN
+def test_persistent_waitid_error_backs_off_then_unknown(tmp_path, monkeypatch):
+    """JCR-F4: bounded backoff and limit, then lost (D-1 UNKNOWN); never spins."""
+    import os
+
+    from binnacle.platform.contracts.process_contracts import JobOwnerLost
+    from binnacle.platform.darwin import job_group_fence as fence
+    from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
+
+    failing = mock.Mock(side_effect=OSError(5, "injected waitid failure"))
+    monkeypatch.setattr(os, "waitid", failing)
+    owner = DarwinJobProcessOwner(boot_id="b", stop_sigterm_grace_s=0.2)
+    with (tmp_path / "in").open("w+b") as stdin, (tmp_path / "out").open("w+b") as out:
+        leader = owner.spawn(
+            "job-w",
+            ["/bin/sh", "-c", "exit 0"],
+            workdir=tmp_path,
+            env={"PATH": "/usr/bin:/bin"},
+            stdin=stdin,
+            output=out,
+        ).pid
+        began = time.monotonic()
+        with pytest.raises(JobOwnerLost):
+            owner.wait("job-w", 10)
+        elapsed, calls = time.monotonic() - began, failing.call_count
+        time.sleep(0.5)
+        assert calls == failing.call_count == fence.WAITID_FAILURE_LIMIT  # no spin
+        assert elapsed < 5  # bounded backoff (~1.6 s at the limit)
+        assert owner.authority("job-w").reason_code == "darwin_job_exit_unverified"
+        assert owner.take_lost() == ["job-w"]  # the manager persists UNKNOWN
+        with mock.patch.object(os, "killpg") as killpg:
+            owner.close()
+        assert killpg.call_count == 0  # never signalled without proof
+    monkeypatch.undo()
+    os.waitpid(leader, 0)  # the test's own zombie child (not a signal)

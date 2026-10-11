@@ -11,16 +11,25 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
 from binnacle import config
 from binnacle.features.commands import job_client
 from binnacle.platform.contracts import process_contracts as pc
+from binnacle.platform.darwin import job_group_fence as fence
 from binnacle.platform.darwin import job_manager_entry as entry
 from binnacle.platform.darwin import job_manager_service as svc
+from binnacle.platform.darwin import job_process_owner as jpo
 from binnacle.platform.darwin.job_manager_client import DarwinJobClient
-from tests.platform.darwin.test_job_manager_resilience import lock_open_fails, wait_for
+from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
+from tests import signal_safety
+from tests.platform.darwin.test_job_manager_resilience import (
+    lock_open_fails,
+    procargs,
+    wait_for,
+)
 from tests.platform.darwin.test_job_manager_service import (
     ReferenceOwner,
     manager_for,
@@ -233,7 +242,6 @@ def test_persistent_reap_failure_stops_the_manager(tmp_path, monkeypatch):
 def test_real_owner_persists_background_exits_while_serving(tmp_path):
     # RJ1D-F1 (5): the composed owner (start_reaper=False) and reap_forever
     # persist and release every background exit before any close().
-    from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
 
     owner = DarwinJobProcessOwner(boot_id="b", start_reaper=False)
     manager, halt = manager_for(owner, tmp_path / "jobs"), threading.Event()
@@ -266,7 +274,6 @@ def test_close_persists_every_unreleased_exit_and_many_jobs_in_budget(
     # J1r handoff 2 / CR0 point 3 / R-J3-F3: reaped exits whose persistence
     # failed are written by close() with their own reason; running jobs get
     # owner_restart; more than 4 groups stop inside launchd ExitTimeOut.
-    from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
 
     owner = DarwinJobProcessOwner(boot_id="b", start_reaper=False)
     manager = manager_for(owner, tmp_path / "jobs")
@@ -376,3 +383,118 @@ def test_entry_point_serves_pings_and_exits_per_launchd_contract():
                     child.communicate(timeout=10)
             for fd in (read, write, inherited):
                 os.close(fd)
+
+
+@pytest.fixture
+def owned_j1g(tmp_path):
+    """P2 pre-review repairs (R4 J1g-a2, SD-49); parser units in resilience."""
+
+    owner = DarwinJobProcessOwner(
+        boot_id="b",
+        start_reaper=False,
+        stop_sigterm_grace_s=0.5,
+        stop_sigkill_grace_s=0.5,
+    )
+    files = [(tmp_path / name).open("w+b") for name in ("stdin", "out.log")]
+    recorded: list[tuple[int, tuple[int, int]]] = []
+
+    def spawn(job_id, script):
+        env, argv = {"PATH": "/usr/bin:/bin"}, ["/bin/sh", "-c", script]
+        started = owner.spawn(
+            job_id, argv, workdir=tmp_path, env=env, stdin=files[0], output=files[1]
+        )
+        recorded.append((started.pid, signal_safety.observe(started.pid).birth))
+        return started
+
+    yield owner, spawn, recorded
+    owner.close()
+    for pid, birth in recorded:  # RULE-NO-PKILL: exact verified (pid, birth) only
+        record = signal_safety.observe(pid)
+        if record is not None and record.birth == birth and record.state != 5:
+            signal_safety.kill_verified(pid, birth)
+    for handle in files:
+        handle.close()
+
+
+@NATIVE
+def test_f1_job_status_keeps_empty_argv_and_never_shows_env(
+    tmp_path, monkeypatch, caplog
+):
+
+    secret = os.urandom(16).hex()
+    monkeypatch.setenv("R_TEST_SECRET", secret)  # the manager passes os.environ on
+    caplog.set_level("DEBUG")
+    owner = DarwinJobProcessOwner(boot_id="b", stop_sigterm_grace_s=0.5)
+    manager = svc.DarwinJobManager(
+        owner=owner,
+        jobs_dir=tmp_path / "jobs",
+        boot_id="b",
+        wait_max_s=5,
+        keep_newest=9,
+    )
+    code = "import time; time.sleep(30)"
+    argv = [sys.executable, "-c", code, "", "", "tail"]
+    try:  # manager.close() stops only the group it spawned
+        replies = [
+            manager.handle(req(tmp_path, f"exec {argv[0]} -c '{code}' '' '' tail"))
+        ]
+        ask = {"version": 1, "op": "processes", "max_cmd_chars": 4096}
+        ask["job_id"] = replies[0]["job_id"]
+
+        def listed():
+            replies.append(manager.handle(ask))
+            return [p.get("cmd") for p in replies[-1]["processes"]] == [" ".join(argv)]
+
+        assert wait_for(listed)  # (a) empty fields kept, exactly argc taken
+        replies.append(manager.handle({"version": 1, "op": "ping"}))
+        replies.append(manager.handle(stop_req(replies[0]["job_id"])))
+    finally:
+        manager.close()
+    output = json.dumps(replies)
+    assert secret not in output + caplog.text  # (b) no job_status, no log line
+    assert "R_TEST_SECRET" not in output + caplog.text and "PATH=" not in output
+
+
+@NATIVE
+def test_f1_argc_beyond_fields_falls_back_to_comm(owned_j1g, monkeypatch):
+    owner, spawn, _ = owned_j1g
+    spawn("job-c", "exec sleep 30")
+    assert wait_for(lambda: owner.processes("job-c")[0].get("cmd") == "sleep 30")
+    real, short = entry._sysctl, procargs(9, b"/bin/sleep", b"sleep", b"30")
+    monkeypatch.setattr(
+        entry, "_sysctl", lambda mib, n: short if mib[1] == 49 else real(mib, n)
+    )
+    assert owner.processes("job-c")[0]["cmd"] == "sleep"  # (c) comm, fail closed
+
+
+@NATIVE
+def test_f3_fenced_job_stays_transient_and_loses_only_on_proof(
+    owned_j1g, monkeypatch, caplog
+):
+
+    owner, spawn, recorded = owned_j1g
+    leader = spawn("job-f", "sleep 30 & exit 0").pid
+    assert wait_for(lambda: owner.reap_exits(0) or owner._jobs["job-f"].exit)
+    (member,) = [
+        m for m in jpo._process_records(2, leader) if m.pid != leader and m.state != 5
+    ]
+    recorded.append((member.pid, member.birth))
+    real = owner._child_record_or_raise
+    failing = mock.Mock(side_effect=OSError("injected sysctl failure"))
+    monkeypatch.setattr(owner, "_child_record_or_raise", failing)
+    for _ in range(10 * fence.OBSERVATION_FAILURE_LIMIT):
+        owner.reap_exits(0)
+    assert failing.call_count >= 30 and not owner._jobs["job-f"].lost  # transient
+    moved = real(leader)._replace(birth=(0, 0))  # proven identity change
+    monkeypatch.setattr(owner, "_child_record_or_raise", lambda pid: moved)
+    owner.reap_exits(0)
+    job = owner._jobs["job-f"]  # recorded, kept UNKNOWN, never adopted
+    assert job.lost and job.reason_code == "darwin_exclusive_reaper_required"
+    assert owner.authority("job-f").authority == "UNKNOWN"
+    assert "event=darwin_fenced_job_lost job_id=job-f" in caplog.text
+    monkeypatch.setattr(owner, "_child_record_or_raise", real)
+    with mock.patch.object(os, "killpg") as killpg:
+        owner.close()
+    assert killpg.call_count == 0  # never signalled without proof
+    assert signal_safety.kill_verified(member.pid, member.birth)
+    os.waitpid(leader, 0)  # the test's own zombie child (not a signal)

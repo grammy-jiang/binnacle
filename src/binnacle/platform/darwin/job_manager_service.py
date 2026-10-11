@@ -207,6 +207,8 @@ class DarwinJobManager(_ManagerStopping):
             raise ValueError(f"workdir is not a directory: {workdir}")
         if not (math.isfinite(wait_seconds) and 0 <= wait_seconds <= self.wait_max_s):
             raise ValueError("wait_seconds outside manager bounds")
+        if self.stopping.is_set():  # PRE-J1g-F6: never launch into close()
+            return {"ok": False, "error": "could not start job: job manager stopping"}
         try:
             job_id = self._launch(command, workdir, stdin, call_id)
         except (OSError, NativeCapabilityError) as exc:
