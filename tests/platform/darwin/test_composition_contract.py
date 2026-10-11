@@ -131,8 +131,8 @@ def test_provisioner_maps_frozen_types_and_refuses_incompatible_launch_plan(
     monkeypatch.setattr(composition.platform, "system", lambda: "Darwin")
     factory = getattr(composition, "create_native_provisioner", None)
     assert factory is not None, "A6 type mapping is missing"
-    with tempfile.TemporaryDirectory(prefix="b0p-", dir="/private/tmp") as directory:
-        root = Path(directory)
+    with tempfile.TemporaryDirectory(prefix="b0p-") as directory:
+        root = Path(directory).resolve()
         lease = composition.create_service_lease(
             root=root, label="com.binnacle.r3test.b0", generation="b0-generation-123456"
         )
@@ -162,8 +162,8 @@ def test_composed_authenticated_channel_preserves_payload_and_generation(monkeyp
     if sys.platform != "darwin":
         pytest.skip("Real Darwin getpeereid and LOCAL_PEERPID")
     monkeypatch.setattr(composition.platform, "system", lambda: "Darwin")
-    with tempfile.TemporaryDirectory(prefix="b0i-", dir="/private/tmp") as directory:
-        root = Path(directory)
+    with tempfile.TemporaryDirectory(prefix="b0i-") as directory:
+        root = Path(directory).resolve()
         lease = composition.create_service_lease(
             root=root,
             label="com.binnacle.r3test.b0ipc",
