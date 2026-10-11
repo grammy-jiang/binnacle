@@ -460,7 +460,7 @@ def render_jobs_test_plist(
         raise ValueError("path_not_absolute")
     env = dict(environment)
     env["BINNACLE_SERVICE_ROLE"] = "manager"
-    env["BINNACLE_RUNTIME_DIR"] = str(runtime_dir)
+    env.pop("BINNACLE_RUNTIME_DIR", None)  # refused by the manager entry (N5)
     body = _jobs_lifecycle(argv, number_of_processes)
     body.update(
         {
@@ -494,6 +494,7 @@ def validate_jobs_test_plist_bytes(
         or not _lifecycle_matches(value)
         or not isinstance(env, dict)
         or env.get("BINNACLE_SERVICE_ROLE") != "manager"
-        or env.get("BINNACLE_RUNTIME_DIR") != str(runtime_dir)
+        or "BINNACLE_RUNTIME_DIR" in env  # SD-43 N5: the entry refuses it
+        or not runtime_dir.is_absolute()
     ):
         raise ValueError("plist_scope_refused")
