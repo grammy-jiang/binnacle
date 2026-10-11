@@ -191,12 +191,27 @@ class LaunchdUserServices:
     def _validate_plist(self, value: object) -> None:
         if not isinstance(value, dict):
             raise _unknown("launchd_plist_invalid")
+        allowed = {
+            "Label",
+            "ProgramArguments",
+            "EnvironmentVariables",
+            "WorkingDirectory",
+            "RunAtLoad",
+            "KeepAlive",
+            "LimitLoadToSessionType",
+            "StandardOutPath",
+            "StandardErrorPath",
+            "ExitTimeOut",
+            "ProcessType",
+        }
         env = value.get("EnvironmentVariables", {})
         argv = value.get("ProgramArguments")
         if (
-            value.get("Label") != self.lease.label
+            not value.keys() <= allowed
+            or value.get("Label") != self.lease.label
             or not isinstance(env, dict)
             or env.get("BINNACLE_SERVICE_ROLE") not in ("frontend", "probe", "manager")
+            or self.lease.label.rsplit(".", 1)[-1] != env.get("BINNACLE_SERVICE_ROLE")
             or env.get("BINNACLE_RUNTIME_DIR") != str(self.root)
             or not isinstance(argv, list)
             or not argv
@@ -204,11 +219,6 @@ class LaunchdUserServices:
             or not Path(argv[0]).is_absolute()
             or value.get("KeepAlive", False) is not False
             or value.get("LimitLoadToSessionType") != "Background"
-            or "Program" in value
-            or "UserName" in value
-            or "GroupName" in value
-            or "Sockets" in value
-            or "MachServices" in value
         ):
             raise _unknown("launchd_plist_scope_refused")
 
@@ -244,7 +254,10 @@ class LaunchdUserServices:
 
     def bootout(self, lease: ServiceLease, *, timeout_s: float) -> ServiceReceipt:
         self._owned(lease)
-        if self._role not in ("frontend", "probe"):
+        if (
+            self._role not in ("frontend", "probe")
+            or self._role != lease.label.rsplit(".", 1)[-1]
+        ):
             raise _unknown("launchd_durable_quiet_gate_unavailable")
         if not 0 < timeout_s <= 60:
             raise _unknown("launchd_timeout_invalid")
@@ -318,6 +331,7 @@ class LaunchdUserServices:
         if (
             service != self.lease.label
             or self._role != "frontend"
+            or not self.lease.label.endswith(".frontend")
             or self._plan is None
         ):
             return ServiceAction(
