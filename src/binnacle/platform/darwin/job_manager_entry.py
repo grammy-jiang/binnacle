@@ -10,6 +10,10 @@ SuccessfulExit=false). Its only input is the Binnacle config named by
 stop: the provisioner checks the ping counts, writes the private stop marker
 ``<runtime root>/<socket name>.stop`` holding ``{"owner_instance_id": ...}``
 from that ping, then boots the manager out. Every other stop exits non-zero.
+
+D1: a removed, replaced or stale socket endpoint (or a removed runtime root)
+never ends serving while this incarnation owns jobs: ``serve_endpoint``
+recreates the private 0700 root and publishes a fresh generation.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ import secrets
 import signal
 import sys
 import threading
+import time
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from pathlib import Path
@@ -36,6 +41,7 @@ from pydantic_settings import (
 
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 from binnacle.platform.contracts.native_service_contracts import ServiceLease
+from binnacle.platform.contracts.process_contracts import JOB_MANAGER_UNAVAILABLE
 from binnacle.platform.darwin.generation_runtime import (
     bounded_json,
     check_socket_path,
@@ -55,10 +61,13 @@ from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
 log = logging.getLogger("binnacle.job_manager")
 EX_FAILED, EX_USAGE, EX_TEMPFAIL, EX_CONFIG = 1, 64, 75, 78  # sysexits.h
 STOP_MARKER_SUFFIX = ".stop"
+STOP_PENDING_CODE = "manager_stopping"  # D2: typed, retryable start refusal
 CONFIG_FILE_ENV = "BINNACLE_CONFIG_FILE"
 # env_nested_delimiter overrides, and the runtime root the client would not share
 _OVERRIDES = ("BINNACLE_JOBS__", "BINNACLE_RUN_COMMAND__", "BINNACLE_RUNTIME_DIR")
 BOOT_SESSION = re.compile(r"[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}")
+SUN_PATH_MAX = 104  # Darwin sockaddr_un.sun_path bytes, terminating NUL included
+REBIND_DELAY_S = (0.1, 5.0)  # D1: first and longest wait before an endpoint rebind
 
 
 def serve_job_manager(
@@ -69,14 +78,15 @@ def serve_job_manager(
     stop: threading.Event,
 ) -> int:
     """Serve until ``stop``; the jobs-dir writer lock spans recovery and close."""
-    from binnacle.platform.darwin.ipc_transport import serve_authenticated
-
     if signal.getsignal(signal.SIGCHLD) != signal.SIG_DFL:
         raise RuntimeError("darwin_exclusive_reaper_required")
     # JCRP-F2: SIGTERM (or a reaper death) sets ``stop``; sharing it as the
     # manager's stopping event releases every waiting handler at once, so the
     # serving drain never delays close() past launchd's ExitTimeOut.
     manager.stopping = stop
+    manager.stop_pending = lambda: stop_pending_refusal(
+        socket_path, manager.owner_instance_id
+    )
     with jobs_dir_writer(manager.jobs_dir):
         recovered = manager.recover()
         log.info("event=job_manager_start pid=%d recovered=%d", os.getpid(), recovered)
@@ -96,8 +106,7 @@ def serve_job_manager(
         reaper = threading.Thread(target=reap, name="job-manager-reaper")
         reaper.start()
         try:
-            handler = manager.handle
-            serve_authenticated(socket_path, lease=lease, handler=handler, stop=stop)
+            serve_endpoint(manager, socket_path=socket_path, lease=lease, stop=stop)
         finally:
             halt.set()
             reaper.join()
@@ -105,6 +114,79 @@ def serve_job_manager(
     if died.is_set():
         raise RuntimeError("job_manager_reaper_stopped")  # exit non-zero; restart
     return recovered
+
+
+def require_socket_path(socket_path: Path) -> None:
+    """D1: fail closed, clearly, when ``sun_path`` cannot hold the path + NUL."""
+    size = len(os.fsencode(socket_path))
+    if size >= SUN_PATH_MAX:
+        limit = SUN_PATH_MAX - 1
+        raise ValueError(
+            f"darwin_socket_path_too_long: {size} bytes > {limit}: {socket_path}"
+        )
+    check_socket_path(socket_path)
+
+
+def owns_jobs(manager: DarwinJobManager) -> bool:
+    """Any doubt counts as owning: the manager never exits on uncertainty."""
+    try:
+        return manager.job_counts()[0] > 0
+    except Exception:  # noqa: BLE001 - fail safe: keep serving the jobs
+        return True
+
+
+def fresh_lease(socket_path: Path, label: str) -> ServiceLease:
+    """D1: recreate the private 0700 runtime root if gone; a new generation."""
+    require_socket_path(socket_path)
+    os.close(open_private_root(socket_path.parent, create=True))
+    generation = secrets.token_hex(16)
+    return open_service_lease(
+        root=socket_path.parent, label=label, generation=generation
+    )
+
+
+def serve_endpoint(
+    manager: DarwinJobManager,
+    *,
+    socket_path: Path,
+    lease: ServiceLease,
+    stop: threading.Event,
+) -> None:
+    """D1: serve until ``stop``, rebinding a lost endpoint while owning jobs.
+
+    A failure of the first binding while this incarnation owns no job keeps
+    the startup contract (it raises: non-zero exit, launchd restarts a fresh
+    incarnation, nothing is lost). Otherwise every loss - socket or credential
+    file removed or replaced, runtime root removed - is followed by a rebind
+    under a fresh lease after a capped backoff. The jobs-dir writer lock is
+    held throughout, so a rebind never admits a second writer. Unrecognised
+    endpoint debris is never adopted or removed (A3 reclaim refuses it): the
+    manager keeps its jobs and retries until that entry is gone.
+    """
+    from binnacle.platform.darwin.ipc_transport import serve_authenticated
+
+    current: ServiceLease | None = lease
+    delay = REBIND_DELAY_S[0]
+    while True:
+        started = time.monotonic()
+        try:
+            if current is None:
+                current = fresh_lease(socket_path, lease.label)
+            handler = manager.handle
+            serve_authenticated(socket_path, lease=current, handler=handler, stop=stop)
+            return  # serving ends only once ``stop`` is set
+        except (NativeCapabilityError, OSError, ValueError) as exc:
+            if stop.is_set() or (current is lease and not owns_jobs(manager)):
+                raise
+            code = getattr(exc, "code", type(exc).__name__)
+            event = "event=job_manager_endpoint_lost code=%s rebind_in_s=%.1f"
+            log.warning(event, code, delay)
+        if time.monotonic() - started > REBIND_DELAY_S[1]:
+            delay = REBIND_DELAY_S[0]  # a long-served endpoint restarts the backoff
+        current = None
+        if stop.wait(delay):
+            return
+        delay = min(delay * 2, REBIND_DELAY_S[1])
 
 
 class _Jobs(BaseModel):
@@ -198,8 +280,7 @@ def compose_owner(boot: str) -> DarwinJobProcessOwner:
     return DarwinJobProcessOwner(boot_id=boot, start_reaper=False)
 
 
-def provisioner_stop(socket_path: Path, owner_instance_id: str) -> bool:
-    """Consume the quiet-window stop marker; it must name this incarnation."""
+def _stop_marker(socket_path: Path, owner_instance_id: str, *, consume: bool) -> bool:
     name = socket_path.name + STOP_MARKER_SUFFIX
     try:
         root = open_private_root(socket_path.parent)
@@ -211,11 +292,37 @@ def provisioner_stop(socket_path: Path, owner_instance_id: str) -> bool:
                 value = bounded_json(stream.read(65537))
         except (OSError, ValueError, NativeCapabilityError):
             return False
-        with suppress(OSError):
-            os.unlink(name, dir_fd=root)
+        if consume:
+            with suppress(OSError):
+                os.unlink(name, dir_fd=root)
     finally:
         os.close(root)
     return value.get("owner_instance_id") == owner_instance_id
+
+
+def stop_pending_refusal(
+    socket_path: Path, owner_instance_id: str
+) -> dict[str, object] | None:
+    """D2: refuse ``start`` while the quiet-window marker names this incarnation.
+
+    Typed and retryable; the text is the existing manager-unavailable class
+    (no new tool text), and the caller creates no job record.
+    """
+    if not stop_marker_names(socket_path, owner_instance_id):
+        return None
+    log.info("event=job_start_refused reason=stop_marker")
+    error = f"{JOB_MANAGER_UNAVAILABLE} at {socket_path}: {STOP_PENDING_CODE}"
+    return {"ok": False, "error": error, "code": STOP_PENDING_CODE, "retryable": True}
+
+
+def provisioner_stop(socket_path: Path, owner_instance_id: str) -> bool:
+    """Consume the quiet-window stop marker; it must name this incarnation."""
+    return _stop_marker(socket_path, owner_instance_id, consume=True)
+
+
+def stop_marker_names(socket_path: Path, owner_instance_id: str) -> bool:
+    """D2: read-only peek; a marker naming another incarnation is ignored."""
+    return _stop_marker(socket_path, owner_instance_id, consume=False)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -234,7 +341,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         settings = read_config()
         socket_path = settings.jobs.socket_path or resolve_runtime_paths().jobs_socket
-        check_socket_path(socket_path)
+        require_socket_path(socket_path)
         generation = secrets.token_hex(16)
         lease = open_service_lease(
             root=socket_path.parent, label=MANAGER_LABEL, generation=generation

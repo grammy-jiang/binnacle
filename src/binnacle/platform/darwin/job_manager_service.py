@@ -19,7 +19,7 @@ import shutil
 import threading
 import time
 import uuid
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Protocol
@@ -138,6 +138,8 @@ class DarwinJobManager(_ManagerStopping):
         # Set on SIGTERM (serve_job_manager shares its stop event): every
         # waiting handler returns at once (JCRP-F2).
         self.stopping = threading.Event()
+        # D2: the entry's stop-marker probe: a typed refusal, or None to start.
+        self.stop_pending: Callable[[], dict[str, Any] | None] = lambda: None
 
     @contextmanager
     def _transaction(self) -> Iterator[None]:
@@ -215,6 +217,8 @@ class DarwinJobManager(_ManagerStopping):
             raise ValueError("wait_seconds outside manager bounds")
         if self.stopping.is_set():  # PRE-J1g-F6: never launch into close()
             return {"ok": False, "error": "could not start job: job manager stopping"}
+        if refusal := self.stop_pending():  # D2: before any record is reserved
+            return refusal
         try:
             job_id = self._launch(command, workdir, stdin, call_id, shown)
         except (OSError, NativeCapabilityError) as exc:
