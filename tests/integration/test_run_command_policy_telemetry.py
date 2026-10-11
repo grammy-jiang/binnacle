@@ -1,7 +1,9 @@
 import asyncio
 import re
+import sys
 
 import mcp.types
+import pytest
 from fastmcp import Client
 
 from binnacle import server
@@ -14,6 +16,15 @@ from binnacle.features.commands.run_command_telemetry import (
     auto_background_policy_hash,
 )
 from binnacle.features.commands.tools import stop_job as sj
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason=(
+        "Linux durable job engine / background run_command; Darwin counterpart: "
+        "tests/platform/darwin/test_native_smoke_mcp.py::test_run_command_sd18; "
+        "background jobs are UNAVAILABLE on Darwin by release scope"
+    ),
+)
 
 
 def _fields(line: str) -> dict[str, str]:
@@ -29,6 +40,7 @@ def _run(name: str, args: dict, client_info):
     return asyncio.run(go())
 
 
+@LINUX_ONLY
 def test_auto_background_marker_hashes_policy_and_rule_without_pattern(
     monkeypatch, caplog, tmp_path, run_policy
 ):

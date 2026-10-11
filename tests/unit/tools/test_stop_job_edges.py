@@ -1,12 +1,24 @@
 """Error and rare terminal summaries for stop_job."""
 
+import sys
+
 import pytest
 from fastmcp.exceptions import ToolError
 
 from binnacle.features.commands import job_owner
 from binnacle.features.commands.tools import stop_job
 
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason=(
+        "Linux durable job_owner.stop_job; Darwin counterpart: "
+        "tests/platform/darwin/test_native_smoke_mcp.py::"
+        "test_stop_job_is_unavailable_never_enabled"
+    ),
+)
 
+
+@LINUX_ONLY
 def test_stop_job_wraps_owner_failure(monkeypatch):
     monkeypatch.setattr(
         job_owner,
@@ -17,6 +29,7 @@ def test_stop_job_wraps_owner_failure(monkeypatch):
         stop_job.stop_job_impl("job")
 
 
+@LINUX_ONLY
 def test_stop_job_describes_exit_without_recorded_status(monkeypatch):
     monkeypatch.setattr(
         job_owner,
