@@ -69,8 +69,10 @@ def blob(result) -> str:
 LEXICAL = [
     ("/r/a", "/r", ["a"]),
     ("/r", "/r", []),
-    ("/r/", "/r", []),
-    ("//r//a/./b/", "/r", ["a", "b"]),
+    ("/r/", "/r", [""]),  # A trailing '/' or '/.' keeps one '' marker (RX2-F2).
+    ("/r/.", "/r", [""]),
+    ("//r//a/./b/", "/r", ["a", "b", ""]),
+    ("/r/a/.", "/r", ["a", ""]),
     ("/r/./a", "/r", ["a"]),
     ("/r/a/../b", "/r", None),  # Any '..', even one that stays inside.
     ("/r/..", "/r", None),
@@ -79,6 +81,7 @@ LEXICAL = [
     ("/other/a", "/r", None),
     ("/", "/r", None),
     ("/a/b", "/", ["a", "b"]),
+    ("/a/b/", "/", ["a", "b", ""]),
 ]
 
 
@@ -118,6 +121,31 @@ def test_absolute_in_root_file_and_dir_links_are_listed(tree):
         "aroot": ("dir", None),
         "aslash": ("dir", None),
     }
+
+
+@pytest.mark.parametrize("suffix", ["/", "/.", "//"])
+@pytest.mark.parametrize(
+    ("target", "expected"),
+    [("hello.txt", None), ("d", ("dir", None))],
+    ids=["file", "dir"],
+)
+def test_trailing_slash_needs_a_directory_as_for_relative_text(
+    tree, suffix, target, expected
+):
+    # RX2-F2: the kernel follows '<file>/' to nothing (ENOTDIR): a dangling
+    # link, omitted; '<dir>/' is the directory. Absolute and relative text of
+    # the same link give the same output.
+    root = tree["root"]
+    outputs = []
+    for lead in (f"{root}/", ""):
+        (root / "probe").symlink_to(f"{lead}{target}{suffix}")
+        if expected is None:
+            with pytest.raises(NotADirectoryError):
+                os.stat(root / "probe")
+        assert typed(tree).get("probe") == expected
+        outputs.append(blob(run(tree)) + blob(run(tree, max_results=1)))
+        (root / "probe").unlink()
+    assert outputs[0] == outputs[1]
 
 
 def test_absolute_link_in_a_subdirectory_and_relative_hops_after_it(tree):

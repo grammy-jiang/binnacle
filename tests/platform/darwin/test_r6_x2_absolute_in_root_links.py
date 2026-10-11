@@ -169,6 +169,30 @@ def test_darwin_matches_linux_per_probe(tree, probe):
     assert str(len(SECRET)) not in output
 
 
+@pytest.mark.parametrize("suffix", ["/", "/.", "//"])
+@pytest.mark.parametrize(
+    ("target", "expected"),
+    [("hello.txt", None), ("d", ("dir", None))],
+    ids=["file", "dir"],
+)
+def test_darwin_trailing_slash_needs_a_directory_as_for_relative_text(
+    tree, suffix, target, expected
+):
+    # RX2-F2: '<file>/' is a dangling link (ENOTDIR), omitted; '<dir>/' is
+    # listed as the directory. Absolute and relative text give the same output.
+    root = tree["root"]
+    outputs = []
+    for lead in (f"{root}/", ""):
+        link(root / "probe", f"{lead}{target}{suffix}")
+        if expected is None:
+            with pytest.raises(NotADirectoryError):
+                os.stat(root / "probe")
+        outputs.append(both(tree))
+        assert typed(tree).get("probe") == expected
+        (root / "probe").unlink()
+    assert outputs[0] == outputs[1]
+
+
 def test_darwin_absolute_link_in_a_subdirectory(tree):
     root = tree["root"]
     link(root / "rel", "hello.txt")
@@ -321,10 +345,10 @@ def test_darwin_tmp_root_canonical_text_and_omissions(tmp_alias):
 @_DARWIN
 @pytest.mark.xfail(
     strict=True,
-    reason="STEER-01 item 3 BLOCKED: the provider is granted only the canonical "
-    "root (features/files/paths.py _open_grants: files.grant(canonical, ...); "
-    "contract FileAccess.grant), so text under the configured /tmp alias is "
-    "omitted; outside the R6-X2 grant",
+    reason="LIST-FOLLOWUP-alias-root-prefixes: the provider is granted only the "
+    "canonical root (features/files/paths.py _open_grants: "
+    "files.grant(canonical, ...); contract FileAccess.grant), so text under the "
+    "configured /tmp alias is omitted",
 )
 def test_darwin_tmp_root_alias_text_is_listed(tmp_alias):
     work = tmp_alias["work"]

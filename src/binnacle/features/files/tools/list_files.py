@@ -74,12 +74,16 @@ def _absolute_in_root(text: str, root: str) -> list[str] | None:
     The components of text below root, or None: any '..' component, or text
     outside root. Only '' and '.' components are dropped; the filesystem is
     never consulted, so text that steps out and back is no existence oracle.
+    A trailing '/' or '/.' keeps one '' marker, so the walk requires a
+    directory there, as it does for relative text (RX2-F2).
     """
-    parts = [part for part in text.split("/") if part not in ("", ".")]
+    raw = text.split("/")
+    parts = [part for part in raw if part not in ("", ".")]
     base = [part for part in root.split("/") if part]
     if ".." in parts or parts[: len(base)] != base:
         return None
-    return parts[len(base) :]
+    below = parts[len(base) :]
+    return [*below, ""] if raw[-1] in ("", ".") else below
 
 
 def _link_target(link: Path, allowed: tuple[Path, ...]) -> Path | None:

@@ -461,11 +461,11 @@ def test_list_files_symlinks_match_linux_for_in_root_and_omit_the_rest(tmp_path)
     try:
         listing, sub = _list(app, {"path": str(root)}, {"path": str(root / "docs")})
         assert listing["mode"] == "list"
-        # Linux types a symlink by its target. Outside-root, absolute, dangling,
-        # looping and special entries are omitted (deliberate divergence).
+        # As Linux: abs_in listed (r6 X2); outside, dangling, loop, special omitted.
         assert [(e["path"], e["type"], e.get("bytes")) for e in listing["entries"]] == [
             (str(root / "dirlink"), "dir", None),
             (str(root / "docs"), "dir", None),
+            (str(root / "abs_in"), "file", 6),
             (str(root / "chain"), "file", 6),
             (str(root / "filelink"), "file", 6),
             (str(root / "hello.txt"), "file", 6),
