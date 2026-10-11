@@ -207,5 +207,9 @@ class DarwinJobOwner(Protocol):
         persists a terminal record before it exits. A group that cannot be
         reaped is left UNKNOWN, never reported exited. Busy-stop refusal is
         a provisioner gate and does not weaken this contract.
+
+        1.2.0 clarification: close(): leaders still running when close()
+        begins get termination_reason=owner_restart; exits observed earlier
+        keep their Linux reason; close() returns every exit not yet released.
         """
         ...

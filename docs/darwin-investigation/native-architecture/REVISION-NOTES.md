@@ -75,3 +75,5 @@ SHA-256 `2977f84264465de10ad32915b4cccd07971db2af6ebdf584ad54d4bf965271a6`.
 
 Repository evidence is pinned to `c2234f16bdfb1a17500b99101d3184b797ebb673`.
 All historical evidence remains bounded and cannot enable this revision.
+
+- 1.2.0 clarification (RJ1D-F3, Supervisor ACK 21:1x): close(): leaders still running when close() begins get termination_reason=owner_restart; exits observed earlier keep their Linux reason; close() returns every exit not yet released.
