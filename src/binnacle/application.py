@@ -292,8 +292,8 @@ def compose_native_tools(
     """Compose reviewed mechanisms; release_scope replacement is for TESTS only.
 
     Production resolves the owner from jobs.owner (Darwin auto = manager,
-    JCR-2) and reads that owner's committed rows. A test scope without an
-    explicit owner keeps the embedded owner it was written for.
+    JCR-2) and reads that owner's committed rows. A test scope must name its
+    owner explicitly (CR0-2); there is no implicit owner.
     """
     from uuid import uuid4
 
@@ -308,11 +308,9 @@ def compose_native_tools(
 
     settings = settings.model_copy(deep=True)
     if owner is None:
-        owner = (
-            resolve_darwin_job_owner(settings.jobs.owner)
-            if release_scope is None
-            else "embedded"
-        )
+        if release_scope is not None:  # CR0-2: no implicit owner for a test scope
+            raise ValueError("a test release_scope requires an explicit owner")
+        owner = resolve_darwin_job_owner(settings.jobs.owner)
     release_scope = dict(
         release_scope_for_owner(owner) if release_scope is None else release_scope
     )

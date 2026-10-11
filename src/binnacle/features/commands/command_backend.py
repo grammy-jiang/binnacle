@@ -280,7 +280,9 @@ class DarwinManagerCommandBackend:
             return reply
         summary, payload = reply.summary, dict(reply.payload)
         if note := state.get("note"):
-            summary, payload["note"] = f"{summary} {note}.", note
+            # D-1 replaces the Linux "process is gone" text: never gone or exited.
+            summary = f"Job {job_id} state unknown: {note}."
+            payload["state"], payload["note"] = "unknown", note
         if isinstance(resources := state.get("resource_usage"), dict):
             payload["resource_usage"] = {**resources, "accounting": RESOURCES_SAMPLED}
             summary = f"{summary} Resource usage is {RESOURCES_SAMPLED}."

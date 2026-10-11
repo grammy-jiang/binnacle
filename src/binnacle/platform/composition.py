@@ -9,6 +9,7 @@ import platform
 from collections.abc import Mapping
 from contextlib import contextmanager
 from pathlib import Path
+from secrets import token_hex
 from threading import Event
 from typing import TYPE_CHECKING, Literal
 
@@ -204,8 +205,6 @@ def create_service_lease(
     from binnacle.platform.darwin.generation_runtime import open_service_lease
 
     if generation is None:
-        from secrets import token_hex
-
         generation = token_hex(16)
     return open_service_lease(root=root, label=label, generation=generation)
 
@@ -226,10 +225,8 @@ def connect_native_channel(*, socket_path: Path, lease: ServiceLease, timeout_s:
             return connect_authenticated(socket_path, lease=lease, timeout_s=timeout_s)
         except NativeCapabilityError as exc:
             remaining = deadline - time.monotonic()
-            if (
-                exc.code not in ("ipc_connect_refused", "ipc_connect_timeout")
-                or remaining <= 0
-            ):
+            retry = exc.code in ("ipc_connect_refused", "ipc_connect_timeout")
+            if not retry or remaining <= 0:
                 raise
             time.sleep(min(0.02, remaining))
             timeout_s = max(0.000001, deadline - time.monotonic())
@@ -256,7 +253,10 @@ def serve_native_channel(
 
 
 def validate_native_command_states(
-    states: Mapping[str, str], *, owner: JobOwnerKind, execution=None
+    states: Mapping[str, str],
+    *,
+    owner: JobOwnerKind,
+    execution: ForegroundExecution | None = None,
 ) -> None:
     """Reject contradictory scopes; the stop_job rule is owner-conditioned (1.2.0)."""
     rows.validate_owner_command_states(states, owner, execution)

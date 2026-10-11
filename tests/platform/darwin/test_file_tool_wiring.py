@@ -274,11 +274,11 @@ def test_candidate_release_scope_is_per_tool_and_committed_scope_is_unchanged(
         )
         for tool, row in committed.items()
     }
-    scope["read_file"] = replace(
-        scope["read_file"],
-        capability=Capability(CapabilityState.LIMITED, "test_only", "read_file"),
+    limited = Capability(CapabilityState.LIMITED, "test_only", "read_file")
+    scope["read_file"] = replace(scope["read_file"], capability=limited)
+    access, backend = compose_native_tools(
+        settings=settings, release_scope=scope, owner="embedded"
     )
-    access, backend = compose_native_tools(settings=settings, release_scope=scope)
     app = create_application(
         settings=settings, token="test", backend=backend, file_access=access
     )

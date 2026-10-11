@@ -76,6 +76,7 @@ platform/darwin/test_job_manager_service.py | A3: per-test Darwin getpeereid/LOC
 platform/darwin/test_job_manager_entry.py | A3: per-test Darwin com.binnacle.jobs entry point, J1 owner and job-manager IPC (R4 J2r, A3 successor)
 platform/darwin/test_job_manager_resilience.py | A3: per-test Darwin libproc verified-teardown negative test (R4 J2t, RULE-NO-PKILL); the rest of the module runs everywhere
 platform/darwin/test_durable_tool_wiring.py | B0: per-test Darwin manager-owner tool composition (R4 J4); the owner call-site test runs everywhere
+platform/darwin/test_durable_manager_e2e.py | B0: per-test Darwin real com.binnacle.jobs end-to-end for the manager-composed command tools (R4 J4, split from test_durable_tool_wiring.py)
 platform/darwin/test_ipc_launchd.py | A3: per-test opt-in real launchd bootstrap (BINNACLE_A3_LAUNCHD=1)
 platform/darwin/test_search_parity.py | A4: in-body skip when APFS rejects a non-UTF-8 filename
 platform/darwin/test_package_install.py | A6: per-test Apple-silicon (arm64) native package install
@@ -119,6 +120,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_job_manager_entry.py": 1,
     "tests/platform/darwin/test_job_manager_resilience.py": 1,
     "tests/platform/darwin/test_durable_tool_wiring.py": 1,
+    "tests/platform/darwin/test_durable_manager_e2e.py": 1,
     "tests/platform/darwin/test_ipc_launchd.py": 3,
     "tests/platform/darwin/test_search_parity.py": 1,
     "tests/platform/darwin/test_package_install.py": 1,

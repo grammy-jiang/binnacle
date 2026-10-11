@@ -6,17 +6,12 @@ client that writes the J2 spool contract (meta.json + out.log).
 """
 
 import asyncio
-import functools
 import json
 import os
 import platform
-import signal
 import subprocess
-import sys
-import tempfile
 import threading
 import time
-from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -204,6 +199,8 @@ def test_explicit_embedded_owner_keeps_limited_composition(tmp_path):
     settings.jobs.owner = "embedded"
     _, backend = compose_native_tools(settings=settings)
     assert backend.release_states["run_command"] == "LIMITED"
+    with pytest.raises(ValueError, match="explicit owner"):  # RJ4-F4: no implicit owner
+        compose_native_tools(settings=settings, release_scope={})
     assert _app(settings, backend).instructions == _DARWIN_INSTRUCTIONS
 
 
@@ -338,8 +335,10 @@ def test_owner_lost_job_renders_unknown_and_refuses_stop(tmp_path):
     status = result.structured_content
     assert status["state"] == "unknown"  # D-1: never exited
     assert status["exit_code"] is None
-    # STEER-04 2(b): the result text states the owner loss where it occurs.
-    assert "owner lost; process not tracked" in str(result.content)
+    # RJ4-F1: the D-1 text replaces Linux's "process is gone"; never gone/exited.
+    text = result.content[0].text
+    assert text == f"Job {job_id} state unknown: owner lost; process not tracked."
+    assert "gone" not in text and "exited" not in text
     assert status["note"] == cb.DARWIN_OWNER_LOST_NOTE
     state = backend.job_state(job_id)
     assert state["note"] == cb.DARWIN_OWNER_LOST_NOTE
@@ -366,124 +365,18 @@ def test_d2_sampled_resources_are_marked_in_job_status(tmp_path):
     assert "Resource usage is sampled." in str(result.content)
 
 
-# J2r frozen ping fields (jobs/J2r-a2/INTERFACE-FROZEN.md, D3).
-PING_FIELDS = {"ok", "version", "owner_instance_id", "boot_id", "pid"}
-PING_FIELDS |= {"package_version", "revision", "running_jobs", "unknown_jobs"}
-
-
-@contextmanager
-def _real_manager():
-    """The real com.binnacle.jobs entry point; only its own child is signalled."""
-    with tempfile.TemporaryDirectory(prefix="r4-j4e-", dir="/tmp") as value:
-        base = Path(value).resolve()
-        (base / "rt").mkdir(mode=0o700)
-        sock, jobs = base / "rt" / "jobs.sock", base / "jobs"
-        toml = f'[jobs]\nsocket_path = "{sock}"\ndir = "{jobs}"\n'
-        (base / "config.toml").write_text(toml)
-        env = {"BINNACLE_CONFIG_FILE": str(base / "config.toml"), "HOME": str(base)}
-        env["PATH"] = "/usr/bin:/bin"
-        argv = [sys.executable, "-m", "binnacle.platform.darwin.job_manager_service"]
-        with open(base / "manager.log", "wb") as log:
-            child = subprocess.Popen(argv, env=env, cwd=base, stdout=log, stderr=log)
-        try:
-            yield child, sock, jobs, base / "manager.log"
-        finally:
-            if child.poll() is None:
-                child.kill()  # exact pid of the child this fixture spawned
-                child.wait(timeout=30)
-
-
-def _available_manager_backend(tmp_path, sock, jobs):
-    """Production composition with test-only AVAILABLE rows (SD-16 item 3)."""
-    from dataclasses import replace
-
-    from binnacle.application import compose_native_tools
-    from binnacle.platform.contracts import capability_contracts as cc
-    from binnacle.platform.contracts import darwin_release_scope as drs
-
-    scope = dict(drs.release_scope_for_owner("manager"))
-    for tool in drs.COMMAND_TOOLS:
-        available = cc.Capability(cc.CapabilityState.AVAILABLE, "test", tool)
-        scope[tool] = replace(scope[tool], capability=available)
-    settings, root = _settings(tmp_path)
-    settings.jobs.dir, settings.jobs.socket_path = jobs, sock
-    _, backend = compose_native_tools(
-        settings=settings, release_scope=scope, owner="manager"
-    )
-    return settings, root, backend
-
-
-def _ping_when_ready(backend, child):
-    deadline = time.monotonic() + 30
-    while True:
-        try:
-            return backend.client.ping(backend.socket_path)
-        except RuntimeError:
-            if child.poll() is not None or time.monotonic() > deadline:
-                raise
-            time.sleep(0.05)
-
-
-@_DARWIN
-def test_tools_run_end_to_end_through_the_real_job_manager(tmp_path):
-    """STEER-07 item 5: J4 tools -> DarwinJobClient -> com.binnacle.jobs -> J1."""
-    with _real_manager() as (child, sock, jobs, log):
-        settings, root, backend = _available_manager_backend(tmp_path, sock, jobs)
-        assert type(backend.client).__name__ == "DarwinJobClient"
-        assert backend.client.label == "com.binnacle.jobs"  # production label
-        pong = _ping_when_ready(backend, child)
-        assert PING_FIELDS <= set(pong) and pong["pid"] == child.pid
-        assert pong["version"] == 1 and pong["unknown_jobs"] == 0
-        assert pong["running_jobs"] == 0
-        owner_id = pong["owner_instance_id"]
-
-        run = functools.partial(_run, settings, root, backend)
-        done = run("echo hi; exit 3", 10)
-        payload = done.structured_content
-        assert payload["state"] == "exited" and payload["exit_code"] == 3
-        assert payload["output"] == "hi\n" and payload["background_job"] is False
-        assert str(done.content).count("descendants_unverified=true") == 1
-        status = js.job_status_impl(payload["job_id"], 10, backend=backend)
-        assert status.structured_content["state"] == "exited"
-        record = backend.job_state(payload["job_id"])  # the J2 spool record
-        assert record["owner_instance_id"] == owner_id and record["owner"] == "manager"
-        assert record["termination_reason"] == "normal_exit"
-        tail = run("seq 1 20000", 30).structured_content  # PARITY-INVENTORY gap
-        assert tail["state"] == "exited" and tail["truncated"] is True
-        assert tail["output"].rstrip().endswith("\n20000")
-        assert "elided" in tail["output"] and tail["background_job"] is False
-        job = run("sleep 60", 1).structured_content
-        assert job["state"] == "running" and job["background_job"] is True
-        assert backend.client.ping(sock)["running_jobs"] == 1
-        # An MCP restart is only a new client: a fresh composition reads the job.
-        _, _, again = _available_manager_backend(tmp_path, sock, jobs)
-        assert len(_tools(_app(settings, again))) == 8
-        assert again.job_state(job["job_id"])["state"] == "running"
-        stopped = sj.stop_job_impl(job["job_id"], backend=again).structured_content
-        assert stopped["state"] == "exited" and stopped["signal"] == 15
-        assert again.job_state(job["job_id"])["termination_reason"] == "stop_requested"
-        assert again.job_processes(job["job_id"]) == []  # no pid adoption
-        pong = backend.client.ping(sock)
-        assert (pong["running_jobs"], pong["unknown_jobs"]) == (0, 0)
-        with pytest.raises(ToolError, match="No job with id"):
-            sj.stop_job_impl("0" * 12, backend=backend)
-
-        # Provisioner quiet-window stop (ENTRY-CONTRACT): marker, then SIGTERM.
-        marker = sock.with_name("jobs.sock.stop")
-        marker.write_text(json.dumps({"owner_instance_id": owner_id}))
-        marker.chmod(0o600)
-        child.send_signal(signal.SIGTERM)
-        assert child.wait(timeout=30) == 0, log.read_text()
-    with pytest.raises(ToolError, match=JOB_MANAGER_UNAVAILABLE):
-        run("echo after", 5)  # no embedded fallback once the manager is gone
-
-
 def test_every_production_owner_call_site_passes_owner():
     """CR0-1.2.0 point 2: no production call relies on an owner default."""
     import ast
+    import inspect
+
+    from binnacle.platform import composition
 
     names = {"validate_native_command_states", "native_file_capability"}
     names.add("create_foreground_execution")
+    for name in names:  # RJ4-F2: owner is keyword-only and has no default
+        owner = inspect.signature(getattr(composition, name)).parameters["owner"]
+        assert (owner.kind, owner.default) == (owner.KEYWORD_ONLY, owner.empty), name
     src = Path(__file__).parents[3] / "src/binnacle"
     calls = []
     for path in sorted(src.rglob("*.py")):

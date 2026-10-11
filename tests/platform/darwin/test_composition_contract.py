@@ -378,7 +378,7 @@ settings.run_command.wait_max_s = 5
 scope = dict(DARWIN_RELEASE_SCOPE)
 scope["run_command"] = dataclasses.replace(scope["run_command"], capability=Capability(CapabilityState.LIMITED, "test_only", "foreground"))
 scope["job_status"] = dataclasses.replace(scope["job_status"], capability=Capability(CapabilityState.LIMITED, "test_only", "foreground history"))
-access, backend = compose_native_tools(settings=settings, release_scope=scope)
+access, backend = compose_native_tools(settings=settings, release_scope=scope, owner="embedded")
 backend.max_output_chars = 1024
 app = create_application(settings=settings, token="test", backend=backend, file_access=access)
 async def exercise():
@@ -480,7 +480,7 @@ def test_invalid_native_scope_raises_at_every_composition_boundary(
     monkeypatch.setattr(c, "create_foreground_execution", lambda **kwargs: disabled)
     reason = "stop_job" if tool == "stop_job" else "runtime gate"
     with pytest.raises(RuntimeError, match=reason):
-        compose_native_tools(settings=Settings(), release_scope=scope)
+        compose_native_tools(settings=Settings(), release_scope=scope, owner="embedded")
     for host in ("Darwin", "Linux") if tool == "stop_job" else ("Darwin",):
         monkeypatch.setattr(c.platform, "system", lambda host=host: host)
         with pytest.raises(RuntimeError, match=reason):

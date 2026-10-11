@@ -366,17 +366,17 @@ def _generation_app(
     root.mkdir()
     (root / "file").write_text("hello")
     settings = Settings(roots=RootsSettings(default_root=root, extra_roots=extra_roots))
+    off = CapabilityState.UNAVAILABLE
     scope = {
-        tool: replace(
-            row, capability=Capability(CapabilityState.UNAVAILABLE, "test", tool)
-        )
+        tool: replace(row, capability=Capability(off, "test", tool))
         for tool, row in DARWIN_RELEASE_SCOPE.items()
     }
     for tool in tools:
-        scope[tool] = replace(
-            scope[tool], capability=Capability(CapabilityState.LIMITED, "test", tool)
-        )
-    access, backend = compose_native_tools(settings=settings, release_scope=scope)
+        limited = Capability(CapabilityState.LIMITED, "test", tool)
+        scope[tool] = replace(scope[tool], capability=limited)
+    access, backend = compose_native_tools(
+        settings=settings, release_scope=scope, owner="embedded"
+    )
     app = create_application(
         settings=settings, token="test", backend=backend, file_access=access
     )
