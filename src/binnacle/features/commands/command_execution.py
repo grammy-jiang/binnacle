@@ -10,6 +10,9 @@ from binnacle.features.commands.command_contracts import (
     CommandBackend,
     CommandFailure,
     CommandReply,
+    ForegroundExecution,
+    ForegroundRequest,
+    ForegroundResult,
 )
 from binnacle.features.commands.run_command_evidence import record_auto_match
 from binnacle.features.commands.run_command_telemetry import DispatchPlan
@@ -211,3 +214,48 @@ def stop_job(job_id: str, *, backend: CommandBackend) -> CommandReply:
     else:
         summary = f"Job {job_id} is in state {result['state']}."
     return CommandReply(summary=summary, payload=payload)
+
+
+async def run_foreground_async(
+    execution: ForegroundExecution, request: ForegroundRequest
+) -> ForegroundResult:
+    """Keep A2's sole owner in a worker; cancellation only sets its owned Event.
+
+    The cancelled request never signals/reaps from the event loop. The worker
+    retains its process owner until A2's bounded cancellation cleanup finishes.
+    """
+    import asyncio
+    from threading import Event
+
+    cancel = Event()
+    try:
+        return await asyncio.to_thread(execution.run_foreground, request, cancel=cancel)
+    except asyncio.CancelledError:
+        cancel.set()
+        raise
+
+
+def foreground_reply(
+    result: ForegroundResult,
+    *,
+    max_output_chars: int,
+    tail_lines: int | None,
+) -> CommandReply:
+    """Map the bounded direct-leader result without inventing durable job state."""
+    shape = job_output.shape_run_command_output(
+        result.output.decode("utf-8", errors="replace"), max_output_chars, tail_lines
+    )
+    return CommandReply(
+        summary="Foreground leader exited; no durable job was created; descendants_unverified=true.",
+        payload={
+            "job_id": result.execution_id,
+            "state": "exited",
+            "exit_code": result.exit_code,
+            "signal": result.signal,
+            "output": shape.output,
+            "output_bytes": result.output_bytes,
+            "truncated": result.truncated or shape.truncated,
+            "duration_s": result.duration_s,
+            "background_job": False,
+        },
+    )

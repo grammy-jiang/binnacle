@@ -11,7 +11,6 @@ import os
 from fastmcp import FastMCP
 
 from binnacle.config import get_settings
-from binnacle.features.commands import jobs
 from binnacle.features.commands.commands_server import create_commands_server
 from binnacle.features.commands.run_command_telemetry import (
     AUTO_BACKGROUND_SEMANTICS_VERSION,
@@ -134,6 +133,27 @@ def log_effective_config() -> None:
         ),
         auto_background_evidence_dir=s.run_command.auto_background_evidence_dir,
     )
+    _log_jobs_config(s)
+    _log_tool_config(
+        "edit_file", snippet_context_lines=s.edit_file.snippet_context_lines
+    )
+
+
+def _log_jobs_config(s) -> None:
+    from binnacle.platform.composition import host_os_family
+
+    if host_os_family() == "darwin":
+        from binnacle.platform.contracts.darwin_release_scope import (
+            DARWIN_RELEASE_SCOPE,
+        )
+
+        for tool in ("run_command", "job_status", "stop_job"):
+            _log_tool_config(
+                tool, capability=DARWIN_RELEASE_SCOPE[tool].capability.state.value
+            )
+        return
+    from binnacle.features.commands import jobs
+
     _log_tool_config(
         "jobs",
         configured_owner=s.jobs.owner,
@@ -146,9 +166,6 @@ def log_effective_config() -> None:
         quiet_after_s=s.jobs.quiet_after_s,
         stop_sigterm_grace_s=jobs.STOP_SIGTERM_GRACE_S,
         stop_sigkill_grace_s=jobs.STOP_SIGKILL_GRACE_S,
-    )
-    _log_tool_config(
-        "edit_file", snippet_context_lines=s.edit_file.snippet_context_lines
     )
 
 
@@ -164,13 +181,20 @@ def _load_token() -> str:
 
 def create_server() -> FastMCP:
     """Maintain the Linux production factory contract and its token bootstrap."""
-    from binnacle.application import create_application
+    from binnacle.application import compose_native_tools, create_application
     from binnacle.features.commands.command_backend import create_command_backend
+    from binnacle.platform.composition import host_os_family
 
+    file_access = None
+    if host_os_family() == "darwin":
+        file_access, backend = compose_native_tools(settings=get_settings())
+    else:
+        backend = create_command_backend()
     return create_application(
+        file_access=file_access,
         settings=get_settings(),
         token=_load_token(),
-        backend=create_command_backend(),
+        backend=backend,
         files_factory=create_files_server,
         search_factory=create_search_server,
         commands_factory=create_commands_server,

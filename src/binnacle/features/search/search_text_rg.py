@@ -79,3 +79,24 @@ def run_rg(
     if metrics is not None:
         metrics.rg_parse_ms += ExactSearchMetrics.elapsed_ms(parse_started_ns)
     return events, proc.returncode == 1
+
+
+def run_rg_compat(
+    root: Path,
+    pattern: str,
+    fixed_strings: bool,
+    context: int,
+    metrics: ExactSearchMetrics | None = None,
+    *,
+    rg_bin: str,
+    timeout_s: int,
+) -> tuple[list[dict], bool]:
+    return run_rg(
+        root,
+        pattern,
+        fixed_strings,
+        context,
+        rg_bin=rg_bin,
+        timeout_s=timeout_s,
+        metrics=metrics,
+    )

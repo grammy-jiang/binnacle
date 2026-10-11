@@ -1,9 +1,13 @@
 """Stateless bridge to the existing process-owned durable job engine."""
 
+import platform
 from importlib import import_module
 from pathlib import Path
 
-from binnacle.features.commands.command_contracts import CommandBackend
+from binnacle.features.commands.command_contracts import (
+    CommandBackend,
+    RestrictedCommandBackend,
+)
 
 
 class DurableCommandBackend:
@@ -74,8 +78,23 @@ class DurableCommandBackend:
         return jobs.RUN_MAX_OUTPUT_CHARS
 
 
+_native_release_states: dict[str, str] | None = None
+
+
+def configure_native_release_states(states: dict[str, str] | None) -> None:
+    """Receive committed per-tool release states from the composition root."""
+    global _native_release_states
+    _native_release_states = None if states is None else dict(states)
+
+
 def create_command_backend() -> CommandBackend:
     """Capture engine settings at default selection, before accepting requests."""
+    # Uncomposed callers on other hosts get an inert backend, never Linux jobs.
+    # Native executors are injected by the application composition root.
+    if platform.system() != "Linux":
+        # Release states are handed in by the application composition root, so
+        # the focused Commands child serves the same metadata; no execution here.
+        return RestrictedCommandBackend(release_states=_native_release_states)
     import_module("binnacle.features.commands.jobs")
     import_module("binnacle.features.commands.job_owner")
     return DurableCommandBackend()

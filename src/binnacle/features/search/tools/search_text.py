@@ -13,7 +13,12 @@ from fastmcp.tools.base import ToolResult
 
 from binnacle.config import RootsSettings, SearchTextSettings, get_settings
 from binnacle.errors import CodedToolError
-from binnacle.features.files.paths import full_match, nearby_hint, resolve_path
+from binnacle.features.files.paths import (
+    FileToolAccess,
+    full_match,
+    nearby_hint,
+    resolve_path,
+)
 from binnacle.features.search.search_text_adaptive import (
     build_adaptive_result,
     log_adaptive_result,
@@ -36,8 +41,9 @@ from binnacle.features.search.search_text_collect import (
 from binnacle.features.search.search_text_collect import (
     matches_glob as _matches_glob_impl,
 )
+from binnacle.features.search.search_text_collect import search_opened
 from binnacle.features.search.search_text_pipeline import scan_exact as _scan_exact_impl
-from binnacle.features.search.search_text_rg import run_rg as _run_rg_impl
+from binnacle.features.search.search_text_rg import run_rg_compat as _run_rg
 from binnacle.features.search.search_text_telemetry import (
     AdaptiveWork,
     ExactSearchMetrics,
@@ -59,19 +65,7 @@ _structured_bytes = _budget_structured_bytes
 _entry_count = _budget_entry_count
 
 
-def _enforce_result_budget_rich(
-    payload: dict[str, Any],
-    *,
-    names_only: bool,
-    max_bytes: int,
-    initial_bytes: int | None = None,
-):
-    return _fit_result_budget(
-        payload,
-        names_only=names_only,
-        max_bytes=max_bytes,
-        initial_bytes=initial_bytes,
-    )
+_enforce_result_budget_rich = _fit_result_budget
 
 
 def _enforce_result_budget(
@@ -81,27 +75,6 @@ def _enforce_result_budget(
         payload, names_only=names_only, max_bytes=max_bytes
     )
     return outcome.payload, outcome.hit
-
-
-def _run_rg(
-    root: Path,
-    pattern: str,
-    fixed_strings: bool,
-    context: int,
-    metrics: ExactSearchMetrics | None = None,
-    *,
-    rg_bin: str,
-    timeout_s: int,
-) -> tuple[list[dict], bool]:
-    return _run_rg_impl(
-        root,
-        pattern,
-        fixed_strings,
-        context,
-        rg_bin=rg_bin,
-        timeout_s=timeout_s,
-        metrics=metrics,
-    )
 
 
 def _matches_glob(file_path: str, root: Path, glob: str | None) -> bool:
@@ -421,6 +394,7 @@ def search_text_impl(
     line_numbers: bool = False,
     *,
     roots: RootsSettings | None = None,
+    file_access: FileToolAccess | None = None,
     settings: SearchTextSettings | None = None,
     rg_bin: str | None = None,
 ) -> ToolResult:
@@ -432,6 +406,20 @@ def search_text_impl(
     if not pattern:
         raise CodedToolError(
             "empty_pattern", "The 'pattern' parameter must be non-empty."
+        )
+    if file_access is not None:
+        file_access.require("search_text")
+        return search_opened(
+            file_access,
+            pattern,
+            path,
+            glob,
+            fixed_strings,
+            context_lines,
+            names_only,
+            max_results,
+            line_numbers,
+            settings,
         )
     resolved = resolve_path(path, roots=roots)
     if not resolved.exists():
@@ -481,6 +469,7 @@ def register(
     mcp: FastMCP,
     *,
     roots: RootsSettings,
+    file_access: FileToolAccess | None = None,
     settings: SearchTextSettings,
     rg_bin: str,
 ) -> None:
@@ -489,7 +478,13 @@ def register(
     roots, settings = roots.model_copy(deep=True), settings.model_copy(deep=True)
     register_search_text(
         mcp,
-        partial(search_text_impl, roots=roots, settings=settings, rg_bin=rg_bin),
+        partial(
+            search_text_impl,
+            roots=roots,
+            file_access=file_access,
+            settings=settings,
+            rg_bin=rg_bin,
+        ),
         output_schema=OUTPUT_SCHEMA,
         max_results_default=settings.max_results_default,
         max_results_cap=settings.max_results_cap,

@@ -451,7 +451,8 @@ def get_settings() -> Settings:
     """Compose the configured native default when building a host application."""
     settings = Settings()
     if settings.jobs.socket_path is None:
-        from binnacle.platform.composition import create_runtime_paths
+        from binnacle.platform.composition import create_runtime_paths, host_os_family
 
-        settings.jobs.socket_path = create_runtime_paths().jobs_socket
+        if host_os_family() == "linux":
+            settings.jobs.socket_path = create_runtime_paths().jobs_socket
     return settings
