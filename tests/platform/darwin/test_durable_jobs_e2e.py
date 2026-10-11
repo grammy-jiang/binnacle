@@ -1,16 +1,16 @@
 """R4 J5 end-to-end durable jobs: real J1 owner + J2 manager in a test subprocess.
 
-Everything runs against a private runtime dir, token (A3 generation), jobs dir and
-the test label ``com.binnacle.r4test.e2e``; the production daemons are never touched.
-Tests that need J4's tool wiring or J3's launchd plist are written now and skip
-per test with a reason naming the lane.
+State is a private tmp root and 127.0.0.1 port. MCP cases use test-only AVAILABLE
+rows (committed rows stay UNAVAILABLE until J-CR); launchd uses r4test.j5 labels.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import plistlib
+import re
 import secrets
 import signal
 import socket
@@ -19,7 +19,6 @@ import sys
 import tempfile
 import threading
 import time
-import urllib.request
 import uuid
 from collections.abc import Iterator
 from contextlib import suppress
@@ -27,6 +26,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fastmcp import Client
+from mcp.types import Implementation
 
 from binnacle.features.commands import job_client, job_store
 from binnacle.platform.contracts import process_contracts as pc
@@ -36,51 +37,30 @@ from binnacle.platform.darwin.generation_runtime import (
     discover_service_lease,
     open_service_lease,
 )
+from binnacle.platform.darwin.job_manager_client import DarwinJobClient
+from binnacle.platform.darwin.job_manager_entry import serve_job_manager
 from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
 
 NATIVE = pytest.mark.skipif(sys.platform != "darwin", reason="Darwin kqueue/A3 IPC")
-LABEL = "com.binnacle.r4test.e2e"
+LABEL = svc.MANAGER_LABEL
 REPO = Path(__file__).resolve().parents[3]
 Err = job_client.JobManagerError
 GRACE = 0.5
 
 
-def need(lane: str, reason: str) -> None:
-    """In-body per-test gate for behaviour another R4 lane has yet to deliver."""
-    j4_wired = "darwin_background_jobs_unavailable" not in (
-        REPO / "src/binnacle/features/commands/tools/run_command.py"
-    ).read_text(encoding="utf-8")
-    j3_plist = Path(os.environ.get("BINNACLE_J5_J3_PLIST", "/nonexistent"))
-    ready = {"J4": j4_wired, "J3": j3_plist.is_file()}[lane]
-    if not ready:
-        pytest.skip(f"needs {lane}: {reason}")
-
-
 def _manager_main(root: Path, jobs: Path) -> int:
     """Child entry: the real owner and manager, SIGTERM drains and closes."""
     boot = "r4-j5-boot-" + root.parent.name  # one host boot across incarnations
-    # The manager's reap_forever drives reap_exits; the owner's own reaper thread
-    # would consume the exits first and the manager would never persist them.
-    owner = DarwinJobProcessOwner(
-        boot_id=boot,
-        stop_sigterm_grace_s=GRACE,
-        stop_sigkill_grace_s=GRACE,
-        start_reaper=False,
-    )
+    grace = {"stop_sigterm_grace_s": GRACE, "stop_sigkill_grace_s": GRACE}
+    owner = DarwinJobProcessOwner(boot_id=boot, start_reaper=False, **grace)
     manager = svc.DarwinJobManager(
-        owner=owner,
-        jobs_dir=jobs,
-        boot_id=boot,
-        wait_max_s=50,
-        keep_newest=50,
+        owner=owner, jobs_dir=jobs, boot_id=boot, wait_max_s=50, keep_newest=50,
         grace=(GRACE, GRACE),
-    )
+    )  # fmt: skip
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     lease = open_service_lease(root=root, label=LABEL, generation=secrets.token_hex(16))
-    svc.serve_job_manager(
-        manager, socket_path=root / "jobs.sock", lease=lease, stop=stop
-    )
+    serve_job_manager(manager, socket_path=root / "jobs.sock", lease=lease, stop=stop)
     return 0
 
 
@@ -88,23 +68,34 @@ def meta_of(jobs: Path, job_id: str) -> dict[str, Any]:
     return dict(json.loads((jobs / job_id / "meta.json").read_text()))
 
 
-def client() -> svc.DarwinJobClient:
-    return svc.DarwinJobClient(label=LABEL, error_type=Err)
+def client(label: str = LABEL) -> DarwinJobClient:
+    return DarwinJobClient(label=label, error_type=Err)
+
+
+def ping(sock: Path, label: str = LABEL) -> dict[str, Any] | None:
+    with suppress(Err):
+        return client(label).ping(sock)
+    return None
+
+
+def tamper(sock: Path) -> bytes:
+    """Corrupt the A3 auth key in place; returns the original bytes to restore."""
+    auth = sock.with_name("jobs.sock.auth")
+    original = auth.read_bytes()
+    auth.write_text(json.dumps({**json.loads(original), "key": "0" * 64}))
+    return original
 
 
 def group_gone(pgid: int) -> bool:
-    try:
+    with suppress(ProcessLookupError):
         os.killpg(pgid, 0)
-    except ProcessLookupError:
-        return True
-    return False
+        return False
+    return True
 
 
 def until(predicate: Any, timeout: float = 10.0) -> bool:
     deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if predicate():
-            return True
+    while time.monotonic() < deadline and not predicate():
         time.sleep(0.05)
     return bool(predicate())
 
@@ -119,6 +110,7 @@ class Stack:
         self.work.mkdir(exist_ok=True)
         self.sock = self.root / "jobs.sock"
         self.proc: subprocess.Popen[bytes] | None = None
+        self.idents: dict[int, str] = {}  # pgid -> (start time, command) at spawn
 
     def spawn_manager(self, root: Path | None = None) -> subprocess.Popen[bytes]:
         argv = [sys.executable, __file__, str(root or self.root), str(self.jobs)]
@@ -126,51 +118,47 @@ class Stack:
 
     def start(self) -> None:
         self.proc = self.spawn_manager()
-        assert until(lambda: self._ping() is not None, 20), "manager did not publish"
-
-    def _ping(self) -> dict[str, Any] | None:
-        with suppress(Err):
-            return client().ping(self.sock)
-        return None
+        assert until(lambda: ping(self.sock) is not None, 20), "manager not ready"
 
     def run(self, command: str, wait: float = 0.2) -> Any:
         kw: dict[str, Any] = {"workdir": self.work, "stdin": None, "call_id": "e2e"}
         return client().start(self.sock, command=command, wait_seconds=wait, **kw)
 
-    def stop_manager(self) -> int:
+    def end(self, sig: int) -> int:
         assert self.proc is not None
-        self.proc.send_signal(signal.SIGTERM)
+        self.proc.send_signal(sig)  # the exact Popen child this stack spawned
         code = self.proc.wait(20)
         self.proc = None
         return code
-
-    def kill_manager(self) -> None:
-        assert self.proc is not None
-        self.proc.kill()
-        self.proc.communicate(timeout=5)
-        self.proc = None
 
 
 @pytest.fixture
 def stack() -> Iterator[Stack]:
     with tempfile.TemporaryDirectory(prefix="r4-j5-", dir="/tmp") as value:
         env = Stack(Path(value).resolve())
-        pgids: list[int] = []
-        env.pgids = pgids  # type: ignore[attr-defined]
         try:
             yield env
         finally:
             if env.proc is not None and env.proc.poll() is None:
                 env.proc.kill()
                 env.proc.communicate(timeout=5)
-            for pgid in pgids:
-                with suppress(ProcessLookupError):
-                    os.killpg(pgid, signal.SIGKILL)
+            for pgid, seen in env.idents.items():  # only a still-matching group
+                if ident(pgid) == seen:
+                    with suppress(ProcessLookupError):
+                        os.killpg(pgid, signal.SIGKILL)
+
+
+def ident(pid: int) -> str:
+    """(start time, command) of ``pid`` for the RULE-NO-PKILL spawn-time record."""
+    argv = ["/bin/ps", "-o", "lstart=,command=", "-p", str(pid)]
+    return subprocess.run(
+        argv, capture_output=True, text=True, check=False
+    ).stdout.strip()
 
 
 def track(stack: Stack, job_id: str) -> int:
     pgid = int(meta_of(stack.jobs, job_id)["pgid"])
-    stack.pgids.append(pgid)  # type: ignore[attr-defined]
+    stack.idents[pgid] = ident(pgid)
     return pgid
 
 
@@ -209,15 +197,12 @@ def test_manager_sigkill_marks_unknown_and_never_adopts(stack: Stack) -> None:
     stack.start()
     job = stack.run("sleep 60", wait=0.1)
     pgid = track(stack, job["job_id"])
-    stack.kill_manager()
+    stack.end(signal.SIGKILL)
     assert not group_gone(pgid)  # the orphaned leader survives its manager
     stack.start()  # a new incarnation recovers the spool, owning nothing
     meta = meta_of(stack.jobs, job["job_id"])
-    assert (meta["authority"], meta["exit_code"], meta["signal"]) == (
-        "UNKNOWN",
-        None,
-        None,
-    )
+    assert (meta["authority"], meta["exit_code"]) == ("UNKNOWN", None)
+    assert meta["signal"] is None
     assert meta["termination_reason"] == "owner_restart"
     with pytest.raises(Err, match=pc.OWNER_LOST_STOP_REFUSED):
         client().stop(stack.sock, job["job_id"])
@@ -232,7 +217,7 @@ def test_graceful_manager_stop_leaves_no_orphans(stack: Stack) -> None:
     marker = stack.work / "inflight"
     job = stack.run(f"(sleep 60 &) ; sleep 60; touch {marker}", wait=0.2)
     pgid = track(stack, job["job_id"])
-    assert stack.stop_manager() == 0
+    assert stack.end(signal.SIGTERM) == 0
     assert group_gone(pgid)
     meta = meta_of(stack.jobs, job["job_id"])
     assert (meta["signal"], meta["termination_reason"]) == (15, "owner_restart")
@@ -240,36 +225,17 @@ def test_graceful_manager_stop_leaves_no_orphans(stack: Stack) -> None:
 
 
 @NATIVE
-def test_log_cursor_survives_a_client_restart(stack: Stack) -> None:
-    # An MCP restart is only a new client; the manager keeps the spool and job.
-    stack.start()
-    job = stack.run("echo one; sleep 1; echo two", wait=0.0)
-    track(stack, job["job_id"])
-    assert until(
-        lambda: (stack.jobs / job["job_id"] / "out.log").read_text() == "one\n"
-    )
-    first, cursor = job_store.read_log_range(stack.jobs, job["job_id"], 0, 4096)
-    assert (first, cursor) == (b"one\n", 4)
-    assert client().ping(stack.sock)["pid"] == stack.proc.pid  # type: ignore[union-attr]
-    assert until(lambda: meta_of(stack.jobs, job["job_id"]).get("exit_code") == 0)
-    rest, end = job_store.read_log_range(stack.jobs, job["job_id"], cursor, 4096)
-    assert (rest, end) == (b"two\n", 8)
-
-
-@NATIVE
 def test_peer_and_generation_refusals_never_dispatch(stack: Stack) -> None:
     stack.start()
-    auth = stack.sock.with_name("jobs.sock.auth")
-    original = auth.read_bytes()
-    auth.write_text(json.dumps({**json.loads(original), "key": "0" * 64}))
+    original = tamper(stack.sock)
     with pytest.raises(Err, match=pc.JOB_MANAGER_UNAVAILABLE):
         stack.run(f"touch {stack.work / 'x'}")
-    auth.write_bytes(original)
-    other = svc.DarwinJobClient(label=LABEL + ".other", error_type=Err)
+    stack.sock.with_name("jobs.sock.auth").write_bytes(original)
+    other = LABEL + ".other"
     with pytest.raises(Err, match=pc.JOB_MANAGER_UNAVAILABLE):
-        other.ping(stack.sock)  # label mismatch is refused before any bytes
+        client(other).ping(stack.sock)  # label mismatch is refused before any bytes
     with pytest.raises(NativeCapabilityError, match="generation_mismatch"):
-        discover_service_lease(root=stack.root, label=LABEL + ".other")
+        discover_service_lease(root=stack.root, label=other, name="jobs.sock")
     assert job_store.list_job_ids(stack.jobs) == []
     assert not (stack.work / "x").exists()
 
@@ -301,105 +267,90 @@ def test_stale_or_ambiguous_process_reference_stays_unowned() -> None:
             assert seen.reason_code == "darwin_job_not_owned"
             with pytest.raises(pc.UnverifiedJobProcess):
                 owner.signal_owned_group(ref, "kill")
-        assert (
-            victim.poll() is None
-        )  # a live pid on disk or in the table grants nothing
+        assert victim.poll() is None  # a live pid grants nothing
     finally:
         owner.close()
         victim.kill()
         victim.wait(5)
 
 
-# --- needs J4's tool wiring (job_status/stop_job/run_command over MCP) --------
+def _mcp_main(port: int, work: Path, jobs: Path, sock: Path, token: str) -> int:
+    """Child entry: manager composition with test-only AVAILABLE rows."""
+    from dataclasses import replace
+
+    from binnacle.application import compose_native_tools, create_application
+    from binnacle.config import RootsSettings, Settings
+    from binnacle.platform.contracts import capability_contracts as cc
+    from binnacle.platform.contracts import darwin_release_scope as drs
+
+    scope = dict(drs.release_scope_for_owner("manager"))
+    for tool in drs.COMMAND_TOOLS:
+        row = cc.Capability(cc.CapabilityState.AVAILABLE, "test", tool)
+        scope[tool] = replace(scope[tool], capability=row)
+    settings = Settings(roots=RootsSettings(default_root=work))
+    settings.jobs.dir, settings.jobs.socket_path = jobs, sock
+    settings.run_command.auto_background_patterns = {"r4-j5": ("^sleep ",)}
+    settings.run_command.auto_background_evidence_dir = work.parent / "evidence"
+    access, backend = compose_native_tools(
+        settings=settings, release_scope=scope, owner="manager"
+    )
+    app = create_application(
+        file_access=access, settings=settings, token=token, backend=backend
+    )
+    app.run(transport="http", host="127.0.0.1", port=port, show_banner=False)
+    return 0
 
 
 class McpStack:
-    """`binnacle serve` on a private 127.0.0.1 port over the manager's runtime dir."""
-
-    def __init__(self, stack: Stack, port: int) -> None:
-        self.stack, self.port = stack, port
-        self.token = "Bearer " + secrets.token_hex(16)  # file is the header value
+    def __init__(self, stack: Stack) -> None:
+        with socket.socket() as probe:  # a free 127.0.0.1 port, never a fixed one
+            probe.bind(("127.0.0.1", 0))
+            self.port = int(probe.getsockname()[1])
+        self.stack, self.token = stack, secrets.token_hex(16)
         self.proc: subprocess.Popen[bytes] | None = None
-        home = stack.root.parent / "home"
-        (home / ".config/binnacle").mkdir(parents=True)
-        (home / ".config/binnacle/token").write_text(self.token)
-        cfg = home / ".config/binnacle/config.toml"
-        cfg.write_text(
-            f'[roots]\ndefault_root = "{stack.work}"\n'
-            f'[auth]\ntoken_file = "{home}/.config/binnacle/token"\n'
-            f'[serve]\nhost = "127.0.0.1"\nport = {port}\n[jobs]\ndir = "{stack.jobs}"\n'
-        )
-        self.env = {"PATH": os.environ["PATH"], "HOME": str(home)}
-        self.env["BINNACLE_CONFIG_FILE"] = str(cfg)
-        self.env["BINNACLE_RUNTIME_DIR"] = str(stack.root)
+        self.env = {**os.environ, "HOME": str(stack.root.parent)}
 
     def start(self) -> None:
-        argv = [sys.executable, "-m", "binnacle", "serve", "--host", "127.0.0.1"]
-        argv += ["--port", str(self.port)]
+        argv = [sys.executable, __file__, "mcp", str(self.port), str(self.stack.work)]
+        argv += [str(self.stack.jobs), str(self.stack.sock), self.token]
+        out = subprocess.DEVNULL
         self.proc = subprocess.Popen(
-            argv, env=self.env, cwd=str(self.stack.work), start_new_session=True
+            argv, env=self.env, stdout=out, stderr=out, start_new_session=True
         )
-        assert until(self._listening, 30), "MCP server did not listen"
+        assert until(self._up, 60), "MCP server did not listen"
 
-    def _listening(self) -> bool:
-        with suppress(OSError):
-            socket.create_connection(("127.0.0.1", self.port), 0.2).close()
+    def _up(self) -> bool:
+        with suppress(OSError), socket.create_connection(("127.0.0.1", self.port), 1):
             return True
         return False
 
     def stop(self) -> None:
         if self.proc is not None:
-            self.proc.terminate()
+            self.proc.terminate()  # exact Popen pid recorded at spawn
             self.proc.wait(20)
             self.proc = None
 
-    def _post(self, head: dict[str, str], body: dict[str, Any]) -> tuple[Any, str]:
-        url = f"http://127.0.0.1:{self.port}/mcp"
-        request = urllib.request.Request(url, json.dumps(body).encode(), head)
-        with urllib.request.urlopen(request, timeout=120) as reply:
-            return reply.headers, reply.read().decode()
-
     def call(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
-        head = {
-            "Authorization": self.token,
-            "Content-Type": "application/json",
-        }
-        head["Accept"] = "application/json, text/event-stream"
-        client_info = {"name": "r4-j5", "version": "0"}
-        init = {
-            "protocolVersion": "2025-06-18",
-            "capabilities": {},
-            "clientInfo": client_info,
-        }
-        seen, _ = self._post(head, rpc(1, "initialize", init))
-        head["mcp-session-id"] = seen.get("mcp-session-id") or ""
-        self._post(head, {"jsonrpc": "2.0", "method": "notifications/initialized"})
-        _, text = self._post(
-            head, rpc(2, "tools/call", {"name": tool, "arguments": args})
-        )
-        data = [line[5:] for line in text.splitlines() if line.startswith("data:")]
-        return dict(json.loads(data[-1] if data else text)["result"])
+        if tool == "run_command":
+            args = {"workdir": str(self.stack.work), **args}
+        url = f"http://127.0.0.1:{self.port}/mcp"
 
+        async def once() -> Any:
+            async with Client(
+                url,
+                auth=self.token,
+                client_info=Implementation(name="r4-j5", version="0"),
+            ) as client:
+                return await client.call_tool(tool, args, raise_on_error=False)
 
-def rpc(ident: int, method: str, params: dict[str, Any]) -> dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": ident, "method": method, "params": params}
-
-
-J4_REASONS = {
-    "test_mcp_wait_expiry_continues": "run_command wait expiry must yield a durable job_id",
-    "test_mcp_background_and_auto_background": "background=true must reach the manager",
-    "test_mcp_cursor_across_mcp_restart": "job_status cursor over the manager spool",
-    "test_mcp_stop_job_term_then_kill": "stop_job must delegate to the manager",
-    "test_mcp_manager_kill_is_unknown": "job_status must render authority=UNKNOWN as unknown",
-    "test_mcp_peer_refusal_fails_closed": "run_command must fail closed on manager refusal",
-}
+        out = asyncio.run(once())
+        return {**(out.structured_content or {}), "isError": out.is_error}
 
 
 @pytest.fixture
-def mcp(stack: Stack, request: pytest.FixtureRequest) -> Iterator[McpStack]:
-    need("J4", J4_REASONS[request.node.name])
+def mcp(stack: Stack) -> Iterator[McpStack]:
     stack.start()
-    server = McpStack(stack, 18000 + os.getpid() % 1000)
+    server = McpStack(stack)
     server.start()
     try:
         yield server
@@ -407,94 +358,142 @@ def mcp(stack: Stack, request: pytest.FixtureRequest) -> Iterator[McpStack]:
         server.stop()
 
 
-def sc(result: dict[str, Any]) -> dict[str, Any]:
-    return dict(result.get("structuredContent") or {})
-
-
+@NATIVE
 def test_mcp_wait_expiry_continues(mcp: McpStack) -> None:
     marker = mcp.stack.work / "marker"
-    reply = sc(
-        mcp.call(
-            "run_command", {"command": f"sleep 2; touch {marker}", "wait_seconds": 1}
-        )
-    )
+    command = f"sleep 2; touch {marker}"
+    reply = mcp.call("run_command", {"command": command, "wait_seconds": 1})
     assert reply["state"] == "running" and reply["job_id"]
     assert until(marker.exists, 10)
-    status = sc(mcp.call("job_status", {"job_id": reply["job_id"], "wait_seconds": 5}))
+    status = mcp.call("job_status", {"job_id": reply["job_id"], "wait_seconds": 5})
     assert (status["state"], status["exit_code"]) == ("exited", 0)
 
 
+@NATIVE
 def test_mcp_background_and_auto_background(mcp: McpStack) -> None:
-    slow = sc(mcp.call("run_command", {"command": "sleep 3", "background": True}))
+    slow = mcp.call("run_command", {"command": "sleep 3", "background": True})
     assert slow["state"] == "running" and slow["background_job"] is True
-    fast = sc(mcp.call("run_command", {"command": "echo hi", "background": True}))
+    fast = mcp.call("run_command", {"command": "echo hi", "background": True})
     assert fast["state"] == "exited" and fast["output"].strip() == "hi"
-    # auto_background_patterns (J4 settings key, as in the R4 evidence config) is
-    # exercised by the Pi-parity auto_bg rerun against the same candidate.
+    auto = mcp.call("run_command", {"command": "sleep 3; echo auto"})
+    assert auto["state"] == "running" and auto["background_job"] is True
+    # an explicit background=false opts out of the pattern (Linux parity)
+    quick = mcp.call("run_command", {"command": "echo y", "background": False})
+    assert quick["state"] == "exited" and quick["background_job"] is False
 
 
+@NATIVE
 def test_mcp_cursor_across_mcp_restart(mcp: McpStack) -> None:
-    job = sc(
-        mcp.call(
-            "run_command", {"command": "echo a; sleep 2; echo b", "background": True}
-        )
-    )
-    first = sc(mcp.call("job_status", {"job_id": job["job_id"], "cursor": "start"}))
+    args = {"command": "echo a; sleep 2; echo b", "background": True}
+    job = mcp.call("run_command", args)
+    first = mcp.call("job_status", {"job_id": job["job_id"], "cursor": "start"})
     mcp.stop()
     mcp.start()  # an MCP restart does not own the job
     args = {"job_id": job["job_id"], "cursor": first["next_cursor"], "wait_seconds": 5}
-    rest = sc(mcp.call("job_status", args))
-    assert rest["state"] == "exited" and "b" in rest["output"]
+    rest = mcp.call("job_status", args)
+    assert first["log_delta"] == "a\n" and first["state"] == "running"
+    assert rest["state"] == "exited" and rest["log_delta"] == "b\n"
+    assert rest["delta_start"] == first["delta_end"]  # the cursor carried over
 
 
+@NATIVE
 def test_mcp_stop_job_term_then_kill(mcp: McpStack) -> None:
-    command = "trap '' TERM; sleep 60"
-    job = sc(mcp.call("run_command", {"command": command, "background": True}))
-    assert sc(mcp.call("stop_job", {"job_id": job["job_id"]}))["state"] == "exited"
-    assert sc(mcp.call("job_status", {"job_id": job["job_id"]}))["signal"] == 9
+    args = {"command": "trap '' TERM; sleep 60", "background": True}
+    job_id = mcp.call("run_command", args)["job_id"]
+    assert mcp.call("stop_job", {"job_id": job_id})["state"] == "exited"
+    assert mcp.call("job_status", {"job_id": job_id})["signal"] == 9
 
 
+@NATIVE
 def test_mcp_manager_kill_is_unknown(mcp: McpStack) -> None:
-    job = sc(mcp.call("run_command", {"command": "sleep 60", "background": True}))
+    job = mcp.call("run_command", {"command": "sleep 60", "background": True})
     pgid = track(mcp.stack, job["job_id"])
-    mcp.stack.kill_manager()
+    mcp.stack.end(signal.SIGKILL)
     mcp.stack.start()
-    status = sc(mcp.call("job_status", {"job_id": job["job_id"]}))
+    status = mcp.call("job_status", {"job_id": job["job_id"]})
     assert status["state"] == "unknown" and status.get("exit_code") is None
-    assert mcp.call("stop_job", {"job_id": job["job_id"]}).get("isError")
+    assert mcp.call("stop_job", {"job_id": job["job_id"]})["isError"]
     assert not group_gone(pgid)  # no adoption
 
 
+@NATIVE
 def test_mcp_peer_refusal_fails_closed(mcp: McpStack) -> None:
-    auth = mcp.stack.sock.with_name("jobs.sock.auth")
-    original = auth.read_bytes()
-    auth.write_text(json.dumps({**json.loads(original), "key": "0" * 64}))
+    original = tamper(mcp.stack.sock)
     refused = mcp.call("run_command", {"command": "touch x", "background": True})
-    auth.write_bytes(original)
-    assert refused.get("isError") and not (mcp.stack.work / "x").exists()
+    mcp.stack.sock.with_name("jobs.sock.auth").write_bytes(original)
+    assert refused["isError"] and not (mcp.stack.work / "x").exists()
 
 
-# --- needs J3's launchd plist for the jobs manager ---------------------------
+def launchctl(*args: str) -> subprocess.CompletedProcess[str]:
+    argv = ["/bin/launchctl", *args]
+    return subprocess.run(argv, capture_output=True, text=True, check=False)
 
 
-def test_launchd_user_label_runs_the_jobs_manager_on_a_test_port() -> None:
-    need(
-        "J3", "BINNACLE_J5_J3_PLIST must name the rendered com.binnacle.r4test.* plist"
+def label_pid(target: str) -> int | None:
+    found = re.search(
+        r"^\s+pid = (\d+)$", launchctl("print", target).stdout, re.MULTILINE
     )
-    plist = Path(os.environ["BINNACLE_J5_J3_PLIST"])
-    label = plistlib.loads(plist.read_bytes())["Label"]
-    assert label.startswith("com.binnacle.r4test."), "never the production label"
-    domain, target = f"gui/{os.getuid()}", f"gui/{os.getuid()}/{label}"
-    subprocess.run(["launchctl", "bootstrap", domain, str(plist)], check=True)
+    return int(found[1]) if found else None
+
+
+def render_test_plist(base: Path, label: str, config: Path) -> Path:
+    """The jobs-daemon plist shape, as a user-domain test label (no UserName)."""
+    assert label.startswith("com.binnacle.r4test.j5."), "never a production label"
+    env = {"HOME": str(base), "PATH": "/usr/bin:/bin", "PYTHONPATH": str(REPO / "src")}
+    env["BINNACLE_CONFIG_FILE"] = str(config)
+    module = "binnacle.platform.darwin.job_manager_service"  # the production entry
+    plist = {
+        "Label": label,
+        "ProgramArguments": [sys.executable, "-m", module],
+        "EnvironmentVariables": env,
+        "LimitLoadToSessionType": "Background",
+        "RunAtLoad": True,
+        "KeepAlive": {"SuccessfulExit": False},
+        "StandardErrorPath": str(base / "launchd.err.log"),
+    }
+    path = base / f"{label}.plist"
+    path.write_bytes(plistlib.dumps(plist))
+    return path
+
+
+@NATIVE
+def test_launchd_kickstart_restart_leaves_no_orphans_and_marks_owner_restart(
+    stack: Stack,
+) -> None:
+    base, sock = stack.root.parent, stack.sock
+    config = base / "config.toml"
+    config.write_text(f'[jobs]\nsocket_path = "{sock}"\ndir = "{stack.jobs}"\n')
+    label = f"com.binnacle.r4test.j5.jobs.{uuid.uuid4().hex[:8]}"
+    plist = render_test_plist(base, label, config)
+    domain, target = f"user/{os.getuid()}", f"user/{os.getuid()}/{label}"
     try:
-        probe = ["launchctl", "print", target]
-        ok = lambda: (
-            subprocess.run(probe, capture_output=True, check=False).returncode == 0
-        )
-        assert until(ok, 10)
+        assert launchctl("bootstrap", domain, str(plist)).returncode == 0
+        assert until(lambda: ping(sock) is not None, 60), "manager not ready"
+        first = label_pid(target)  # recorded to prove a new incarnation
+        job = client().start(
+            sock, command="(sleep 120 &); sleep 120", wait_seconds=0.2,
+            workdir=stack.work, stdin=None, call_id="e2e-launchd",
+        )  # fmt: skip
+        pgid = track(stack, job["job_id"])
+        result = launchctl("kickstart", "-k", target)  # SIGTERM -> owned groups reaped
+        assert result.returncode == 0, result.stderr
+        assert until(lambda: group_gone(pgid), 30), "group member survived restart"
+        assert until(lambda: ping(sock) is not None, 60), "no restart"
+        assert label_pid(target) not in (None, first)
+        meta = meta_of(stack.jobs, job["job_id"])
+        assert meta["termination_reason"] == "owner_restart"
+        assert (ping(sock) or {})["running_jobs"] == 0  # the new incarnation owns none
     finally:
-        subprocess.run(["launchctl", "bootout", domain, str(plist)], check=False)
+        launchctl("bootout", target)
+        assert until(lambda: launchctl("print", target).returncode != 0, 30)
+        plist.unlink(missing_ok=True)
+    assert launchctl("print", target).returncode != 0  # label absent after teardown
 
 
 if __name__ == "__main__":
+    if sys.argv[1] == "mcp":
+        port, work, jobs, sock, token = sys.argv[2:7]
+        raise SystemExit(
+            _mcp_main(int(port), Path(work), Path(jobs), Path(sock), token)
+        )
     raise SystemExit(_manager_main(Path(sys.argv[1]), Path(sys.argv[2])))
