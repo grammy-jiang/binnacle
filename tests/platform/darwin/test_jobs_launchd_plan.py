@@ -273,6 +273,12 @@ def test_exit_timeout_covers_the_close_persist_budget() -> None:
     budget = sum(linux.values()) + c.JOBS_PERSIST_MARGIN_S
     assert c.JOBS_PERSIST_MARGIN_S > 0
     assert budget <= c.JOBS_EXIT_TIMEOUT_S
+    # SD-43 JCRP-F2 / SD-45: worst close() budget (handler release, TERM
+    # grace, KILL grace, reaper join); ExitTimeOut >= budget + 10 s and >= 30.
+    assert c.JOBS_CLOSE_BUDGET_S == 1.0 + sum(linux.values()) + 1.0
+    assert c.JOBS_EXIT_TIMEOUT_S >= c.JOBS_CLOSE_BUDGET_S + 10.0
+    assert c.JOBS_EXIT_TIMEOUT_S >= 30
+    assert c.JOBS_EXIT_TIMEOUT_S == 30  # SD-45: not lowered
     value = plistlib.loads(render_jobs_daemon_plist(_jobs_spec()))
     assert value["ExitTimeOut"] == c.JOBS_EXIT_TIMEOUT_S
 

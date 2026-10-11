@@ -6,6 +6,7 @@ production ``com.binnacle.jobs`` LaunchDaemon.
 
 from __future__ import annotations
 
+import math
 import os
 import plistlib
 import re
@@ -132,17 +133,26 @@ JOBS_DAEMON_PLIST_PATH = Path("/Library/LaunchDaemons") / f"{JOBS_DAEMON_LABEL}.
 # ``binnacle-jobs`` console script.
 JOBS_ENTRY_MODULE = "binnacle.platform.darwin.job_manager_service"
 _PYTHON_NAME = re.compile(r"python(3(\.[0-9]+)?)?")
-# close() budget (CR0 point 3): one TERM sweep, the Linux grace windows
-# (features/commands/jobs.py STOP_SIGTERM/SIGKILL_GRACE_S), one KILL sweep,
-# then exit records are persisted before launchd's ExitTimeOut SIGKILL.
+# close() budget (CR0 point 3, SD-43 JCRP-F2): the stopping event releases
+# waiting handlers (one STOPPING_SLICE_S, rounded up to 1 s), one TERM sweep,
+# the Linux grace windows (features/commands/jobs.py STOP_SIGTERM/SIGKILL_
+# GRACE_S), one KILL sweep, the reaper join (1 s). SD-45: ExitTimeOut =
+# max(30, close budget + 10 s persist margin); never lowered below 30.
 JOBS_STOP_SIGTERM_GRACE_S = 5.0
 JOBS_STOP_SIGKILL_GRACE_S = 2.0
+JOBS_HANDLER_RELEASE_S = 1.0
+JOBS_REAPER_JOIN_S = 1.0
+JOBS_CLOSE_BUDGET_S = (
+    JOBS_HANDLER_RELEASE_S
+    + JOBS_STOP_SIGTERM_GRACE_S
+    + JOBS_STOP_SIGKILL_GRACE_S
+    + JOBS_REAPER_JOIN_S
+)
 JOBS_PERSIST_MARGIN_S = 10.0
-JOBS_EXIT_TIMEOUT_S = 30
-if JOBS_EXIT_TIMEOUT_S < (
-    JOBS_STOP_SIGTERM_GRACE_S + JOBS_STOP_SIGKILL_GRACE_S + JOBS_PERSIST_MARGIN_S
-):  # pragma: no cover - import-time invariant
-    raise RuntimeError("jobs_exit_timeout_below_close_budget")
+JOBS_EXIT_TIMEOUT_FLOOR_S = 30
+JOBS_EXIT_TIMEOUT_S = max(
+    JOBS_EXIT_TIMEOUT_FLOOR_S, math.ceil(JOBS_CLOSE_BUDGET_S + JOBS_PERSIST_MARGIN_S)
+)
 # Linux binnacle-jobs runs with UMask=0077; job spools stay private.
 JOBS_UMASK = 0o077
 JOBS_THROTTLE_INTERVAL_S = 10
