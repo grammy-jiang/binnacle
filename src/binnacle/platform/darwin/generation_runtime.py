@@ -49,6 +49,7 @@ def _close_inherited_locks() -> None:
 
 os.register_at_fork(after_in_child=_close_inherited_locks)
 _SCOPE = "private cooperative-account runtime; no durable job authority"
+RUNTIME_ROOT = "Library/Application Support/Binnacle/r3"  # SD-68: never Caches
 
 
 def denied(code: str) -> UnsafePath:
@@ -56,9 +57,10 @@ def denied(code: str) -> UnsafePath:
 
 
 def check_socket_path(path: Path) -> None:
-    # sockaddr_un.sun_path is 104 bytes on Darwin, including the terminator.
-    if not path.is_absolute() or len(os.fsencode(path)) >= 104:
-        raise denied("runtime_socket_path_invalid")
+    size = len(os.fsencode(path))  # sun_path: 104 bytes on Darwin, NUL included
+    if not path.is_absolute() or size >= 104:
+        detail = f"darwin_socket_path_too_long: {size} bytes > 103: {path}"
+        raise denied("runtime_socket_path_invalid") from ValueError(detail)
 
 
 def open_private_root(root: Path, *, create: bool = False) -> int:
@@ -100,9 +102,7 @@ def open_private_root(root: Path, *, create: bool = False) -> int:
 
 def resolve_runtime_paths() -> RuntimePaths:
     configured = os.environ.get("BINNACLE_RUNTIME_DIR")
-    root = (
-        Path(configured) if configured else Path.home() / "Library/Caches/Binnacle/r3"
-    )
+    root = Path(configured) if configured else Path.home() / RUNTIME_ROOT
     check_socket_path(root / "jobs.sock")
     fd = open_private_root(root, create=True)
     os.close(fd)
