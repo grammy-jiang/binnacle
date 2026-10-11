@@ -1,8 +1,10 @@
 """Bounded ripgrep stdin search over opened Files capabilities.
 
 Ignore discovery is confined to the grant: .gitignore/.ignore/.rgignore above
-it and global policies are never read. Search skips NUL-containing files and
-reports binary_files_skipped in its single aggregate summary event's stats.
+it and global policies are never read. Search treats NUL-containing files as
+text (rg --text, as on Linux); binary_files_skipped stays in the summary stats
+at 0. Files skipped for size or concurrent change are counted in those stats but
+never set ``truncated``: only caps (file, input or output budgets) do.
 Files use deterministic path order (rg --sort path); default rg order is unspecified. Listing includes
 binary files, matching rg --files. The helper owns one direct rg child, closes
 pipes and reaps on every exit. This is not general process-tree control.
@@ -47,7 +49,7 @@ from binnacle.platform.darwin.file_traversal import (
 
 
 def _command(rg_bin: str, request: SearchRequest) -> list[str]:
-    argv = [rg_bin, "--no-config", "--json", "--smart-case"]
+    argv = [rg_bin, "--no-config", "--json", "--smart-case", "--text"]
     if request.fixed_strings:
         argv.append("--fixed-strings")
     if request.context_lines:
@@ -276,7 +278,8 @@ class DarwinSearchAccess:
         argv = _command(self._rg_bin, request)
         paths, truncated = self._paths(grant, request)
         events: list[Mapping[str, object]] = []
-        files_searched = binary_files_skipped = unreadable_files_skipped = 0
+        files_searched = unreadable_files_skipped = 0
+        binary_files_skipped = 0  # NUL files are searched as text
         skipped_oversize = skipped_changed = 0
         input_budget_exhausted = output_budget_exhausted = 0
         input_left = output_left = request.max_bytes
@@ -308,14 +311,10 @@ class DarwinSearchAccess:
                 }:
                     raise
                 skipped_changed += 1
-                truncated = True
-                continue
-            if b"\0" in data:
-                binary_files_skipped += 1
                 continue
             if len(data) > input_left:
                 # Never search a cut line and report a false regex/end anchor hit.
-                truncated = True
+                # Reported through skipped_oversize; not a capped result set.
                 skipped_oversize += 1
                 continue
             input_left -= len(data)

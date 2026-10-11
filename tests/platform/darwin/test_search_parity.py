@@ -71,7 +71,7 @@ def content(events):
 
 
 def baseline(root, rg, req):
-    argv = [rg, "--no-config", "--json", "--smart-case"]
+    argv = [rg, "--no-config", "--json", "--smart-case", "--text"]
     if req.fixed_strings:
         argv.append("--fixed-strings")
     if req.context_lines:
@@ -181,7 +181,7 @@ def test_repository_ignore_and_binary_equality_with_rg(tree, hidden):
     make_repository_fixture(root)
     batch = search.search(grant, request())
     assert content(batch.events) == content(baseline(root, rg, request()))
-    assert batch.events[-1]["data"]["stats"]["binary_files_skipped"] == 1
+    assert batch.events[-1]["data"]["stats"]["binary_files_skipped"] == 0
     argv = [rg, "--no-config", "--files"]
     if hidden:
         argv += ["--hidden", "--glob", "!**/.git/**"]
@@ -222,9 +222,10 @@ def test_search_budgets_report_truncation_without_partial_line_matches(tree):
     root, _, grant, search, _ = tree
     (root / "file").write_text("needle\n" * 100)
     result = search.search(grant, request(max_bytes=10))
-    assert (
-        result.truncated and not content(result.events) and result.files_searched == 0
-    )
+    # An oversize file is skipped and reported, not a capped result set.
+    assert not result.truncated and not content(result.events)
+    assert result.files_searched == 0
+    assert result.events[-1]["data"]["stats"]["skipped_oversize"] == 1
     (root / "file").write_text("needle\n")
     result = search.search(grant, request(max_bytes=100))
     assert result.truncated  # JSON output budget, not just input bytes.
@@ -326,14 +327,18 @@ def test_non_utf8_filename_remapped_as_rg_bytes(tree):
     assert match["data"]["path"] == {"bytes": "YmFkLf8="}
 
 
-def test_binary_files_are_skipped_and_counted(tree):
+def test_binary_files_are_searched_as_text(tree):
     root, files, grant, search, _ = tree
     (root / "binary").write_bytes(b"needle\0binary\n")
     (root / "text").write_text("needle\n")
-    for req in (request(), request(relative_path="binary")):
+    for req, expected in (
+        (request(), {"binary", "text"}),
+        (request(relative_path="binary"), {"binary"}),
+    ):
         batch = search.search(grant, req)
-        assert batch.events[-1]["data"]["stats"]["binary_files_skipped"] == 1
-        assert all(e[1] != "binary" for e in content(batch.events))
+        assert batch.events[-1]["data"]["stats"]["binary_files_skipped"] == 0
+        assert not batch.truncated
+        assert {e[1] for e in content(batch.events)} == expected
     with pytest.raises(CapabilityUnavailable, match="rg_rejected"):
         search.search(grant, request(relative_path="binary", pattern="["))
     assert {
