@@ -8,6 +8,9 @@ from binnacle.features.commands.command_contracts import (
     CommandBackend,
     CommandFailure,
     CommandReply,
+    read_log_range_snapshot,
+    read_log_snapshot,
+    snapshot_size,
 )
 from binnacle.features.commands.job_store import JobGone
 from binnacle.mcp.callctx import (
@@ -114,7 +117,9 @@ def _cursor_delta(
     read_start = 0 if requested_start is None else requested_start
     read_limit = 0 if requested_start is None else chunk_size
     try:
-        data, size_at_open = backend.read_log_range(job_id, read_start, read_limit)
+        data, size_at_open = read_log_range_snapshot(
+            backend, job_id, read_start, read_limit, snapshot_size(state)
+        )
     except JobGone:
         raise _no_job_error(job_id) from None
 
@@ -264,7 +269,8 @@ def job_status(
     cursor_fields: dict | None = None
     cursor_log_bytes: int | None = None
     if cursor is None:
-        log_text = backend.read_log(job_id).decode("utf-8", errors="replace")
+        data = read_log_snapshot(backend, job_id, snapshot_size(state))
+        log_text = data.decode("utf-8", errors="replace")
         selected_tail = _tail(log_text, max(1, tail_lines))
         log_tail, log_tail_clipped, omitted_chars = job_output.clip_head_tail_hard(
             selected_tail, backend.max_output_chars

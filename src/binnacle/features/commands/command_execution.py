@@ -13,6 +13,8 @@ from binnacle.features.commands.command_contracts import (
     ForegroundExecution,
     ForegroundRequest,
     ForegroundResult,
+    read_log_snapshot,
+    snapshot_size,
 )
 from binnacle.features.commands.run_command_evidence import record_auto_match
 from binnacle.features.commands.run_command_telemetry import DispatchPlan
@@ -22,9 +24,10 @@ log = logging.getLogger("binnacle.run_command")
 
 
 def _shaped_output(
-    backend: CommandBackend, job_id: str, tail_lines: int | None
+    backend: CommandBackend, job_id: str, tail_lines: int | None, size: int | None
 ) -> job_output.RunCommandOutputShape:
-    log_text = backend.read_log(job_id).decode("utf-8", errors="replace")
+    data = read_log_snapshot(backend, job_id, size)
+    log_text = data.decode("utf-8", errors="replace")
     return job_output.shape_run_command_output(
         log_text, backend.max_output_chars, tail_lines
     )
@@ -115,7 +118,7 @@ def run_command(
     plan.log_success(
         call_id, job_id, returned_state, owner_roundtrip_ms, owner_instance
     )
-    shape = _shaped_output(backend, job_id, tail_lines)
+    shape = _shaped_output(backend, job_id, tail_lines, snapshot_size(state))
     output, truncated = shape.output, shape.truncated
     _log_output_shaping(
         call_id,

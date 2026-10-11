@@ -2,10 +2,10 @@
 
 The Linux engine measures the log size in ``jobs.job_state`` and the tools
 read the text afterwards, so a burst landing between the two made a reply's
-byte count disagree with its text. The durable backend now pins the next log
-read of a job to the size its state measured (append-only prefix), as r5 L2c
-did for the Darwin manager. A hook appends to the log right after every size
-read, so each test forces the race deterministically on every OS.
+byte count disagree with its text. Since r6 W2 X1e (SD-74) the tools pass
+the size a state measured explicitly to the log read (append-only prefix); the
+backend keeps no pin. A hook appends to the log right after every size read,
+so each test forces the race deterministically on every OS.
 """
 
 import json
@@ -22,6 +22,11 @@ from binnacle.features.commands import (
     jobs,
 )
 from binnacle.features.commands.command_backend import DurableCommandBackend
+from binnacle.features.commands.command_contracts import (
+    read_log_range_snapshot,
+    read_log_snapshot,
+    snapshot_size,
+)
 
 JOB = "aaaaaaaaaaaa"
 OTHER = "bbbbbbbbbbbb"
@@ -115,28 +120,33 @@ def test_job_status_cursors_end_where_their_bytes_end(burst):
     assert (end["delta_start"], end["delta_end"], end["log_bytes"]) == (9, 9, 9)
 
 
-def test_log_reads_return_the_prefix_their_state_measured(tmp_path, monkeypatch):
-    """The pairing itself: only the next read of that same job is pinned."""
+def test_log_reads_return_the_prefix_their_size_measured(tmp_path, monkeypatch):
+    """The pairing itself: the size is a value passed to the read, never a pin."""
     monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path / "jobs")
     log = _spool(tmp_path / "jobs", JOB, b"m1\n")
     _spool(tmp_path / "jobs", OTHER, b"b\n")
     backend = DurableCommandBackend()
-    assert backend.job_state(JOB)["log_bytes"] == 3
+    size = snapshot_size(backend.job_state(JOB))
+    assert size == 3
     with log.open("ab") as out:
         out.write(b"m2\n")
-    assert backend.read_log(JOB) == b"m1\n"
-    assert backend.read_log(JOB) == b"m1\nm2\n"  # consumed: unpaired
-    backend.job_state(JOB)
+    assert read_log_snapshot(backend, JOB, size) == b"m1\n"
+    assert backend.read_log(JOB) == b"m1\nm2\n"  # the backend keeps no size
+    assert read_log_snapshot(backend, JOB, size) == b"m1\n"  # a value: not consumed
+    size = snapshot_size(backend.job_state(JOB))
     with log.open("ab") as out:
         out.write(b"m3\n")
-    assert backend.read_log_range(JOB, 3, 100) == (b"m2\n", 6)
-    assert backend.await_exit(JOB, 0)["log_bytes"] == 9  # a waited state pins too
+    assert read_log_range_snapshot(backend, JOB, 3, 100, size) == (b"m2\n", 6)
+    size = snapshot_size(backend.await_exit(JOB, 0))
+    assert size == 9  # a waited state measures too
     with log.open("ab") as out:
         out.write(b"m4\n")
-    assert backend.read_log(JOB) == b"m1\nm2\nm3\n"
-    backend.job_state(OTHER)  # another job's state never pins this one
-    assert backend.read_log_range(JOB, 0, 100) == (b"m1\nm2\nm3\nm4\n", 12)
-    backend.job_state(JOB)
+    assert read_log_snapshot(backend, JOB, size) == b"m1\nm2\nm3\n"
+    backend.job_state(OTHER)  # another job's state never sizes this one
+    whole = (b"m1\nm2\nm3\nm4\n", 12)
+    assert read_log_range_snapshot(backend, JOB, 0, 100, None) == whole
+    assert backend.read_log_range(JOB, 0, 100) == whole
+    size = snapshot_size(backend.job_state(JOB))
     log.write_bytes(b"")  # not append-only any more: never invent a prefix
-    assert backend.read_log_range(JOB, 0, 100) == (b"", 0)
-    assert backend.read_log(JOB) == b""
+    assert read_log_range_snapshot(backend, JOB, 0, 100, size) == (b"", 0)
+    assert read_log_snapshot(backend, JOB, size) == b""
