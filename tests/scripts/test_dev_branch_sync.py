@@ -6,6 +6,7 @@ import subprocess
 
 import pytest
 
+from scripts import dev_branch_sync as sync
 from tests import dev_branch_sync_support as support
 from tests.dev_branch_sync_support import Fixture, commit, git
 
@@ -23,10 +24,13 @@ def test_tracking_check_and_safe_apply(
         git(case.repo, "branch", "-d", "master")
         git(case.repo, "update-ref", "-d", "refs/remotes/origin/master")
     target = case.advance()
+    branches = git(case.repo, "for-each-ref", "refs/heads/")
     code, report = case.run(capsys)
     assert code == 1 and report["result"] == "needs-sync"
     assert git(case.repo, "rev-parse", "origin/master") == target
     assert git(case.wt, "rev-parse", "HEAD") == case.initial
+    assert git(case.repo, "for-each-ref", "refs/heads/") == branches
+    assert not git(case.repo, "for-each-ref", "refs/binnacle-sync/")
     code, report = case.run(capsys, "--apply")
     assert code == 0 and report["actions"] == [
         "fast-forward-local-base",
@@ -35,6 +39,16 @@ def test_tracking_check_and_safe_apply(
     assert git(case.repo, "rev-parse", "master") == target
     assert git(case.wt, "rev-parse", "HEAD") == target
     assert case.run(capsys, "--apply")[1]["actions"] == []
+
+
+def test_check_help_discloses_ref_mutation(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        sync.main(["--help"])
+    assert exc.value.code == 0
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert "mutates refs, not a dry run" in help_text
+    assert "Default mode is --check" in help_text
+    assert "mutates remote-tracking refs, not local branches" in help_text
 
 
 @pytest.mark.parametrize("history", ["behind", "ahead", "diverged", "both", "guard"])

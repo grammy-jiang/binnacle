@@ -131,6 +131,10 @@ class Sync(SyncCore):
 
     def synchronize(self, apply: bool, report: dict[str, object]) -> int:
         self.validate_refs()
+        if errors := self.url_rewrite_errors():
+            report["refusals"] = [f"Ambiguous publication configuration: {errors}"]
+            report["result"] = "refused"
+            return 2
         heads = self.remote_heads()
         target = heads[f"refs/heads/{self.base}"]
         published = heads.get(f"refs/heads/{self.branch}")
@@ -229,7 +233,10 @@ class Sync(SyncCore):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        epilog="Default mode is --check: it mutates remote-tracking refs, not local branches.",
+    )
     parser.add_argument("--repo", type=Path, required=True)
     parser.add_argument("--worktree", type=Path, required=True)
     parser.add_argument("--branch", required=True)
@@ -243,7 +250,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lock-timeout", type=float, default=12)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--apply", action="store_true")
-    mode.add_argument("--check", action="store_true", help="Update tracking refs only")
+    mode.add_argument(
+        "--check",
+        action="store_true",
+        help="Fetch and update remote-tracking refs; mutates refs, not a dry run",
+    )
     args = parser.parse_args(argv)
     report: dict[str, object] = {
         "mode": "apply" if args.apply else "check",

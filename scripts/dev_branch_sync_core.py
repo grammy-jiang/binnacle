@@ -203,6 +203,35 @@ class SyncCore:
                 raise SyncError(f"Symbolic branch/tracking ref is unsafe: {ref}")
         return inventory
 
+    def url_rewrite_errors(self) -> tuple[str, ...]:
+        """Reject any applicable rewrite, even if Git selects a longer prefix."""
+        errors = []
+        for checkout in (self.repo, self.wt):
+            urls = []
+            for field in ("url", "pushurl"):
+                values = self.git(
+                    checkout,
+                    "config",
+                    "--null",
+                    "--get-all",
+                    f"remote.{self.remote}.{field}",
+                    ok=(0, 1),
+                )
+                urls.extend(values.split("\0")[:-1])
+            rewrites = self.git(
+                checkout,
+                "config",
+                "--null",
+                "--get-regexp",
+                r"^url\..*\.(pushinsteadof|insteadof)$",
+                ok=(0, 1),
+            )
+            for entry in rewrites.split("\0")[:-1]:
+                key, _, prefix = entry.partition("\n")
+                if any(url.startswith(prefix) for url in urls):
+                    errors.append(f"{checkout}: {key}")
+        return tuple(errors)
+
     def publication_errors(self) -> tuple[str, ...]:
         expected = {
             f"branch.{self.branch}.remote": self.remote,
@@ -214,7 +243,7 @@ class SyncCore:
             f"remote.{self.remote}.push": "",
             f"remote.{self.remote}.pushurl": "",
         }
-        errors = []
+        errors = list(self.url_rewrite_errors())
         for checkout in (self.repo, self.wt):
             for key, value in expected.items():
                 values = self.git(
