@@ -34,6 +34,7 @@ from binnacle.platform.contracts.darwin_contracts import (
     AuthorityObservation,
     OwnedWitness,
 )
+from binnacle.platform.contracts.process_contracts import OwnedJobExit
 
 _FOREGROUND_SCOPE = (
     "isolated process group; new process groups/sessions (setsid, set -m) "
@@ -211,6 +212,34 @@ def _validate_process_layout() -> None:
         os.getpgrp(),
     ):
         raise OSError("kinfo_proc self round-trip failed")
+
+
+def _returncode(result: OwnedJobExit | None) -> int | None:
+    if result is None:
+        return None
+    return -result.signal if result.signal is not None else result.exit_code
+
+
+def birth_token(birth: tuple[int, int]) -> int:
+    """Encode the kinfo_proc p_starttime (sec, usec) as the frozen ``int`` birth."""
+    return birth[0] * 1_000_000 + birth[1]
+
+
+class _OwnedLeaderWait:
+    """The one wait4 site for R4 manager-owned job leaders (sole reaper).
+
+    Only DarwinJobProcessOwner constructs it, for a pid it spawned in this
+    incarnation and has not reaped; never for a pid read from disk or a peer.
+    """
+
+    __slots__ = ("_pid",)
+
+    def __init__(self, pid: int) -> None:
+        self._pid = pid
+
+    def wait4(self, *, block: bool = False) -> tuple[int, int]:
+        waited, status, _usage = os.wait4(self._pid, 0 if block else os.WNOHANG)
+        return waited, status
 
 
 class _ForegroundOwner:

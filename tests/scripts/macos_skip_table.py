@@ -70,6 +70,7 @@ live/test_deployment_smoke.py | baseline: opt-in live host (BINNACLE_LIVE=1)
 scripts/test_macos_collection_native.py | T0: Darwin host probe (sw_vers); the rest of the module runs everywhere
 platform/darwin/test_foreground_commands.py | A2: per-test Darwin posix_spawn owned-child mechanism
 platform/darwin/test_process_native.py | A2: per-test Darwin kqueue/posix_spawn child and witness probes
+platform/darwin/test_job_process_owner.py | A2: per-test Darwin posix_spawn/kqueue manager-owned job leaders (R4 J1, A2 successor)
 platform/darwin/test_ipc_generation.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID contract
 platform/darwin/test_job_manager_service.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID job-manager IPC (R4 J2, A3 successor)
 platform/darwin/test_ipc_launchd.py | A3: per-test opt-in real launchd bootstrap (BINNACLE_A3_LAUNCHD=1)
@@ -107,6 +108,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/scripts/test_macos_collection_native.py": 1,
     "tests/platform/darwin/test_foreground_commands.py": 1,
     "tests/platform/darwin/test_process_native.py": 1,
+    "tests/platform/darwin/test_job_process_owner.py": 1,
     "tests/platform/darwin/test_ipc_generation.py": 1,
     "tests/platform/darwin/test_job_manager_service.py": 1,
     "tests/platform/darwin/test_ipc_launchd.py": 3,

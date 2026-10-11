@@ -16,12 +16,13 @@ import fcntl
 import math
 import os
 import selectors
+import subprocess  # TimeoutExpired only; no process is created or waited here
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from threading import Event
-from typing import BinaryIO, Literal
+from threading import Event, RLock
+from typing import BinaryIO, Literal, Protocol
 from uuid import uuid4
 
 from binnacle.platform.contracts.darwin_contracts import (
@@ -31,8 +32,10 @@ from binnacle.platform.contracts.darwin_contracts import (
     OwnedWitness,
 )
 from binnacle.platform.contracts.process_contracts import (
+    JobOwnerLost,
     JobProcessIdentity,
     JobSignalLease,
+    OwnedJobExit,
     ProcessHandle,
     UnverifiedJobProcess,
 )
@@ -40,6 +43,7 @@ from binnacle.platform.darwin.process_authority import (
     DirectChildExitObserver,
     _ForegroundOwner,
     _is_darwin,
+    _returncode,
     _unavailable,
     _unknown,
     observe_authority,
@@ -146,6 +150,110 @@ class DarwinProcessBackend:
     def boot_id(self) -> str:
         # No private sysctl/libproc substitute and no fabricated boot identity.
         raise _unknown("darwin_boot_identity_unavailable")
+
+
+class _OwnedExitSource(Protocol):
+    def wait(self, job_id: str, timeout: float | None) -> OwnedJobExit | None: ...
+
+    def exit_for(self, job_id: str) -> OwnedJobExit | None: ...
+
+
+class OwnedProcessHandle:
+    """ProcessHandle over a manager-owned job (R4 J1).
+
+    wait() blocks only on the owner's reaper condition. It never calls waitpid
+    and never starts a waiter thread, and it keeps subprocess.TimeoutExpired.
+    """
+
+    def __init__(self, owner: _OwnedExitSource, job_id: str, pid: int) -> None:
+        self._owner = owner
+        self._job_id = job_id
+        self._pid = pid
+
+    @property
+    def pid(self) -> int:
+        return self._pid
+
+    @property
+    def returncode(self) -> int | None:
+        return _returncode(self._owner.exit_for(self._job_id))
+
+    def wait(self, timeout: float | None = None) -> int:
+        # Decide from one exit snapshot: the reaper may reap between the
+        # timed-out wait() and a later read, which is an exit, not a loss.
+        result = self._owner.wait(self._job_id, timeout)
+        if result is None:
+            result = self._owner.exit_for(self._job_id)
+            if result is None:
+                raise subprocess.TimeoutExpired(
+                    ["binnacle-job", self._job_id], timeout or 0.0
+                )
+        code = _returncode(result)
+        if code is None:
+            raise JobOwnerLost("darwin_job_reap_unverified")
+        return code
+
+
+@dataclass(slots=True)
+class _OwnedJob:
+    job_id: str
+    pid: int
+    birth: tuple[int, int]
+    exit_seen: bool = False
+    reaped: bool = False
+    lost: bool = False
+    reason_code: str = "darwin_job_owned"
+    stop_requested: bool = False
+    close_signalled: bool = False
+    straggler_deadline: float | None = None
+    exit: OwnedJobExit | None = None
+
+
+class _OwnedExitTable:
+    """Released jobs leave the scans; id and exit stay (no duplicate writer)."""
+
+    _lock: RLock
+    _jobs: dict[str, _OwnedJob]
+    _by_pid: dict[int, _OwnedJob]
+    _released: dict[str, _OwnedJob]
+
+    def _check_owner(self) -> None:
+        raise NotImplementedError
+
+    def wait(self, job_id: str, timeout: float | None) -> OwnedJobExit | None:
+        raise NotImplementedError
+
+    def _lookup_locked(self, job_id: str) -> _OwnedJob | None:
+        return self._jobs.get(job_id) or self._released.get(job_id)
+
+    def handle(self, job_id: str) -> OwnedProcessHandle:
+        """A ``ProcessHandle`` whose wait() is served by the reaper's condition."""
+        with self._lock:
+            job = self._lookup_locked(job_id)
+            if job is None:
+                raise UnverifiedJobProcess("darwin_job_not_owned")
+            return OwnedProcessHandle(self, job_id, job.pid)
+
+    def exit_for(self, job_id: str) -> OwnedJobExit | None:
+        with self._lock:
+            job = self._lookup_locked(job_id)
+            return None if job is None else job.exit
+
+    def release(self, job_id: str) -> None:
+        """1.2.0-additive: ack a persisted terminal record; close() omits it."""
+        self._check_owner()
+        with self._lock:
+            if job_id in self._released:
+                return
+            job = self._jobs.get(job_id)
+            if job is None:
+                raise UnverifiedJobProcess("darwin_job_not_owned")
+            if job.exit is None and not job.lost:
+                raise ValueError("darwin_job_not_terminal")
+            del self._jobs[job_id]
+            if self._by_pid.get(job.pid) is job:
+                del self._by_pid[job.pid]
+            self._released[job_id] = job
 
 
 class _CommandPipes:
