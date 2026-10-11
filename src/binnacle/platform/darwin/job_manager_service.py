@@ -58,8 +58,8 @@ class ReleasingJobOwner(pc.DarwinJobOwner, Protocol):
 
 
 @contextmanager
-def _flock(path: Path, operation: int, busy: str = "") -> Iterator[None]:
-    """CLOEXEC so spawned jobs never inherit (and pin) a manager lock."""
+def _flock(path: Path, operation: int, busy: str = "") -> Iterator[int]:
+    """CLOEXEC so spawned jobs never inherit (and pin) a manager lock (yields it)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC
     fd = os.open(path, flags, 0o600)
@@ -68,7 +68,7 @@ def _flock(path: Path, operation: int, busy: str = "") -> Iterator[None]:
             fcntl.flock(fd, operation)
         except BlockingIOError as exc:
             raise RuntimeError(busy) from exc
-        yield
+        yield fd
     finally:
         os.close(fd)
 

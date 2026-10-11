@@ -94,8 +94,8 @@ def serve_job_manager(
     manager.stop_pending = lambda: stop_pending_refusal(
         socket_path, manager.owner_instance_id
     )
-    with jobs_dir_writer(manager.jobs_dir):
-        manager.held_jobs_dir = os.path.realpath(manager.jobs_dir)  # M1-2, STEER-01
+    with jobs_dir_writer(manager.jobs_dir) as lock_fd:
+        manager.hold_jobs_dir(lock_fd)  # M1-2, STEER-01; R-M1-N1: fail closed
         recovered = manager.recover()
         log.info("event=job_manager_start pid=%d recovered=%d", os.getpid(), recovered)
         halt, died = threading.Event(), threading.Event()
