@@ -187,6 +187,47 @@ looks like image/png) — content not shown.`
    naming the path, never an internal error (property test, 2026-09-13).
 2. **Stat**: missing → error E1; directory → E2; > `READ_MAX_FILE_BYTES`
    → E3.
+   **Open and verify (Linux, r6 W2 X3b, SD-76)**: this is verify-after-open,
+   not confinement. `fd_walk.open_walked` opens the innermost root holding
+   the resolved path from `/` and traverses each directory below it with
+   `O_PATH|O_DIRECTORY|O_NOFOLLOW`, then opens the file name relative to its
+   parent descriptor with `O_RDONLY|O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC|O_NOCTTY`.
+   A component swapped for a symlink fails the walk, so nothing outside a
+   root is opened. `fd_walk.open_verified` then checks, in this order: the
+   kernel path (`/proc/self/fd/N`) is inside SOME configured root, else
+   `path_outside_root`; `(st_dev, st_ino)` equals the pair from the stat in
+   step 2, else `path_changed`; the object is a regular file, else
+   `not_a_regular_file` (a FIFO no longer blocks the call; `read_file`
+   words a FIFO, socket or device as below); `st_nlink > 0`,
+   else `path_changed` (a file deleted after the open is not served; a new
+   call reports E1). A symlink that the no-follow open refuses is
+   `path_outside_root` when its target is outside every root, else
+   `path_changed`; EACCES is `permission_denied`. A FIFO, a socket and a
+   character or block device are `special_file_unsupported` with the text
+   `special_file_unsupported.`, byte for byte as on Darwin (X3b-a3), also
+   when the open itself fails (a socket is ENXIO, a disk device EACCES).
+   `read_file` words them: `fd_walk` still raises `not_a_regular_file`,
+   `file_io_failed` or `permission_denied`, and an lstat that shows the
+   checked `(st_dev, st_ino)` with a FIFO, socket or device type turns that
+   into `special_file_unsupported`; `path_outside_root` and `path_changed`
+   are never reworded. A mode-000 regular file stays `permission_denied`
+   on Linux: Darwin's `permission_denied_tcc_possible` carries a macOS TCC
+   hint that does not apply on Linux, so this code differs between the OSes
+   by design. The content
+   is read only from the verified descriptor; the path is never opened
+   again. The raw descriptor is read with an `os.read` loop; each request
+   asks only for the bytes still allowed, so at most
+   `READ_MAX_FILE_BYTES` + 1 bytes are read from the descriptor (no buffered
+   file object, so no read-ahead past the bound; RX3b2-F1, RX3b3-F1). A file
+   at or under the limit also gets a final request that sees end of file. The read stops after
+   `READ_MAX_FILE_BYTES` + 1 bytes, so a file
+   that grew past the limit after the stat is E3, with the same text as at
+   the stat. Every path whose target lies in any configured root
+   (cross-root links, `..` into an outer root) reads as in r6. Darwin keeps its own `READ_FLAGS` walk and
+   never calls `open_verified`. `open_verified` without a parent descriptor
+   still opens by path and follows intermediate symlinks: an outside object
+   can be opened (a device open side effect, same uid only) before the
+   `path_outside_root` refusal; `read_file` does not use that form.
 3. **Sniff**: extension in the known-text allowlist → text; else read the
    first 8 KB — NUL byte present → `kind: "binary"` result (message names
    the size and a MIME guess; not an error).
