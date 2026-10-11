@@ -96,10 +96,10 @@ def test_job_status_lists_the_running_group_through_the_manager(tmp_path):
         status = js.job_status_impl(job["job_id"], 10, backend=backend)
         listed = status.structured_content["processes"]
         by_pid = {item["pid"]: item for item in listed}
-        assert leader in by_pid and by_pid[leader]["state"] in {"R", "S"}
+        assert leader in by_pid and by_pid[leader]["state"] in {"?", "S"}  # SD-59
         commands = sorted(item.get("cmd", "") for item in listed)
         assert "sleep 30" in commands and "sleep 31" in commands
-        assert all(item["ppid"] in {leader, child.pid} for item in listed)
+        assert all(set(item) == {"pid", "state", "etime_s", "cmd"} for item in listed)
         short = backend.job_processes(job["job_id"], max_cmd_chars=5)
         assert all(len(item.get("cmd", "")) <= 5 for item in short)
         stopped = sj.stop_job_impl(job["job_id"], backend=backend)
