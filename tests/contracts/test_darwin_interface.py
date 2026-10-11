@@ -1,4 +1,4 @@
-"""CR1A-02 permits one Darwin description change; all eight schemas stay pinned."""
+"""Reviewed Darwin descriptions and release scope preserve all eight schemas."""
 
 import asyncio
 import json
@@ -9,6 +9,8 @@ from fastmcp import Client
 from binnacle.application import create_application
 from binnacle.config import RootsSettings, Settings
 from binnacle.features.commands.restricted_backend import RestrictedCommandBackend
+from binnacle.features.files.paths import FileToolAccess
+from binnacle.platform.contracts.capability_contracts import Capability, CapabilityState
 
 
 def test_native_wire_schema_preserves_v101_with_declared_description_exception(
@@ -20,10 +22,18 @@ def test_native_wire_schema_preserves_v101_with_declared_description_exception(
             / "docs/os-independent-stage1-evidence/os0-raw-mcp-surface.json"
         ).read_text()
     )["profile_surfaces"]["default"]
+    settings = Settings(roots=RootsSettings(default_root=tmp_path, extra_roots=()))
     root = create_application(
-        settings=Settings(roots=RootsSettings(default_root=tmp_path, extra_roots=())),
+        settings=settings,
         token="test",
         backend=RestrictedCommandBackend(),
+        file_access=FileToolAccess(
+            roots=settings.roots,
+            files=None,
+            search=None,
+            generation="schema",
+            capability=Capability(CapabilityState.UNAVAILABLE, "test", "schema"),
+        ),
     )
 
     async def inspect():
@@ -45,6 +55,14 @@ def test_native_wire_schema_preserves_v101_with_declared_description_exception(
     assert "descendants_unverified=true" in description
     original = next(tool for tool in baseline["tools"] if tool["name"] == "run_command")
     native["description"] = original["description"]
+    search = next(tool for tool in actual if tool["name"] == "search_text")
+    assert "per-file size limit: 16 MiB (16,777,216 bytes)" in search["description"]
+    assert "remaining aggregate 16 MiB input budget" in search["description"]
+    search["description"] = next(
+        tool["description"]
+        for tool in baseline["tools"]
+        if tool["name"] == "search_text"
+    )
     assert actual == baseline["tools"]
 
 

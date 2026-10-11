@@ -38,8 +38,8 @@ async def check():
         import json
         from pathlib import Path
         original = json.loads(Path("docs/os-independent-stage1-evidence/os0-raw-mcp-surface.json").read_text())
-        old_run = next(t for t in original["profile_surfaces"]["default"]["tools"] if t["name"] == "run_command")
-        normalized = [t.model_copy(update={"description": old_run["description"]}) if t.name == "run_command" else t for t in listed]
+        descriptions = {t["name"]: t["description"] for t in original["profile_surfaces"]["default"]["tools"]}
+        normalized = [t.model_copy(update={"description": descriptions[t.name]}) if t.name in ("run_command", "search_text") else t for t in listed]
         assert {t.name: digest(surface(t)) for t in normalized} == SURFACE_SHA256["default"]
         for name, arguments in calls.items():
             result = await client.call_tool(name, arguments, raise_on_error=False)
