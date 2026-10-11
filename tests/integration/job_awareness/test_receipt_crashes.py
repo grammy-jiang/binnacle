@@ -7,7 +7,7 @@ import sqlite3
 import sys
 import types
 import unittest
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
@@ -340,7 +340,7 @@ class CrashTests(LabFixture, unittest.TestCase):
         with patch.object(ReceiptTransaction, "issue_proof", failed):
             self.denied(service.issue(self.handle, self.snapshot, 0))
         self.assertEqual(self.counts(), (0, 0, 0))
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(db.execute("PRAGMA journal_mode").fetchone()[0], "delete")
         self.ok(service.issue(self.handle, self.snapshot, 0))
 

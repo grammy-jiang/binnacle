@@ -37,7 +37,7 @@ async def test_invalid_success_suppresses():
             content=[TextContent(type="text", text="original")],
             structured_content={"ok": "invalid"},
         )
-        result = await adapter.adapt(original)
+        result = await adapter.adapt_bound(original)
         assert result is original  # nosec B101 - pytest assertion
         assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion
         assert META_KEY not in (original.meta or {})  # nosec B101 - pytest assertion
@@ -54,7 +54,7 @@ async def test_disabled_identity():
             adapter = lab.adapter(enabled=enabled, exclusive=exclusive, schema=schema)
             value = original()
             before = value.model_dump_json()
-            assert await adapter.adapt(value) is value  # nosec B101 - pytest assertion
+            assert await adapter.adapt_bound(value) is value  # nosec B101 - pytest assertion
             assert value.model_dump_json() == before  # nosec B101 - pytest assertion
             assert adapter.last_meter is None  # nosec B101 - pytest assertion
         assert lab.catalog_reads == lab.queries == lab.payload.reads == 0  # nosec B101 - pytest assertion
@@ -124,9 +124,9 @@ async def test_six_failures_preserve_envelope():
                     else (lab, "query" if failure == "query" else "observe")
                 )
                 with patch.object(obj, method, side_effect=RuntimeError("secret")):
-                    assert await adapter.adapt(value) is value  # nosec B101 - pytest assertion
+                    assert await adapter.adapt_bound(value) is value  # nosec B101 - pytest assertion
             else:
-                assert await adapter.adapt(value) is value  # nosec B101 - pytest assertion
+                assert await adapter.adapt_bound(value) is value  # nosec B101 - pytest assertion
             assert value.model_dump_json() == before  # nosec B101 - pytest assertion
 
 
@@ -151,7 +151,7 @@ async def test_large_shallow_result_preflight():
             value = original()
             value.structured_content = {key: [object()] * 10000}
             adapter = lab.adapter(enabled=True, schema={"type": "object"})
-            assert await adapter.adapt(value) is value  # nosec B101 - pytest assertion
+            assert await adapter.adapt_bound(value) is value  # nosec B101 - pytest assertion
             assert adapter.last_meter.nodes < 30  # nosec B101 - pytest assertion
             assert adapter.last_meter.copied_bytes == adapter.last_meter.predicates == 0  # nosec B101 - pytest assertion
             assert lab.queries == lab.catalog_reads == 0  # nosec B101 - pytest assertion
@@ -267,7 +267,7 @@ async def test_malformed_native_fields_deny_before_reads():
         ):
             value = original()
             value.__dict__[field] = malformed
-            assert await lab.adapter(enabled=True).adapt(value) is value  # nosec B101 - pytest assertion
+            assert await lab.adapter(enabled=True).adapt_bound(value) is value  # nosec B101 - pytest assertion
             assert lab.queries == lab.catalog_reads == 0  # nosec B101 - pytest assertion
 
 
@@ -290,7 +290,7 @@ async def test_whole_native_projection_and_carrier_limit():
             json.dumps(wire, ensure_ascii=False, separators=(",", ":")).encode()
         )
         baseline = meter.bytes
-        adapted = await lab.adapter(enabled=True).adapt(value)
+        adapted = await lab.adapter(enabled=True).adapt_bound(value)
         walk(adapted, meter)
         added = meter.bytes - baseline
         for limit in (1024, 1025):
@@ -298,7 +298,7 @@ async def test_whole_native_projection_and_carrier_limit():
                 "binnacle.mcp.job_awareness_hint.META_KEY",
                 META_KEY + "x" * (limit - added),
             ):
-                result = await lab.adapter(enabled=True).adapt(value)
+                result = await lab.adapter(enabled=True).adapt_bound(value)
             if limit == 1024:
                 assert result is not value  # nosec B101 - pytest assertion
                 walk(result, meter)
@@ -314,7 +314,7 @@ async def test_plain_dict_cannot_impersonate_native_content():
         value.__dict__["content"] = [
             {"type": "text", "text": "forged native", "_meta": None}
         ]
-        assert await lab.adapter(enabled=True).adapt(value) is value  # nosec B101 - pytest assertion
+        assert await lab.adapter(enabled=True).adapt_bound(value) is value  # nosec B101 - pytest assertion
         assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion
 
 
@@ -376,7 +376,7 @@ async def test_preflight_rejects_callback_traps(slot):
                 trap.update(target.__dict__)
             object.__setattr__(target, name, trap)
         calls.clear()
-        result = await lab.adapter(enabled=True).adapt(value)
+        result = await lab.adapter(enabled=True).adapt_bound(value)
         assert calls == [] and result is value  # nosec B101 - pytest assertion
         assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion
 
@@ -415,7 +415,7 @@ async def test_renderer_utf8_limit_and_shape(case):
         elif case == "extra":
             object.__setattr__(hint, "extra", "unsupported")
         adapter.bindings = replace(adapter.bindings, render=lambda *_: hint)
-        result = await adapter.adapt(value)
+        result = await adapter.adapt_bound(value)
         assert lab.catalog_reads == lab.queries == 1  # nosec B101 - pytest assertion
         if case in ("512", "unicode"):
             assert result is not value and result.meta[META_KEY] == text  # nosec B101 - pytest assertion

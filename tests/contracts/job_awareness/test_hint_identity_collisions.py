@@ -91,7 +91,7 @@ def _compose(app, topology, version, ran):
 
 async def _run(lab, app, bound, name, protocol, carrier=HintCarrier.META):
     adapter = lab.adapter(enabled=True, carrier=carrier)
-    adapter.server_info = app._mcp_server.server_info_stamp
+    adapter.bind_server(app)
     bound_adapter = replace(adapter, tool=bound)
     seen: list[ToolResult] = []
     middleware = ExecutionCarrier(app, bound_adapter, seen)

@@ -8,6 +8,7 @@ asserts that the authority fails closed.
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -214,7 +215,7 @@ class IssueGrantTests(AuthorityFixture, unittest.TestCase):
             self.assert_denied(
                 self.authority.issue_grant(person, (self.job,), frozenset(Scope))
             )
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(db.execute("SELECT count(*) FROM grants").fetchone()[0], 0)
 
     def test_job_sets_outside_bounds_are_denied(self):
@@ -268,26 +269,26 @@ class RegisteredHandleTests(AuthorityFixture, unittest.TestCase):
 
     def test_tampered_ledger_capability_digest_denies(self):
         _, _, handle = self.started_grant()
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("UPDATE grants SET capability_sha256=?", ("e" * 64,))
         self.assertIs(self.check(handle), AuthorityDecision.DENIED)
 
     def test_tampered_ledger_credential_digest_denies(self):
         _, _, handle = self.started_grant()
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("UPDATE grants SET credential_sha256=?", ("e" * 64,))
         self.assertIs(self.check(handle), AuthorityDecision.DENIED)
 
     def test_tampered_ledger_claims_deny(self):
         _, _, handle = self.started_grant()
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             claims = db.execute("SELECT claims FROM grants").fetchone()[0]
             db.execute("UPDATE grants SET claims=?", (claims.replace("5", "8"),))
         self.assertIs(self.check(handle), AuthorityDecision.DENIED)
 
     def test_missing_ledger_record_denies(self):
         _, _, handle = self.started_grant()
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("PRAGMA foreign_keys=OFF")
             db.execute("DELETE FROM grants")
         self.assertIs(self.check(handle), AuthorityDecision.DENIED)

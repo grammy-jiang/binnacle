@@ -2,6 +2,7 @@
 
 import sqlite3
 import unittest
+from contextlib import closing
 from dataclasses import replace
 
 from binnacle.features.commands.job_awareness.models import (
@@ -70,7 +71,7 @@ class ReceiptQueryContract(fixture_store.StoreFixture, unittest.TestCase):
         self.assertEqual(before, self.path.read_bytes())
 
     def test_unknown_schema_fails_without_migration(self):
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("PRAGMA user_version=99")
         before = self.path.read_bytes()
         self.assertEqual(

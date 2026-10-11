@@ -88,12 +88,19 @@ def canonical_schema(schema: Any) -> str:
     )
 
 
-def producer_identity(tool: object) -> Identity | None:
+def producer_identity(
+    tool: object, expected: Identity | None = None
+) -> Identity | None:
     """Return (name, version, canonical schema) of a native Tool, else None.
 
     None means unknown: the caller must suppress. The exact-type check runs
     before any attribute, key lookup or equality, so a subclass (hostile or
     not) is unknown and never gets a callback.
+
+    ADV-G4-03: the cheap checks (type, field shape, name, version) run first.
+    With ``expected``, a name or version that differs from it returns None
+    before the schema is canonicalized, so the costly walk runs only for a
+    producer that can still match. The canonical schema is computed last.
     """
     try:
         if not native_tool(tool):
@@ -114,6 +121,8 @@ def producer_identity(tool: object) -> Identity | None:
             or (version is not None and len(version) > 128)
             or type(schema) is not dict
         ):
+            return None
+        if expected is not None and (name, version) != expected[:2]:
             return None
         return name, version, canonical_schema(schema)
     except Exception:  # noqa: BLE001 - unknown producer identity suppresses

@@ -6,6 +6,7 @@ import importlib
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -129,7 +130,7 @@ class LabFixture:
         self.assertEqual(result, Failure(BoundaryError(ErrorCode.DENIED)))
 
     def counts(self):
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             return tuple(
                 db.execute(statement).fetchone()[0]
                 for statement in (
@@ -333,7 +334,7 @@ class GrantTests(LabFixture, unittest.TestCase):
         self.denied(self.authority.verify(self.credential, self.capability, Scope.READ))
 
     def test_independent_credential_and_capability_digests(self):
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             capability_digest, credential_digest = db.execute(
                 "SELECT capability_sha256,credential_sha256 FROM grants"
             ).fetchone()
