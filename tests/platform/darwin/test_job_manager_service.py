@@ -452,7 +452,7 @@ def test_killed_manager_jobs_become_unknown_and_endpoint_reclaimed(runtime, tmp_
     root, jobs = runtime / "rt", runtime / "jobs"
     argv = [sys.executable, __file__, str(root), str(jobs)]
     child = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    from tests.platform.darwin import _signal_safety as safety
+    from tests import signal_safety as safety
 
     pgid = birth = None
     try:

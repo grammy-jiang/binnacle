@@ -27,7 +27,7 @@ from typing import Any
 
 import pytest
 
-from tests.platform.darwin import _signal_safety as safety
+from tests import signal_safety as safety
 
 FULL_PARITY = "FULL_PARITY_NO_GO"
 TOOLS = "read_file list_files search_text edit_file write_file run_command job_status stop_job"

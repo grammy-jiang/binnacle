@@ -370,7 +370,7 @@ def test_unreadable_current_boot_identity_fails_closed(jobs_dir):
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="Darwin libproc")
 def test_verified_teardown_signal_skips_stale_or_reused_targets():
-    from tests.platform.darwin import _signal_safety as safety
+    from tests import signal_safety as safety
 
     proc = subprocess.Popen(["/bin/sleep", "30"], start_new_session=True)
     try:

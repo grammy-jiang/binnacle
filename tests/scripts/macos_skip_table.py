@@ -74,6 +74,7 @@ platform/darwin/test_job_process_owner.py | A2: per-test Darwin posix_spawn/kque
 platform/darwin/test_ipc_generation.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID contract
 platform/darwin/test_job_manager_service.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID job-manager IPC (R4 J2, A3 successor)
 platform/darwin/test_job_manager_entry.py | A3: per-test Darwin com.binnacle.jobs entry point, J1 owner and job-manager IPC (R4 J2r, A3 successor)
+platform/darwin/test_job_manager_resilience.py | A3: per-test Darwin libproc verified-teardown negative test (R4 J2t, RULE-NO-PKILL); the rest of the module runs everywhere
 platform/darwin/test_durable_tool_wiring.py | B0: per-test Darwin manager-owner tool composition (R4 J4); the owner call-site test runs everywhere
 platform/darwin/test_ipc_launchd.py | A3: per-test opt-in real launchd bootstrap (BINNACLE_A3_LAUNCHD=1)
 platform/darwin/test_search_parity.py | A4: in-body skip when APFS rejects a non-UTF-8 filename
@@ -116,6 +117,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_ipc_generation.py": 1,
     "tests/platform/darwin/test_job_manager_service.py": 1,
     "tests/platform/darwin/test_job_manager_entry.py": 1,
+    "tests/platform/darwin/test_job_manager_resilience.py": 1,
     "tests/platform/darwin/test_durable_tool_wiring.py": 1,
     "tests/platform/darwin/test_ipc_launchd.py": 3,
     "tests/platform/darwin/test_search_parity.py": 1,
