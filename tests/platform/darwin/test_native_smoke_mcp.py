@@ -289,7 +289,7 @@ def test_file_tools_happy_paths_and_denials(endpoint: Endpoint) -> None:
     assert "hello e0" in json.dumps(out["read"]["data"]) + out["read"]["text"]
     assert (root / "w.txt").read_text() == "edited\n"
     assert all(o["error"] for k, o in out.items() if k.startswith("deny_")), out
-    assert "secret" not in out["deny_root_escape"]["text"]
+    assert out["deny_root_escape"]["text"] == f"Path outside allowed roots ({root}): {sec}"  # fmt: skip
     assert (outside / "secret.txt").read_text() == "hello secret\n"
     assert not (outside / "x.txt").exists() and not (outside / "y").exists()
 
