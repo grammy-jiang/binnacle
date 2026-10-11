@@ -8,6 +8,7 @@ Linux and macOS, and nothing here skips a whole platform.
 
 import ast
 import importlib
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -32,30 +33,19 @@ CONTRACTS = (
 SUPPORT_MODULES = {"__init__.py", "conftest.py"}
 
 
+def _selection_module():
+    """The T0 skip scanner, loaded by path (tests/scripts is not a package)."""
+    path = ROOT / "tests/scripts/test_macos_test_selection.py"
+    spec = importlib.util.spec_from_file_location("_t0_skip_scanner", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _module_skips_everything(tree: ast.Module) -> bool:
-    """True when a module-level ``pytestmark`` skips the whole file."""
-    for node in tree.body:
-        if not (
-            isinstance(node, ast.Assign)
-            and any(
-                isinstance(t, ast.Name) and t.id == "pytestmark" for t in node.targets
-            )
-        ):
-            continue
-        marks = node.value.elts if isinstance(node.value, ast.List) else [node.value]
-        for mark in marks:
-            call = mark.func if isinstance(mark, ast.Call) else mark
-            if isinstance(call, ast.Attribute) and call.attr == "skip":
-                return True
-            if (
-                isinstance(mark, ast.Call)
-                and isinstance(call, ast.Attribute)
-                and call.attr == "skipif"
-            ):
-                condition = ast.unparse(mark.args[0]) if mark.args else ""
-                if "platform" in condition or "system" in condition:
-                    return True
-    return False
+    """True when any module-scope skip (mark, alias, call, autouse) hides tests."""
+    return bool(_selection_module().whole_module_skips(ast.unparse(tree)))
 
 
 def test_darwin_test_modules_use_default_discovery_names():
@@ -90,18 +80,39 @@ def test_no_darwin_test_module_skips_its_whole_platform():
         assert not _module_skips_everything(tree), path.name
 
 
-def test_whole_platform_skip_detector_rejects_blanket_skips():
-    blanket = ast.parse(
-        "import pytest, sys\n"
-        "pytestmark = pytest.mark.skipif(sys.platform != 'darwin', reason='x')\n"
-    )
-    assert _module_skips_everything(blanket)
-    assert _module_skips_everything(
-        ast.parse("import pytest\npytestmark = [pytest.mark.skip(reason='x')]\n")
-    )
+@pytest.mark.parametrize(
+    "source",
+    [
+        (
+            "import pytest, sys\n"
+            "pytestmark = pytest.mark.skipif(sys.platform != 'darwin', reason='x')\n"
+        ),
+        "import pytest\npytestmark = [pytest.mark.skip(reason='x')]\n",
+        (
+            "import pytest, sys\n"
+            "NATIVE = pytest.mark.skipif(sys.platform != 'darwin', reason='x')\n"
+            "pytestmark = NATIVE\n"
+        ),
+        (
+            "import pytest, sys\n"
+            "if sys.platform != 'darwin':\n"
+            "    pytest.skip('x', allow_module_level=True)\n"
+        ),
+        "import pytest\npytest.skip('x', allow_module_level=True)\n",
+    ],
+)
+def test_whole_platform_skip_detector_rejects_blanket_skips(source):
+    assert _module_skips_everything(ast.parse(source))
+
+
+def test_whole_platform_skip_detector_allows_narrow_skips():
     narrow = ast.parse(
-        "import pytest\npytestmark = pytest.mark.no_xdist\n"
-        "@pytest.mark.skipif(True, reason='x')\ndef test_a(): ...\n"
+        "import pytest, sys\npytestmark = pytest.mark.no_xdist\n"
+        "NATIVE = pytest.mark.skipif(sys.platform != 'darwin', reason='x')\n"
+        "@NATIVE\ndef test_a(): ...\n"
+        "@pytest.mark.skipif(True, reason='x')\ndef test_b(): ...\n"
+        "def test_c():\n"
+        "    if sys.platform != 'darwin':\n        pytest.skip('x')\n"
     )
     assert not _module_skips_everything(narrow)
 
