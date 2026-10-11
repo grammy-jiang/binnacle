@@ -10,24 +10,26 @@ this secret protect a cooperative account, not malicious same-UID code.
 from __future__ import annotations
 
 import ctypes
-import fcntl
 import hashlib
 import hmac
 import json
+import logging
 import math
 import os
 import secrets
+import select
 import socket
-import stat
 import struct
 import sys
 import time
 from collections.abc import Callable, Mapping
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
 from typing import Any
 
 from binnacle.platform.contracts.capability_contracts import (
+    BudgetExceeded,
     Capability,
     CapabilityState,
     CapabilityUnavailable,
@@ -39,14 +41,24 @@ from binnacle.platform.contracts.native_service_contracts import (
     ServiceLease,
 )
 from binnacle.platform.darwin.generation_runtime import (
+    EndpointRecovery,
+    _credentials,
+    _endpoint,
+    _identity,
+    _lock_root,
+    _remember_endpoint,
+    bounded_json,
     check_socket_path,
-    denied,
-    private_file,
     unlink_owned,
     validate_lease,
 )
+from binnacle.platform.darwin.generation_runtime import (
+    recover_stale_endpoint as recover_stale_endpoint,  # noqa: PLC0414 - public recovery API
+)
 
 _MAX_FRAME = 1024 * 1024
+_LOG = logging.getLogger(__name__)
+_MAX_CLIENTS = 16
 _SCOPE = "Darwin authenticated IPC; cooperative UID; no process signal authority"
 
 
@@ -118,14 +130,13 @@ def _read_exact(conn: socket.socket, size: int, deadline: float) -> bytes:
     return bytes(data)
 
 
-def _receive(conn: socket.socket, deadline: float) -> dict[str, Any]:
+def _receive(
+    conn: socket.socket, deadline: float, *, limit: int = _MAX_FRAME
+) -> dict[str, Any]:
     size = struct.unpack("!I", _read_exact(conn, 4, deadline))[0]
-    if size > _MAX_FRAME:
+    if size > limit:
         raise _refuse("ipc_frame_too_large")
-    value = json.loads(_read_exact(conn, size, deadline))
-    if not isinstance(value, dict):
-        raise _refuse()
-    return value
+    return bounded_json(_read_exact(conn, size, deadline))
 
 
 def _proof(key: bytes, purpose: str, value: object) -> str:
@@ -154,35 +165,6 @@ def _nonce(value: object) -> str:
     return value
 
 
-def _identity(fd: int, name: str) -> tuple[int, int]:
-    info = os.stat(name, dir_fd=fd, follow_symlinks=False)
-    return info.st_dev, info.st_ino
-
-
-def _endpoint(fd: int, name: str, expected: tuple[int, int]) -> None:
-    info = os.stat(name, dir_fd=fd, follow_symlinks=False)
-    if (
-        (info.st_dev, info.st_ino) != expected
-        or not stat.S_ISSOCK(info.st_mode)
-        or info.st_uid != os.getuid()
-        or stat.S_IMODE(info.st_mode) != 0o600
-    ):
-        raise _refuse("ipc_endpoint_changed")
-
-
-def _credentials(fd: int, name: str, lease: ServiceLease) -> dict[str, Any]:
-    key_fd = private_file(fd, name + ".auth")
-    try:
-        value = json.loads(os.read(key_fd, 65537))
-    finally:
-        os.close(key_fd)
-    if not isinstance(value, dict) or value.get("generation") != lease.generation:
-        raise _refuse("ipc_generation_mismatch")
-    if value.get("label") != lease.label or value.get("uid") != lease.uid:
-        raise _refuse()
-    return value
-
-
 class _Channel:
     def __init__(
         self, conn: socket.socket, key: bytes, transcript: list[object]
@@ -191,6 +173,7 @@ class _Channel:
         self.key = key
         self.transcript = transcript
         self.sequence = 0
+        self.recovery: EndpointRecovery | None = None
 
     def _exchange(
         self, kind: str, payload: Mapping[str, object], timeout_s: float
@@ -215,6 +198,12 @@ class _Channel:
                 raise _refuse()
             self.sequence += 1
             return response
+        except TimeoutError as exc:
+            self.close()
+            code = "ipc_request_timeout_outcome_unknown"
+            raise BudgetExceeded(
+                code, Capability(CapabilityState.UNKNOWN, code, _SCOPE)
+            ) from exc
         except (OSError, ValueError, TypeError, NativeCapabilityError) as exc:
             self.close()
             raise _refuse("ipc_request_failed") from exc
@@ -238,6 +227,7 @@ def connect_authenticated(
     conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
         credentials = _credentials(fd, socket_path.name, lease)
+        names = (socket_path.name, socket_path.name + ".auth", "manager.lock")
         expected = (credentials["device"], credentials["inode"])
         _endpoint(fd, socket_path.name, expected)
         key = bytes.fromhex(credentials["key"])
@@ -248,13 +238,14 @@ def connect_authenticated(
         if _peer(conn) != (lease.uid, credentials["pid"]):
             raise _refuse("ipc_wrong_peer")
         _endpoint(fd, socket_path.name, expected)
+        identities = tuple(_identity(fd, name) for name in names)
         client_nonce = secrets.token_hex(32)
         _send(
             conn,
             {"version": 1, "generation": lease.generation, "nonce": client_nonce},
             deadline,
         )
-        hello = _receive(conn, deadline)
+        hello = _receive(conn, deadline, limit=4096)
         transcript: list[object] = [
             1,
             lease.generation,
@@ -269,12 +260,32 @@ def connect_authenticated(
         pong = channel._exchange("ping", {}, max(0.000001, deadline - time.monotonic()))
         if pong != {"generation": lease.generation, "ready": True}:
             raise _refuse("ipc_readiness_failed")
+        if identities != tuple(
+            _identity(fd, name) for name in names
+        ) or credentials != _credentials(fd, socket_path.name, lease):
+            raise _refuse("ipc_generation_fenced")
+        channel.recovery = _remember_endpoint(
+            socket_path, lease, credentials, identities
+        )
         return channel
+    except (TimeoutError, BudgetExceeded) as exc:
+        conn.close()
+        code = "ipc_connect_timeout"
+        raise BudgetExceeded(
+            code, Capability(CapabilityState.UNKNOWN, code, _SCOPE)
+        ) from exc
     except (OSError, ValueError, KeyError, TypeError, NativeCapabilityError) as exc:
         conn.close()
         raise _refuse("ipc_connect_refused") from exc
     finally:
         os.close(fd)
+
+
+def capture_recovery_authority(channel: AuthenticatedChannel) -> EndpointRecovery:
+    """Retain live-handshake evidence for explicit post-crash recovery."""
+    if not isinstance(channel, _Channel) or channel.recovery is None:
+        raise _refuse("ipc_recovery_not_authenticated")
+    return channel.recovery
 
 
 def _serve_connection(
@@ -288,7 +299,7 @@ def _serve_connection(
     deadline = _deadline(2)
     if _peer(conn)[0] != lease.uid:
         raise _refuse("ipc_wrong_peer")
-    hello = _receive(conn, deadline)
+    hello = _receive(conn, deadline, limit=4096)
     if (
         type(hello.get("version")) is not int
         or hello.get("version") != 1
@@ -307,11 +318,16 @@ def _serve_connection(
         {"nonce": transcript[-1], "proof": _proof(key, "server", transcript)},
         deadline,
     )
-    _verify(key, "client", transcript, _receive(conn, deadline).get("proof"))
+    _verify(
+        key, "client", transcript, _receive(conn, deadline, limit=4096).get("proof")
+    )
     sequence = 0
     while not stop.is_set():
-        deadline = _deadline(2)
-        message = _receive(conn, deadline)
+        # Idle authenticated channels have no expiry. Partial frames get 2 s;
+        # polling lets shutdown drain idle workers without dropping active replies.
+        if not select.select([conn], [], [], 0.1)[0]:
+            continue
+        message = _receive(conn, _deadline(2))
         kind, payload = message.get("kind"), message.get("payload")
         value = [transcript, sequence, kind, payload]
         if type(message.get("sequence")) is not int or message["sequence"] != sequence:
@@ -329,40 +345,19 @@ def _serve_connection(
             response = handler(payload)
         else:
             raise _refuse()
-        _send(
-            conn,
-            {
-                "payload": dict(response),
-                "proof": _proof(key, "response", [value, dict(response)]),
-            },
-            deadline,
-        )
+        try:
+            _send(
+                conn,
+                {
+                    "payload": dict(response),
+                    "proof": _proof(key, "response", [value, dict(response)]),
+                },
+                _deadline(2),  # response I/O budget starts AFTER handler execution
+            )
+        except Exception:
+            _LOG.warning("ipc_response_undelivered")
+            raise
         sequence += 1
-
-
-def _lock_root(fd: int) -> int:
-    lock = os.open(
-        "manager.lock",
-        os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
-        0o600,
-        dir_fd=fd,
-    )
-    try:
-        info = os.fstat(lock)
-        if (
-            not stat.S_ISREG(info.st_mode)
-            or info.st_uid != os.getuid()
-            or stat.S_IMODE(info.st_mode) != 0o600
-            or info.st_nlink != 1
-        ):
-            raise denied("ipc_lock_unsafe")
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        if _identity(fd, "manager.lock") != (info.st_dev, info.st_ino):
-            raise _refuse("ipc_lock_changed")
-        return lock
-    except (OSError, NativeCapabilityError) as exc:
-        os.close(lock)
-        raise _refuse("ipc_duplicate_starter") from exc
 
 
 def serve_authenticated(
@@ -428,18 +423,7 @@ def serve_authenticated(
             ):
                 raise _refuse("ipc_generation_fenced")
 
-        while not stop.is_set():
-            validate()
-            try:
-                conn, _ = listener.accept()
-            except TimeoutError:
-                continue
-            with conn:
-                try:
-                    _serve_connection(conn, lease, key, handler, validate, stop)
-                except (OSError, ValueError, TypeError, NativeCapabilityError):
-                    # Do not disclose credentials, paths, native errors or payloads.
-                    continue
+        _serve_clients(listener, lease, key, handler, validate, stop)
     except OSError as exc:
         raise _refuse("ipc_endpoint_unavailable") from exc
     finally:
@@ -456,3 +440,50 @@ def serve_authenticated(
             os.close(fd)
         if not clean:
             raise _refuse("ipc_cleanup_identity_changed")
+
+
+def _serve_clients(
+    listener: socket.socket,
+    lease: ServiceLease,
+    key: bytes,
+    handler: Callable[[Mapping[str, object]], Mapping[str, object]],
+    validate: Callable[[], None],
+    stop: Event,
+) -> None:
+    """At most 16 channels; per-channel serial RPC, concurrent handlers.
+
+    Callers supply a thread-safe handler. No queued excess sockets, idle expiry,
+    automatic request retry or cross-connection deduplication. Client timeout
+    means outcome UNKNOWN, never cancellation. Drain handlers before unlock.
+    """
+    draining = Event()
+
+    def serve(conn: socket.socket) -> None:
+        with conn:
+            try:
+                _serve_connection(conn, lease, key, handler, validate, draining)
+            except Exception:  # noqa: BLE001 - per-client fault containment boundary
+                # Contain ordinary handler/parser faults, without disclosing data.
+                _LOG.debug("ipc_connection_dropped")
+
+    with ThreadPoolExecutor(max_workers=_MAX_CLIENTS) as pool:
+        pending: set[Future[None]] = set()
+        try:
+            while not stop.is_set():
+                validate()
+                for future in tuple(pending):
+                    if future.done():
+                        pending.remove(future)
+                        future.result()  # BaseException still propagates to owner
+                try:
+                    conn, _ = listener.accept()
+                except TimeoutError:
+                    continue
+                if len(pending) >= _MAX_CLIENTS:
+                    conn.close()
+                    continue
+                pending.add(pool.submit(serve, conn))
+        finally:
+            draining.set()
+            for future in pending:
+                future.result()  # join handlers before releasing generation/lock
