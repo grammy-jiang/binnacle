@@ -76,6 +76,7 @@ platform/darwin/test_job_manager_service.py | A3: per-test Darwin getpeereid/LOC
 platform/darwin/test_ipc_launchd.py | A3: per-test opt-in real launchd bootstrap (BINNACLE_A3_LAUNCHD=1)
 platform/darwin/test_search_parity.py | A4: in-body skip when APFS rejects a non-UTF-8 filename
 platform/darwin/test_package_install.py | A6: per-test Apple-silicon (arm64) native package install
+platform/darwin/test_jobs_launchd_plan.py | A6: J3 per-test Darwin kern.maxprocperuid default for the com.binnacle.jobs plist NumberOfProcesses limit
 platform/darwin/test_composition_contract.py | B0: in-body skip of the real-socket peer check off Darwin
 unit/tools/test_command_characterization.py | T0: Linux durable job-engine characterization; Darwin counterpart tests/platform/darwin/test_foreground_commands.py::test_native_normal_exit_cwd_stdin_binary_combined_output
 unit/tools/test_stop_job_edges.py | T0: Linux durable job_owner.stop_job; Darwin counterpart tests/platform/darwin/test_native_smoke_mcp.py::test_stop_job_is_unavailable_never_enabled
@@ -114,6 +115,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_ipc_launchd.py": 3,
     "tests/platform/darwin/test_search_parity.py": 1,
     "tests/platform/darwin/test_package_install.py": 1,
+    "tests/platform/darwin/test_jobs_launchd_plan.py": 1,
     "tests/platform/darwin/test_composition_contract.py": 3,
     "tests/contracts/test_darwin_interface.py": 1,
     "tests/platform/darwin/test_missing_roots.py": 1,
