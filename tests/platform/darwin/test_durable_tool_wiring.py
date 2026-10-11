@@ -41,6 +41,7 @@ class _SpoolClient:
     def __init__(self, jobs_dir: Path):
         self.jobs_dir = jobs_dir
         self.stops: list[str] = []
+        self.down = False  # SD-41: the manager is unreachable while set
         # LATE jobs: persist the exit record only after this event is set.
         self.persist_late = threading.Event()
         self.late_persisted = threading.Event()
@@ -91,7 +92,13 @@ class _SpoolClient:
         self._write(job_id, meta)
         return {"ok": True, "job_id": job_id, "state": "exited"}
 
+    def ping(self, socket_path):
+        if self.down:
+            raise RuntimeError(f"{JOB_MANAGER_UNAVAILABLE} at {socket_path}: refused")
+        return {"ok": True}
+
     def stop(self, socket_path, job_id, *, call_id="-"):
+        self.ping(socket_path)
         self.stops.append(job_id)
         meta = json.loads((self.jobs_dir / job_id / "meta.json").read_text())
         meta.update(exit_code=None, signal=15, ended_at=time.time())
@@ -345,6 +352,42 @@ def test_owner_lost_job_renders_unknown_and_refuses_stop(tmp_path):
     with pytest.raises(ToolError, match=OWNER_LOST_STOP_REFUSED):
         sj.stop_job_impl(job_id, backend=backend)
     assert backend.client.stops == []
+
+
+@_DARWIN
+def test_unreachable_manager_job_status_never_claims_running_or_exited(tmp_path):
+    """SD-41: terminal records as they are; non-terminal ones unknown/unverified."""
+    settings, root, backend = _manager(tmp_path)
+    done = _run(settings, root, backend, "true", 5).structured_content["job_id"]
+    job_id = _run(settings, root, backend, "RUNNING sleep", 1).structured_content[
+        "job_id"
+    ]
+    backend.client.down = True
+    final = js.job_status_impl(done, 10, backend=backend).structured_content
+    assert (final["state"], final["exit_code"]) == ("exited", 0)  # served as is
+    for wait in (0, 5):  # a wait never blocks on an unverifiable record
+        result = js.job_status_impl(job_id, 10, wait, backend=backend)
+        text, status = result.content[0].text, result.structured_content
+        assert (
+            text == f"Job {job_id} state unknown: {cb.DARWIN_MANAGER_UNAVAILABLE_NOTE}."
+        )
+        assert not {"gone", "running", "exited"} & set(text.replace(".", " ").split())
+        assert status["state"] == "unknown" and status["exit_code"] is None
+        assert status["note"] == "job manager unavailable; state unverified"
+    rows = js.job_status_impl(None, 10, backend=backend).structured_content["jobs"]
+    assert {r["job_id"]: r["state"] for r in rows} == {
+        done: "exited",
+        job_id: "unknown",
+    }
+    with pytest.raises(ToolError, match=JOB_MANAGER_UNAVAILABLE):
+        sj.stop_job_impl(job_id, backend=backend)  # the Linux per-call error
+    backend.client.down = False  # reachable again: a reply rendered unknown stays so
+    linux_unknown = cb.CommandReply("its process is gone", {"state": "unknown"})
+    assert "gone" not in backend.disclose_status(job_id, linux_unknown).summary
+    assert (
+        js.job_status_impl(job_id, 10, backend=backend).structured_content["state"]
+        == "running"
+    )
 
 
 @_DARWIN
