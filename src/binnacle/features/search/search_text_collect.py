@@ -8,6 +8,7 @@ from pathlib import Path, PurePath
 
 from binnacle.errors import CodedToolError
 from binnacle.features.files.paths import full_match
+from binnacle.features.search.rg_env import NO_CONFIG, rg_env
 from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 
@@ -20,13 +21,18 @@ def _rg_rejection(access, pattern: str, fixed_strings: bool) -> CodedToolError:
     """Linux rg_rejected sentence: the adapter drains stderr, so ask rg again
     about the pattern alone (no files are read) to recover its diagnostic."""
     rg = getattr(access.search, "_rg_bin", None) or shutil.which("rg") or "rg"
-    cmd = [rg, "--no-config", "--smart-case"]
+    cmd = [rg, NO_CONFIG, "--smart-case"]
     if fixed_strings:
         cmd.append("--fixed-strings")
     cmd += ["--regexp", pattern, os.devnull]
     try:
         proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=5, check=False
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+            env=rg_env(),
         )
         stderr = proc.stderr.strip()[-300:] if proc.returncode == 2 else ""
     except (OSError, subprocess.SubprocessError):

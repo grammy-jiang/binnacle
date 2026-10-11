@@ -67,6 +67,8 @@ OpenAI's tool-design guidance, design doc §5.2.)
 
 **Errors** (all instructions): directory not found → nearby-siblings hint (shared helper); path is a file → "Use read_file to read it."; outside roots → shared guard message; a directory the server cannot open → `permission_denied`; a path component that stops being a directory during the listing → `path_changed`; rg failure/timeout → actionable message.
 
+**Glob mode and swapped paths (Linux path, r6 W2 X3c, SD-76; X3c-a3, SD-78)**: `rg --files` lists by path string and never lists a symlink. A listed line that is absolute or has a `..` component is rejected (rg below the glob base prints neither). Each listed file is sized by one no-follow metadata read relative to its directory, and that directory is opened from `/` one component at a time, no-follow (O_PATH on Linux). Only the directory chain of the current path is open, so the descriptors held are bounded by the path depth, not by the number of listed directories. An entry whose directory is no longer a directory (swapped for a symlink or a file after rg listed it) or whose final component is now a symlink is omitted, so no outside object is typed or sized; omitted entries do not count toward `count`. Any other metadata failure (for example a file removed after rg listed it, or a descriptor shortage in the server) keeps the entry without `bytes`, as before; no benign entry is dropped. Benign results are unchanged, including a glob under a path reached through a cross-root link. rg runs with `--no-config` and without `RIPGREP_CONFIG_PATH`.
+
 ## 4. Test checklist (tests/unit/tools/test_list_files.py)
 
 Listing: dirs-first + alphabetical + sizes; hidden excluded by default,

@@ -106,6 +106,49 @@ fallback hint.
 path (nearby-siblings hint); outside roots; timeout (narrow-scope
 message).
 
+**Reported-path checks (Linux path, r6 W2 X3c, SD-76; X3c-a3, SD-78)**:
+ripgrep walks and opens files by path string, so descriptor containment
+cannot reach rg's own traversal: a same-uid swap of a file or a directory
+for a symlink between rg's directory read and its open can make rg read an
+object outside the roots. Before a match is reported, its path is checked
+twice. (1) Prefix: the path must be absolute with no `..` component, and
+its components must start with the components of the resolved search base
+(exactly the base when the base is a file). The prefix is checked, not
+assumed from how rg was called. (2) Object: each component from `/` to the
+file's directory is opened no-follow relative to its opened parent (O_PATH
+on Linux), and the final component is stat-ed relative to that descriptor
+without following a symlink; it must be a regular file. Only the directory
+chain of the current path is open, so the descriptors held are bounded by
+the path depth. A file that fails either check (outside the base, swapped
+for a symlink, removed, or no longer a regular file) is omitted with all
+its lines, and its retained matches are subtracted from `count`. Adaptive
+discovery checks every file in its final entries the same way. The text of
+each reported line is rg's text, as in r6. If the server has too many open
+files to check a path, the call fails with `too_many_open_files`; no entry
+is dropped silently. Benign results are unchanged, including a search base
+reached through a cross-root link or `..` into an outer root (the base is
+resolved before rg runs).
+
+Threat model (SD-78): a path-swap race inside a root can only be won by a
+same-UID process, and every client profile that serves these file tools
+also serves run_command (arbitrary shell as that user); closing the search
+content race is defense in depth against mistakes, not a boundary against
+the client.
+
+Residuals (documented, not verified per match): the content race. A file
+that rg read through a swapped symlink and that is swapped back to an
+in-root regular file before the check passes both checks, so rg's text
+from the outside object is reported under the in-root path (X3c-a3 removed
+the per-match content re-read because it read every reported file again
+and breached the latency budget on large files, RX3c-F2). Matches beyond
+`max_results` that are only counted, the adaptive totals in `count` and
+`note` and the per-file `count` of an omitted file are derived from rg's
+path walk; they report numbers, never outside content or paths. A hard link
+to an outside file that already exists inside a root is an in-root path, as
+in r6. ripgrep is run with `--no-config` and without `--follow`, and
+`RIPGREP_CONFIG_PATH` is removed from its environment. On macOS the tool
+uses the native search adapter, not this path.
+
 ## 4. Test checklist (tests/unit/tools/test_search_text.py)
 
 Match basics (file/line/text, no number prefix); smart-case both ways;
