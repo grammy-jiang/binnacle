@@ -1,6 +1,6 @@
 """Opened-root Darwin Files adapter, awaiting independent review and B0 wiring.
 
-Atomic replacement preserves mode bits, but changes inode and does not preserve
+Atomic replacement preserves permission bits (0777 only), but changes inode and does not preserve
 ownership, xattrs or ACLs. Hardlinks keep old content. Digest checking observes
 conflicts; it is not hostile-writer CAS. Failed writes may leave created parents.
 No power-loss durability, continuous containment or full parity is claimed.
@@ -96,7 +96,7 @@ def _destination(parent: int, name: str, expected: str | None) -> os.stat_result
     # Checking actual write access matters: rename alone would bypass a read-only
     # destination's permissions. No O_TRUNC; this descriptor cannot mutate bytes.
     flags = (os.O_RDWR if expected is not None else os.O_WRONLY) | (
-        os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+        os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC | os.O_NOCTTY
     )
     try:
         fd = regular_fd(parent, name, flags)
@@ -121,8 +121,13 @@ def _replace(parent: int, name: str, data: bytes, expected: str | None) -> Write
     temporary = ".binnacle-write-" + secrets.token_hex(16)
     fd = os.open(
         temporary,
-        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
-        (previous.st_mode & 0o7777) if previous is not None else 0o666,
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | os.O_NOFOLLOW
+        | os.O_CLOEXEC
+        | os.O_NOCTTY,
+        (previous.st_mode & 0o0777) if previous is not None else 0o666,
         dir_fd=parent,
     )
     replaced = False
@@ -147,7 +152,7 @@ def _replace(parent: int, name: str, data: bytes, expected: str | None) -> Write
         ) != (previous.st_dev, previous.st_ino, previous.st_mtime_ns, previous.st_size):
             raise unsafe("write_conflict")
         if current is not None:
-            os.fchmod(fd, current.st_mode & 0o7777)
+            os.fchmod(fd, current.st_mode & 0o0777)
         os.fsync(fd)
         os.replace(temporary, name, src_dir_fd=parent, dst_dir_fd=parent)
         replaced = True
@@ -192,14 +197,21 @@ class DarwinFileAccess:
 
     @contextmanager
     def _root(self, grant: RootGrant) -> Iterator[int]:
-        with self._lock, native_errors():
-            self._check()
-            if not isinstance(grant, _RootGrant) or grant not in self._grants:
-                raise unsafe("foreign_root_grant")
-            with grant.lock:
-                if grant.fd < 0:
-                    raise unsafe("root_grant_closed")
-                yield grant.fd
+        # Capture per-call ownership; slow traversal never holds the registry lock.
+        # Already admitted calls retain their duplicate if the grant is closed.
+        with native_errors():
+            with self._lock:
+                self._check()
+                if not isinstance(grant, _RootGrant) or grant not in self._grants:
+                    raise unsafe("foreign_root_grant")
+                with grant.lock:
+                    if grant.fd < 0:
+                        raise unsafe("root_grant_closed")
+                    fd = os.dup(grant.fd)
+            try:
+                yield fd
+            finally:
+                os.close(fd)
 
     def open_read(self, grant: RootGrant, relative_path: str) -> OpenedFile:
         parts = validate_relative_path(relative_path)
@@ -208,16 +220,20 @@ class DarwinFileAccess:
         with self._root(grant) as root, directory_at(root, parts[:-1]) as parent:
             fd = regular_fd(parent, parts[-1], READ_FLAGS)
             opened = _OpenedFile(fd, "/".join(parts))
-            self._files = {file for file in self._files if file.fd >= 0}
-            self._files.add(opened)
-            return opened
+            with self._lock:
+                if self._closed:
+                    opened.close()
+                    self._check()
+                self._files = {file for file in self._files if file.fd >= 0}
+                self._files.add(opened)
+                return opened
 
     def list_entries(self, grant: RootGrant, request: ListRequest) -> FileListing:
         parts = validate_relative_path(request.relative_path)
         listing = Listing(request)
         with (
             self._root(grant) as root,
-            listing_directory(root, parts, request.glob is not None) as directory,
+            listing_directory(root, parts, listing) as directory,
         ):
             listing.walk(directory)
         return listing.result(parts)
