@@ -6,6 +6,8 @@ gitignore respected. Uses the system ripgrep on purpose: bundled
 jemalloc builds abort on this Pi's 16 KB kernel pages (Copilot lesson).
 """
 
+import os
+import stat
 import subprocess
 from pathlib import Path, PurePath
 from typing import Annotated
@@ -50,6 +52,7 @@ OUTPUT_SCHEMA = {
 
 
 def _file_entry(p: Path) -> dict | None:
+    # Follows links; LIST mode types entries with _list_entry instead (SD-60).
     try:
         if p.is_dir():
             return {"path": str(p), "type": "dir"}
@@ -58,15 +61,83 @@ def _file_entry(p: Path) -> dict | None:
         return None
 
 
-def _list_mode(root: Path, max_results: int, include_hidden: bool) -> ToolResult:
-    children = [
-        p
+MAX_LINK_HOPS = 40  # Darwin platform/darwin/file_access.py MAX_LINK_HOPS.
+
+
+def _inside(path: Path, allowed: tuple[Path, ...]) -> bool:
+    return any(path.is_relative_to(root) for root in allowed)
+
+
+def _link_target(link: Path, allowed: tuple[Path, ...]) -> Path | None:
+    """Walk a link's text as Darwin's link_target_info does; None = omit.
+
+    Every component is checked with lstat and must stay inside a root, so
+    an absolute target, any step out of the roots (also out-and-back),
+    more than MAX_LINK_HOPS links, a dangling link or a loop yields None.
+    """
+    try:
+        pending = os.readlink(link).split("/")
+        if pending[0] == "":
+            return None  # Absolute target: omitted, as on Darwin.
+        current, hops = link.parent, 1
+        while pending:
+            part = pending.pop(0)
+            if part in ("", "."):
+                continue
+            current = current.parent if part == ".." else current / part
+            if not _inside(current, allowed):
+                return None
+            info = os.lstat(current)
+            if stat.S_ISLNK(info.st_mode):
+                hops += 1
+                target = os.readlink(current)
+                if hops > MAX_LINK_HOPS or target.startswith("/"):
+                    return None
+                pending[:0] = target.split("/")
+                current = current.parent
+            elif pending and not stat.S_ISDIR(info.st_mode):
+                return None
+    except OSError:
+        return None
+    return current
+
+
+def _list_entry(p: Path, allowed: tuple[Path, ...]) -> dict | None:
+    """Type p from ONE lstat of its contained target (p itself if not a link).
+
+    The entry never re-follows the link: a target that is a link by now, or
+    any lstat failure (Darwin file_traversal.py walk: EACCES/ENOENT entries
+    are omitted), omits the entry before it is counted (SD-60).
+    """
+    try:
+        info = os.lstat(p)
+        if stat.S_ISLNK(info.st_mode):
+            target = _link_target(p, allowed)
+            if target is None or not _inside(target, allowed):
+                return None
+            info = os.lstat(target)
+            if stat.S_ISLNK(info.st_mode):
+                return None
+    except OSError:
+        return None
+    if stat.S_ISDIR(info.st_mode):
+        return {"path": str(p), "type": "dir"}
+    return {"path": str(p), "type": "file", "bytes": info.st_size}
+
+
+def _list_mode(
+    root: Path, max_results: int, include_hidden: bool, allowed: tuple[Path, ...]
+) -> ToolResult:
+    listed = [
+        (p, e)
         for p in root.iterdir()
-        if p.name != ".git" and (include_hidden or not p.name.startswith("."))
+        if p.name != ".git"
+        and (include_hidden or not p.name.startswith("."))
+        and (e := _list_entry(p, allowed)) is not None
     ]
-    children.sort(key=lambda p: (0 if p.is_dir() else 1, p.name.lower()))
-    truncated = len(children) > max_results
-    entries = [e for p in children[:max_results] if (e := _file_entry(p)) is not None]
+    listed.sort(key=lambda pe: (0 if pe[1]["type"] == "dir" else 1, pe[0].name.lower()))
+    truncated = len(listed) > max_results
+    entries = [e for _, e in listed[:max_results]]
     payload = {
         "path": str(root),
         "mode": "list",
@@ -77,11 +148,11 @@ def _list_mode(root: Path, max_results: int, include_hidden: bool) -> ToolResult
     summary = f"Listed {len(entries)} entries in {root}."
     if truncated:
         note = (
-            f"Showing first {max_results} of {len(children)} entries; "
+            f"Showing first {max_results} of {len(listed)} entries; "
             f"raise max_results or use a glob."
         )
         payload["note"] = note
-        summary = f"Listed first {len(entries)} of {len(children)} entries in {root}."
+        summary = f"Listed first {len(entries)} of {len(listed)} entries in {root}."
     return ToolResult(content=summary, structured_content=payload)
 
 
@@ -294,7 +365,8 @@ def list_files_impl(
             rg_bin=rg_bin,
             timeout_s=settings.rg_timeout_s,
         )
-    return _list_mode(resolved, max_results, include_hidden)
+    allowed = (get_settings().roots if roots is None else roots).canonical_allowed
+    return _list_mode(resolved, max_results, include_hidden, allowed)
 
 
 def register(
