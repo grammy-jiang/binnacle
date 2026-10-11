@@ -112,8 +112,16 @@ def test_a_socket_is_refused_as_on_darwin(root):
 
 
 def test_a_character_device_is_refused_as_on_darwin():
+    # /dev is the root because a device node cannot be created without
+    # privilege, so the test reads the host's own /dev/null in place.
+    if not (
+        os.path.exists("/dev/null") and stat.S_ISCHR(os.lstat("/dev/null").st_mode)
+    ):
+        pytest.skip(
+            "/dev/null is missing or not a character device (lstat); /dev is the"
+            " root because a device node cannot be created without privilege"
+        )
     roots = RootsSettings(default_root=Path("/dev"), extra_roots=())
-    assert stat.S_ISCHR(os.stat("/dev/null").st_mode)
     assert both(roots, Path("/dev/null")) == (CODE, f"{CODE}.")
 
 
@@ -126,7 +134,11 @@ def test_a_block_device_is_refused_as_on_darwin():
         if os.path.exists(f"/dev/{n}") and stat.S_ISBLK(os.lstat(f"/dev/{n}").st_mode)
     ]
     if not found:
-        pytest.skip("no block device under /dev")
+        pytest.skip(
+            "none of /dev/loop0, /dev/mmcblk0, /dev/nvme0n1, /dev/sda, /dev/vda"
+            " exists as a block device (lstat); /dev is the root because a"
+            " device node cannot be created without privilege"
+        )
     roots = RootsSettings(default_root=Path("/dev"), extra_roots=())
     assert both(roots, found[0]) == (CODE, f"{CODE}.")
 
@@ -170,6 +182,31 @@ def test_a_socket_swapped_in_keeps_the_identity_refusal(root, monkeypatch):
     with server:
         code, _text = refusal(in_root(root), target, darwin=False)
     assert code == "file_io_failed"
+
+
+@pytest.mark.parametrize("code", ["path_changed", "path_outside_root"])
+def test_path_refusals_on_the_checked_fifo_are_never_reworded(root, monkeypatch, code):
+    # RX3b3-F2: the lstat shows the unchanged checked FIFO, so only the code
+    # decides; path_changed and path_outside_root keep their code and text.
+    fifo = root / "fifo"
+    os.mkfifo(fifo)
+    before = os.lstat(fifo)
+    assert stat.S_ISFIFO(before.st_mode)
+    original = CodedToolError(code, f"{code} from the stub: {fifo}")
+    seen: list[tuple[int, int]] = []
+
+    def refuse(_resolved, _allowed, expected) -> int:
+        seen.append(expected)
+        raise original
+
+    monkeypatch.setattr(fd_walk, "open_walked", refuse)
+    with pytest.raises(CodedToolError) as exc:
+        rf.read_file_impl(str(fifo), 1, None, roots=in_root(root))
+    after = os.lstat(fifo)
+    assert seen == [(before.st_dev, before.st_ino)]
+    assert (after.st_dev, after.st_ino) == seen[0] and stat.S_ISFIFO(after.st_mode)
+    assert exc.value.telemetry_code == code
+    assert str(exc.value) == f"{code} from the stub: {fifo}"
 
 
 # RX3b2-F1: read(2) is asked for at most READ_MAX_FILE_BYTES + 1 bytes.

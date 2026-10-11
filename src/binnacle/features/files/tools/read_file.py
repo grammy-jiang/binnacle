@@ -99,9 +99,12 @@ def _is_special(resolved: Path, expected: tuple[int, int]) -> bool:
 
 
 def _read_at_most(fd: int, limit: int) -> bytes:
-    """Read up to limit bytes; the read(2) requests add up to at most limit.
+    """Read at most limit bytes from fd.
 
-    No buffered file object, so no read-ahead past the bound (RX3b2-F1).
+    Each read(2) asks only for the bytes still allowed, so at most limit
+    bytes are read; a file under the limit also gets a final request that
+    sees end of file (RX3b3-F1). No buffered file object, so no read-ahead
+    past the bound (RX3b2-F1).
     """
     chunks: list[bytes] = []
     left = limit
@@ -126,8 +129,9 @@ def _read_checked(
     (fd_walk.open_verified) and reads only from that descriptor; the path
     is never opened again. The read stops after max_file_bytes + 1 bytes, so
     a file that grew after the stat is file_too_large, never read unbounded
-    (RX3b-F6); the raw descriptor is read with os.read, so read(2) is never
-    asked for more than that in total (RX3b2-F1). Darwin keeps its own READ_FLAGS walk (RX3a2-N4) and never
+    (RX3b-F6); the raw descriptor is read with os.read, each request asking
+    only for the bytes still allowed, so at most max_file_bytes + 1 bytes are
+    read from the descriptor (RX3b2-F1, RX3b3-F1). Darwin keeps its own READ_FLAGS walk (RX3a2-N4) and never
     calls open_verified. A FIFO, socket or device that fd_walk refuses is
     worded as on Darwin when an lstat shows the checked object (X3b-a3);
     path_outside_root and path_changed are never reworded, and nothing is

@@ -215,9 +215,11 @@ looks like image/png) — content not shown.`
    hint that does not apply on Linux, so this code differs between the OSes
    by design. The content
    is read only from the verified descriptor; the path is never opened
-   again. The raw descriptor is read with an `os.read` loop whose requests
-   add up to at most `READ_MAX_FILE_BYTES` + 1 bytes (no buffered file
-   object, so no read-ahead past the bound; RX3b2-F1). The read stops after
+   again. The raw descriptor is read with an `os.read` loop; each request
+   asks only for the bytes still allowed, so at most
+   `READ_MAX_FILE_BYTES` + 1 bytes are read from the descriptor (no buffered
+   file object, so no read-ahead past the bound; RX3b2-F1, RX3b3-F1). A file
+   at or under the limit also gets a final request that sees end of file. The read stops after
    `READ_MAX_FILE_BYTES` + 1 bytes, so a file
    that grew past the limit after the stat is E3, with the same text as at
    the stat. Every path whose target lies in any configured root
