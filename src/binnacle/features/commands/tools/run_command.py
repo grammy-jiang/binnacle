@@ -4,6 +4,7 @@ Spec: docs/tools/run_command.md. Shared job machinery: jobs.py.
 """
 
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from functools import wraps
 from typing import Annotated
 
@@ -15,7 +16,11 @@ from pydantic import Field
 from binnacle.config import RootsSettings, RunCommandSettings, get_settings
 from binnacle.errors import CodedToolError
 from binnacle.features.commands import command_execution
-from binnacle.features.commands.command_backend import create_command_backend
+from binnacle.features.commands.command_backend import (
+    DESCENDANTS_UNVERIFIED,
+    DarwinManagerCommandBackend,
+    create_command_backend,
+)
 from binnacle.features.commands.command_contracts import (
     CommandBackend,
     CommandFailure,
@@ -83,6 +88,9 @@ def run_command_impl(
         )
     except CommandFailure as exc:
         raise ToolError(str(exc)) from exc.__cause__
+    if isinstance(backend, DarwinManagerCommandBackend):
+        # Session leaders that leave the job's group are not tracked on macOS.
+        reply = replace(reply, summary=f"{reply.summary} {DESCENDANTS_UNVERIFIED}")
     return ToolResult(content=reply.summary, structured_content=reply.payload)
 
 
@@ -100,6 +108,22 @@ def register(
     roots, settings = roots.model_copy(deep=True), settings.model_copy(deep=True)
 
     backend = create_command_backend() if backend is None else backend
+    restricted = isinstance(backend, RestrictedCommandBackend)
+    # The embedded macOS owner refuses background and kills at the limit, so
+    # its parameters must not advertise jobs it never creates.
+    wait_help = (
+        f"Seconds to wait for the command to finish (max {settings.wait_max_s}); "
+        "on macOS foreground mode a command still running at the limit is "
+        "terminated."
+        if restricted
+        else "Seconds to wait for the command to finish before yielding a job_id (max 50); returns as soon as it finishes, so a long wait costs nothing."
+    )
+    background_help = (
+        "Unavailable on macOS foreground mode: background=true is refused "
+        "(darwin_background_jobs_unavailable)."
+        if restricted
+        else "Return at once with a job_id after a 1 s warm-up. Local policy may also auto-background matching commands."
+    )
 
     def run_command(
         command: Annotated[str, Field(description="Shell command, run as bash -c.")],
@@ -114,14 +138,12 @@ def register(
             Field(
                 ge=1,
                 le=settings.wait_max_s,
-                description="Seconds to wait for the command to finish before yielding a job_id (max 50); returns as soon as it finishes, so a long wait costs nothing.",
+                description=wait_help,
             ),
         ] = settings.wait_default_s,
         background: Annotated[
             bool,
-            Field(
-                description="Return at once with a job_id after a 1 s warm-up. Local policy may also auto-background matching commands."
-            ),
+            Field(description=background_help),
         ] = False,
         stdin: Annotated[
             str | None, Field(description="Text piped to the command's stdin.")

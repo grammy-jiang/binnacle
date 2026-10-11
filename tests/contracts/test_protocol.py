@@ -181,6 +181,14 @@ def test_write_read_edit_search_round_trip(tmp_path):
 
 def test_run_command_synchronous_result_reports_no_job(tmp_path):
     r = call("run_command", command="printf 'hi nonce-7Q3'", workdir=str(tmp_path))
+    if sys.platform == "darwin":
+        # R4 J4: production composes the com.binnacle.jobs manager, whose rows
+        # stay UNAVAILABLE until J-CR; it fails closed, never runs embedded.
+        # The manager-composed synchronous reply is pinned in
+        # tests/platform/darwin/test_durable_tool_wiring.py.
+        assert r.is_error and "no embedded fallback" in text_of(r), text_of(r)
+        assert "nonce-7Q3" not in text_of(r)
+        return
     assert not r.is_error, text_of(r)
     sc = r.structured_content
     assert sc is not None

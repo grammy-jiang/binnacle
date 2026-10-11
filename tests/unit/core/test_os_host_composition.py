@@ -61,8 +61,8 @@ assert c.create_service_inspector(lease=lease).__class__.__name__ == "LaunchdUse
 assert c.create_service_controller(lease=lease).__class__.__name__ == "LaunchdUserServices"
 assert all(row.capability.state in (CapabilityState.UNAVAILABLE, CapabilityState.LIMITED) for row in DARWIN_RELEASE_SCOPE.values())
 assert DARWIN_RELEASE_SCOPE["stop_job"].capability.state == CapabilityState.UNAVAILABLE
-execution = c.create_foreground_execution(command_states={tool: row.capability.state.value for tool, row in DARWIN_RELEASE_SCOPE.items()})
-assert c.native_file_capability(execution=execution).state == CapabilityState.LIMITED
+execution = c.create_foreground_execution(owner="embedded", command_states={tool: row.capability.state.value for tool, row in DARWIN_RELEASE_SCOPE.items()})
+assert c.native_file_capability(owner="embedded", execution=execution).state == CapabilityState.LIMITED
 assert not any(m.startswith("binnacle.platform.linux") for m in sys.modules)
 """
     # Short root also satisfies Darwin's Unix-domain socket path limit on Linux CI.
@@ -115,7 +115,7 @@ def test_focused_factories_without_file_access_refuse_with_files_error(
         asyncio.run(call())
     assert "run_command" not in str(caught.value)
     with pytest.raises(RuntimeError, match="runtime gate"):
-        c.native_file_capability()
+        c.native_file_capability(owner="embedded")
 
 
 def test_server_instructions_are_host_aware(monkeypatch):

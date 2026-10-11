@@ -17,7 +17,8 @@ import platform
 platform.system = lambda: "Darwin"
 import sys
 import binnacle.server
-from binnacle.platform.contracts.darwin_release_scope import DARWIN_RELEASE_SCOPE
+from binnacle.platform.contracts.darwin_release_scope import release_scope_for_owner
+SCOPE = release_scope_for_owner("manager")  # CR0 point 4: auto is the manager
 assert not any(m.startswith("binnacle.platform.linux") for m in sys.modules)
 assert "binnacle.features.commands.jobs" not in sys.modules
 import asyncio
@@ -44,7 +45,7 @@ async def check():
         assert {t.name: digest(surface(t)) for t in normalized} == SURFACE_SHA256["default"]
         for name, arguments in calls.items():
             result = await client.call_tool(name, arguments, raise_on_error=False)
-            if DARWIN_RELEASE_SCOPE[name].capability.state.value == "UNAVAILABLE":
+            if SCOPE[name].capability.state.value == "UNAVAILABLE":
                 assert result.is_error and "unavailable" in str(result.content).lower(), (name, result)
             elif name == "job_status":
                 assert not result.is_error, result
@@ -475,7 +476,7 @@ def test_invalid_native_scope_raises_at_every_composition_boundary(
     scope[tool] = replace(
         scope[tool], capability=Capability(CapabilityState(state), "test", tool)
     )
-    disabled = c.create_foreground_execution()
+    disabled = c.create_foreground_execution(owner="embedded")
     monkeypatch.setattr(c, "create_foreground_execution", lambda **kwargs: disabled)
     reason = "stop_job" if tool == "stop_job" else "runtime gate"
     with pytest.raises(RuntimeError, match=reason):
@@ -483,7 +484,7 @@ def test_invalid_native_scope_raises_at_every_composition_boundary(
     for host in ("Darwin", "Linux") if tool == "stop_job" else ("Darwin",):
         monkeypatch.setattr(c.platform, "system", lambda host=host: host)
         with pytest.raises(RuntimeError, match=reason):
-            c.native_file_capability(release_scope=scope)
+            c.native_file_capability(release_scope=scope, owner="embedded")
     backend = RestrictedCommandBackend(release_states={tool: state})
     with pytest.raises(RuntimeError, match=reason):
         create_application(settings=Settings(), token="test", backend=backend)
