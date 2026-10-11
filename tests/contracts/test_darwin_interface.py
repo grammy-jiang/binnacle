@@ -212,6 +212,8 @@ def test_production_scope_controls_real_server_without_test_override(tmp_path):
     config.write_text(
         f'[auth]\ntoken_file = "{token}"\n'
         f'[roots]\ndefault_root = "{tmp_path}"\nextra_roots = []\n'
+        # Ruling (4) b rows are AVAILABLE; an unpublished socket, never the host's.
+        f'[jobs]\ndir = "{tmp_path / "jobs"}"\nsocket_path = "{tmp_path / "jobs.sock"}"\n'
     )
     script = """
 import asyncio, sys
@@ -238,15 +240,13 @@ async def check():
         ):
             result = await client.call_tool(name, args, raise_on_error=False)
             enabled = rows("manager")[name].capability.state.value in ("LIMITED", "AVAILABLE")  # CR0-1.2.0 point 4: auto is the manager
-            assert result.is_error != enabled, (name, result)
-            if not enabled:
-                assert "unavailable" in str(result.content).lower(), (name, result)
+            assert enabled and result.is_error == (name in ("run_command", "stop_job")), (name, result)
+            if name == "run_command":  # unreachable manager: per-call error, no embedded run
+                assert "job manager unavailable" in str(result.content) and result.structured_content is None, (name, result)
+            elif name == "stop_job":  # a foreign id is refused before any manager contact
+                assert "unavailable" not in str(result.content).lower(), (name, result)
             elif name == "read_file":
                 assert result.structured_content["content"] == "after"
-            elif name == "run_command":
-                assert result.structured_content["output"] == "production"
-                assert "descendants_unverified=true" in str(result.content)
-                assert "descendants_unverified" not in result.structured_content
 asyncio.run(check())
 """
     result = subprocess.run(
@@ -314,11 +314,11 @@ def test_interface_120_rows_follow_the_composed_owner(monkeypatch):
     manager, cmd = rs.release_scope_for_owner("manager"), rs.COMMAND_TOOLS
     assert all(manager[t] == rs.DARWIN_RELEASE_SCOPE[t] for t in rs.FILE_TOOLS)
     rows = {(manager[t].capability.state, manager[t].enabling_gate) for t in cmd}
-    assert rows == {(CapabilityState.UNAVAILABLE, "J-CR")}  # until J-CR
+    assert rows == {(CapabilityState.AVAILABLE, "J-CR")}  # ruling (4) b; J-CR reviews
     assert {manager[t].disclosures for t in cmd} == {rs.MANAGER_DISCLOSURES}
     labels = [d.split(":")[0] for d in rs.MANAGER_DISCLOSURES]
     assert labels == ["D-1", "D-2", "descendants_unverified=true"]
-    a = CapabilityState.AVAILABLE
+    a, off = CapabilityState.AVAILABLE, rs.DARWIN_RELEASE_SCOPE["stop_job"]
     on = {t: replace(manager[t], capability=Capability(a, "t", t)) for t in cmd}
     monkeypatch.setattr(c.platform, "system", lambda: "Darwin")
     full = {**manager, **on}
@@ -328,7 +328,7 @@ def test_interface_120_rows_follow_the_composed_owner(monkeypatch):
     for scope, owner, match in (
         (full, "embedded", "stop_job must remain UNAVAILABLE"),
         (rs.DARWIN_RELEASE_SCOPE, "manager", "only UNAVAILABLE or AVAILABLE"),
-        ({**manager, "stop_job": on["stop_job"]}, "manager", "require run_command"),
+        ({**manager, "run_command": off}, "manager", "require run_command"),
         (bare, "manager", "requires its disclosures"),
     ):
         with pytest.raises(RuntimeError, match=match):

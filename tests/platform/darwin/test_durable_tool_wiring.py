@@ -1,8 +1,8 @@
 """R4 J4: Darwin command tools wired to the com.binnacle.jobs manager owner.
 
-The manager rows stay UNAVAILABLE in the committed scope until J-CR, so the
-manager-composed paths run here with test-only AVAILABLE rows and a fake
-client that writes the J2 spool contract (meta.json + out.log).
+Supervisor ruling (4) b: the committed manager rows are AVAILABLE ahead of
+J-CR. The manager-composed paths run here with explicit AVAILABLE rows and a
+fake client that writes the J2 spool contract (meta.json + out.log).
 """
 
 import asyncio
@@ -172,8 +172,8 @@ def test_production_composes_manager_owner_and_fails_closed(tmp_path):
     _, backend = compose_native_tools(settings=settings)
     assert isinstance(backend, cb.DarwinManagerCommandBackend)
     assert type(backend.client).__name__ == "DarwinJobClient"
-    # The committed rows stay UNAVAILABLE until J-CR; no embedded fallback.
-    assert set(backend.release_states.values()) == {"UNAVAILABLE"}
+    # Ruling (4) b: the committed manager rows are AVAILABLE ahead of J-CR.
+    assert set(backend.release_states.values()) == {"AVAILABLE"}
     instructions = _server_instructions("manager")
     assert "com.binnacle.jobs" in instructions and len(instructions) <= 512
     assert DARWIN_MANAGER_REQUIREMENT in instructions
@@ -183,12 +183,16 @@ def test_production_composes_manager_owner_and_fails_closed(tmp_path):
     assert len(_o200k().encode(DARWIN_JOBS_DISCLOSURE)) <= 35
     app = _app(settings, backend)
     assert "com.binnacle.jobs" in app.instructions
-    with pytest.raises(ToolError, match="no embedded fallback"):
+    # The socket is never published: each manager call is the per-call error.
+    with pytest.raises(ToolError, match=JOB_MANAGER_UNAVAILABLE):
         _run(settings, root, backend, "echo hi", 5)
-    with pytest.raises(ToolError, match="no embedded fallback"):
-        js.job_status_impl(None, 10, backend=backend)
-    with pytest.raises(ToolError, match="no embedded fallback"):
-        sj.stop_job_impl("000000000000", backend=backend)
+    assert list(settings.jobs.dir.iterdir()) == []  # nothing ran locally
+    js.job_status_impl(None, 10, backend=backend)  # spool read, no process
+    running = _SpoolClient(settings.jobs.dir).start(
+        None, command="RUNNING", workdir=root, stdin=None, wait_seconds=0, call_id="-"
+    )["job_id"]
+    with pytest.raises(ToolError, match=JOB_MANAGER_UNAVAILABLE):
+        sj.stop_job_impl(running, backend=backend)
 
 
 @_DARWIN

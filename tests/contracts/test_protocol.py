@@ -179,14 +179,26 @@ def test_write_read_edit_search_round_trip(tmp_path):
     assert not listing.is_error and "note.md" in text_of(listing)
 
 
-def test_run_command_synchronous_result_reports_no_job(tmp_path):
+def test_run_command_synchronous_result_reports_no_job(tmp_path, monkeypatch):
+    if sys.platform == "darwin":
+        from binnacle.config import get_settings
+
+        # Hermetic: a never-published tmp socket, never the runtime default,
+        # so no host com.binnacle.jobs can receive this command.
+        jobs = get_settings().jobs
+        monkeypatch.setattr(jobs, "dir", tmp_path / "jobs")
+        monkeypatch.setattr(jobs, "socket_path", tmp_path / "jobs.sock")
+        monkeypatch.setattr(server, "mcp", server.create_server())
     r = call("run_command", command="printf 'hi nonce-7Q3'", workdir=str(tmp_path))
     if sys.platform == "darwin":
         # R4 J4: production composes the com.binnacle.jobs manager, whose rows
-        # stay UNAVAILABLE until J-CR; it fails closed, never runs embedded.
-        # The manager-composed synchronous reply is pinned in
+        # are AVAILABLE (ruling (4) b); without a reachable manager the call is
+        # the per-call error and never runs embedded. The manager-composed
+        # synchronous reply is pinned in
         # tests/platform/darwin/test_durable_tool_wiring.py.
-        assert r.is_error and "no embedded fallback" in text_of(r), text_of(r)
+        assert r.is_error and "job manager unavailable" in text_of(r), text_of(r)
+        assert str(tmp_path / "jobs.sock") in text_of(r), text_of(r)
+        assert not (tmp_path / "jobs").exists()  # nothing ran locally
         assert "nonce-7Q3" not in text_of(r)
         return
     assert not r.is_error, text_of(r)
