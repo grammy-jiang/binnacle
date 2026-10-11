@@ -369,11 +369,8 @@ class DarwinJobManager:
         except OSError as exc:
             with self._lock:
                 self._unrecorded[exited.job_id] = exited
-            log.warning(
-                "event=job_exit_unrecorded job_id=%s errno=%s retry=queued",
-                exited.job_id,
-                exc.errno,
-            )
+            event = "event=job_exit_unrecorded job_id=%s errno=%s retry=queued"
+            log.warning(event, exited.job_id, exc.errno)
             return False
         log.info("event=job_exit job_id=%s", exited.job_id)
         return True
@@ -395,27 +392,36 @@ class DarwinJobManager:
         with self._lock:
             return len(self._unrecorded)
 
-    def _mark_unknown(self, job_id: str, meta: dict[str, Any], reason: str) -> None:
+    def _mark_unknown(
+        self, job_id: str, meta: dict[str, Any], reason: str, *, gone: bool = False
+    ) -> None:
+        authority = {} if gone else {AUTHORITY_FIELD: AUTHORITY_UNKNOWN}
+        meta.pop(AUTHORITY_FIELD, None)  # gone: a prior boot, terminal like Linux
         meta.update(exit_code=None, signal=None, ended_at=time.time())
-        meta.update(termination_reason=reason, **{AUTHORITY_FIELD: AUTHORITY_UNKNOWN})
+        meta.update(termination_reason=reason, **authority)
         self._write_meta(job_id, meta)
         log.warning("event=job_interrupted job_id=%s reason=%s", job_id, reason)
 
     def recover(self) -> int:
-        """Unfinished v2 records of other incarnations -> ``authority=UNKNOWN``."""
+        """Other incarnations' unfinished v2 records -> UNKNOWN; prior boot: final."""
+        from binnacle.platform.darwin.job_manager_entry import prior_boot
+
         recovered = 0
         with self._transaction():
             for job_id in list_job_ids(self.jobs_dir):
                 meta = self._meta(job_id)
-                if meta is None or meta.get("schema_version") != 2 or _terminal(meta):
+                if meta is None or meta.get("schema_version") != 2:
                     continue
-                if meta.get("owner_instance_id") == self.owner_instance_id:
+                lost = meta.get(AUTHORITY_FIELD) == AUTHORITY_UNKNOWN
+                gone = (lost or not _terminal(meta)) and prior_boot(meta, self.boot_id)
+                mine = meta.get("owner_instance_id") == self.owner_instance_id
+                if not gone and (_terminal(meta) or mine):
                     continue
                 rebooted = meta.get("boot_id") != self.boot_id
                 reason = "host_reboot" if rebooted else "owner_restart"
                 if meta.get("stop_requested"):
                     reason = "stop_requested"
-                self._mark_unknown(job_id, meta, reason)
+                self._mark_unknown(job_id, meta, reason, gone=gone)
                 recovered += 1
         return recovered
 

@@ -17,12 +17,12 @@ from __future__ import annotations
 import ctypes
 import logging
 import os
+import re
 import secrets
 import signal
-import struct
 import sys
 import threading
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from pathlib import Path
 
@@ -57,6 +57,7 @@ STOP_MARKER_SUFFIX = ".stop"
 CONFIG_FILE_ENV = "BINNACLE_CONFIG_FILE"
 # env_nested_delimiter overrides, and the runtime root the client would not share
 _OVERRIDES = ("BINNACLE_JOBS__", "BINNACLE_RUN_COMMAND__", "BINNACLE_RUNTIME_DIR")
+BOOT_SESSION = re.compile(r"[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}")
 
 
 def serve_job_manager(
@@ -148,9 +149,11 @@ def read_config() -> ManagerConfig:
 
 
 def boot_id() -> str:
-    """``kern.boottime`` plus ``kern.uuid`` (design); a recovery reason only.
+    """``kern.bootsessionuuid``: a public sysctl, new per boot, fixed within one.
 
-    It labels ``host_reboot`` versus ``owner_restart`` and is never authority.
+    STEER-10: ``kern.boottime`` moves whenever the wall clock is set, so it
+    cannot prove a reboot (``prior_boot``); ``kern.uuid`` is the kernel build.
+    It is never process authority. The J1 owner is composed with this same id.
     """
     libc = ctypes.CDLL(None, use_errno=True)
 
@@ -160,11 +163,21 @@ def boot_id() -> str:
             raise OSError(ctypes.get_errno(), f"sysctl {name} failed")
         return value.raw[: length.value]
 
-    seconds, micros = struct.unpack("=qi", sysctl("kern.boottime", 16)[:12])
-    kernel = sysctl("kern.uuid", 64).rstrip(b"\0").decode("ascii")
-    if seconds <= 0 or not kernel:
+    session = sysctl("kern.bootsessionuuid", 64).rstrip(b"\0").decode("ascii")
+    if not BOOT_SESSION.fullmatch(session.upper()):
         raise OSError("darwin_boot_identity_unavailable")
-    return f"{seconds}.{micros:06d}-{kernel}"
+    return session.upper()
+
+
+def prior_boot(meta: Mapping[str, object], current: str) -> bool:
+    """STEER-10: the record's ``boot_id`` is provably an earlier boot's.
+
+    Both ids must be boot sessions and differ. An absent, unreadable or
+    other-format id proves nothing: the record stays UNKNOWN (fail closed).
+    """
+    ids = (meta.get("boot_id"), current)
+    known = all(isinstance(i, str) and BOOT_SESSION.fullmatch(i) for i in ids)
+    return known and ids[0] != ids[1]
 
 
 def inherited_fds_cloexec() -> None:

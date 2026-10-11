@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import signal
 import subprocess
 import sys
@@ -132,6 +131,25 @@ def test_owner_is_composed_without_its_own_reaper(monkeypatch):
 
 def test_main_takes_no_arguments():
     assert entry.main(["--socket", "/tmp/x"]) == entry.EX_USAGE
+
+
+def test_unreadable_boot_session_is_never_fabricated(monkeypatch):
+    # STEER-10: no boot identity means no manager (EX_FAILED), never a guess.
+    class NoSysctl:
+        def sysctlbyname(self, *_):
+            return -1
+
+    monkeypatch.setattr(entry.ctypes, "CDLL", lambda *_, **__: NoSysctl())
+    with pytest.raises(OSError, match="sysctl kern.bootsessionuuid failed"):
+        entry.boot_id()
+
+
+@NATIVE
+def test_boot_identity_is_the_public_boot_session_sysctl():
+    argv = ["/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"]
+    session = subprocess.run(argv, capture_output=True, text=True, check=True)
+    assert entry.boot_id() == session.stdout.strip().upper()
+    assert entry.BOOT_SESSION.fullmatch(entry.boot_id())
 
 
 def test_stop_marker_must_name_this_incarnation():
@@ -320,7 +338,7 @@ def test_entry_point_serves_pings_and_exits_per_launchd_contract():
                 0,
                 0,
             )
-            assert re.fullmatch(r"\d+\.\d{6}-[0-9A-Fa-f-]+", pong["boot_id"])
+            assert pong["boot_id"] == entry.boot_id()  # kern.bootsessionuuid
             probe = "printenv PATH; test -e /dev/fd/77 && echo leaked || echo clean"
             kw = {"workdir": base, "stdin": None, "call_id": "c"}
             done = client.start(sock, command=probe, wait_seconds=10, **kw)

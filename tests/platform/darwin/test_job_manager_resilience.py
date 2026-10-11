@@ -1,5 +1,6 @@
 """J2r repairs: reaper survival (R-J2-F1), close and partial-stop durability,
-and Linux-parity texts (F2, F6). Portable: no A3 IPC is needed.
+Linux-parity texts (F2, F6) and prior-boot recovery (STEER-10, RJ2D-F3).
+Portable: no A3 IPC is needed.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ import socket
 import tempfile
 import threading
 import time
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -293,3 +295,72 @@ def test_response_timeout_uses_linux_text_without_replay(monkeypatch):
         == (f"{pc.JOB_MANAGER_UNAVAILABLE} at {sock}: timed out")
     )
     assert len(sent) == 1  # a dispatched request is never replayed
+
+
+def session():
+    return str(uuid.uuid4()).upper()  # the kern.bootsessionuuid form
+
+
+def booted(jobs_dir, boot):
+    kw = {"wait_max_s": 50, "keep_newest": 50}
+    return svc.DarwinJobManager(
+        owner=ReferenceOwner(), jobs_dir=jobs_dir, boot_id=boot, **kw
+    )
+
+
+def test_prior_boot_records_are_finalised_like_linux_and_not_counted(jobs_dir):
+    # STEER-10: a provably earlier boot's jobs are gone (design section 7).
+    now, prior = session(), session()
+    v2 = {"schema_version": 2, "owner_instance_id": "old", "boot_id": prior}
+    write_record(jobs_dir, "a" * 12, **v2)  # unfinished
+    write_record(jobs_dir, "b" * 12, **v2, stop_requested=True)
+    lost = {"exit_code": None, "signal": None, "ended_at": 2.0, "authority": "UNKNOWN"}
+    write_record(jobs_dir, "c" * 12, **v2, **lost, termination_reason="owner_restart")
+    write_record(jobs_dir, "d" * 12, **v2, exit_code=0, termination_reason="signal")
+    manager = booted(jobs_dir, now)
+    assert (manager.recover(), manager.recover()) == (3, 0)
+    reasons = {}
+    for job_id in ("a" * 12, "b" * 12, "c" * 12):
+        meta = meta_of(jobs_dir, job_id)
+        assert "authority" not in meta and meta["pid"] == 31337
+        assert (meta["exit_code"], meta["signal"]) == (None, None)
+        reasons[job_id[0]] = meta["termination_reason"]
+        assert manager.state(job_id) == "exited"
+    assert reasons == {"a": "host_reboot", "b": "stop_requested", "c": "host_reboot"}
+    assert meta_of(jobs_dir, "d" * 12)["termination_reason"] == "signal"  # untouched
+    assert manager.job_counts() == (0, 0)  # a quiet window is reachable again
+    assert manager.handle(stop_req("a" * 12))["state"] == "exited"
+
+
+def test_same_boot_and_unprovable_records_stay_unknown_and_counted(jobs_dir):
+    # STEER-10 (2): a manager crash in this boot is D-1; no proof, no finalising.
+    now = session()
+    v2 = {"schema_version": 2, "owner_instance_id": "old"}
+    write_record(jobs_dir, "a" * 12, **v2, boot_id=now)  # same boot
+    write_record(jobs_dir, "b" * 12, **v2)  # the record has no boot id
+    write_record(jobs_dir, "c" * 12, **v2, boot_id="1791391931.519537-25FECA3D")
+    manager = booted(jobs_dir, now)
+    assert (manager.recover(), manager.recover()) == (3, 0)
+    reasons = {}
+    for job_id in ("a" * 12, "b" * 12, "c" * 12):
+        meta = meta_of(jobs_dir, job_id)
+        assert meta["authority"] == "UNKNOWN" and manager.state(job_id) == "unknown"
+        reasons[job_id[0]] = meta["termination_reason"]
+        refused = {"ok": False, "error": pc.OWNER_LOST_STOP_REFUSED}
+        assert manager.handle(stop_req(job_id)) == refused
+    assert reasons == {"a": "owner_restart", "b": "host_reboot", "c": "host_reboot"}
+    assert manager.job_counts() == (0, 3)
+
+
+def test_unreadable_current_boot_identity_fails_closed(jobs_dir):
+    # STEER-10 (1): without a readable current boot, no record is provably gone.
+    v2 = {"schema_version": 2, "owner_instance_id": "old", "boot_id": session()}
+    write_record(jobs_dir, "a" * 12, **v2)
+    for current in ("", "unreadable", session().lower()):
+        assert not entry.prior_boot(v2, current)
+    manager = booted(jobs_dir, "")
+    assert manager.recover() == 1
+    assert meta_of(jobs_dir, "a" * 12)["authority"] == "UNKNOWN"
+    assert manager.job_counts() == (0, 1)
+    assert booted(jobs_dir, session()).recover() == 1  # finalised once provable
+    assert "authority" not in meta_of(jobs_dir, "a" * 12)
