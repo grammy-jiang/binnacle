@@ -51,7 +51,7 @@
     "LINUX": 62
   },
   "coverage_complete": true,
-  "implementation_commit": "1bbb8ea7f0bdf32f6308c72bd7e80f08bb13850b",
+  "implementation_commit": "45613320bc8dda12c7d30e080292bb92720063bb",
   "production_module_count": 178,
   "rows": [
     {
@@ -795,7 +795,7 @@
       "owner": "KEEP",
       "path": "scripts/gate_a_manifest.py",
       "rationale": "External repository management/testing; subprocess for Git, uv or ripgrep is portable, not a host adapter",
-      "sha256": "9bdc8845496b8d2ce3976c9337b7a0639a2a9af29ed5a190e7e69875d4524b11",
+      "sha256": "ee6a61c5352d67477993ec746a6713f91a0bc37d9e0d1c2632276431aca0cf2b",
       "stage": "OS6",
       "was_in_baseline": true
     },
