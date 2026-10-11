@@ -9,6 +9,7 @@ import asyncio
 import json
 import os
 import platform
+import re
 import subprocess
 import threading
 import time
@@ -269,9 +270,38 @@ def test_large_output_returns_the_true_tail(tmp_path):
     assert payload["output"].rstrip().endswith("\n20000")
     assert payload["truncated"] is True
     assert "elided" in payload["output"]
-    # STEER-04 2(b): the result text keeps the descendants disclosure.
-    assert str(result.content).count("descendants_unverified=true") == 1
+    # SD-50: routine result text carries no descendants disclosure.
+    assert "descendants_unverified" not in str(result.content)
     assert "descendants_unverified" not in payload
+
+
+@_DARWIN
+def test_routine_result_text_is_byte_identical_to_linux(tmp_path):
+    """SD-50 r5 L1: foreground, yielded-job and background text equal Linux."""
+    snapshots = Path(__file__).parents[2] / "contracts" / "snapshots"
+    settings, root, backend = _manager(tmp_path)
+
+    def text(name, command, wait=5, background=False):
+        result = rc.run_command_impl(
+            command,
+            str(root),
+            wait,
+            background,
+            None,
+            roots=settings.roots,
+            backend=backend,
+        )
+        job_id = result.structured_content["job_id"]
+        got = str(result.content[0].text).replace(job_id, "<job-1>")
+        expected = json.loads((snapshots / f"{name}.json").read_text())["content"]
+        return re.sub(r"\b\d+\.\d+(?= s\b)", "<s>", got).encode(), expected.encode()
+
+    for got, linux in (
+        text("run_command-fast", "printf 'hello golden\\n'"),
+        text("run_command-job", "RUNNING", wait=1),
+        text("run_command-background", "RUNNING", background=True),
+    ):
+        assert got == linux
 
 
 @_DARWIN
