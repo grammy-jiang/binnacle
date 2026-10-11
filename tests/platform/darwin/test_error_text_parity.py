@@ -8,6 +8,7 @@ one.
 """
 
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -142,9 +143,13 @@ def test_list_files_glob_summaries_and_notes(tree, glob, limit):
 
 def test_list_files_glob_respects_gitignore_with_linux_summary(tree):
     root = tree[0]
+    # rg only honors .gitignore inside a git work tree; pin that so the result
+    # does not depend on where the host places temporary directories.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    subprocess.run(["git", "init", "-q", str(root / "g")], check=True, env=env)
     (root / "g" / "ign.txt").write_text("i\n")
     linux, _ = _same_text(list_files_impl, tree, str(root / "g"), "**/*", 50, False)
-    assert linux[1].startswith("Found ")
+    assert linux[1].startswith("Found 1 files matching")
 
 
 def test_list_files_plain_listing_truncation_note(tree):
