@@ -93,7 +93,14 @@
       "src/binnacle/features/files/paths.py",
       "src/binnacle/deployment/server_unit.py",
       "src/binnacle/features/files/textio.py",
-      "src/binnacle/deployment/units.py"
+      "src/binnacle/deployment/units.py",
+      "src/binnacle/features/commands/job_awareness/models.py",
+      "src/binnacle/features/commands/job_awareness/ports.py",
+      "src/binnacle/features/commands/job_awareness/identifiers.py",
+      "src/binnacle/features/commands/job_awareness/observation.py",
+      "src/binnacle/features/commands/job_awareness/receipts.py",
+      "src/binnacle/features/commands/job_awareness/hint_policy.py",
+      "src/binnacle/features/commands/job_awareness/hint_render.py"
     ],
     "temporary_floors": {
       "unit": {},
@@ -141,7 +148,18 @@
       "binnacle.features.commands.command_execution",
       "binnacle.features.commands.command_status",
       "binnacle.observability.logstats",
-      "binnacle.platform.contracts"
+      "binnacle.platform.contracts",
+      "binnacle.features.commands.job_awareness.models",
+      "binnacle.features.commands.job_awareness.ports",
+      "binnacle.features.commands.job_awareness.identifiers",
+      "binnacle.features.commands.job_awareness.observation",
+      "binnacle.features.commands.job_awareness.snapshots",
+      "binnacle.features.commands.job_awareness.projection",
+      "binnacle.features.commands.job_awareness.receipts",
+      "binnacle.features.commands.job_awareness.grants",
+      "binnacle.features.commands.job_awareness.proofs",
+      "binnacle.features.commands.job_awareness.hint_policy",
+      "binnacle.features.commands.job_awareness.hint_render"
     ],
     "rollout_note": "Linux deployment.unit compatibility methods explicitly own platform-specific mechanics while generic planning remains mockable. Direct Linux imports from CLI are prohibited."
   }

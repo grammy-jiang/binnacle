@@ -1,0 +1,324 @@
+{
+  "schema": "ja-p0-contract-examples-v1",
+  "scope": "SYNTHETIC_VALIDATION_ONLY; constants are not issued credentials",
+  "valid": [
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": "abcdef012345",
+        "incarnation": "g1_22222222222222222222222222222222"
+      }
+    },
+    {
+      "type": "OutputSnapshot",
+      "value": {
+        "job": {
+          "run_namespace": "ja1_11111111111111111111111111111111",
+          "job_id": "abcdef012345",
+          "incarnation": "g1_22222222222222222222222222222222"
+        },
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "byte_length": 0,
+        "terminal": {
+          "kind": "EXIT_CODE",
+          "value": 0
+        },
+        "sealed_at_ms": 1000,
+        "retained_until_ms": 86401000,
+        "source_kind": "CONTROLLER_SEALED_SYNTHETIC",
+        "seal_id": "33333333333333333333333333333333"
+      }
+    },
+    {
+      "type": "RunGrantClaims",
+      "value": {
+        "principal": {
+          "issuer_id": "44444444444444444444444444444444",
+          "tenant_id": "55555555555555555555555555555555",
+          "subject_id": "66666666666666666666666666666666",
+          "consumer_id": "77777777777777777777777777777777",
+          "audience": "binnacle-ja-lab-v1"
+        },
+        "issuer_epoch": "88888888888888888888888888888888",
+        "grant_id": "99999999999999999999999999999999",
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "jobs": [
+          {
+            "run_namespace": "ja1_11111111111111111111111111111111",
+            "job_id": "abcdef012345",
+            "incarnation": "g1_22222222222222222222222222222222"
+          }
+        ],
+        "scopes": [
+          "observe",
+          "read",
+          "ack"
+        ],
+        "issued_at_ms": 1000,
+        "expires_at_ms": 3601000,
+        "consent_version": "lab-user-run-v1",
+        "authority_revision": 1
+      }
+    },
+    {
+      "type": "PageEnvelope",
+      "value": {
+        "snapshot": {
+          "job": {
+            "run_namespace": "ja1_11111111111111111111111111111111",
+            "job_id": "abcdef012345",
+            "incarnation": "g1_22222222222222222222222222222222"
+          },
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "byte_length": 0,
+          "terminal": {
+            "kind": "EXIT_CODE",
+            "value": 0
+          },
+          "sealed_at_ms": 1000,
+          "retained_until_ms": 86401000,
+          "source_kind": "CONTROLLER_SEALED_SYNTHETIC",
+          "seal_id": "33333333333333333333333333333333"
+        },
+        "range": {
+          "start": 0,
+          "stop": 0
+        },
+        "page_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "data_base64": "",
+        "proof": "0000000000000000000000000000000000000000000000000000000000000000",
+        "expires_at_ms": 301000
+      }
+    },
+    {
+      "type": "ConsumerReceipt",
+      "value": {
+        "state": "UNCONFIRMED",
+        "job": {
+          "run_namespace": "ja1_11111111111111111111111111111111",
+          "job_id": "abcdef012345",
+          "incarnation": "g1_22222222222222222222222222222222"
+        },
+        "snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "ranges": [],
+        "empty_confirmed": false,
+        "commit_version": 0,
+        "authority_revision": 1
+      }
+    },
+    {
+      "type": "ReceiptQueryResult",
+      "value": {
+        "ok": true,
+        "receipt": {
+          "state": "UNCONFIRMED",
+          "job": {
+            "run_namespace": "ja1_11111111111111111111111111111111",
+            "job_id": "abcdef012345",
+            "incarnation": "g1_22222222222222222222222222222222"
+          },
+          "snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "ranges": [],
+          "empty_confirmed": false,
+          "commit_version": 0,
+          "authority_revision": 1
+        }
+      }
+    },
+    {
+      "type": "ReceiptQueryResult",
+      "value": {
+        "ok": false,
+        "error": {
+          "code": "DENIED"
+        }
+      }
+    },
+    {
+      "type": "RenderedHint",
+      "value": {
+        "carrier": "META",
+        "text": "Job abcdef012345: output unconfirmed.",
+        "utf8_bytes": 37
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": "../abcdef012",
+        "incarnation": "g1_22222222222222222222222222222222"
+      }
+    },
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": "/etc/passwd/",
+        "incarnation": "g1_22222222222222222222222222222222"
+      }
+    },
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": "abc/def01234",
+        "incarnation": "g1_22222222222222222222222222222222"
+      }
+    },
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": "abc\\def01234",
+        "incarnation": "g1_22222222222222222222222222222222"
+      }
+    },
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": "ABCDEF012345",
+        "incarnation": "g1_22222222222222222222222222222222"
+      }
+    },
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": "abcdef01234\n",
+        "incarnation": "g1_22222222222222222222222222222222"
+      }
+    },
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": "abcdef01234\u0000",
+        "incarnation": "g1_22222222222222222222222222222222"
+      }
+    },
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": "%2e%2e%2fxxx",
+        "incarnation": "g1_22222222222222222222222222222222"
+      }
+    },
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": "ａｂｃｄｅｆ012345",
+        "incarnation": "g1_22222222222222222222222222222222"
+      }
+    },
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": "aaaaaaaaaaaaa",
+        "incarnation": "g1_22222222222222222222222222222222"
+      }
+    },
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": "aaaaaaaaaaa",
+        "incarnation": "g1_22222222222222222222222222222222"
+      }
+    },
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": true,
+        "incarnation": "g1_22222222222222222222222222222222"
+      }
+    },
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": 42,
+        "incarnation": "g1_22222222222222222222222222222222"
+      }
+    },
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": null,
+        "incarnation": "g1_22222222222222222222222222222222"
+      }
+    },
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": "abcdef012345",
+        "incarnation": "g1_22222222222222222222222222222222",
+        "extra": "rejected"
+      }
+    },
+    {
+      "type": "JobRef",
+      "value": {
+        "run_namespace": "ja1_11111111111111111111111111111111",
+        "job_id": "abcdef012345"
+      }
+    },
+    {
+      "type": "OutputSnapshot",
+      "value": {
+        "job": {
+          "run_namespace": "ja1_11111111111111111111111111111111",
+          "job_id": "abcdef012345",
+          "incarnation": "g1_22222222222222222222222222222222"
+        },
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "byte_length": 1048577,
+        "terminal": {
+          "kind": "EXIT_CODE",
+          "value": 0
+        },
+        "sealed_at_ms": 1000,
+        "retained_until_ms": 86401000,
+        "source_kind": "CONTROLLER_SEALED_SYNTHETIC",
+        "seal_id": "33333333333333333333333333333333"
+      }
+    },
+    {
+      "type": "ReceiptQueryResult",
+      "value": {
+        "ok": false,
+        "receipt": {
+          "state": "UNCONFIRMED",
+          "job": {
+            "run_namespace": "ja1_11111111111111111111111111111111",
+            "job_id": "abcdef012345",
+            "incarnation": "g1_22222222222222222222222222222222"
+          },
+          "snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "ranges": [],
+          "empty_confirmed": false,
+          "commit_version": 0,
+          "authority_revision": 1
+        }
+      }
+    },
+    {
+      "type": "RenderedHint",
+      "value": {
+        "carrier": "STRUCT",
+        "text": "x",
+        "utf8_bytes": 1
+      }
+    }
+  ]
+}
