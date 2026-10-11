@@ -28,6 +28,7 @@ from binnacle.features.files.paths import (
     nearby_hint,
     resolve_path,
 )
+from binnacle.features.search.fd_chain import DirectoryChain
 from binnacle.features.search.rg_env import NO_CONFIG, rg_env
 from binnacle.platform.contracts.file_access_contracts import ListRequest
 
@@ -174,36 +175,32 @@ def _list_mode(
 
 
 def _glob_entries(root: Path, lines: list[str]) -> list[dict]:
-    """Size each listed file by ONE no-follow lstat (r6 W2 X3c, SD-76).
+    """Size each listed file by ONE no-follow lstat (r6 W2 X3c-a3, SD-78).
 
-    rg lists by path string and never lists a symlink, so every component
-    from '/' to the file's directory is opened no-follow (O_PATH on Linux),
-    and the file is lstat-ed relative to that descriptor. A path whose
-    directory is no longer a directory (swapped for a symlink or a file) or
-    whose final component is now a symlink is omitted: no outside object is
-    typed or sized. Any other failure keeps the entry without bytes, as r6
-    did when p.stat() failed.
+    rg lists by path string and never lists a symlink. A line that is
+    absolute or has a '..' component is rejected: rg --files below root
+    prints neither. Every component from '/' to the file's directory is
+    opened no-follow (O_PATH on Linux); only the chain of the current path
+    is open (fd_chain, a stack bounded by the path depth). The file is
+    lstat-ed relative to that descriptor. A path whose directory is no
+    longer a directory (swapped for a symlink or a file) or whose final
+    component is now a symlink is omitted: no outside object is typed or
+    sized. Any other failure, including a descriptor shortage, keeps the
+    entry without bytes, as r6 did when p.stat() failed.
     """
     entries: list[dict] = []
-    with ExitStack() as stack:
-        fds: dict[tuple[str, ...], int] = {}
-
-        def directory(parts: tuple[str, ...]) -> int:
-            if parts not in fds:
-                if parts:
-                    parent = directory(parts[:-1])
-                    fd = os.open(parts[-1], fd_walk.TRAVERSE_FLAGS, dir_fd=parent)
-                else:
-                    fd = os.open("/", fd_walk.TRAVERSE_FLAGS)
-                stack.callback(os.close, fd)
-                fds[parts] = fd
-            return fds[parts]
-
+    # Plain string splitting: PurePath costs more than the walk itself. The
+    # components and the reported path equal those of root / line.
+    top = [part for part in str(root).split("/") if part]
+    with DirectoryChain() as chain:
         for line in lines:
-            p = root / line
-            entry: dict = {"path": str(p), "type": "file"}
+            below = [part for part in line.split("/") if part not in ("", ".")]
+            if line.startswith("/") or ".." in below or not below:
+                continue
+            parts = top + below
+            entry: dict = {"path": "/" + "/".join(parts), "type": "file"}
             try:
-                info = os.lstat(p.name, dir_fd=directory(p.parent.parts[1:]))
+                info = os.lstat(below[-1], dir_fd=chain.directory(tuple(parts[:-1])))
             except OSError as exc:
                 if exc.errno in (errno.ENOTDIR, errno.ELOOP):
                     continue

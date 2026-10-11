@@ -152,7 +152,7 @@ def _scan_exact(
         max_line_chars=settings.max_line_chars,
         clip_mark=LINE_CLIP_MARK,
     )
-    return verify_exact_scan(scan)  # rg opened each file by path (SD-76)
+    return verify_exact_scan(scan, resolved)  # rg opens files by path (SD-78)
 
 
 def _fit_budget_with_metrics(
@@ -346,7 +346,7 @@ def _search_exact_impl(
             metrics.adaptive_selected = True
             metrics.adaptive_budget_trimmed = adaptive.budget_trimmed
             metrics.result_bytes = adaptive.result_bytes
-            payload = verify_adaptive(adaptive.payload)
+            payload = verify_adaptive(adaptive.payload, resolved)
             log_adaptive_result(
                 log,
                 call=current_call.get(),

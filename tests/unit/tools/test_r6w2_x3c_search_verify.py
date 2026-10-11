@@ -105,7 +105,10 @@ def test_a_file_swapped_for_an_outside_symlink_is_omitted(tree, execution, names
     assert payload["count"] == 1
 
 
-def test_a_file_swapped_back_after_rg_read_outside_is_omitted(tree):
+def test_a_file_swapped_back_after_rg_read_is_the_documented_residual(tree):
+    # X3c-a3 (SD-78) removed the per-match content re-read: a swap that is
+    # undone before the check leaves an in-root regular file, so rg's text
+    # is reported as in r6 (docs/tools/search_text.md, content residual).
     root, outside = tree["root"], tree["outside"]
     rg = wrapper(
         tree["tmp"],
@@ -116,8 +119,10 @@ def test_a_file_swapped_back_after_rg_read_outside_is_omitted(tree):
         "needle", str(root), None, False, 0, False, 100, roots=tree["roots"], rg_bin=rg
     ).structured_content
     assert payload is not None
-    assert OUTSIDE not in texts(payload)
-    assert [Path(e["file"]).name for e in payload["entries"]] == ["n.txt"]
+    assert {e["file"] for e in payload["entries"]} == {
+        str(root / "m.txt"),
+        str(root / "d" / "n.txt"),
+    }
 
 
 def test_a_directory_swapped_for_an_outside_symlink_is_omitted(tree):
