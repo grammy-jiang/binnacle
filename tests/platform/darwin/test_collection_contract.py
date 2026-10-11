@@ -360,8 +360,7 @@ tests/integration/test_jobs_lifecycle_stops.py 1 1
 tests/integration/test_jobs_state_machine.py 1 1
 tests/integration/test_jobs_stop_paths.py 1 1
 tests/integration/test_jobs_store.py 6 6
-tests/integration/test_log_privacy.py 2 2
-tests/integration/test_logging.py 1 1
+tests/integration/test_log_privacy.py 1 1
 tests/integration/test_logging_jobs.py 1 4
 tests/integration/test_mounted_call_context.py 1 1
 tests/integration/test_os_job_rpc_cross_version.py 1 2
@@ -385,7 +384,7 @@ for _row in _T0A9_PIN_TABLE.strip().splitlines():
     _path, _n_uses, _n_nodes = _row.split()
     LINUX_PIN_USE_COUNTS[_path] = int(_n_uses)
     LINUX_PIN_NODE_COUNTS[_path] = int(_n_nodes)
-LINUX_PIN_TOTAL_NODES = 182
+LINUX_PIN_TOTAL_NODES = 180
 
 
 def _repo_sources() -> dict[str, str]:

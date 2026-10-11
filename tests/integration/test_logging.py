@@ -24,11 +24,6 @@ from binnacle.mcp.callctx import (
     current_turn,
 )
 
-LINUX_ONLY = pytest.mark.skipif(
-    sys.platform != "linux",
-    reason="Darwin tool_config line set differs (no Darwin counterpart: Commands tools are LIMITED)",
-)
-
 
 @pytest.fixture
 def tmp_path(default_root_tmp_path):
@@ -309,7 +304,6 @@ def test_prune_line(caplog, tmp_path, monkeypatch):
     assert "effective_keep=50" in line
 
 
-@LINUX_ONLY
 def test_effective_config_line(caplog):
     with caplog.at_level("INFO", logger="binnacle.server"):
         server.log_effective_config()
@@ -330,6 +324,25 @@ def test_effective_config_line(caplog):
     tool_lines = [
         r.getMessage() for r in caplog.records if "event=tool_config" in r.getMessage()
     ]
+    if sys.platform != "linux":
+        # Darwin: Commands tools are LIMITED/UNAVAILABLE (no durable jobs engine).
+        parsed = [_fields(line) for line in tool_lines]
+        assert [(f["tool"], f.get("capability")) for f in parsed] == [
+            ("read_file", None),
+            ("list_files", None),
+            ("search_text", None),
+            ("run_command", None),
+            ("run_command", "LIMITED"),
+            ("job_status", "LIMITED"),
+            ("stop_job", "UNAVAILABLE"),
+            ("edit_file", None),
+        ]
+        by_tool = {f["tool"]: f for f in parsed}
+        assert by_tool["read_file"]["max_chars"] == "24000"
+        assert by_tool["search_text"]["result_max_bytes"] == "65536"
+        assert by_tool["search_text"]["exact_execution"] == "streaming"
+        assert parsed[3]["wait_max_s"] == "50"
+        return
     assert len(tool_lines) == 6
     by_tool = {_fields(line)["tool"]: _fields(line) for line in tool_lines}
     assert by_tool["read_file"]["max_chars"] == "24000"
