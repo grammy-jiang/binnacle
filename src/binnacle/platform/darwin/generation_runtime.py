@@ -124,6 +124,25 @@ def open_service_lease(*, root: Path, label: str, generation: str) -> ServiceLea
         os.close(fd)
 
 
+def discover_service_lease(*, root: Path, label: str) -> ServiceLease:
+    """Lease for the published generation; connect still proves peer and HMAC."""
+    fd = open_private_root(root)
+    try:
+        key_fd = private_file(fd, "jobs.sock.auth")
+    except OSError as exc:
+        raise _refuse("ipc_endpoint_unpublished") from exc
+    finally:
+        os.close(fd)
+    with os.fdopen(key_fd, "rb") as stream:
+        value = bounded_json(stream.read(65537))
+    gen = value.get("generation")
+    if (value.get("label"), value.get("uid")) != (label, os.getuid()) or not (
+        isinstance(gen, str)
+    ):
+        raise _refuse("ipc_generation_mismatch")
+    return open_service_lease(root=root, label=label, generation=gen)
+
+
 def lease_root(lease: ServiceLease) -> Path:
     """Lookup only a root opened in this process; a copied lease is insufficient."""
     root = _ROOTS.get(lease)
