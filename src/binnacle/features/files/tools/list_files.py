@@ -215,9 +215,14 @@ def list_files_impl(
             for _ in PurePath(relative).parts:
                 root_label = root_label.parent
             for entry in listing.entries:
+                # A symlink is typed by its in-root target; any other entry the
+                # provider could not type (unresolved link, fifo, socket) is omitted.
+                kind = entry.target_kind or entry.kind
+                if kind not in ("file", "directory"):
+                    continue
                 item: dict = {
                     "path": str(root_label / entry.relative_path),
-                    "type": "dir" if entry.kind == "directory" else "file",
+                    "type": "dir" if kind == "directory" else "file",
                 }
                 if entry.size_bytes is not None:
                     item["bytes"] = entry.size_bytes
