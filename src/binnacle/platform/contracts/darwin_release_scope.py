@@ -7,7 +7,8 @@ Interface 1.2.0: rows are chosen from the composed job owner. The embedded
 owner keeps the reviewed LIMITED rows below. The manager owner targets
 "full_with_disclosure": AVAILABLE plus an explicit, non-empty disclosure scope.
 There is no FULL_WITH_DISCLOSURE capability state, and an unreachable manager
-never selects LIMITED rows. Manager command rows stay UNAVAILABLE until J-CR.
+never selects LIMITED rows. Supervisor ruling (4) option b: the manager
+command rows are AVAILABLE ahead of J-CR, which reviews them at the J4f commit.
 """
 
 from collections.abc import Mapping
@@ -104,12 +105,12 @@ MANAGER_DISCLOSURES: tuple[str, ...] = (
 _REQUIRED_DISCLOSURES = ("D-1:", "descendants_unverified=true")
 
 
-def _manager_pending(tool: str) -> ReleaseDecision:
+def _manager_available(tool: str) -> ReleaseDecision:
     return ReleaseDecision(
-        Capability(CapabilityState.UNAVAILABLE, "review_pending", tool),
+        Capability(CapabilityState.AVAILABLE, "full_with_disclosure", tool),
         FULL_WITH_DISCLOSURE,
         "J-CR",
-        f"R4 DARWIN-DURABLE-JOBS-DESIGN.md#10; JCR-DESIGN-REVIEW.json; {tool}",
+        "pending J-CR at the J4f commit on r4/J4f-20261011",
         MANAGER_DISCLOSURES,
     )
 
@@ -118,7 +119,7 @@ DARWIN_EMBEDDED_RELEASE_SCOPE = DARWIN_RELEASE_SCOPE
 DARWIN_MANAGER_RELEASE_SCOPE: Mapping[str, ReleaseDecision] = MappingProxyType(
     {
         **{tool: DARWIN_RELEASE_SCOPE[tool] for tool in FILE_TOOLS},
-        **{tool: _manager_pending(tool) for tool in COMMAND_TOOLS},
+        **{tool: _manager_available(tool) for tool in COMMAND_TOOLS},
     }
 )
 

@@ -490,11 +490,11 @@ def test_invalid_native_scope_raises_at_every_composition_boundary(
         create_application(settings=Settings(), token="test", backend=backend)
 
 
-def test_committed_stop_job_is_unavailable_for_every_owner():
+def test_committed_stop_job_row_follows_the_owner():
     from binnacle.platform.contracts.capability_contracts import CapabilityState as S
     from binnacle.platform.contracts.darwin_release_scope import release_scope_for_owner
 
-    # Owner-conditioned: embedded is permanent, the manager row waits for J-CR.
-    for owner, gate in (("embedded", "never"), ("manager", "J-CR")):
+    rows = (("embedded", S.UNAVAILABLE, "never"), ("manager", S.AVAILABLE, "J-CR"))
+    for owner, state, gate in rows:  # ruling (4) b: manager AVAILABLE before J-CR
         row = release_scope_for_owner(owner)["stop_job"]
-        assert (row.capability.state, row.enabling_gate) == (S.UNAVAILABLE, gate)
+        assert (row.capability.state, row.enabling_gate) == (state, gate)
