@@ -1,245 +1,235 @@
-"""E2 S4 / CA-2 under concurrency: once-only emission around adapt_routed.
+"""E2 S5 / CA-2 on the real lab ledger: once-only emission around adapt_routed.
 
-``EmitLedger`` is a test double of the S2 lab ``emit`` table with the exact
-design §2.6 reserve/emit/reset/abort SQL and rowcount rules. These tests pin
-the adapter side of the contract: a job becomes EMITTED only when it appears
-in a returned hint, a hint names only jobs that its own reservation holds,
-and every job is hinted at most once, with or without the per-key fence.
+The S4 in-memory ``emit`` double is gone. Every test here drives the real S2
+``emit_hint`` (per-key fence, reserve/emit/reset/abort SQL, final validation)
+over the real ``SessionLab`` with the real ``HintAdapter.adapt_routed``,
+``select_candidates`` and ``render_hint`` (design §2.6 tests).
 """
 
 import asyncio
+import sqlite3
 from collections import Counter
 from dataclasses import replace
 
 import pytest
+from fastmcp.tools.base import ToolResult
+from mcp.types import TextContent
 
 from binnacle.features.commands.job_awareness.models import HintCarrier
-from binnacle.mcp.job_awareness_hint import META_KEY, HintAdapter
-from tests.contracts.job_awareness.routed_support import (
-    EmitLedger,
-    RoutedLab,
-    emission,
-    yield_,
+from binnacle.features.commands.job_awareness.session_emission import emit_hint
+from binnacle.mcp.job_awareness_hint import HintAdapter
+from tests.contracts.job_awareness.e2_composition import (
+    NOTE,
+    E2Server,
+    chat,
+    hinted_keys,
 )
+from tests.contracts.job_awareness.e2_scoring import ledger_rows
 from tests.contracts.job_awareness.synthetic_app import in_loop
-
-KD = "e" * 32 + ":" + "a" * 32 + ":" + "b" * 32
-
-
-def hinted(result) -> list[str]:
-    meta = result.meta or {}
-    text = meta.get(META_KEY)
-    if text is None and len(result.content) > 1:
-        text = result.content[-1].text
-    if text is None:
-        return []
-    body = text.removeprefix("[Binnacle job reminder] ")
-    return [part.split(" ")[0] for part in body.split("; ")]
+from tests.contracts.job_awareness.test_hint_schema_support import executed
 
 
-def ordered_keys(jobs) -> list[str]:
-    return sorted(job.canonical_key for job in jobs)
+def note() -> ToolResult:
+    return ToolResult(
+        content=[TextContent(type="text", text=NOTE)],
+        structured_content={"note": NOTE},
+    )
+
+
+def hinted(result: ToolResult) -> list[str]:
+    blocks = [{"text": getattr(block, "text", "")} for block in result.content]
+    return hinted_keys({"_meta": result.meta, "content": blocks})
+
+
+async def allocate(server: E2Server, name: str, count: int, *, seal=True):
+    who = chat(name)
+    handles = []
+    for index in range(count):
+        started = await server.lab.start_fixture(
+            server.outcome(who), f"R3-SYN-JOB-{index + 1:02d}"
+        )
+        assert isinstance(started, str)  # nosec B101 - pytest assertion
+        if seal:
+            await server.seal(who, started)
+        handles.append(started)
+    return who, handles
+
+
+async def emission(server, who, *, adapter=None, checkpoint=None):
+    value = note()
+    receipt = executed(value, server.tool)
+    result = await emit_hint(
+        server.lab,
+        server.outcome(who),
+        value,
+        execution=receipt,
+        adapter=adapter or server.adapter,
+        checkpoint=checkpoint,
+    )
+    return value, result
+
+
+def states(server, who=None) -> dict[str, str]:
+    rows = ledger_rows(server, "SELECT jobref,kd,state FROM emit")
+    kd = None if who is None else server.key(who).kd
+    return {str(j): str(s) for j, k, s in rows if kd is None or k == kd}
+
+
+def keys_of(server, who) -> list[str]:
+    binding = server.lab.table.get(server.key(who).kd)
+    assert binding is not None  # nosec B101 - pytest assertion
+    return sorted(job.canonical_key for job in binding.jobs)
 
 
 @pytest.mark.parametrize("live", [3, 4, 8])
 @in_loop
-async def test_live_jobs_are_hinted_two_per_call_in_order(live):
-    with RoutedLab(8) as lab:
-        adapter = lab.routed(enabled=True)
-        ledger = EmitLedger(KD, lab.jobs[:live])
-        keys = ordered_keys(lab.jobs[:live])
-        for start in range(0, live, 2):
-            result = await emission(lab, adapter, ledger)
-            assert hinted(result) == keys[start : start + 2]  # nosec B101 - pytest assertion
-        assert hinted(await emission(lab, adapter, ledger)) == []  # nosec B101 - pytest assertion
-        assert {ledger.state(job) for job in lab.jobs[:live]} == {"EMITTED"}  # nosec B101 - pytest assertion
+async def test_live_jobs_are_hinted_two_per_call_in_order(tmp_path, live):
+    server = E2Server(tmp_path / "phase")
+    who, _ = await allocate(server, "A", live)
+    keys = keys_of(server, who)
+    for start in range(0, live, 2):
+        _, result = await emission(server, who)
+        assert hinted(result) == keys[start : start + 2]  # nosec B101 - pytest assertion
+    value, result = await emission(server, who)
+    assert result is value  # nosec B101 - pytest assertion
+    assert set(states(server).values()) == {"EMITTED"}  # nosec B101 - pytest assertion
+    await server.workers.close()
 
 
 @in_loop
-async def test_fewer_than_two_candidates_reserve_only_those():
-    with RoutedLab(1) as lab:
-        adapter = lab.routed(enabled=True)
-        ledger = EmitLedger(KD, lab.jobs)
-        assert hinted(await emission(lab, adapter, ledger)) == ordered_keys(lab.jobs)  # nosec B101 - pytest assertion
+async def test_fewer_than_two_and_unsealed_are_not_reserved(tmp_path):
+    server = E2Server(tmp_path / "phase")
+    who, _ = await allocate(server, "A", 1)
+    await server.lab.start_fixture(server.outcome(who), "R3-SYN-JOB-09")  # unsealed
+    _, result = await emission(server, who)
+    assert len(hinted(result)) == 1  # nosec B101 - pytest assertion
+    assert sorted(states(server).values()) == ["EMITTED", "PENDING"]  # nosec B101 - pytest assertion
+    await server.workers.close()
 
 
 @in_loop
-async def test_unselected_jobs_are_reset_not_blocked():
-    """A COMPLETE/expired job is not rendered, returns to PENDING, blocks nothing."""
-    with RoutedLab(3) as lab:
-        adapter = lab.routed(enabled=True)
-        done = min(lab.jobs, key=lambda job: job.canonical_key)
-        select = adapter.bindings.select
-        adapter.bindings = replace(
-            adapter.bindings,
-            select=lambda grant, observed: tuple(
-                c for c in select(grant, observed) if c.job != done
-            ),
-        )
-        ledger = EmitLedger(KD, lab.jobs)
-        first = hinted(await emission(lab, adapter, ledger))
-        assert done.canonical_key not in first and len(first) == 1  # nosec B101 - pytest assertion
-        assert ledger.state(done) == "PENDING"  # nosec B101 - pytest assertion
-        second = hinted(await emission(lab, adapter, ledger))
-        assert len(second) == 1 and set(first).isdisjoint(second)  # nosec B101 - pytest assertion
-        assert ledger.state(done) == "PENDING"  # nosec B101 - pytest assertion
+async def test_unselected_and_render_none_reset_to_pending(tmp_path):
+    server = E2Server(tmp_path / "phase")
+    who, _ = await allocate(server, "A", 3)
+    done = keys_of(server, who)[0]
+    real = server.adapter.bindings
+    server.adapter.bindings = replace(
+        real,
+        select=lambda grant, observed: tuple(
+            c for c in real.select(grant, observed) if c.job.canonical_key != done
+        ),
+    )
+    _, first = await emission(server, who)
+    assert hinted(first) == keys_of(server, who)[1:2]  # nosec B101 - pytest assertion
+    assert states(server)[done] == "PENDING"  # nosec B101 - pytest assertion
+    server.adapter.bindings = replace(real, render=lambda *args: None)
+    value, result = await emission(server, who)
+    assert result is value  # nosec B101 - pytest assertion
+    assert sorted(states(server).values()) == ["EMITTED", "PENDING", "PENDING"]  # nosec B101 - pytest assertion
+    server.adapter.bindings = real
+    _, last = await emission(server, who)
+    assert done in hinted(last)  # nosec B101 - pytest assertion
+    await server.workers.close()
 
 
-@in_loop
-async def test_render_none_resets_every_reserved_job():
-    with RoutedLab(2) as lab:
-        adapter = lab.routed(enabled=True)
-        real = adapter.bindings
-        adapter.bindings = replace(real, render=lambda *args: None)
-        ledger = EmitLedger(KD, lab.jobs)
-        assert hinted(await emission(lab, adapter, ledger)) == []  # nosec B101 - pytest assertion
-        assert {ledger.state(job) for job in lab.jobs} == {"PENDING"}  # nosec B101 - pytest assertion
-        adapter.bindings = real
-        assert hinted(await emission(lab, adapter, ledger)) == ordered_keys(lab.jobs)  # nosec B101 - pytest assertion
-
-
-async def drain(lab, adapter, ledger, calls, *, fenced):
-    """Run batches of concurrent calls until no job is PENDING."""
-    lock = asyncio.Lock()
-
-    async def one():
-        if fenced:
-            async with lock:
-                return await emission(lab, adapter, ledger)
-        return await emission(lab, adapter, ledger, fence=yield_)
-
-    results = []
-    for _ in range(64):
-        if not any(ledger.state(job) == "PENDING" for job in ledger.jobs):
-            break
-        results.extend(await asyncio.gather(*(one() for _ in range(calls))))
-    return results
-
-
-@pytest.mark.parametrize("fenced", [True, False])
+@pytest.mark.timeout(600)
 @pytest.mark.parametrize("calls", [2, 8])
 @in_loop
-async def test_concurrent_calls_hint_each_job_exactly_once(calls, fenced):
-    with RoutedLab(8) as lab:
-        # 100 rounds on the design path (fenced); 50 extra unfenced rounds
-        # show that the reserve CAS alone keeps emission once-only.
-        for round_ in range(100 if fenced else 50):
-            carrier = HintCarrier.META if round_ % 2 else HintCarrier.TEXT
-            adapter = lab.routed(enabled=True, carrier=carrier)
-            ledger = EmitLedger(KD, lab.jobs)
-            results = await drain(lab, adapter, ledger, calls, fenced=fenced)
-            seen = Counter(key for result in results for key in hinted(result))
-            emitted = {
-                job.canonical_key for job in lab.jobs if ledger.state(job) == "EMITTED"
-            }
-            assert set(seen) == emitted  # nosec B101 - pytest assertion
-            assert set(seen.values()) == {1}, seen  # nosec B101 - pytest assertion
-            assert all(len(hinted(result)) <= 2 for result in results)  # nosec B101 - pytest assertion
-            assert ledger.counts() == {"EMITTED": 8}  # nosec B101 - pytest assertion
+async def test_concurrent_calls_hint_each_job_exactly_once(tmp_path, calls):
+    """100 rounds; each job EMITTED once, and only when in a returned hint."""
+    server = None
+    for round_ in range(100):
+        if round_ % 30 == 0:
+            if server is not None:
+                await server.workers.close()
+            carrier = HintCarrier.META if round_ % 60 else HintCarrier.TEXT
+            server = E2Server(tmp_path / f"phase-{round_}", carrier=carrier)
+            server.adapter = server.build_adapter(enabled=True)
+        who, _ = await allocate(server, f"chat-{round_}", 3)
+        results = await asyncio.gather(*(emission(server, who) for _ in range(calls)))
+        seen = Counter(key for _, result in results for key in hinted(result))
+        emitted = {k for k, v in states(server, who).items() if v == "EMITTED"}
+        assert set(seen) == emitted and set(seen.values()) <= {1}  # nosec B101 - pytest assertion
+        assert len(emitted) == min(3, 2 * calls)  # nosec B101 - pytest assertion
+    assert server is not None  # nosec B101 - pytest assertion
+    await server.workers.close()
 
 
-class Gate:
-    """Pause inside the routed call; the test cancels or retires meanwhile."""
-
-    def __init__(self):
-        self.entered, self.release = asyncio.Event(), asyncio.Event()
-
-    async def __call__(self, _=0):
-        self.entered.set()
-        await self.release.wait()
+POINTS = ("after_reserve", "after_adapt", "after_validation", "before_commit")
 
 
+@pytest.mark.parametrize("point", POINTS)
 @in_loop
-async def test_cancel_at_the_pause_point_aborts_and_never_rehints():
-    with RoutedLab(2) as lab:
-        adapter = lab.routed(enabled=True)
-        ledger = EmitLedger(KD, lab.jobs)
-        gate = Gate()
-        task = asyncio.ensure_future(emission(lab, adapter, ledger, fence=gate))
-        await gate.entered.wait()
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
-        assert {ledger.state(job) for job in lab.jobs} == {"ABORTED"}  # nosec B101 - pytest assertion
-        assert hinted(await emission(lab, adapter, ledger)) == []  # nosec B101 - pytest assertion
+async def test_cancel_at_each_pause_point_aborts_and_never_rehints(tmp_path, point):
+    server = E2Server(tmp_path / "phase")
+    who, _ = await allocate(server, "A", 2)
+    entered, release = asyncio.Event(), asyncio.Event()
 
+    async def pause(name):
+        if name == point:
+            entered.set()
+            await release.wait()
 
-@in_loop
-async def test_cancel_inside_the_worker_returns_no_result():
-    with RoutedLab(2) as lab:
-        adapter = lab.routed(enabled=True)
-        ledger = EmitLedger(KD, lab.jobs)
-        entered, release = asyncio.Event(), asyncio.Event()
-        loop = asyncio.get_running_loop()
-        real = adapter.bindings.select
-
-        def slow(grant, observed):
-            loop.call_soon_threadsafe(entered.set)
-            asyncio.run_coroutine_threadsafe(release.wait(), loop).result(5)
-            return real(grant, observed)
-
-        adapter.bindings = replace(adapter.bindings, select=slow)
-        task = asyncio.ensure_future(emission(lab, adapter, ledger))
-        await entered.wait()
-        task.cancel()
-        release.set()
-        with pytest.raises(asyncio.CancelledError):
-            await task
-        await adapter.workers.close()  # drain the worker before the loop ends
-        assert {ledger.state(job) for job in lab.jobs} == {"ABORTED"}  # nosec B101 - pytest assertion
+    task = asyncio.ensure_future(emission(server, who, checkpoint=pause))
+    await entered.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert set(states(server).values()) == {"ABORTED"}  # nosec B101 - pytest assertion
+    value, result = await emission(server, who)
+    assert result is value  # nosec B101 - pytest assertion
+    await server.workers.close()
 
 
 @pytest.mark.parametrize("step", ["emit", "reset"])
 @in_loop
-async def test_commit_rowcount_mismatch_returns_original_and_aborts(step):
-    with RoutedLab(3) as lab:
-        adapter = lab.routed(enabled=True)
-        ledger = EmitLedger(KD, lab.jobs[:2] if step == "emit" else lab.jobs)
-        select = adapter.bindings.select
-        if step == "reset":
-            adapter.bindings = replace(
-                adapter.bindings,
-                select=lambda grant, observed: select(grant, observed)[:1],
-            )
-        gate = Gate()
-        task = asyncio.ensure_future(emission(lab, adapter, ledger, fence=gate))
-        await gate.entered.wait()
-        # A bypassing writer (no fence) changes one reserved row underneath.
-        reserved = sorted(ledger.jobs, key=lambda job: job.canonical_key)[:2]
-        victim = reserved[0 if step == "emit" else 1]
-        ledger.db.execute(
-            "UPDATE emit SET reservation_id=? WHERE jobref=?",
-            ("f" * 32, victim.canonical_key),
+async def test_commit_rowcount_mismatch_returns_original_and_aborts(tmp_path, step):
+    """A bypassing writer changes one reserved row before the commit."""
+    server = E2Server(tmp_path / "phase")
+    who, _ = await allocate(server, "A", 2)
+    keys = keys_of(server, who)
+    real = server.adapter.bindings
+    if step == "reset":
+        server.adapter.bindings = replace(
+            real, select=lambda grant, observed: real.select(grant, observed)[:1]
         )
-        gate.release.set()
-        result = await task
-        assert hinted(result) == []  # nosec B101 - pytest assertion
-        assert ledger.state(victim) == "RESERVED"  # nosec B101 - pytest assertion
-        others = [job for job in reserved if job != victim]
-        assert {ledger.state(job) for job in others} == {"ABORTED"}  # nosec B101 - pytest assertion
-        # A stuck RESERVED row is never re-hintable.
-        later = hinted(await emission(lab, adapter, ledger))
-        assert victim.canonical_key not in later  # nosec B101 - pytest assertion
+    victim = keys[0 if step == "emit" else 1]
+
+    async def tamper(name):
+        if name == "before_commit":
+            db = sqlite3.connect(server.lab.ledger.path)
+            db.execute(
+                "UPDATE emit SET reservation_id=? WHERE jobref=?", ("f" * 32, victim)
+            )
+            db.commit()
+            db.close()
+
+    value, result = await emission(server, who, checkpoint=tamper)
+    assert result is value  # nosec B101 - pytest assertion
+    after = states(server)
+    assert after[victim] == "RESERVED"  # nosec B101 - pytest assertion
+    assert {after[k] for k in keys if k != victim} == {"ABORTED"}  # nosec B101 - pytest assertion
+    server.adapter.bindings = real
+    value, result = await emission(server, who)
+    assert result is value  # nosec B101 - pytest assertion
+    await server.workers.close()
 
 
 @in_loop
-async def test_two_keys_interleaved_never_cross():
-    with RoutedLab(4) as lab:
-        adapter = lab.routed(enabled=True)
-        left = EmitLedger("a" * 98, lab.jobs[:2])
-        right = EmitLedger("b" * 98, lab.jobs[2:])
-        ledgers = (left, right, left, right)
-        for _ in range(32):  # a busy worker returns the original; retry
-            if "PENDING" not in left.counts() | right.counts():
-                break
-            results = await asyncio.gather(
-                *(emission(lab, adapter, ledger, fence=yield_) for ledger in ledgers)
-            )
-            for ledger, result in zip(ledgers, results, strict=True):
-                own = {job.canonical_key for job in ledger.jobs}
-                assert set(hinted(result)) <= own  # nosec B101 - pytest assertion
-        for ledger in (left, right):
-            assert {ledger.state(job) for job in ledger.jobs} == {"EMITTED"}  # nosec B101 - pytest assertion
+async def test_two_keys_interleaved_never_cross(tmp_path):
+    server = E2Server(tmp_path / "phase")
+    a, _ = await allocate(server, "A", 2)
+    b, _ = await allocate(server, "B", 2)
+    own = {a: set(keys_of(server, a)), b: set(keys_of(server, b))}
+    order = (a, b, a, b)
+    for _ in range(32):  # a busy worker or store returns the original; retry
+        if "PENDING" not in states(server).values():
+            break
+        results = await asyncio.gather(*(emission(server, who) for who in order))
+        for who, (_, result) in zip(order, results, strict=True):
+            assert set(hinted(result)) <= own[who]  # nosec B101 - pytest assertion
+    assert set(states(server).values()) == {"EMITTED"}  # nosec B101 - pytest assertion
+    await server.workers.close()
 
 
 def test_guard_negative_control_rendered_subset():

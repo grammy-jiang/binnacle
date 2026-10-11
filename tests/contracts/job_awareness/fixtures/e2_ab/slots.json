@@ -1,0 +1,1376 @@
+{
+ "arms": [
+  {
+   "arm": "CONTROL",
+   "carrier": "META",
+   "execution_rank_within_carrier": 1,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-01-00",
+    "synthetic-r3-01-01",
+    "synthetic-r3-01-02"
+   ],
+   "fixture_payload_sha256": "536001a68e2c3fde4479485428b112eb3e8786e64fbe611a824b3aa21ee02acf",
+   "job_id": "R3-SYN-JOB-01",
+   "nonce_sha256": "a2a64f7d13329f34d79c9b19e180c5b875651153e8cb527b305854235f3d0d29",
+   "pair_id": "META-01"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "META",
+   "execution_rank_within_carrier": 1,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-01-00",
+    "synthetic-r3-01-01",
+    "synthetic-r3-01-02"
+   ],
+   "fixture_payload_sha256": "536001a68e2c3fde4479485428b112eb3e8786e64fbe611a824b3aa21ee02acf",
+   "job_id": "R3-SYN-JOB-01",
+   "nonce_sha256": "a2a64f7d13329f34d79c9b19e180c5b875651153e8cb527b305854235f3d0d29",
+   "pair_id": "META-01"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "META",
+   "execution_rank_within_carrier": 2,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-03-00",
+    "synthetic-r3-03-01",
+    "synthetic-r3-03-02"
+   ],
+   "fixture_payload_sha256": "e01226ba670e625c10616ca14ee417404bbae670afb49c2ef887686e2c0585f3",
+   "job_id": "R3-SYN-JOB-03",
+   "nonce_sha256": "07105dcc912793f862f4740b6dc3daeb4d2f3e2ca36fd74bbcdb5030c6bb8e30",
+   "pair_id": "META-03"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "META",
+   "execution_rank_within_carrier": 2,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-03-00",
+    "synthetic-r3-03-01",
+    "synthetic-r3-03-02"
+   ],
+   "fixture_payload_sha256": "e01226ba670e625c10616ca14ee417404bbae670afb49c2ef887686e2c0585f3",
+   "job_id": "R3-SYN-JOB-03",
+   "nonce_sha256": "07105dcc912793f862f4740b6dc3daeb4d2f3e2ca36fd74bbcdb5030c6bb8e30",
+   "pair_id": "META-03"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "META",
+   "execution_rank_within_carrier": 3,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-11-00",
+    "synthetic-r3-11-01",
+    "synthetic-r3-11-02"
+   ],
+   "fixture_payload_sha256": "ab952fb5f91bce5767eb40dec1de1defaad554738014df36e2eadfcbbcf26028",
+   "job_id": "R3-SYN-JOB-11",
+   "nonce_sha256": "c23e23944b351ae22f1121871cb360438f011827e762b51ed3e1d1b3a623a93e",
+   "pair_id": "META-11"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "META",
+   "execution_rank_within_carrier": 3,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-11-00",
+    "synthetic-r3-11-01",
+    "synthetic-r3-11-02"
+   ],
+   "fixture_payload_sha256": "ab952fb5f91bce5767eb40dec1de1defaad554738014df36e2eadfcbbcf26028",
+   "job_id": "R3-SYN-JOB-11",
+   "nonce_sha256": "c23e23944b351ae22f1121871cb360438f011827e762b51ed3e1d1b3a623a93e",
+   "pair_id": "META-11"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "META",
+   "execution_rank_within_carrier": 4,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-02-00",
+    "synthetic-r3-02-01",
+    "synthetic-r3-02-02"
+   ],
+   "fixture_payload_sha256": "6856dbefc95992d754840b78c1df5fa6872271962bf7611357c1590f62f227c9",
+   "job_id": "R3-SYN-JOB-02",
+   "nonce_sha256": "88c42004cca1d047fa33c63af81c80f5e011df64a33456e00b50567fdd7c7d33",
+   "pair_id": "META-02"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "META",
+   "execution_rank_within_carrier": 4,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-02-00",
+    "synthetic-r3-02-01",
+    "synthetic-r3-02-02"
+   ],
+   "fixture_payload_sha256": "6856dbefc95992d754840b78c1df5fa6872271962bf7611357c1590f62f227c9",
+   "job_id": "R3-SYN-JOB-02",
+   "nonce_sha256": "88c42004cca1d047fa33c63af81c80f5e011df64a33456e00b50567fdd7c7d33",
+   "pair_id": "META-02"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "META",
+   "execution_rank_within_carrier": 5,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-10-00",
+    "synthetic-r3-10-01",
+    "synthetic-r3-10-02"
+   ],
+   "fixture_payload_sha256": "7a873a49cf4c879c91e5f81b390089674a574f1a043678e3604ae59acca5c39d",
+   "job_id": "R3-SYN-JOB-10",
+   "nonce_sha256": "e596305904b37eda60513ee4191caaeed2fc146e33fb7aa1000927897a3d3009",
+   "pair_id": "META-10"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "META",
+   "execution_rank_within_carrier": 5,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-10-00",
+    "synthetic-r3-10-01",
+    "synthetic-r3-10-02"
+   ],
+   "fixture_payload_sha256": "7a873a49cf4c879c91e5f81b390089674a574f1a043678e3604ae59acca5c39d",
+   "job_id": "R3-SYN-JOB-10",
+   "nonce_sha256": "e596305904b37eda60513ee4191caaeed2fc146e33fb7aa1000927897a3d3009",
+   "pair_id": "META-10"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "META",
+   "execution_rank_within_carrier": 6,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-08-00",
+    "synthetic-r3-08-01",
+    "synthetic-r3-08-02"
+   ],
+   "fixture_payload_sha256": "6e23102c0d714e33b8970f1a03edc2bd7fbd149aa1378e64f008d265d2b7460d",
+   "job_id": "R3-SYN-JOB-08",
+   "nonce_sha256": "a6c4edd43e2e3fe124f9d0e5ff65317c8e028587af7644208ca7fd2edf1774b8",
+   "pair_id": "META-08"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "META",
+   "execution_rank_within_carrier": 6,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-08-00",
+    "synthetic-r3-08-01",
+    "synthetic-r3-08-02"
+   ],
+   "fixture_payload_sha256": "6e23102c0d714e33b8970f1a03edc2bd7fbd149aa1378e64f008d265d2b7460d",
+   "job_id": "R3-SYN-JOB-08",
+   "nonce_sha256": "a6c4edd43e2e3fe124f9d0e5ff65317c8e028587af7644208ca7fd2edf1774b8",
+   "pair_id": "META-08"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "META",
+   "execution_rank_within_carrier": 7,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-06-00",
+    "synthetic-r3-06-01",
+    "synthetic-r3-06-02"
+   ],
+   "fixture_payload_sha256": "c9dd681f11d77cb5563b3281a1d8bf2783f3d40ee9e6101c9d46885ccb6afe9e",
+   "job_id": "R3-SYN-JOB-06",
+   "nonce_sha256": "eb0fe8906f9a842da103bcb100d71b4a808f613375cc5518ca1e1e0048aa10e6",
+   "pair_id": "META-06"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "META",
+   "execution_rank_within_carrier": 7,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-06-00",
+    "synthetic-r3-06-01",
+    "synthetic-r3-06-02"
+   ],
+   "fixture_payload_sha256": "c9dd681f11d77cb5563b3281a1d8bf2783f3d40ee9e6101c9d46885ccb6afe9e",
+   "job_id": "R3-SYN-JOB-06",
+   "nonce_sha256": "eb0fe8906f9a842da103bcb100d71b4a808f613375cc5518ca1e1e0048aa10e6",
+   "pair_id": "META-06"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "META",
+   "execution_rank_within_carrier": 8,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-04-00",
+    "synthetic-r3-04-01",
+    "synthetic-r3-04-02"
+   ],
+   "fixture_payload_sha256": "0de5a2ced28e5a568aee3a7d045f5535730379d8f2250705a270630797d16d14",
+   "job_id": "R3-SYN-JOB-04",
+   "nonce_sha256": "36a5509cd1d565addacb680f83561e3667fce31937faab08184ad3f29b76342f",
+   "pair_id": "META-04"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "META",
+   "execution_rank_within_carrier": 8,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-04-00",
+    "synthetic-r3-04-01",
+    "synthetic-r3-04-02"
+   ],
+   "fixture_payload_sha256": "0de5a2ced28e5a568aee3a7d045f5535730379d8f2250705a270630797d16d14",
+   "job_id": "R3-SYN-JOB-04",
+   "nonce_sha256": "36a5509cd1d565addacb680f83561e3667fce31937faab08184ad3f29b76342f",
+   "pair_id": "META-04"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "META",
+   "execution_rank_within_carrier": 9,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-12-00",
+    "synthetic-r3-12-01",
+    "synthetic-r3-12-02"
+   ],
+   "fixture_payload_sha256": "47d8cd3ae75bd803957cde42896b8672c8f922592d4a35d18ff18ee2b92c350f",
+   "job_id": "R3-SYN-JOB-12",
+   "nonce_sha256": "f0f74e310c8932167571c560297a75bfb1f8e6223675f67cd5335e76c749eb49",
+   "pair_id": "META-12"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "META",
+   "execution_rank_within_carrier": 9,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-12-00",
+    "synthetic-r3-12-01",
+    "synthetic-r3-12-02"
+   ],
+   "fixture_payload_sha256": "47d8cd3ae75bd803957cde42896b8672c8f922592d4a35d18ff18ee2b92c350f",
+   "job_id": "R3-SYN-JOB-12",
+   "nonce_sha256": "f0f74e310c8932167571c560297a75bfb1f8e6223675f67cd5335e76c749eb49",
+   "pair_id": "META-12"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "META",
+   "execution_rank_within_carrier": 10,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-07-00",
+    "synthetic-r3-07-01",
+    "synthetic-r3-07-02"
+   ],
+   "fixture_payload_sha256": "1f062175156c2708133784d1257e98f5b909bb19cb7686a8d1ac438471b17e28",
+   "job_id": "R3-SYN-JOB-07",
+   "nonce_sha256": "b6ceed64ad3ada5b37ec0eda5e4628197098b5d572aaaaf905e0a46baf4aad86",
+   "pair_id": "META-07"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "META",
+   "execution_rank_within_carrier": 10,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-07-00",
+    "synthetic-r3-07-01",
+    "synthetic-r3-07-02"
+   ],
+   "fixture_payload_sha256": "1f062175156c2708133784d1257e98f5b909bb19cb7686a8d1ac438471b17e28",
+   "job_id": "R3-SYN-JOB-07",
+   "nonce_sha256": "b6ceed64ad3ada5b37ec0eda5e4628197098b5d572aaaaf905e0a46baf4aad86",
+   "pair_id": "META-07"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "META",
+   "execution_rank_within_carrier": 11,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-05-00",
+    "synthetic-r3-05-01",
+    "synthetic-r3-05-02"
+   ],
+   "fixture_payload_sha256": "d09b3dfb5c84bcb4b93c98e82dec55ec278347ab0cf08feb4b3307e7144cd706",
+   "job_id": "R3-SYN-JOB-05",
+   "nonce_sha256": "b0d881e4fd42c5767adead82d4404e58f659a008bece57391c9d7b06d3bbf1be",
+   "pair_id": "META-05"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "META",
+   "execution_rank_within_carrier": 11,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-05-00",
+    "synthetic-r3-05-01",
+    "synthetic-r3-05-02"
+   ],
+   "fixture_payload_sha256": "d09b3dfb5c84bcb4b93c98e82dec55ec278347ab0cf08feb4b3307e7144cd706",
+   "job_id": "R3-SYN-JOB-05",
+   "nonce_sha256": "b0d881e4fd42c5767adead82d4404e58f659a008bece57391c9d7b06d3bbf1be",
+   "pair_id": "META-05"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "META",
+   "execution_rank_within_carrier": 12,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-09-00",
+    "synthetic-r3-09-01",
+    "synthetic-r3-09-02"
+   ],
+   "fixture_payload_sha256": "4657246640c5847a651e8dc0a23f64b6a090622ff6b891fb2631be7a2b3465c2",
+   "job_id": "R3-SYN-JOB-09",
+   "nonce_sha256": "e4bdfddf39552d3a93ef37c136b090f45ab86adb7242fe1e67b6e5b143cacb63",
+   "pair_id": "META-09"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "META",
+   "execution_rank_within_carrier": 12,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-09-00",
+    "synthetic-r3-09-01",
+    "synthetic-r3-09-02"
+   ],
+   "fixture_payload_sha256": "4657246640c5847a651e8dc0a23f64b6a090622ff6b891fb2631be7a2b3465c2",
+   "job_id": "R3-SYN-JOB-09",
+   "nonce_sha256": "e4bdfddf39552d3a93ef37c136b090f45ab86adb7242fe1e67b6e5b143cacb63",
+   "pair_id": "META-09"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 1,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-05-00",
+    "synthetic-r3-05-01",
+    "synthetic-r3-05-02"
+   ],
+   "fixture_payload_sha256": "d09b3dfb5c84bcb4b93c98e82dec55ec278347ab0cf08feb4b3307e7144cd706",
+   "job_id": "R3-SYN-JOB-05",
+   "nonce_sha256": "b0d881e4fd42c5767adead82d4404e58f659a008bece57391c9d7b06d3bbf1be",
+   "pair_id": "TEXT-05"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 1,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-05-00",
+    "synthetic-r3-05-01",
+    "synthetic-r3-05-02"
+   ],
+   "fixture_payload_sha256": "d09b3dfb5c84bcb4b93c98e82dec55ec278347ab0cf08feb4b3307e7144cd706",
+   "job_id": "R3-SYN-JOB-05",
+   "nonce_sha256": "b0d881e4fd42c5767adead82d4404e58f659a008bece57391c9d7b06d3bbf1be",
+   "pair_id": "TEXT-05"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 2,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-03-00",
+    "synthetic-r3-03-01",
+    "synthetic-r3-03-02"
+   ],
+   "fixture_payload_sha256": "e01226ba670e625c10616ca14ee417404bbae670afb49c2ef887686e2c0585f3",
+   "job_id": "R3-SYN-JOB-03",
+   "nonce_sha256": "07105dcc912793f862f4740b6dc3daeb4d2f3e2ca36fd74bbcdb5030c6bb8e30",
+   "pair_id": "TEXT-03"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 2,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-03-00",
+    "synthetic-r3-03-01",
+    "synthetic-r3-03-02"
+   ],
+   "fixture_payload_sha256": "e01226ba670e625c10616ca14ee417404bbae670afb49c2ef887686e2c0585f3",
+   "job_id": "R3-SYN-JOB-03",
+   "nonce_sha256": "07105dcc912793f862f4740b6dc3daeb4d2f3e2ca36fd74bbcdb5030c6bb8e30",
+   "pair_id": "TEXT-03"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 3,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-02-00",
+    "synthetic-r3-02-01",
+    "synthetic-r3-02-02"
+   ],
+   "fixture_payload_sha256": "6856dbefc95992d754840b78c1df5fa6872271962bf7611357c1590f62f227c9",
+   "job_id": "R3-SYN-JOB-02",
+   "nonce_sha256": "88c42004cca1d047fa33c63af81c80f5e011df64a33456e00b50567fdd7c7d33",
+   "pair_id": "TEXT-02"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 3,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-02-00",
+    "synthetic-r3-02-01",
+    "synthetic-r3-02-02"
+   ],
+   "fixture_payload_sha256": "6856dbefc95992d754840b78c1df5fa6872271962bf7611357c1590f62f227c9",
+   "job_id": "R3-SYN-JOB-02",
+   "nonce_sha256": "88c42004cca1d047fa33c63af81c80f5e011df64a33456e00b50567fdd7c7d33",
+   "pair_id": "TEXT-02"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 4,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-06-00",
+    "synthetic-r3-06-01",
+    "synthetic-r3-06-02"
+   ],
+   "fixture_payload_sha256": "c9dd681f11d77cb5563b3281a1d8bf2783f3d40ee9e6101c9d46885ccb6afe9e",
+   "job_id": "R3-SYN-JOB-06",
+   "nonce_sha256": "eb0fe8906f9a842da103bcb100d71b4a808f613375cc5518ca1e1e0048aa10e6",
+   "pair_id": "TEXT-06"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 4,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-06-00",
+    "synthetic-r3-06-01",
+    "synthetic-r3-06-02"
+   ],
+   "fixture_payload_sha256": "c9dd681f11d77cb5563b3281a1d8bf2783f3d40ee9e6101c9d46885ccb6afe9e",
+   "job_id": "R3-SYN-JOB-06",
+   "nonce_sha256": "eb0fe8906f9a842da103bcb100d71b4a808f613375cc5518ca1e1e0048aa10e6",
+   "pair_id": "TEXT-06"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 5,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-01-00",
+    "synthetic-r3-01-01",
+    "synthetic-r3-01-02"
+   ],
+   "fixture_payload_sha256": "536001a68e2c3fde4479485428b112eb3e8786e64fbe611a824b3aa21ee02acf",
+   "job_id": "R3-SYN-JOB-01",
+   "nonce_sha256": "a2a64f7d13329f34d79c9b19e180c5b875651153e8cb527b305854235f3d0d29",
+   "pair_id": "TEXT-01"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 5,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-01-00",
+    "synthetic-r3-01-01",
+    "synthetic-r3-01-02"
+   ],
+   "fixture_payload_sha256": "536001a68e2c3fde4479485428b112eb3e8786e64fbe611a824b3aa21ee02acf",
+   "job_id": "R3-SYN-JOB-01",
+   "nonce_sha256": "a2a64f7d13329f34d79c9b19e180c5b875651153e8cb527b305854235f3d0d29",
+   "pair_id": "TEXT-01"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 6,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-08-00",
+    "synthetic-r3-08-01",
+    "synthetic-r3-08-02"
+   ],
+   "fixture_payload_sha256": "6e23102c0d714e33b8970f1a03edc2bd7fbd149aa1378e64f008d265d2b7460d",
+   "job_id": "R3-SYN-JOB-08",
+   "nonce_sha256": "a6c4edd43e2e3fe124f9d0e5ff65317c8e028587af7644208ca7fd2edf1774b8",
+   "pair_id": "TEXT-08"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 6,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-08-00",
+    "synthetic-r3-08-01",
+    "synthetic-r3-08-02"
+   ],
+   "fixture_payload_sha256": "6e23102c0d714e33b8970f1a03edc2bd7fbd149aa1378e64f008d265d2b7460d",
+   "job_id": "R3-SYN-JOB-08",
+   "nonce_sha256": "a6c4edd43e2e3fe124f9d0e5ff65317c8e028587af7644208ca7fd2edf1774b8",
+   "pair_id": "TEXT-08"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 7,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-09-00",
+    "synthetic-r3-09-01",
+    "synthetic-r3-09-02"
+   ],
+   "fixture_payload_sha256": "4657246640c5847a651e8dc0a23f64b6a090622ff6b891fb2631be7a2b3465c2",
+   "job_id": "R3-SYN-JOB-09",
+   "nonce_sha256": "e4bdfddf39552d3a93ef37c136b090f45ab86adb7242fe1e67b6e5b143cacb63",
+   "pair_id": "TEXT-09"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 7,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-09-00",
+    "synthetic-r3-09-01",
+    "synthetic-r3-09-02"
+   ],
+   "fixture_payload_sha256": "4657246640c5847a651e8dc0a23f64b6a090622ff6b891fb2631be7a2b3465c2",
+   "job_id": "R3-SYN-JOB-09",
+   "nonce_sha256": "e4bdfddf39552d3a93ef37c136b090f45ab86adb7242fe1e67b6e5b143cacb63",
+   "pair_id": "TEXT-09"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 8,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-12-00",
+    "synthetic-r3-12-01",
+    "synthetic-r3-12-02"
+   ],
+   "fixture_payload_sha256": "47d8cd3ae75bd803957cde42896b8672c8f922592d4a35d18ff18ee2b92c350f",
+   "job_id": "R3-SYN-JOB-12",
+   "nonce_sha256": "f0f74e310c8932167571c560297a75bfb1f8e6223675f67cd5335e76c749eb49",
+   "pair_id": "TEXT-12"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 8,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-12-00",
+    "synthetic-r3-12-01",
+    "synthetic-r3-12-02"
+   ],
+   "fixture_payload_sha256": "47d8cd3ae75bd803957cde42896b8672c8f922592d4a35d18ff18ee2b92c350f",
+   "job_id": "R3-SYN-JOB-12",
+   "nonce_sha256": "f0f74e310c8932167571c560297a75bfb1f8e6223675f67cd5335e76c749eb49",
+   "pair_id": "TEXT-12"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 9,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-04-00",
+    "synthetic-r3-04-01",
+    "synthetic-r3-04-02"
+   ],
+   "fixture_payload_sha256": "0de5a2ced28e5a568aee3a7d045f5535730379d8f2250705a270630797d16d14",
+   "job_id": "R3-SYN-JOB-04",
+   "nonce_sha256": "36a5509cd1d565addacb680f83561e3667fce31937faab08184ad3f29b76342f",
+   "pair_id": "TEXT-04"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 9,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-04-00",
+    "synthetic-r3-04-01",
+    "synthetic-r3-04-02"
+   ],
+   "fixture_payload_sha256": "0de5a2ced28e5a568aee3a7d045f5535730379d8f2250705a270630797d16d14",
+   "job_id": "R3-SYN-JOB-04",
+   "nonce_sha256": "36a5509cd1d565addacb680f83561e3667fce31937faab08184ad3f29b76342f",
+   "pair_id": "TEXT-04"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 10,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-07-00",
+    "synthetic-r3-07-01",
+    "synthetic-r3-07-02"
+   ],
+   "fixture_payload_sha256": "1f062175156c2708133784d1257e98f5b909bb19cb7686a8d1ac438471b17e28",
+   "job_id": "R3-SYN-JOB-07",
+   "nonce_sha256": "b6ceed64ad3ada5b37ec0eda5e4628197098b5d572aaaaf905e0a46baf4aad86",
+   "pair_id": "TEXT-07"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 10,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-07-00",
+    "synthetic-r3-07-01",
+    "synthetic-r3-07-02"
+   ],
+   "fixture_payload_sha256": "1f062175156c2708133784d1257e98f5b909bb19cb7686a8d1ac438471b17e28",
+   "job_id": "R3-SYN-JOB-07",
+   "nonce_sha256": "b6ceed64ad3ada5b37ec0eda5e4628197098b5d572aaaaf905e0a46baf4aad86",
+   "pair_id": "TEXT-07"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 11,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-10-00",
+    "synthetic-r3-10-01",
+    "synthetic-r3-10-02"
+   ],
+   "fixture_payload_sha256": "7a873a49cf4c879c91e5f81b390089674a574f1a043678e3604ae59acca5c39d",
+   "job_id": "R3-SYN-JOB-10",
+   "nonce_sha256": "e596305904b37eda60513ee4191caaeed2fc146e33fb7aa1000927897a3d3009",
+   "pair_id": "TEXT-10"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 11,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-10-00",
+    "synthetic-r3-10-01",
+    "synthetic-r3-10-02"
+   ],
+   "fixture_payload_sha256": "7a873a49cf4c879c91e5f81b390089674a574f1a043678e3604ae59acca5c39d",
+   "job_id": "R3-SYN-JOB-10",
+   "nonce_sha256": "e596305904b37eda60513ee4191caaeed2fc146e33fb7aa1000927897a3d3009",
+   "pair_id": "TEXT-10"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 12,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-11-00",
+    "synthetic-r3-11-01",
+    "synthetic-r3-11-02"
+   ],
+   "fixture_payload_sha256": "ab952fb5f91bce5767eb40dec1de1defaad554738014df36e2eadfcbbcf26028",
+   "job_id": "R3-SYN-JOB-11",
+   "nonce_sha256": "c23e23944b351ae22f1121871cb360438f011827e762b51ed3e1d1b3a623a93e",
+   "pair_id": "TEXT-11"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "TEXT",
+   "execution_rank_within_carrier": 12,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-11-00",
+    "synthetic-r3-11-01",
+    "synthetic-r3-11-02"
+   ],
+   "fixture_payload_sha256": "ab952fb5f91bce5767eb40dec1de1defaad554738014df36e2eadfcbbcf26028",
+   "job_id": "R3-SYN-JOB-11",
+   "nonce_sha256": "c23e23944b351ae22f1121871cb360438f011827e762b51ed3e1d1b3a623a93e",
+   "pair_id": "TEXT-11"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 1,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-08-00",
+    "synthetic-r3-08-01",
+    "synthetic-r3-08-02"
+   ],
+   "fixture_payload_sha256": "6e23102c0d714e33b8970f1a03edc2bd7fbd149aa1378e64f008d265d2b7460d",
+   "job_id": "R3-SYN-JOB-08",
+   "nonce_sha256": "a6c4edd43e2e3fe124f9d0e5ff65317c8e028587af7644208ca7fd2edf1774b8",
+   "pair_id": "STRUCT-08"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 1,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-08-00",
+    "synthetic-r3-08-01",
+    "synthetic-r3-08-02"
+   ],
+   "fixture_payload_sha256": "6e23102c0d714e33b8970f1a03edc2bd7fbd149aa1378e64f008d265d2b7460d",
+   "job_id": "R3-SYN-JOB-08",
+   "nonce_sha256": "a6c4edd43e2e3fe124f9d0e5ff65317c8e028587af7644208ca7fd2edf1774b8",
+   "pair_id": "STRUCT-08"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 2,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-04-00",
+    "synthetic-r3-04-01",
+    "synthetic-r3-04-02"
+   ],
+   "fixture_payload_sha256": "0de5a2ced28e5a568aee3a7d045f5535730379d8f2250705a270630797d16d14",
+   "job_id": "R3-SYN-JOB-04",
+   "nonce_sha256": "36a5509cd1d565addacb680f83561e3667fce31937faab08184ad3f29b76342f",
+   "pair_id": "STRUCT-04"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 2,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-04-00",
+    "synthetic-r3-04-01",
+    "synthetic-r3-04-02"
+   ],
+   "fixture_payload_sha256": "0de5a2ced28e5a568aee3a7d045f5535730379d8f2250705a270630797d16d14",
+   "job_id": "R3-SYN-JOB-04",
+   "nonce_sha256": "36a5509cd1d565addacb680f83561e3667fce31937faab08184ad3f29b76342f",
+   "pair_id": "STRUCT-04"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 3,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-12-00",
+    "synthetic-r3-12-01",
+    "synthetic-r3-12-02"
+   ],
+   "fixture_payload_sha256": "47d8cd3ae75bd803957cde42896b8672c8f922592d4a35d18ff18ee2b92c350f",
+   "job_id": "R3-SYN-JOB-12",
+   "nonce_sha256": "f0f74e310c8932167571c560297a75bfb1f8e6223675f67cd5335e76c749eb49",
+   "pair_id": "STRUCT-12"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 3,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-12-00",
+    "synthetic-r3-12-01",
+    "synthetic-r3-12-02"
+   ],
+   "fixture_payload_sha256": "47d8cd3ae75bd803957cde42896b8672c8f922592d4a35d18ff18ee2b92c350f",
+   "job_id": "R3-SYN-JOB-12",
+   "nonce_sha256": "f0f74e310c8932167571c560297a75bfb1f8e6223675f67cd5335e76c749eb49",
+   "pair_id": "STRUCT-12"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 4,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-11-00",
+    "synthetic-r3-11-01",
+    "synthetic-r3-11-02"
+   ],
+   "fixture_payload_sha256": "ab952fb5f91bce5767eb40dec1de1defaad554738014df36e2eadfcbbcf26028",
+   "job_id": "R3-SYN-JOB-11",
+   "nonce_sha256": "c23e23944b351ae22f1121871cb360438f011827e762b51ed3e1d1b3a623a93e",
+   "pair_id": "STRUCT-11"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 4,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-11-00",
+    "synthetic-r3-11-01",
+    "synthetic-r3-11-02"
+   ],
+   "fixture_payload_sha256": "ab952fb5f91bce5767eb40dec1de1defaad554738014df36e2eadfcbbcf26028",
+   "job_id": "R3-SYN-JOB-11",
+   "nonce_sha256": "c23e23944b351ae22f1121871cb360438f011827e762b51ed3e1d1b3a623a93e",
+   "pair_id": "STRUCT-11"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 5,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-06-00",
+    "synthetic-r3-06-01",
+    "synthetic-r3-06-02"
+   ],
+   "fixture_payload_sha256": "c9dd681f11d77cb5563b3281a1d8bf2783f3d40ee9e6101c9d46885ccb6afe9e",
+   "job_id": "R3-SYN-JOB-06",
+   "nonce_sha256": "eb0fe8906f9a842da103bcb100d71b4a808f613375cc5518ca1e1e0048aa10e6",
+   "pair_id": "STRUCT-06"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 5,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-06-00",
+    "synthetic-r3-06-01",
+    "synthetic-r3-06-02"
+   ],
+   "fixture_payload_sha256": "c9dd681f11d77cb5563b3281a1d8bf2783f3d40ee9e6101c9d46885ccb6afe9e",
+   "job_id": "R3-SYN-JOB-06",
+   "nonce_sha256": "eb0fe8906f9a842da103bcb100d71b4a808f613375cc5518ca1e1e0048aa10e6",
+   "pair_id": "STRUCT-06"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 6,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-10-00",
+    "synthetic-r3-10-01",
+    "synthetic-r3-10-02"
+   ],
+   "fixture_payload_sha256": "7a873a49cf4c879c91e5f81b390089674a574f1a043678e3604ae59acca5c39d",
+   "job_id": "R3-SYN-JOB-10",
+   "nonce_sha256": "e596305904b37eda60513ee4191caaeed2fc146e33fb7aa1000927897a3d3009",
+   "pair_id": "STRUCT-10"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 6,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-10-00",
+    "synthetic-r3-10-01",
+    "synthetic-r3-10-02"
+   ],
+   "fixture_payload_sha256": "7a873a49cf4c879c91e5f81b390089674a574f1a043678e3604ae59acca5c39d",
+   "job_id": "R3-SYN-JOB-10",
+   "nonce_sha256": "e596305904b37eda60513ee4191caaeed2fc146e33fb7aa1000927897a3d3009",
+   "pair_id": "STRUCT-10"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 7,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-03-00",
+    "synthetic-r3-03-01",
+    "synthetic-r3-03-02"
+   ],
+   "fixture_payload_sha256": "e01226ba670e625c10616ca14ee417404bbae670afb49c2ef887686e2c0585f3",
+   "job_id": "R3-SYN-JOB-03",
+   "nonce_sha256": "07105dcc912793f862f4740b6dc3daeb4d2f3e2ca36fd74bbcdb5030c6bb8e30",
+   "pair_id": "STRUCT-03"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 7,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-03-00",
+    "synthetic-r3-03-01",
+    "synthetic-r3-03-02"
+   ],
+   "fixture_payload_sha256": "e01226ba670e625c10616ca14ee417404bbae670afb49c2ef887686e2c0585f3",
+   "job_id": "R3-SYN-JOB-03",
+   "nonce_sha256": "07105dcc912793f862f4740b6dc3daeb4d2f3e2ca36fd74bbcdb5030c6bb8e30",
+   "pair_id": "STRUCT-03"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 8,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-02-00",
+    "synthetic-r3-02-01",
+    "synthetic-r3-02-02"
+   ],
+   "fixture_payload_sha256": "6856dbefc95992d754840b78c1df5fa6872271962bf7611357c1590f62f227c9",
+   "job_id": "R3-SYN-JOB-02",
+   "nonce_sha256": "88c42004cca1d047fa33c63af81c80f5e011df64a33456e00b50567fdd7c7d33",
+   "pair_id": "STRUCT-02"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 8,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-02-00",
+    "synthetic-r3-02-01",
+    "synthetic-r3-02-02"
+   ],
+   "fixture_payload_sha256": "6856dbefc95992d754840b78c1df5fa6872271962bf7611357c1590f62f227c9",
+   "job_id": "R3-SYN-JOB-02",
+   "nonce_sha256": "88c42004cca1d047fa33c63af81c80f5e011df64a33456e00b50567fdd7c7d33",
+   "pair_id": "STRUCT-02"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 9,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-07-00",
+    "synthetic-r3-07-01",
+    "synthetic-r3-07-02"
+   ],
+   "fixture_payload_sha256": "1f062175156c2708133784d1257e98f5b909bb19cb7686a8d1ac438471b17e28",
+   "job_id": "R3-SYN-JOB-07",
+   "nonce_sha256": "b6ceed64ad3ada5b37ec0eda5e4628197098b5d572aaaaf905e0a46baf4aad86",
+   "pair_id": "STRUCT-07"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 9,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-07-00",
+    "synthetic-r3-07-01",
+    "synthetic-r3-07-02"
+   ],
+   "fixture_payload_sha256": "1f062175156c2708133784d1257e98f5b909bb19cb7686a8d1ac438471b17e28",
+   "job_id": "R3-SYN-JOB-07",
+   "nonce_sha256": "b6ceed64ad3ada5b37ec0eda5e4628197098b5d572aaaaf905e0a46baf4aad86",
+   "pair_id": "STRUCT-07"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 10,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-09-00",
+    "synthetic-r3-09-01",
+    "synthetic-r3-09-02"
+   ],
+   "fixture_payload_sha256": "4657246640c5847a651e8dc0a23f64b6a090622ff6b891fb2631be7a2b3465c2",
+   "job_id": "R3-SYN-JOB-09",
+   "nonce_sha256": "e4bdfddf39552d3a93ef37c136b090f45ab86adb7242fe1e67b6e5b143cacb63",
+   "pair_id": "STRUCT-09"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 10,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-09-00",
+    "synthetic-r3-09-01",
+    "synthetic-r3-09-02"
+   ],
+   "fixture_payload_sha256": "4657246640c5847a651e8dc0a23f64b6a090622ff6b891fb2631be7a2b3465c2",
+   "job_id": "R3-SYN-JOB-09",
+   "nonce_sha256": "e4bdfddf39552d3a93ef37c136b090f45ab86adb7242fe1e67b6e5b143cacb63",
+   "pair_id": "STRUCT-09"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 11,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-05-00",
+    "synthetic-r3-05-01",
+    "synthetic-r3-05-02"
+   ],
+   "fixture_payload_sha256": "d09b3dfb5c84bcb4b93c98e82dec55ec278347ab0cf08feb4b3307e7144cd706",
+   "job_id": "R3-SYN-JOB-05",
+   "nonce_sha256": "b0d881e4fd42c5767adead82d4404e58f659a008bece57391c9d7b06d3bbf1be",
+   "pair_id": "STRUCT-05"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 11,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-05-00",
+    "synthetic-r3-05-01",
+    "synthetic-r3-05-02"
+   ],
+   "fixture_payload_sha256": "d09b3dfb5c84bcb4b93c98e82dec55ec278347ab0cf08feb4b3307e7144cd706",
+   "job_id": "R3-SYN-JOB-05",
+   "nonce_sha256": "b0d881e4fd42c5767adead82d4404e58f659a008bece57391c9d7b06d3bbf1be",
+   "pair_id": "STRUCT-05"
+  },
+  {
+   "arm": "CANDIDATE",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 12,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-01-00",
+    "synthetic-r3-01-01",
+    "synthetic-r3-01-02"
+   ],
+   "fixture_payload_sha256": "536001a68e2c3fde4479485428b112eb3e8786e64fbe611a824b3aa21ee02acf",
+   "job_id": "R3-SYN-JOB-01",
+   "nonce_sha256": "a2a64f7d13329f34d79c9b19e180c5b875651153e8cb527b305854235f3d0d29",
+   "pair_id": "STRUCT-01"
+  },
+  {
+   "arm": "CONTROL",
+   "carrier": "STRUCT",
+   "execution_rank_within_carrier": 12,
+   "expected_pages": [
+    0,
+    1,
+    2
+   ],
+   "expected_values": [
+    "synthetic-r3-01-00",
+    "synthetic-r3-01-01",
+    "synthetic-r3-01-02"
+   ],
+   "fixture_payload_sha256": "536001a68e2c3fde4479485428b112eb3e8786e64fbe611a824b3aa21ee02acf",
+   "job_id": "R3-SYN-JOB-01",
+   "nonce_sha256": "a2a64f7d13329f34d79c9b19e180c5b875651153e8cb527b305854235f3d0d29",
+   "pair_id": "STRUCT-01"
+  }
+ ],
+ "schema": "ja-e2-ab-slots-v1",
+ "source": "R3-20261010-201023-74abf737/E0/ab-pairs.json",
+ "source_sha256": "7360a4a3d0b9482325627a59a473a413306a48f32aba2b8d2590e1266f19c265",
+ "total_pair_slots": 36
+}

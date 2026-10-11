@@ -214,6 +214,24 @@ async def close(lab: SessionLab, key: KeyDigest) -> int:
         return _retire_entries(lab, key, binding, entries) if entries else 0
 
 
+async def seal(lab: SessionLab, key: KeyDigest, handle: str) -> bool:
+    """Controller terminal point: one LIVE entry of the key becomes hint-eligible.
+
+    Held under the key's fence like every other state change. Only a
+    ``deferred_seal`` allocation that is not terminal yet changes.
+    """
+    async with lab.fences.hold(key.kd) as held:
+        binding = lab.table.get(key.kd)
+        if not held or binding is None or binding.suspended:
+            return False
+        entry = next((e for e in binding.jobs.values() if e.handle == handle), None)
+        if entry is None or entry.terminal:
+            return False
+        entry.terminal = True
+    lab.event("ja_sealed", key)
+    return True
+
+
 async def suspend(lab: SessionLab, key: KeyDigest) -> bool:
     async with lab.fences.hold(key.kd) as held:
         if held:

@@ -48,12 +48,16 @@ _PRIORITY = {ReceiptState.UNCONFIRMED: 0, ReceiptState.PARTIAL: 1}
 
 
 class RoutedResult(Protocol):
-    """CA-2 ``RoutedOutcome``: ``rendered`` is exactly what ``render_hint`` got."""
+    """CA-2 ``RoutedOutcome``: ``rendered`` is exactly what ``render_hint`` got.
+
+    ``rendered`` is typed ``object`` because the MCP adapter may not import
+    ``JobRef`` (acyclic contract). It is only compared with the reserved jobs.
+    """
 
     @property
     def result(self) -> Any: ...
     @property
-    def rendered(self) -> tuple[JobRef, ...]: ...
+    def rendered(self) -> tuple[object, ...]: ...
 
 
 class RoutedAdapter(Protocol):
@@ -86,9 +90,8 @@ def _eligible(
         pending = tx.pending_live(key.kd)
     ranked: list[tuple[int, str, JobRef]] = []
     for job, entry in binding.jobs.items():
-        priority = (
-            None if job.canonical_key not in pending else _priority(lab, grant, entry)
-        )
+        eligible = entry.terminal and job.canonical_key in pending
+        priority = _priority(lab, grant, entry) if eligible else None
         if priority is not None:
             ranked.append((priority, job.canonical_key, job))
     ranked.sort(key=lambda row: (row[0], row[1]))

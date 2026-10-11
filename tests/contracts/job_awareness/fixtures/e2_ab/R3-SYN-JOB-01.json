@@ -1,0 +1,21 @@
+{
+  "contains_real_user_data": false,
+  "job_id": "R3-SYN-JOB-01",
+  "nonce": "f7d171b87069d7d0af7b311586e38d52",
+  "owner": "A",
+  "records": [
+    {
+      "seq": 0,
+      "value": "synthetic-r3-01-00"
+    },
+    {
+      "seq": 1,
+      "value": "synthetic-r3-01-01"
+    },
+    {
+      "seq": 2,
+      "value": "synthetic-r3-01-02"
+    }
+  ],
+  "schema": "r3-synthetic-result-v1"
+}

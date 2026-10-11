@@ -498,3 +498,20 @@ name = "Production assembly never imports the E2 lab session extraction"
 type = "forbidden"
 source_modules = ["binnacle.server", "binnacle.application"]
 forbidden_modules = ["binnacle.mcp.job_awareness_session"]
+
+[[tool.importlinter.contracts]]
+id = "job-awareness-lab-not-in-production"
+name = "Production entry points never import any E2 lab module (S5 no-path check)"
+type = "forbidden"
+source_modules = ["binnacle.server", "binnacle.application", "binnacle.cli"]
+forbidden_modules = [
+    "binnacle.mcp.job_awareness_session",
+    "binnacle.mcp.job_awareness_hint",
+    "binnacle.features.commands.job_awareness.session_binding",
+    "binnacle.features.commands.job_awareness.session_emission",
+    "binnacle.features.commands.job_awareness.session_fence",
+    "binnacle.features.commands.job_awareness.session_lab",
+    "binnacle.features.commands.job_awareness.session_route",
+    "binnacle.features.commands.job_awareness.session_serving",
+    "binnacle.features.commands.job_awareness.session_snapshot",
+]

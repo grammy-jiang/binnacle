@@ -1,16 +1,14 @@
 """CA-2 routed-adapter fixtures: several synthetic jobs, routes and wire capture.
 
-Everything here is synthetic. The emission ledger is a test double of the
-design §2.6 lab ``emit`` table and its exact reserve/emit/reset/abort SQL;
-the real lab ledger (S2, ``session_binding.py``) replaces it in S5.
+Everything here is synthetic. These fixtures exercise the adapter alone with
+hand-built routes. The S4 in-memory ``emit`` double was replaced in S5 by the
+real lab ledger: emission tests drive ``session_emission.emit_hint`` over the
+real ``SessionLab`` (see ``e2_composition`` and ``test_hint_routed_emission``).
 """
 
-import asyncio
 import hashlib
 import json
-import secrets
-import sqlite3
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import replace
 from unittest.mock import patch
 
@@ -43,13 +41,10 @@ from tests.contracts.job_awareness.synthetic_app import SCHEMA, Lab, ok, origina
 from tests.contracts.job_awareness.test_hint_schema_support import executed
 
 __all__ = [
-    "EmitLedger",
     "RoutedLab",
-    "emission",
     "key_digest",
     "routed_app",
     "wire_call",
-    "yield_",
 ]
 
 
@@ -208,136 +203,3 @@ async def wire_call(app, protocol, *, headers=None, meta=None):
 
 def digest(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
-
-
-_DDL = """
-CREATE TABLE emit (
-  jobref         TEXT PRIMARY KEY,
-  kd             TEXT NOT NULL,
-  state          TEXT NOT NULL CHECK (state IN ('PENDING','RESERVED','EMITTED','ABORTED')),
-  reservation_id TEXT NULL CHECK (reservation_id IS NULL OR length(reservation_id) = 32),
-  reserved_ms    INTEGER NULL,
-  final_ms       INTEGER NULL,
-  version        INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0),
-  CHECK ( (state = 'PENDING'  AND reservation_id IS NULL     AND reserved_ms IS NULL     AND final_ms IS NULL)
-       OR (state = 'RESERVED' AND reservation_id IS NOT NULL AND reserved_ms IS NOT NULL AND final_ms IS NULL)
-       OR (state IN ('EMITTED','ABORTED') AND final_ms IS NOT NULL) )
-) STRICT;
-"""
-_RESERVE = (
-    "UPDATE emit SET state='RESERVED', reservation_id=:rid, reserved_ms=:now,"
-    " version=version+1 WHERE jobref=:j AND kd=:kd AND state='PENDING'"
-)
-_EMIT = (
-    "UPDATE emit SET state='EMITTED', final_ms=:now, version=version+1"
-    " WHERE jobref=:j AND kd=:kd AND state='RESERVED' AND reservation_id=:rid"
-)
-_RESET = (
-    "UPDATE emit SET state='PENDING', reservation_id=NULL, reserved_ms=NULL,"
-    " version=version+1"
-    " WHERE jobref=:j AND kd=:kd AND state='RESERVED' AND reservation_id=:rid"
-)
-_ABORT = (
-    "UPDATE emit SET state='ABORTED', final_ms=:now, version=version+1"
-    " WHERE jobref=:j AND kd=:kd AND state='RESERVED' AND reservation_id=:rid"
-)
-
-
-class EmitLedger:
-    """Test double of the §2.6 emission sequence around ``adapt_routed``.
-
-    It keeps the exact design SQL and rowcount rules. The alloc ``LIVE``
-    sub-select, the receipt filter and final validation belong to S2/S5.
-    """
-
-    def __init__(self, kd: str, jobs: tuple[JobRef, ...]):
-        self.kd, self.jobs = kd, jobs
-        self.db = sqlite3.connect(":memory:", isolation_level=None)
-        self.db.executescript(_DDL)
-        for job in jobs:
-            self.db.execute(
-                "INSERT INTO emit(jobref,kd,state) VALUES(?,?,'PENDING')",
-                (job.canonical_key, kd),
-            )
-
-    def state(self, job: JobRef) -> str:
-        row = self.db.execute(
-            "SELECT state FROM emit WHERE jobref=?", (job.canonical_key,)
-        ).fetchone()
-        return str(row[0])
-
-    def counts(self) -> dict[str, int]:
-        rows = self.db.execute("SELECT state, count(*) FROM emit GROUP BY state")
-        return {str(state): int(count) for state, count in rows}
-
-    def _rows(self, sql: str, jobs: tuple[JobRef, ...], rid: str) -> list[int]:
-        return [
-            self.db.execute(
-                sql, {"j": job.canonical_key, "kd": self.kd, "rid": rid, "now": 1}
-            ).rowcount
-            for job in jobs
-        ]
-
-    def reserve(self, limit: int = 2) -> tuple[str, tuple[JobRef, ...]]:
-        rid = secrets.token_hex(16)
-        pending = sorted(
-            (job for job in self.jobs if self.state(job) == "PENDING"),
-            key=lambda job: job.canonical_key,
-        )[:limit]
-        self.db.execute("BEGIN IMMEDIATE")
-        counts = self._rows(_RESERVE, tuple(pending), rid)
-        self.db.execute("COMMIT")
-        return rid, tuple(job for job, n in zip(pending, counts, strict=True) if n)
-
-    def commit(
-        self, rid: str, reserved: tuple[JobRef, ...], rendered: tuple[object, ...]
-    ) -> bool:
-        emitted = tuple(job for job in reserved if job in rendered)
-        rest = tuple(job for job in reserved if job not in rendered)
-        if len(emitted) != len(rendered):
-            self.abort(rid, reserved)
-            return False
-        self.db.execute("BEGIN IMMEDIATE")
-        counts = self._rows(_EMIT, emitted, rid) + self._rows(_RESET, rest, rid)
-        if any(n != 1 for n in counts):
-            self.db.execute("ROLLBACK")
-            self.abort(rid, reserved)
-            return False
-        self.db.execute("COMMIT")
-        return True
-
-    def abort(self, rid: str, reserved: tuple[JobRef, ...]) -> None:
-        self.db.execute("BEGIN IMMEDIATE")
-        self._rows(_ABORT, reserved, rid)
-        self.db.execute("COMMIT")
-
-
-async def yield_() -> None:
-    """A pause point that only yields to the event loop."""
-    await asyncio.sleep(0)
-
-
-async def emission(
-    lab: RoutedLab,
-    adapter: HintAdapter,
-    ledger: EmitLedger,
-    fence: Callable[[], Awaitable[object]] | None = None,
-) -> ToolResult:
-    """Reserve -> adapt_routed -> commit; the returned result is the transport's."""
-    rid, reserved = ledger.reserve()
-    if not reserved:
-        return original()
-    value = original()
-    try:
-        if fence is not None:
-            await fence()
-        _, outcome = await lab.call(adapter, lab.route(*reserved), value)
-    except BaseException:
-        ledger.abort(rid, reserved)
-        raise
-    if not set(outcome.rendered) <= set(reserved):
-        ledger.abort(rid, reserved)
-        return value
-    if not ledger.commit(rid, reserved, outcome.rendered):
-        return value
-    return outcome.result

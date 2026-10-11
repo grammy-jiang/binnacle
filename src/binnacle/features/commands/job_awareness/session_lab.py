@@ -85,16 +85,26 @@ class LabError(str, Enum):
 
 @dataclass(frozen=True)
 class LabConfig:
-    """Explicit grant TTL (ADV-G4-01): TC phases pass 3600000, A/B 1800000."""
+    """Explicit grant TTL (ADV-G4-01): TC phases pass 3600000, A/B 1800000.
+
+    ``deferred_seal``: a new allocation is not hint-eligible until the
+    controller reaches its terminal point (``session_serving.seal``), as the
+    §4.4 sub-phases and §4.5 arm lifecycle require. Default: eligible at once.
+    """
 
     ttl_ms: int = 1800000
     max_live_per_key: int = 8
     max_per_key: int = 40
     max_per_phase: int = 120
     fence_timeout_s: float = 5.0
+    deferred_seal: bool = False
 
     def __post_init__(self) -> None:
-        if not 1 <= self.ttl_ms <= 3600000 or not 1 <= self.max_live_per_key <= 8:
+        if (
+            not 1 <= self.ttl_ms <= 3600000
+            or not 1 <= self.max_live_per_key <= 8
+            or type(self.deferred_seal) is not bool
+        ):
             raise ValueError("Invalid lab config")
 
 
@@ -356,7 +366,9 @@ class SessionLab:
         if binding is None:
             binding = KeyBinding(key, job.run_namespace, credential, principal)
             self.table.add(binding)
-        entry = AllocationEntry(job, allocation.slot, snapshot)
+        entry = AllocationEntry(
+            job, allocation.slot, snapshot, terminal=not self.config.deferred_seal
+        )
         binding.capability, binding.grant = capability, grant
         binding.jobs[job] = entry
         self.hook("alloc:5:publish")

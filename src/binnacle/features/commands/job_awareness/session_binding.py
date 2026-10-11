@@ -360,11 +360,16 @@ class LabLedger:
 
 @dataclass(eq=False)
 class AllocationEntry:
-    """In-memory published route for one LIVE allocation of one key."""
+    """In-memory published route for one LIVE allocation of one key.
+
+    ``terminal`` is the controller's terminal point: only a terminal entry is
+    hint-eligible. Memory only; a restart denies every allocation anyway.
+    """
 
     job: JobRef
     slot: str
     snapshot: OutputSnapshot
+    terminal: bool = True
 
     @property
     def handle(self) -> str:
