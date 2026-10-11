@@ -274,7 +274,7 @@ def create_job_client():
     """The A3 manager client (R4 J4); never an embedded fallback."""
     if host_os_family() != "darwin":
         raise UnsupportedHostOS("Darwin job manager client requires Darwin")
-    from binnacle.platform.darwin.job_manager_service import DarwinJobClient
+    from binnacle.platform.darwin.job_manager_client import DarwinJobClient
 
     return DarwinJobClient()
 
