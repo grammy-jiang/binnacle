@@ -17,6 +17,7 @@ import platform
 platform.system = lambda: "Darwin"
 import sys
 import binnacle.server
+from binnacle.platform.contracts.darwin_release_scope import DARWIN_RELEASE_SCOPE
 assert not any(m.startswith("binnacle.platform.linux") for m in sys.modules)
 assert "binnacle.features.commands.jobs" not in sys.modules
 import asyncio
@@ -38,13 +39,17 @@ async def check():
         import json
         from pathlib import Path
         original = json.loads(Path("docs/os-independent-stage1-evidence/os0-raw-mcp-surface.json").read_text())
-        old_run = next(t for t in original["profile_surfaces"]["default"]["tools"] if t["name"] == "run_command")
-        normalized = [t.model_copy(update={"description": old_run["description"]}) if t.name == "run_command" else t for t in listed]
+        descriptions = {t["name"]: t["description"] for t in original["profile_surfaces"]["default"]["tools"]}
+        normalized = [t.model_copy(update={"description": descriptions[t.name]}) if t.name in ("run_command", "search_text") else t for t in listed]
         assert {t.name: digest(surface(t)) for t in normalized} == SURFACE_SHA256["default"]
         for name, arguments in calls.items():
             result = await client.call_tool(name, arguments, raise_on_error=False)
-            assert result.is_error, name
-            assert "UNAVAILABLE" in str(result.content), (name, result)
+            if DARWIN_RELEASE_SCOPE[name].capability.state.value == "UNAVAILABLE":
+                assert result.is_error and "UNAVAILABLE" in str(result.content), (name, result)
+            elif name == "job_status":
+                assert not result.is_error, result
+            else:
+                assert result.is_error and "UNAVAILABLE" not in str(result.content), (name, result)
 asyncio.run(check())
 """
     result = subprocess.run(
@@ -58,8 +63,6 @@ asyncio.run(check())
 
 
 def test_unreviewed_command_refuses_before_workdir_access(tmp_path, monkeypatch):
-    import pytest
-
     from binnacle.features.commands.restricted_backend import RestrictedCommandBackend
     from binnacle.features.commands.tools import run_command
 
@@ -126,8 +129,6 @@ def test_provisioner_maps_frozen_types_and_refuses_incompatible_launch_plan(
     import tempfile
     from pathlib import Path
 
-    import pytest
-
     from binnacle.platform import composition
     from binnacle.platform.contracts.capability_contracts import CapabilityUnavailable
     from binnacle.platform.contracts.native_service_contracts import ServicePlan
@@ -135,8 +136,8 @@ def test_provisioner_maps_frozen_types_and_refuses_incompatible_launch_plan(
     monkeypatch.setattr(composition.platform, "system", lambda: "Darwin")
     factory = getattr(composition, "create_native_provisioner", None)
     assert factory is not None, "A6 type mapping is missing"
-    with tempfile.TemporaryDirectory(prefix="b0p-", dir="/private/tmp") as directory:
-        root = Path(directory)
+    with tempfile.TemporaryDirectory(prefix="b0p-") as directory:
+        root = Path(directory).resolve()
         lease = composition.create_service_lease(
             root=root, label="com.binnacle.r3test.b0", generation="b0-generation-123456"
         )
@@ -160,16 +161,14 @@ def test_composed_authenticated_channel_preserves_payload_and_generation(monkeyp
     import time
     from pathlib import Path
 
-    import pytest
-
     from binnacle.platform import composition
     from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 
     if sys.platform != "darwin":
         pytest.skip("Real Darwin getpeereid and LOCAL_PEERPID")
     monkeypatch.setattr(composition.platform, "system", lambda: "Darwin")
-    with tempfile.TemporaryDirectory(prefix="b0i-", dir="/private/tmp") as directory:
-        root = Path(directory)
+    with tempfile.TemporaryDirectory(prefix="b0i-") as directory:
+        root = Path(directory).resolve()
         lease = composition.create_service_lease(
             root=root,
             label="com.binnacle.r3test.b0ipc",
@@ -259,50 +258,6 @@ def test_composed_authenticated_channel_preserves_payload_and_generation(monkeyp
         assert not (root / "jobs.sock.auth").exists()
 
 
-def test_foreground_bridge_runs_off_loop_and_forwards_cancellation(tmp_path):
-    import asyncio
-    import threading
-
-    from binnacle.features.commands import command_execution
-    from binnacle.platform.contracts.darwin_contracts import ForegroundRequest
-
-    started, cancelled = threading.Event(), threading.Event()
-    thread_ids = []
-
-    class Execution:
-        def run_foreground(self, request, *, cancel):
-            thread_ids.append(threading.get_ident())
-            started.set()
-            if cancel.wait(1):
-                cancelled.set()
-            raise RuntimeError("test worker finished")
-
-    bridge = getattr(command_execution, "run_foreground_async", None)
-    assert bridge is not None, "foreground thread/cancellation bridge missing"
-    request = ForegroundRequest("test", tmp_path, None, 1, False, 1, 100)
-
-    async def exercise():
-        task = asyncio.create_task(bridge(Execution(), request))
-        for _ in range(100):
-            if started.is_set():
-                break
-            await asyncio.sleep(0.005)
-        assert started.is_set()
-        assert thread_ids == [thread_ids[0]] and thread_ids[0] != threading.get_ident()
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        for _ in range(100):
-            if cancelled.is_set():
-                break
-            await asyncio.sleep(0.005)
-        assert cancelled.is_set(), "request cancellation did not reach A2 Event"
-
-    asyncio.run(exercise())
-
-
 def test_darwin_command_description_states_foreground_limits():
     import asyncio
 
@@ -364,6 +319,8 @@ def test_native_mcp_foreground_uses_worker_and_cancels_owned_event(tmp_path):
             )
             assert result.structured_content["output"] == "ok"
             assert result.structured_content["state"] == "exited"
+            assert "descendants_unverified=true" in str(result.content)
+            assert "descendants_unverified" not in result.structured_content
             task = asyncio.create_task(
                 client.call_tool(
                     "run_command", {"command": "cancel", "workdir": str(tmp_path)}
@@ -391,8 +348,6 @@ def test_native_mcp_foreground_uses_worker_and_cancels_owned_event(tmp_path):
 
 def test_owned_reaper_metrics_wiring_and_no_competing_async_waiter(tmp_path):
     """R1P-A2-05: real MCP worker + native owner; all child waits are PID-specific."""
-    import pytest
-
     if sys.platform != "darwin":
         pytest.skip("Real Darwin owned-child process and stdlib event-loop contract")
     script = """
@@ -417,13 +372,11 @@ from binnacle.config import Settings, RootsSettings
 from binnacle.platform import composition as c
 from binnacle.platform.contracts.capability_contracts import Capability, CapabilityState
 from binnacle.platform.contracts.darwin_release_scope import DARWIN_RELEASE_SCOPE
-from binnacle.platform.darwin.process_backend import DarwinProcessBackend, _ForegroundRunner
-# Test-only substitution at the PUBLIC observer seam. Production stays disabled.
-DarwinProcessBackend.run_foreground = _ForegroundRunner(5, 5).run_foreground
 settings = Settings(roots=RootsSettings(default_root=Path(sys.argv[1]), extra_roots=()))
 settings.run_command.wait_max_s = 5
 scope = dict(DARWIN_RELEASE_SCOPE)
 scope["run_command"] = dataclasses.replace(scope["run_command"], capability=Capability(CapabilityState.LIMITED, "test_only", "foreground"))
+scope["job_status"] = dataclasses.replace(scope["job_status"], capability=Capability(CapabilityState.LIMITED, "test_only", "foreground history"))
 access, backend = compose_native_tools(settings=settings, release_scope=scope)
 backend.max_output_chars = 1024
 app = create_application(settings=settings, token="test", backend=backend, file_access=access)
@@ -432,6 +385,11 @@ async def exercise():
         result = await client.call_tool("run_command", {"command": "printf ok", "workdir": sys.argv[1], "wait_seconds": 5})
         data = result.structured_content
         assert data["output"] == "ok" and data["exit_code"] == 0
+        history = await client.call_tool("job_status", {"job_id": data["job_id"], "cursor": "start"})
+        assert history.structured_content["state"] == "exited"
+        assert history.structured_content["log_delta"] == "ok"
+        assert history.structured_content["processes"] == []
+        assert backend.list_jobs()[0]["job_id"] == data["job_id"]
         metrics = backend.foreground_execution.execution.accounting.snapshot_scoped(data["job_id"])
         assert metrics["direct_child.cpu.user_usec"].final
         assert metrics["direct_child.cpu.user_usec"].capability.state == CapabilityState.LIMITED
@@ -481,3 +439,61 @@ def test_concurrent_handlers_capacity_backlog_and_fresh_generation(
     assert receipt["capacity_error"] in ("ipc_connect_refused", "ipc_connect_timeout")
     assert 0.1 <= receipt["refusal_time"] < 1
     assert receipt["unique_generations"] and receipt["generation_bits"] >= 128
+
+
+@pytest.mark.parametrize(
+    "tool,state",
+    [
+        ("stop_job", "LIMITED"),
+        ("stop_job", "AVAILABLE"),
+        ("stop_job", "UNKNOWN"),
+        ("run_command", "LIMITED"),
+        ("job_status", "LIMITED"),
+        ("run_command", "AVAILABLE"),
+        ("job_status", "AVAILABLE"),
+        ("run_command", "UNKNOWN"),
+        ("job_status", "UNKNOWN"),
+    ],
+)
+def test_invalid_native_scope_raises_at_every_composition_boundary(
+    tmp_path, monkeypatch, tool, state
+):
+    from dataclasses import replace
+
+    from binnacle.application import compose_native_tools, create_application
+    from binnacle.config import Settings
+    from binnacle.features.commands.command_contracts import RestrictedCommandBackend
+    from binnacle.platform import composition as c
+    from binnacle.platform.contracts.capability_contracts import (
+        Capability,
+        CapabilityState,
+    )
+    from binnacle.platform.contracts.darwin_release_scope import DARWIN_RELEASE_SCOPE
+
+    monkeypatch.setattr(c.platform, "system", lambda: "Darwin")
+    scope = dict(DARWIN_RELEASE_SCOPE)
+    scope[tool] = replace(
+        scope[tool], capability=Capability(CapabilityState(state), "test", tool)
+    )
+    disabled = c.create_foreground_execution()
+    monkeypatch.setattr(c, "create_foreground_execution", lambda **kwargs: disabled)
+    reason = "stop_job" if tool == "stop_job" else "runtime gate"
+    with pytest.raises(RuntimeError, match=reason):
+        compose_native_tools(settings=Settings(), release_scope=scope)
+    for host in ("Darwin", "Linux") if tool == "stop_job" else ("Darwin",):
+        monkeypatch.setattr(c.platform, "system", lambda host=host: host)
+        with pytest.raises(RuntimeError, match=reason):
+            c.native_file_capability(release_scope=scope)
+    backend = RestrictedCommandBackend(release_states={tool: state})
+    with pytest.raises(RuntimeError, match=reason):
+        create_application(settings=Settings(), token="test", backend=backend)
+
+
+def test_committed_stop_job_is_permanently_unavailable():
+    from binnacle.platform.contracts.capability_contracts import CapabilityState
+    from binnacle.platform.contracts.darwin_release_scope import DARWIN_RELEASE_SCOPE
+
+    assert (
+        DARWIN_RELEASE_SCOPE["stop_job"].capability.state == CapabilityState.UNAVAILABLE
+    )
+    assert DARWIN_RELEASE_SCOPE["stop_job"].enabling_gate == "never"

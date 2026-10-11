@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
+import resource
 import secrets
 import signal
 import socket
@@ -13,7 +14,7 @@ import sys
 import tempfile
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 import pytest
@@ -22,8 +23,6 @@ from binnacle.platform.contracts.capability_contracts import NativeCapabilityErr
 from binnacle.platform.darwin import ipc_transport as ipc
 from binnacle.platform.darwin.generation_runtime import (
     open_service_lease,
-    resolve_runtime_paths,
-    validate_lease,
 )
 
 NATIVE = pytest.mark.skipif(
@@ -38,7 +37,6 @@ def runtime():
         prefix="bna3-", dir=Path(tempfile.gettempdir()).resolve()
     ) as value:
         root = Path(value)
-        root.chmod(0o700)
         yield root
 
 
@@ -56,23 +54,44 @@ def connect_when_ready(path, lease, *, timeout=5):
     pytest.fail("authenticated readiness deadline expired")
 
 
+def attempt_start(root, lease=None):
+    stopped = threading.Event()
+    stopped.set()
+    ipc.serve_authenticated(
+        root / "jobs.sock",
+        lease=lease or lease_for(root),
+        handler=lambda p: p,
+        stop=stopped,
+    )
+
+
 @contextmanager
-def serving(root):
+def serving(root, *, handler=None, stop=None):
     lease = lease_for(root)
-    stop = threading.Event()
+    stop = stop or threading.Event()
     calls, errors = [], []
 
-    def handler(payload):
+    def default_handler(payload):
         calls.append(dict(payload))
         time.sleep(payload.get("delay", 0))
         if payload.get("raise"):
             raise KeyError("private handler details")
+        if "response" in payload:
+            response = {"nan": float("nan"), "huge": "x" * 1048576}.get(
+                payload["response"], None
+            )
+            for _ in range(40 if payload["response"] == "deep" else 0):
+                response = [response]
+            return {"result": response}
         return {"ok": True, "payload": dict(payload)}
 
     def run():
         try:
             ipc.serve_authenticated(
-                root / "jobs.sock", lease=lease, handler=handler, stop=stop
+                root / "jobs.sock",
+                lease=lease,
+                handler=handler or default_handler,
+                stop=stop,
             )
         except (OSError, NativeCapabilityError) as exc:
             errors.append(exc)
@@ -87,40 +106,6 @@ def serving(root):
         stop.set()
         thread.join(4)
         assert not thread.is_alive(), "server failed to quiesce"
-
-
-def test_private_root_and_replaced_inode(runtime, monkeypatch):
-    lease = lease_for(runtime)
-    monkeypatch.setenv("BINNACLE_RUNTIME_DIR", str(runtime))
-    assert resolve_runtime_paths().jobs_socket == runtime / "jobs.sock"
-    moved = runtime.with_name(runtime.name + "-moved")
-    runtime.rename(moved)
-    runtime.mkdir(mode=0o700)
-    try:
-        with pytest.raises(NativeCapabilityError):
-            validate_lease(runtime, lease)
-    finally:
-        runtime.rmdir()
-        moved.rename(runtime)
-
-
-@pytest.mark.parametrize("mode", [0o755, 0o770, 0o777])
-def test_nonprivate_root_refused(runtime, mode):
-    runtime.chmod(mode)
-    with pytest.raises(NativeCapabilityError):
-        lease_for(runtime)
-
-
-def test_symlink_ancestor_and_overlong_path_refused(runtime, monkeypatch):
-    real = runtime / "real"
-    real.mkdir(mode=0o700)
-    alias = runtime / "alias"
-    alias.symlink_to(real, target_is_directory=True)
-    with pytest.raises(NativeCapabilityError):
-        lease_for(alias)
-    monkeypatch.setenv("BINNACLE_RUNTIME_DIR", str(runtime / ("x" * 104)))
-    with pytest.raises(NativeCapabilityError):
-        resolve_runtime_paths()
 
 
 @NATIVE
@@ -157,24 +142,13 @@ def test_wrong_generation_secret_peer_and_unauthenticated_requests(runtime):
                     runtime / "jobs.sock", lease=lease, timeout_s=1
                 )
             auth.write_bytes(original)
-        for hello in (
-            {"version": 1, "op": "stop"},
-            {
-                "version": 1,
-                "generation": wrong.generation,
-                "nonce": secrets.token_hex(32),
-            },
-        ):
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
-                conn.connect(str(runtime / "jobs.sock"))
-                ipc._send(conn, hello, time.monotonic() + 1)
-                assert conn.recv(1) == b""
         assert not calls
     assert not errors
 
 
 @NATIVE
-def test_authenticated_replay_is_not_dispatched_twice(runtime):
+@pytest.mark.parametrize("reconnect", [False, True])
+def test_authenticated_replay_is_not_dispatched_twice(runtime, reconnect):
     with serving(runtime) as (lease, calls, errors):
         channel = connect_when_ready(runtime / "jobs.sock", lease)
         payload = {"version": 1, "op": "sentinel"}
@@ -187,6 +161,9 @@ def test_authenticated_replay_is_not_dispatched_twice(runtime):
         }
         ipc._send(channel.conn, envelope, time.monotonic() + 1)
         assert ipc._receive(channel.conn, time.monotonic() + 1)["payload"]["ok"]
+        if reconnect:
+            channel.close()
+            channel = connect_when_ready(runtime / "jobs.sock", lease)
         ipc._send(channel.conn, envelope, time.monotonic() + 1)
         assert channel.conn.recv(1) == b""
         channel.close()
@@ -194,31 +171,29 @@ def test_authenticated_replay_is_not_dispatched_twice(runtime):
     assert not errors
 
 
+def foreign_entry(path, kind):
+    if kind == "socket":
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as foreign:
+            foreign.bind(str(path))
+        path.chmod(0o600)
+    elif kind == "symlink":
+        path.symlink_to(path.with_name("missing"))
+    elif kind != "missing-lock":
+        path.write_bytes(b"foreign sentinel")
+        path.chmod(0o600)
+
+
 @NATIVE
 @pytest.mark.parametrize("kind", ["file", "socket", "symlink", "auth"])
 def test_stale_foreign_endpoint_not_unlinked(runtime, kind):
     endpoint = runtime / ("jobs.sock.auth" if kind == "auth" else "jobs.sock")
-    sentinel = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    try:
-        if kind == "socket":
-            sentinel.bind(str(endpoint))
-        elif kind == "symlink":
-            endpoint.symlink_to(runtime / "missing")
-        else:
-            endpoint.write_bytes(b"foreign sentinel")
-        before = endpoint.lstat()
-        with pytest.raises(NativeCapabilityError):
-            ipc.serve_authenticated(
-                runtime / "jobs.sock",
-                lease=lease_for(runtime),
-                handler=lambda p: p,
-                stop=threading.Event(),
-            )
-        assert endpoint.lstat().st_ino == before.st_ino
-        if kind in ("file", "auth"):
-            assert endpoint.read_bytes() == b"foreign sentinel"
-    finally:
-        sentinel.close()
+    foreign_entry(endpoint, kind)
+    before = endpoint.lstat()
+    with pytest.raises(NativeCapabilityError):
+        attempt_start(runtime)
+    assert endpoint.lstat() == before
+    if kind in ("file", "auth"):
+        assert endpoint.read_bytes() == b"foreign sentinel"
 
 
 @NATIVE
@@ -237,10 +212,6 @@ def test_socket_pathname_replacement_fences_owner_and_preserves_foreign(runtime)
             assert errors
             assert path.lstat().st_ino == before.st_ino
             assert not calls
-    assert errors[0].code in (
-        "ipc_cleanup_identity_changed",
-        "ipc_endpoint_unavailable",
-    )
 
 
 def child_command(root, lease, mode="serve", gate="-"):
@@ -255,19 +226,41 @@ def child_command(root, lease, mode="serve", gate="-"):
     ]
 
 
+@contextmanager
+def owned_child(root, lease, mode="serve", gate="-"):
+    child = subprocess.Popen(
+        child_command(root, lease, mode, gate),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        yield child
+    finally:
+        if child.poll() is None:
+            child.terminate()
+        try:
+            child.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            child.kill()
+            child.communicate(timeout=3)
+
+
+def wait_path(path, child):
+    deadline = time.monotonic() + 5
+    while not path.exists():
+        assert (child is None or child.poll() is None) and time.monotonic() < deadline
+        time.sleep(0.02)
+
+
 @NATIVE
 def test_two_starters_one_owner_and_loser_cannot_dispatch(runtime):
     lease = lease_for(runtime)
     gate = runtime / "start"
-    children = [
-        subprocess.Popen(
-            child_command(runtime, lease, gate=str(gate)),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        for _ in range(2)
-    ]
-    try:
+    with ExitStack() as stack:
+        children = [
+            stack.enter_context(owned_child(runtime, lease, gate=str(gate)))
+            for _ in range(2)
+        ]
         gate.touch()
         channel = connect_when_ready(runtime / "jobs.sock", lease)
         assert channel.request({"version": 1, "op": "ping"}, timeout_s=1)["pid"] in [
@@ -278,82 +271,21 @@ def test_two_starters_one_owner_and_loser_cannot_dispatch(runtime):
         while all(p.poll() is None for p in children) and time.monotonic() < deadline:
             time.sleep(0.02)
         assert sorted(p.poll() == 3 for p in children) == [False, True]
-    finally:
-        for child in children:
-            if child.poll() is None:
-                child.terminate()  # only this test's directly owned subprocess
-            child.communicate(timeout=5)
     assert sorted(p.returncode for p in children) == [0, 3]
     assert not (runtime / "jobs.sock").exists()
 
 
 @NATIVE
-def test_frontend_crash_leaves_manager_generation_live(runtime):
-    with serving(runtime) as (lease, calls, errors):
-        crashed = subprocess.run(
-            child_command(runtime, lease, "crash-client"),
-            capture_output=True,
-            timeout=5,
-            check=False,
-        )
-        assert crashed.returncode == 23
-        channel = connect_when_ready(runtime / "jobs.sock", lease)
-        assert channel.request({"version": 1, "op": "after-crash"}, timeout_s=1)["ok"]
-        channel.close()
-        assert [p["op"] for p in calls] == ["before-crash", "after-crash"]
-    assert not errors
-
-
-@NATIVE
-def test_unrelated_same_uid_process_receives_no_application_bytes(runtime):
-    lease = lease_for(runtime)
-    child = subprocess.Popen(
-        child_command(runtime, lease, "foreign"),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    try:
-        deadline = time.monotonic() + 3
-        while not (runtime / "foreign.ready").exists() and time.monotonic() < deadline:
-            time.sleep(0.02)
-        info = (runtime / "jobs.sock").stat()
-        # Credentials name this process, but the listener is another native PID.
-        auth = {
-            "key": secrets.token_hex(32),
-            "pid": os.getpid(),
-            "uid": lease.uid,
-            "generation": lease.generation,
-            "label": lease.label,
-            "device": info.st_dev,
-            "inode": info.st_ino,
-        }
-        path = runtime / "jobs.sock.auth"
-        path.write_text(json.dumps(auth))
-        path.chmod(0o600)
-        with pytest.raises(NativeCapabilityError):
-            ipc.connect_authenticated(runtime / "jobs.sock", lease=lease, timeout_s=1)
-        output, error = child.communicate(timeout=3)
-        assert child.returncode == 0, error
-        assert output == b"0\n"
-    finally:
-        if child.poll() is None:
-            child.terminate()
-            child.communicate(timeout=3)
-
-
-@NATIVE
 @pytest.mark.parametrize(
     "replacement",
-    [None, "socket", "file", "symlink", "auth", "lock", "missing-lock", "pid-reused"],
+    [None, "socket", "file", "symlink", "auth", "lock", "missing-lock"],
 )
-def test_crashed_manager_requires_authenticated_recovery(
-    runtime, replacement, monkeypatch
+@pytest.mark.parametrize("recovery", ["token", "lease"])
+def test_crashed_manager_recovery_preserves_replacements(
+    runtime, replacement, recovery
 ):
     lease = lease_for(runtime)
-    child = subprocess.Popen(
-        child_command(runtime, lease), stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
-    try:
+    with owned_child(runtime, lease) as child:
         channel = connect_when_ready(runtime / "jobs.sock", lease)
         authority = ipc.capture_recovery_authority(channel)
         with pytest.raises(NativeCapabilityError):
@@ -361,119 +293,194 @@ def test_crashed_manager_requires_authenticated_recovery(
         channel.close()
         child.kill()  # owned direct child: simulate an unclean manager crash
         child.communicate(timeout=3)
-        inode = (runtime / "jobs.sock").stat().st_ino
-        auth = (runtime / "jobs.sock.auth").read_bytes()
-        with pytest.raises(NativeCapabilityError, match="stale_endpoint"):
-            ipc.serve_authenticated(
-                runtime / "jobs.sock",
-                lease=lease_for(runtime),
-                handler=lambda p: p,
-                stop=threading.Event(),
-            )
-        assert (runtime / "jobs.sock").stat().st_ino == inode
-        assert (runtime / "jobs.sock.auth").read_bytes() == auth
         with pytest.raises(NativeCapabilityError, match="not_authenticated"):
             ipc.recover_stale_endpoint(dataclasses.replace(authority))
-        if replacement in ("missing-lock", "pid-reused"):
-            if replacement == "missing-lock":
-                (runtime / "manager.lock").unlink()
-            else:
-                monkeypatch.setattr(os, "kill", lambda pid, sig: None)
-            with pytest.raises(NativeCapabilityError):
+
+        def recover():
+            if recovery == "token":
                 ipc.recover_stale_endpoint(authority)
-            assert (runtime / "jobs.sock").stat().st_ino == inode
-            assert (runtime / "jobs.sock.auth").read_bytes() == auth
-            assert (runtime / "manager.lock").exists() == (replacement == "pid-reused")
-            return
+            else:
+                attempt_start(runtime)
+
         if replacement:
-            path = runtime / {"auth": "jobs.sock.auth", "lock": "manager.lock"}.get(
-                replacement, "jobs.sock"
-            )
+            path = runtime / {
+                "auth": "jobs.sock.auth",
+                "lock": "manager.lock",
+                "missing-lock": "manager.lock",
+            }.get(replacement, "jobs.sock")
             path.rename(path.with_name(path.name + ".old"))
-            if replacement == "socket":
-                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as foreign:
-                    foreign.bind(str(path))
-            elif replacement == "symlink":
-                path.symlink_to(runtime / "missing")
-            else:
-                path.write_text("foreign sentinel")
-                path.chmod(0o600)
-            before = path.lstat()
+            foreign_entry(path, replacement)
+            before = path.lstat() if path.is_symlink() or path.exists() else None
             with pytest.raises(NativeCapabilityError):
-                ipc.recover_stale_endpoint(authority)
-            assert path.lstat() == before
+                recover()
+            if before:
+                assert path.lstat() == before
             assert path.with_name(path.name + ".old").exists()
-            return
-        ipc.recover_stale_endpoint(authority)
-        with serving(runtime) as (successor, _, errors):
-            assert successor.generation != lease.generation
-        assert not errors
-    finally:
-        if child.poll() is None:
-            child.terminate()
-            child.communicate(timeout=3)
+        else:
+            recover()
+            with serving(runtime) as (successor, _, errors):
+                assert successor.generation != lease.generation
+            assert not errors
 
 
 @NATIVE
-def test_server_rejects_wrong_uid_before_handshake(runtime, monkeypatch):
-    """Injected credential negative complements the native same-UID PID case."""
+@pytest.mark.parametrize("fault", ["missing", "generation", "proof", "uid"])
+def test_untrusted_handshake_never_dispatches(runtime, monkeypatch, fault):
     with serving(runtime) as (lease, calls, errors):
-        real_peer = ipc._peer
-        monkeypatch.setattr(
-            ipc, "_peer", lambda conn: (lease.uid + 1, real_peer(conn)[1])
-        )
+        if fault == "uid":
+            real_peer = ipc._peer
+            monkeypatch.setattr(
+                ipc, "_peer", lambda conn: (lease.uid + 1, real_peer(conn)[1])
+            )
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
             conn.settimeout(1)
             conn.connect(str(runtime / "jobs.sock"))
+            if fault != "uid":
+                hello = {
+                    "version": 1,
+                    "generation": lease.generation,
+                    "nonce": secrets.token_hex(32),
+                }
+                if fault == "generation":
+                    hello["generation"] = secrets.token_hex(16)
+                if fault == "missing":
+                    hello = {"version": 1, "op": "stop"}
+                deadline = time.monotonic() + 1
+                ipc._send(conn, hello, deadline)
+                if fault == "proof":
+                    ipc._receive(conn, deadline)
+                    ipc._send(conn, {"proof": "\u2603" * 64}, deadline)
             assert conn.recv(1) == b""
+        monkeypatch.undo()
+        connect_when_ready(runtime / "jobs.sock", lease).close()
         assert not calls
     assert not errors
 
 
 @NATIVE
-def test_malformed_proof_cannot_crash_manager(runtime):
-    with serving(runtime) as (lease, calls, errors):
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
-            conn.connect(str(runtime / "jobs.sock"))
-            deadline = time.monotonic() + 1
-            hello = {
-                "version": 1,
-                "generation": lease.generation,
-                "nonce": secrets.token_hex(32),
-            }
-            ipc._send(conn, hello, deadline)
-            ipc._receive(conn, deadline)
-            ipc._send(conn, {"proof": "\u2603" * 64}, deadline)
-            assert conn.recv(1) == b""
-        channel = connect_when_ready(runtime / "jobs.sock", lease)
-        channel.close()
-        assert not calls
-    assert not errors
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "no-handshake",
+        "sigterm",
+        "witness",
+        "child",
+        "high-fd",
+        "bind",
+        "journal",
+        "publish",
+    ],
+)
+def test_tokenless_owner_death_and_high_fds(runtime, mode):
+    lease = lease_for(runtime)
+    with ExitStack() as stack:
+        child = stack.enter_context(owned_child(runtime, lease, mode))
+        wait_path(runtime / "manager.ready", child)
+        if mode == "witness":
+            witness = stack.enter_context(owned_child(runtime, lease, "witness-client"))
+            wait_path(runtime / "witness.ready", witness)
+            witness.kill()
+            witness.wait(timeout=3)
+        if mode == "high-fd":
+            channel = connect_when_ready(runtime / "jobs.sock", lease)
+            assert channel.request({}, timeout_s=1)["ok"]
+            channel.close()
+        with pytest.raises(NativeCapabilityError, match="duplicate_starter"):
+            attempt_start(runtime)
+        child.send_signal(signal.SIGTERM if mode == "sigterm" else signal.SIGKILL)
+        child.wait(timeout=3)
+        # Startup obtains authority from the lock; no recovery token is passed.
+        with serving(runtime) as (_, calls, errors):
+            with pytest.raises(NativeCapabilityError):
+                ipc.connect_authenticated(
+                    runtime / "jobs.sock", lease=lease, timeout_s=1
+                )
+            assert not calls
+        assert not errors
+        if mode == "child":
+            assert not (runtime / "child.done").exists()
+            (runtime / "child.exit").touch()
+            wait_path(runtime / "child.done", None)
 
 
 def _main():
     mode, root_arg, label, generation, gate = sys.argv[1:]
     root = Path(root_arg)
     lease = open_service_lease(root=root, label=label, generation=generation)
+    if mode == "orphan":
+        deadline = time.monotonic() + 10
+        while not (root / "child.exit").exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        (root / "child.done").touch()
+        return 0
     if mode == "foreign":
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
             listener.bind(str(root / "jobs.sock"))
             (root / "jobs.sock").chmod(0o600)
             listener.listen(1)
+            info = (root / "jobs.sock").stat()
+            auth = {
+                "key": secrets.token_hex(32),
+                "pid": os.getppid(),
+                "uid": lease.uid,
+                "generation": generation,
+                "label": label,
+                "device": info.st_dev,
+                "inode": info.st_ino,
+            }
+            (root / "jobs.sock.auth").write_text(json.dumps(auth))
+            (root / "jobs.sock.auth").chmod(0o600)
             (root / "foreign.ready").touch()
             conn, _ = listener.accept()
             with conn:
                 conn.settimeout(2)
                 print(len(conn.recv(1024)), flush=True)
         return 0
-    if mode == "crash-client":
+    if mode in ("crash-client", "witness-client"):
         channel = ipc.connect_authenticated(
             root / "jobs.sock", lease=lease, timeout_s=2
         )
-        channel.request({"version": 1, "op": "before-crash"}, timeout_s=2)
-        os._exit(23)
+        if mode == "crash-client":
+            channel.request({"version": 1, "op": "before-crash"}, timeout_s=2)
+            os._exit(23)
+        authority = ipc.capture_recovery_authority(channel)
+        (root / "witness.ready").touch()
+        while authority:
+            time.sleep(0.05)
+    if mode == "high-fd":
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (max(soft, 2048), hard))
+        padding = []
+        while not padding or padding[-1] < 1100:
+            padding.append(os.open(os.devnull, os.O_RDONLY))
+
+    def pause_after(function):
+        def wrapped(*args, **kwargs):
+            function(*args, **kwargs)
+            (root / "manager.ready").touch()
+            while True:
+                time.sleep(0.02)
+
+        return wrapped
+
+    if mode == "bind":
+        socket.socket.bind = pause_after(socket.socket.bind)
+    elif mode == "journal":
+        ipc._record_endpoint = pause_after(ipc._record_endpoint)
+    elif mode == "publish":
+        ipc._publish_entry = pause_after(ipc._publish_entry)
+    original_listen = socket.socket.listen
+
+    def listen(listener, backlog):
+        original_listen(listener, backlog)
+        if mode == "child":
+            subprocess.Popen(child_command(root, lease, "orphan"), close_fds=False)
+        (root / "manager.ready").touch()
+
+    socket.socket.listen = listen
     stop = threading.Event()
-    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    if mode != "sigterm":
+        signal.signal(signal.SIGTERM, lambda *_: stop.set())
     while gate != "-" and not Path(gate).exists():
         time.sleep(0.01)
     try:

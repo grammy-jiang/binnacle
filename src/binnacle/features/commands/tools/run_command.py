@@ -159,10 +159,17 @@ def register(
     description = None
     if isinstance(backend, RestrictedCommandBackend):
         description = (
-            "Darwin foreground execution is UNAVAILABLE pending R1 + CR1 approval. "
-            "Background processes are terminated when the command finishes. "
+            (
+                f"Darwin foreground execution is LIMITED to {settings.wait_max_s} seconds. "
+                if backend.release_states.get("run_command") == "LIMITED"
+                else "Darwin foreground execution is UNAVAILABLE pending R1 + CR1 approval. "
+            )
+            + "Background processes are terminated when the command finishes. "
             "Processes that start a new session (setsid) are not tracked. "
             "New sessions/process groups are not tracked or terminated. "
+            "Results disclose descendants_unverified=true. "
+            "job_status history contains completed foreground executions in memory "
+            "only and is lost on restart. "
             "Durable background jobs and stop_job are unavailable; FULL_PARITY_NO_GO."
         )
 

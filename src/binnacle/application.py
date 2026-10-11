@@ -8,8 +8,10 @@ in binnacle.server for backward-compatible CLI and ASGI exports.
 
 from collections.abc import Callable, Mapping
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from functools import partial
-from threading import Event
+from threading import Event, RLock
+from time import time
 
 from fastmcp import FastMCP
 from fastmcp.server.auth import StaticTokenVerifier
@@ -22,6 +24,8 @@ from binnacle.features.commands.command_contracts import (
     CommandFailure,
     ForegroundRequest,
     ForegroundResult,
+    RestrictedCommandBackend,
+    refuse_commands,
 )
 from binnacle.features.commands.commands_server import create_commands_server
 from binnacle.features.files.files_server import create_files_server
@@ -60,6 +64,15 @@ def create_application(
     commands_factory: Callable[..., FastMCP] = create_commands_server,
 ) -> FastMCP:
     """Build a pure native FastMCP tree from supplied application dependencies."""
+    if isinstance(backend, RestrictedCommandBackend):
+        from binnacle.platform.composition import validate_native_command_states
+
+        validate_native_command_states(
+            backend.release_states,
+            execution=backend.native_execution
+            if isinstance(backend, _ForegroundCommandBackend)
+            else None,
+        )
     settings = settings.model_copy(deep=True)
     # Root authorization is fixed for this app generation. A mutable symlink
     # alias cannot silently grant new directories to an already running server.
@@ -159,7 +172,6 @@ def compose_native_tools(
     """Compose reviewed mechanisms; release_scope replacement is for TESTS only."""
     from uuid import uuid4
 
-    from binnacle.features.commands.command_contracts import RestrictedCommandBackend
     from binnacle.features.files.paths import FileToolAccess
     from binnacle.platform.composition import (
         create_file_access,
@@ -168,11 +180,23 @@ def compose_native_tools(
         native_file_capability,
     )
 
+    settings = settings.model_copy(deep=True)
+    release_scope = dict(release_scope)
+    execution = create_foreground_execution(
+        command_states={
+            tool: row.capability.state.value for tool, row in release_scope.items()
+        },
+        foreground_limit_s=settings.run_command.wait_max_s,
+        wait_max_s=settings.run_command.wait_max_s,
+    )
+    # Validate Commands before opening any Files resources, even for test scopes.
+    capability = native_file_capability(
+        release_scope=release_scope, execution=execution
+    )
     files = create_file_access()
     search = (
         create_search_access(files=files, rg_bin=settings.rg_bin) if files else None
     )
-    capability = native_file_capability(release_scope=release_scope)
     access = FileToolAccess(
         roots=settings.roots,
         files=files,
@@ -181,10 +205,9 @@ def compose_native_tools(
         capability=capability,
         capabilities={tool: release_scope[tool].capability for tool in FILE_TOOLS},
     )
-    # Commands remain inert even in a candidate scope until A2 opens its public
-    # reviewed entrypoint. No private runner or second waiter is selected here.
-    backend = RestrictedCommandBackend(
-        foreground_execution=_ForegroundDomainAdapter(create_foreground_execution()),
+    backend = _ForegroundCommandBackend(
+        execution=execution,
+        keep_newest=settings.jobs.keep_newest,
         release_states={
             tool: release_scope[tool].capability.state.value
             for tool in ("run_command", "job_status", "stop_job")
@@ -194,11 +217,95 @@ def compose_native_tools(
     return access, backend
 
 
+class _ForegroundCommandBackend(RestrictedCommandBackend):
+    """Application-local completed results only; no durable state or PID adoption."""
+
+    def __init__(self, *, execution, release_states, keep_newest):
+        self.native_execution = execution
+        self._history: dict[str, tuple[dict, bytes]] = {}
+        self._history_lock = RLock()
+        self._keep_newest = keep_newest
+        super().__init__(
+            foreground_execution=_ForegroundDomainAdapter(execution, self._record),
+            release_states=release_states,
+        )
+
+    def require_available(self) -> None:
+        from binnacle.platform.composition import validate_native_command_states
+
+        validate_native_command_states(
+            self.release_states, execution=self.native_execution
+        )
+        super().require_available()
+
+    def _require_history(self) -> None:
+        self.require_available()
+        if self.release_states.get("job_status") != "LIMITED":
+            refuse_commands()
+
+    def _record(self, request: ForegroundRequest, result: ForegroundResult) -> None:
+        if self.release_states.get("job_status") != "LIMITED":
+            return
+        # Only a terminal result enters history, after the owner cleaned and reaped.
+        state = {
+            "job_id": result.execution_id,
+            "state": "exited",
+            "exit_code": result.exit_code,
+            "signal": result.signal,
+            "runtime_s": result.duration_s,
+            "started_at": datetime.fromtimestamp(
+                time() - result.duration_s, timezone.utc
+            ).isoformat(),
+            "workdir": str(request.workdir),
+            "command": request.command,
+            "last_output_age_s": None,
+            "log_bytes": len(result.output),
+            "log_path": "",
+        }
+        with self._history_lock:
+            self._history[result.execution_id] = (state, result.output)
+            while len(self._history) > self._keep_newest:
+                del self._history[next(iter(self._history))]
+
+    def job_state(self, job_id: str) -> dict | None:
+        self._require_history()
+        with self._history_lock:
+            entry = self._history.get(job_id)
+            return dict(entry[0]) if entry else None
+
+    def list_jobs(self) -> list[dict]:
+        self._require_history()
+        with self._history_lock:
+            return [dict(state) for state, _ in reversed(self._history.values())]
+
+    def await_exit(self, job_id: str, timeout: float) -> dict | None:
+        return self.job_state(job_id)
+
+    def read_log(self, job_id: str) -> bytes:
+        self._require_history()
+        with self._history_lock:
+            entry = self._history.get(job_id)
+            if entry is None:
+                raise CommandFailure("foreground_history_unavailable")
+            return entry[1]
+
+    def read_log_range(
+        self, job_id: str, start: int, max_bytes: int
+    ) -> tuple[bytes, int]:
+        output = self.read_log(job_id)
+        return output[start : start + max_bytes], len(output)
+
+
 class _ForegroundDomainAdapter:
     """Map native values/errors to the portable Commands execution protocol."""
 
-    def __init__(self, execution: NativeForegroundExecution) -> None:
+    def __init__(
+        self,
+        execution: NativeForegroundExecution,
+        on_result: Callable[[ForegroundRequest, ForegroundResult], None],
+    ) -> None:
         self.execution = execution
+        self.on_result = on_result
 
     def run_foreground(
         self, request: ForegroundRequest, *, cancel: Event
@@ -215,8 +322,15 @@ class _ForegroundDomainAdapter:
         try:
             result = self.execution.run_foreground(native, cancel=cancel)
         except NativeCapabilityError as exc:
-            raise CommandFailure(f"{exc.code}: {exc.capability.state.value}") from exc
-        return ForegroundResult(
+            marker = (
+                "; descendants_unverified=true"
+                if "descendants_unverified=true" in str(exc)
+                else ""
+            )
+            raise CommandFailure(
+                f"{exc.code}: {exc.capability.state.value}{marker}"
+            ) from exc
+        mapped = ForegroundResult(
             result.execution_id,
             result.owner_generation,
             result.exit_code,
@@ -227,3 +341,5 @@ class _ForegroundDomainAdapter:
             result.duration_s,
             result.descendants_unverified,
         )
+        self.on_result(request, mapped)
+        return mapped

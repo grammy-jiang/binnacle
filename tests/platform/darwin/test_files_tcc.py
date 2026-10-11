@@ -115,7 +115,9 @@ def test_denied_child_listed_without_descent_and_siblings_continue(
         grant = files.grant(root, generation="g")
         monkeypatch.setattr(os, "open", deny_child)
         result = files.list_entries(grant, ListRequest(".", "**/*", False, 100, 100, 5))
-        assert {e.relative_path for e in result.entries} == {"denied", "good"}
+        assert {e.relative_path for e in result.entries} == (
+            {"good"} if directory else {"denied", "good"}
+        )
         search = DarwinSearchAccess(files, rg_bin="rg")
         batch = search.search(
             grant, SearchRequest(".", "needle", True, 0, None, 5, 10000, 100)
@@ -142,7 +144,6 @@ def test_native_unreadable_directory_is_listed_not_descended(tmp_path):
                 grant, ListRequest(".", "**/*", False, 100, 100, 5)
             )
             assert {(e.relative_path, e.kind) for e in result.entries} == {
-                ("denied", "directory"),
                 ("good", "file"),
             }
             with pytest.raises(PermissionDenied):
@@ -171,3 +172,122 @@ def test_symlink_ignore_file_never_opens_external_policy(tmp_path, monkeypatch):
         monkeypatch.setattr(os, "open", guarded)
         result = files.list_entries(grant, ListRequest(".", "**/*", False, 100, 100, 5))
         assert [e.relative_path for e in result.entries] == ["good"]
+
+
+@pytest.mark.parametrize("glob", ["*.py", "**/*"])
+def test_glob_listing_filters_special_and_unreadable_entries(
+    tmp_path, monkeypatch, glob
+):
+    import socket
+    from tempfile import TemporaryDirectory
+
+    root = tmp_path.resolve()
+    for name in ("a.py", "secret.key"):
+        (root / name).write_text("needle\n")
+    (root / "locked").mkdir()
+    (root / "link.py").symlink_to(root / "a.py")
+    os.mkfifo(root / "pipe.py")
+    real_open = os.open
+    denied_calls = []
+
+    def deny(path, flags, *args, **kwargs):
+        if path in ("secret.key", "locked"):
+            denied_calls.append(path)
+            raise PermissionError(errno.EACCES, "denied")
+        return real_open(path, flags, *args, **kwargs)
+
+    with (
+        TemporaryDirectory(dir="/tmp") as short,
+        closing(socket.socket(socket.AF_UNIX)) as sock,
+        closing(DarwinFileAccess()) as files,
+    ):
+        sock.bind(short + "/socket")
+        os.rename(short + "/socket", root / "socket.py")
+        grant = files.grant(root, generation="g")
+        monkeypatch.setattr(os, "open", deny)
+        listing = files.list_entries(grant, ListRequest(".", glob, False, 100, 100, 5))
+        expected = {"a.py"} if glob == "*.py" else {"a.py", "secret.key"}
+        assert {e.relative_path for e in listing.entries} == expected
+        search = DarwinSearchAccess(files, rg_bin="rg")
+        batch = search.search(
+            grant, SearchRequest(".", "needle", True, 0, glob, 5, 10000, 100)
+        )
+        assert batch.files_searched == 1
+        assert batch.events[-1]["data"]["stats"]["unreadable_files_skipped"] == int(
+            glob == "**/*"
+        )
+        if glob == "*.py":
+            assert "secret.key" not in denied_calls
+        plain = files.list_entries(grant, ListRequest(".", None, False, 100, 100, 5))
+        assert {e.relative_path for e in plain.entries} == {
+            "a.py",
+            "secret.key",
+            "locked",
+            "link.py",
+            "pipe.py",
+            "socket.py",
+        }
+
+
+@pytest.mark.parametrize("mode", ["oversize", "remaining", "exhausted", "output"])
+def test_search_budget_continues_or_preserves_matches_and_explains_truncation(
+    tmp_path, mode
+):
+    from binnacle.config import RootsSettings
+    from binnacle.features.files.paths import FileToolAccess
+    from binnacle.features.search.tools.search_text import search_text_impl
+    from binnacle.platform.contracts.capability_contracts import (
+        Capability,
+        CapabilityState,
+    )
+
+    root = tmp_path.resolve()
+    budget = 16 * 1024 * 1024
+    (root / "00-first.txt").write_bytes(b"hello\n")
+    if mode == "oversize":
+        (root / "big.bin").write_bytes(b"A" * (21 * 1024 * 1024))
+    elif mode == "remaining":
+        for index in range(300):
+            (root / f"a{index:03}.txt").write_bytes(b"x" * (60 * 1024))
+    elif mode == "exhausted":
+        (root / "a.txt").write_bytes(b"x" * (budget - 6))
+        (root / "b.txt").write_bytes(b"x" * (4 * 1024 * 1024))
+    else:
+        (root / "a.txt").write_bytes(b"hello " + b"x" * (9 * 1024 * 1024))
+    (root / "hello.txt").write_text("hello e0\n")
+    files = DarwinFileAccess()
+    roots = RootsSettings(default_root=root, extra_roots=())
+    access = FileToolAccess(
+        roots=roots,
+        files=files,
+        search=DarwinSearchAccess(files, rg_bin="rg"),
+        generation="budget-test",
+        capability=Capability(CapabilityState.LIMITED, "test_only", "opened-object"),
+    )
+    try:
+        result = search_text_impl(
+            "hello.*" if mode == "output" else "hello",
+            str(root),
+            None,
+            False,
+            0,
+            False,
+            100,
+            roots=roots,
+            file_access=access,
+        )
+        payload = result.structured_content
+        text = result.content[0].text
+        assert payload["truncated"] and "truncated=true" in text
+        assert payload["entries"][0]["file"] == str(root / "00-first.txt")
+        if mode in ("oversize", "remaining"):
+            assert payload["count"] == 2
+            assert "skipped_oversize=" in text and "remaining input budget" in text
+        else:
+            assert payload["count"] == 1
+            assert (
+                f"Aggregate {'input' if mode == 'exhausted' else 'output'} budget exhausted"
+                in text
+            )
+    finally:
+        access.close()

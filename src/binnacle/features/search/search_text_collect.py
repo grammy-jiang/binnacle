@@ -158,7 +158,7 @@ def search_opened(
                 span,
                 glob,
                 settings.timeout_s,
-                16 * 1024 * 1024,
+                16 * 1024 * 1024,  # Aggregate input and rg output caps.
                 10000,
             ),
         )
@@ -218,7 +218,29 @@ def search_opened(
         outcome = enforce_result_budget(
             payload, names_only=names_only, max_bytes=settings.result_max_bytes
         )
+        summary = f"Found {total} matches for {pattern!r} under {display}."
+        if outcome.payload["truncated"]:
+            summary += " Results truncated (truncated=true); narrow the path or glob."
+        for event in batch.events:
+            if event.get("type") == "summary":
+                stats = event["data"]["stats"]
+                skipped = [
+                    f"{key}={value}"
+                    for key, value in stats.items()
+                    if (key.endswith("_skipped") or key.startswith("skipped_"))
+                    and value
+                ]
+                if skipped:
+                    summary += " Skipped files: " + ", ".join(skipped) + "."
+                if stats.get("skipped_oversize"):
+                    summary += (
+                        f" {stats['skipped_oversize']} file(s) skipped: larger than the per-file limit"
+                        " (bounded by the remaining input budget)."
+                    )
+                for budget in ("input", "output"):
+                    if stats.get(f"{budget}_budget_exhausted"):
+                        summary += f" Aggregate {budget} budget exhausted."
         return ToolResult(
-            content=f"Found {total} matches for {pattern!r} under {display}.",
+            content=summary,
             structured_content=outcome.payload,
         )

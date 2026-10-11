@@ -255,7 +255,7 @@ def test_descriptor_outputs_match_legacy_supported_text_subset(tmp_path):
         access.close()
 
 
-def test_candidate_release_scope_is_per_tool_and_default_stays_disabled(
+def test_candidate_release_scope_is_per_tool_and_committed_scope_is_unchanged(
     tmp_path, monkeypatch
 ):
     from dataclasses import replace
@@ -266,7 +266,13 @@ def test_candidate_release_scope_is_per_tool_and_default_stays_disabled(
     monkeypatch.setattr(composition.platform, "system", lambda: "Darwin")
     settings = Settings(roots=RootsSettings(default_root=tmp_path, extra_roots=()))
     (tmp_path / "file").write_text("hello")
-    scope = dict(DARWIN_RELEASE_SCOPE)
+    committed = dict(DARWIN_RELEASE_SCOPE)
+    scope = {
+        tool: replace(
+            row, capability=Capability(CapabilityState.UNAVAILABLE, "test", tool)
+        )
+        for tool, row in committed.items()
+    }
     scope["read_file"] = replace(
         scope["read_file"],
         capability=Capability(CapabilityState.LIMITED, "test_only", "read_file"),
@@ -293,10 +299,7 @@ def test_candidate_release_scope_is_per_tool_and_default_stays_disabled(
 
     asyncio.run(exercise())
     assert (tmp_path / "file").read_text() == "hello"
-    assert all(
-        r.capability.state == CapabilityState.UNAVAILABLE
-        for r in DARWIN_RELEASE_SCOPE.values()
-    )
+    assert dict(DARWIN_RELEASE_SCOPE) == committed
 
 
 def test_a6_service_output_uses_a5_redacted_epochs(tmp_path, monkeypatch):
@@ -347,3 +350,46 @@ def test_a6_service_output_uses_a5_redacted_epochs(tmp_path, monkeypatch):
                         b"private-value",
                     )
                 )
+
+
+def test_search_summary_names_per_file_limit_without_schema_change(tmp_path):
+    from binnacle.features.search.tools.search_text import search_text_impl
+
+    (tmp_path / "small.txt").write_text("needle\n")
+    (tmp_path / "large.txt").write_bytes(b"x" * (16 * 1024 * 1024 + 1))
+    roots = RootsSettings(default_root=tmp_path, extra_roots=())
+    files = DarwinFileAccess()
+    access = paths.FileToolAccess(
+        roots=roots,
+        files=files,
+        search=DarwinSearchAccess(files, rg_bin="rg"),
+        generation="summary-test",
+        capability=Capability(CapabilityState.LIMITED, "test", "opened-object"),
+    )
+    try:
+        result = search_text_impl(
+            "needle",
+            str(tmp_path),
+            None,
+            False,
+            0,
+            False,
+            100,
+            roots=roots,
+            file_access=access,
+        )
+        assert result.structured_content["count"] == 1
+        assert result.structured_content["truncated"]
+        assert (
+            "1 file(s) skipped: larger than the per-file limit"
+            in result.content[0].text
+        )
+        assert set(result.structured_content) == {
+            "path",
+            "pattern",
+            "entries",
+            "count",
+            "truncated",
+        }
+    finally:
+        access.close()

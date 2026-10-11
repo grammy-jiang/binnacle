@@ -239,29 +239,12 @@ def test_search_budgets_report_truncation_without_partial_line_matches(tree):
             search.search(grant, req)
 
 
-def test_search_root_swap_at_native_launch_preserves_opened_bytes(tree, monkeypatch):
-    root, _, grant, search, _ = tree
-    (root / "file").write_text("needle owned\n")
-    original_popen = subprocess.Popen
-    seen = []
-
-    def swap(argv, **kwargs):
-        root.rename(root.with_name("moved"))
-        root.mkdir()
-        (root / "file").write_text("needle SECRET\n")
-        seen.append(argv)
-        return original_popen(argv, **kwargs)
-
-    monkeypatch.setattr(search_access.subprocess, "Popen", swap)
-    result = search.search(grant, request())
-    assert "SECRET" not in repr(result.events)
-    assert "owned" in repr(result.events)
-    assert seen[0][-1] == "-"
-    assert not any(str(root) in arg for arg in seen[0])
-
-
-def test_search_leaf_swap_between_enumeration_and_open_is_denied(tree, monkeypatch):
+@pytest.mark.parametrize("replacement", ["symlink", "directory", "missing"])
+def test_search_leaf_swap_between_enumeration_and_open_is_denied(
+    tree, monkeypatch, replacement
+):
     root, files, grant, search, _ = tree
+    (root / "good").write_text("needle sibling")
     target = root / "file"
     target.write_text("needle owned")
     outside = root.with_name("secret")
@@ -271,12 +254,25 @@ def test_search_leaf_swap_between_enumeration_and_open_is_denied(tree, monkeypat
     def swap(*args):
         result = original_list(*args)
         target.unlink()
-        target.symlink_to(outside)
+        if replacement == "symlink":
+            target.symlink_to(outside)
+        elif replacement == "directory":
+            target.mkdir()
         return result
 
     monkeypatch.setattr(files, "list_entries", swap)
+    result = search.search(grant, request())
+    assert {e[1] for e in content(result.events)} == {"good"}
+    assert result.events[-1]["data"]["stats"]["skipped_changed"] == 1
+    assert "SECRET" not in repr(result.events)
+    monkeypatch.setattr(files, "list_entries", original_list)
     with pytest.raises(UnsafePath):
-        search.search(grant, request())
+        search.search(
+            grant,
+            request(
+                relative_path="file/missing" if replacement == "directory" else "file"
+            ),
+        )
     assert outside.read_text() == "needle SECRET"
 
 

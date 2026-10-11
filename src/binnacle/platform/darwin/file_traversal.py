@@ -360,6 +360,12 @@ class Listing:
                         raise
                     continue  # No metadata can be safely claimed for this entry.
                 is_dir = stat.S_ISDIR(info.st_mode)
+                if (
+                    recursive
+                    and not is_dir
+                    and not glob_matches(path, self.request.glob or "")
+                ):
+                    continue
                 decision = (
                     _ignore_decision(self.base + path, is_dir, rules)
                     if recursive
@@ -406,7 +412,7 @@ class Listing:
                             )
                         else:
                             self.add(path, kind, info)
-                    elif not recursive or glob_matches(path, self.request.glob or ""):
+                    else:
                         self.add(path, kind, info)
                 except PermissionError:
                     self.add(path, kind, info)
@@ -419,6 +425,10 @@ class Listing:
         kind: Literal["file", "directory", "other"],
         info: os.stat_result,
     ) -> None:
+        if self.request.glob is not None and (
+            kind != "file" or not glob_matches(path, self.request.glob)
+        ):
+            return
         # Retain at most the visit budget, then sort before applying result cap.
         self.entries.append(
             FileEntry(

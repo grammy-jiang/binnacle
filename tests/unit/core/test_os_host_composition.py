@@ -59,8 +59,10 @@ assert c.create_runtime_paths().jobs_socket == root / "jobs.sock"
 assert c.create_service_log_source(root=root, generation=lease.generation).__class__.__name__ == "PrivateServiceLogSource"
 assert c.create_service_inspector(lease=lease).__class__.__name__ == "LaunchdUserServices"
 assert c.create_service_controller(lease=lease).__class__.__name__ == "LaunchdUserServices"
-assert all(row.capability.state == CapabilityState.UNAVAILABLE for row in DARWIN_RELEASE_SCOPE.values())
-assert c.native_file_capability().state == CapabilityState.UNAVAILABLE
+assert all(row.capability.state in (CapabilityState.UNAVAILABLE, CapabilityState.LIMITED) for row in DARWIN_RELEASE_SCOPE.values())
+assert DARWIN_RELEASE_SCOPE["stop_job"].capability.state == CapabilityState.UNAVAILABLE
+execution = c.create_foreground_execution(command_states={tool: row.capability.state.value for tool, row in DARWIN_RELEASE_SCOPE.items()})
+assert c.native_file_capability(execution=execution).state == CapabilityState.LIMITED
 assert not any(m.startswith("binnacle.platform.linux") for m in sys.modules)
 """
     # Short root also satisfies Darwin's Unix-domain socket path limit on Linux CI.
