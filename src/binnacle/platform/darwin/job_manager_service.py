@@ -15,7 +15,6 @@ import json
 import logging
 import math
 import os
-import re
 import shutil
 import threading
 import time
@@ -23,11 +22,16 @@ import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Literal, Protocol
+from typing import Any, Protocol
 
 from binnacle.platform.contracts import process_contracts as pc
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 from binnacle.platform.contracts.process_contracts import OwnedJobExit
+from binnacle.platform.darwin.job_manager_stopping import (
+    _JOB_ID,
+    _ManagerStopping,
+    _terminal,
+)
 from binnacle.provenance import runtime_provenance
 
 log = logging.getLogger("binnacle.job_manager")
@@ -43,8 +47,6 @@ ENV_OVERRIDES: Mapping[str, str] = dict(i.split("=", 1) for i in _ENV.split())
 META_REQUIRED = ("command", "workdir", "pid", "started_at")
 PARTIAL_SIGNAL_FIELD = "stop_signal_partial"
 PARTIAL_SIGNAL_MESSAGE = "previous verified process signal delivery was incomplete"
-_JOB_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
-_STOP_PHASES: tuple[Literal["terminate", "kill"], ...] = ("terminate", "kill")
 EXIT_RETRY_S = 1.0  # an unpersisted exit is retried, never dropped
 REAP_FAILURE_LIMIT = 20  # consecutive reap_exits failures before the manager stops
 
@@ -91,10 +93,6 @@ def jobs_dir_writer(jobs_dir: Path) -> Any:
     return _flock(jobs_dir / ".manager.lock", fcntl.LOCK_EX | fcntl.LOCK_NB, busy)
 
 
-def _terminal(meta: Mapping[str, object]) -> bool:
-    return "exit_code" in meta or "signal" in meta
-
-
 def read_meta(root: Path, job_id: str) -> dict[str, Any] | None:
     """``job_store.read_meta``: a complete record, or None when unusable."""
     try:
@@ -113,8 +111,10 @@ def list_job_ids(root: Path) -> list[str]:
         return []
 
 
-class DarwinJobManager:
+class DarwinJobManager(_ManagerStopping):
     """RPC v1 dispatcher and durable-record writer for one owner incarnation."""
+
+    owner: ReleasingJobOwner
 
     def __init__(
         self,
@@ -132,6 +132,9 @@ class DarwinJobManager:
         self.grace, self.provenance = grace, runtime_provenance()
         self._lock = threading.RLock()
         self._unrecorded: dict[str, OwnedJobExit] = {}  # reaped, not yet durable
+        # Set on SIGTERM (serve_job_manager shares its stop event): every
+        # waiting handler returns at once (JCRP-F2).
+        self.stopping = threading.Event()
 
     @contextmanager
     def _transaction(self) -> Iterator[None]:
@@ -188,6 +191,8 @@ class DarwinJobManager:
             return self._start(request)
         if op == "stop":
             return self._stop(request)
+        if op == "processes":
+            return self._processes(request)
         return {"ok": False, "error": f"unknown job-manager operation {op!r}"}
 
     def _start(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -202,12 +207,19 @@ class DarwinJobManager:
             raise ValueError(f"workdir is not a directory: {workdir}")
         if not (math.isfinite(wait_seconds) and 0 <= wait_seconds <= self.wait_max_s):
             raise ValueError("wait_seconds outside manager bounds")
+        if self.stopping.is_set():  # PRE-J1g-F6: never launch into close()
+            return {"ok": False, "error": "could not start job: job manager stopping"}
         try:
             job_id = self._launch(command, workdir, stdin, call_id)
         except (OSError, NativeCapabilityError) as exc:
             return {"ok": False, "error": f"could not start job: {exc}"}
         try:
-            exited = self.owner.wait(job_id, wait_seconds)
+            # Stopping: the start returns its job id auto-backgrounded (F2).
+            exited = (
+                None
+                if self.stopping.is_set()
+                else self._wait_exit(job_id, wait_seconds)
+            )
         except pc.JobOwnerLost:  # reaper fault: authority UNKNOWN, record no exit
             exited = None
         if exited is not None:
@@ -286,37 +298,6 @@ class DarwinJobManager:
             return {"ok": False, "error": f"job stop partially failed: {exc}"}
         log.info("event=job_stop job_id=%s call=%s state=%s", job_id, call_id, state)
         return {"ok": True, "job_id": job_id, "state": state}
-
-    def _stop_owned(self, job_id: str, call_id: str) -> str:
-        """A1 order: durable prepare -> TERM -> grace -> KILL -> reaper evidence."""
-        with self._transaction():
-            meta = self._meta(job_id)
-            if meta is not None and not _terminal(meta):
-                meta.update(stop_requested=True, stop_call_id=call_id)
-                self._write_meta(job_id, meta)
-        partial: list[Exception] = []
-        for intent, grace in zip(_STOP_PHASES, self.grace, strict=True):
-            try:
-                self.owner.signal_owned_group(job_id, intent)
-            except Unowned:
-                break  # leader reaped (pgid may recycle) or not ours: no signal
-            except Partial as exc:
-                partial.append(exc)
-                self._persist_partial(job_id)
-            try:
-                exited = self.owner.wait(job_id, grace)
-            except pc.JobOwnerLost:
-                log.warning("event=job_stop_owner_lost job_id=%s", job_id)
-                break  # authority UNKNOWN: record no exit, signal nothing more
-            if exited is not None:
-                self.record_exit(exited)
-                break
-        deadline = time.monotonic() + self.grace[1]
-        while (state := self.state(job_id)) != "exited" and time.monotonic() < deadline:
-            time.sleep(0.02)
-        if partial:
-            raise Partial("; ".join(str(item) for item in partial))
-        return state
 
     def _persist_partial(self, job_id: str) -> None:
         """``job_stop.persist_partial_or_raise``: no partial ack without a marker."""
@@ -462,6 +443,7 @@ class DarwinJobManager:
             failures = 0
             for exited in exits:
                 self._record_guarded(exited)
+            self.persist_lost()
             if self._unrecorded and time.monotonic() >= retry_at:
                 retry_at = time.monotonic() + EXIT_RETRY_S
                 self.retry_unrecorded()
@@ -476,6 +458,7 @@ class DarwinJobManager:
 
     def close(self) -> Sequence[OwnedJobExit]:
         """Persist reaped exits BEFORE returning; unreaped stay UNKNOWN."""
+        self.stopping.set()
         exits = self.owner.close()
         self.retry_unrecorded()  # unpersisted exits that stay so become UNKNOWN
         for exited in exits:

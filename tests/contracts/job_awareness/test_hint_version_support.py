@@ -1,24 +1,22 @@
-"""Native producer resolution for fixed, isolated synthetic registrations."""
+"""Execution-witness carrier for fixed, isolated synthetic registrations."""
 
 from fastmcp import FastMCP
 from fastmcp.server.middleware import Middleware
 from fastmcp.tools.base import ToolResult
-from fastmcp.utilities.versions import VersionSpec
 
-from binnacle.mcp.job_awareness_hint import HintAdapter
+from binnacle.mcp.job_awareness_hint import HintAdapter, witnessed_call
 
 
-class VersionBoundCarrier(Middleware):
-    """Pass the Tool object FastMCP resolves for this call to the adapter.
+class ExecutionCarrier(Middleware):
+    """Pass the receipt of the tool body that actually ran to the adapter.
 
-    Native resolution applies injection, mounted providers, transforms,
-    highest-version selection and unversioned fallback. FastMCP 4.1.0 exposes
-    no resolved tool in the middleware context, so this lab resolves it with the
-    server's own get_tool() and the dispatch selector. The lab has fixed
-    registrations and no downstream middleware that rewrites routing or
-    substitutes results, so the resolved tool is the actual producer. The
-    adapter, not this carrier, decides identity; an unresolved tool is passed
-    as None and suppresses (fail closed).
+    ADV-G4-01: the carrier never looks a producer up by name, version or
+    registry. It runs dispatch through witnessed_call, which issues a receipt
+    for the returned result only when exactly one witnessed body completed on
+    this server. Native
+    dispatch (injection, mounted providers, transforms, version selection)
+    decides which body runs. The adapter, not this carrier, decides identity;
+    no receipt suppresses (fail closed).
     """
 
     def __init__(
@@ -28,18 +26,8 @@ class VersionBoundCarrier(Middleware):
         self.adapted: list[ToolResult] = []
 
     async def on_call_tool(self, context, call_next):
-        # FastMCP constructs this metadata from its dispatch VersionSpec.
-        selector = (context.message.meta or {}).get("fastmcp", {}).get("version")
-        version = (
-            VersionSpec(eq=selector)
-            if isinstance(selector, str)
-            else VersionSpec(**selector)
-            if isinstance(selector, dict)
-            else None
-        )
-        producer = await self.app.get_tool(context.message.name, version=version)
-        value = await call_next(context)
+        value, execution = await witnessed_call(call_next, context)
         self.seen.append(value)
-        result = await HintAdapter.adapt(self.adapter, value, tool=producer)
+        result = await HintAdapter.adapt(self.adapter, value, execution=execution)
         self.adapted.append(result)
         return result

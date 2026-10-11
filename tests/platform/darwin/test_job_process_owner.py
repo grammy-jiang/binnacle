@@ -290,13 +290,7 @@ def test_foreign_reap_echild_becomes_unknown_never_exited(spool):
         assert created.close() == ()
 
 
-@native
-def test_straggler_in_owned_group_is_terminated_before_reap(owner, spool):
-    started = _spawn(owner, "job-g", "sleep 30 & exit 0", spool)
-    result = owner.wait("job-g", 5)
-    assert result is not None
-    assert result.termination_reason == "normal_exit"
-    assert job_process_owner._process_records(2, started.pid) == []
+# The straggler-kill pin is replaced by test_j1g_leader_fence.py (SD-43 F1).
 
 
 @native

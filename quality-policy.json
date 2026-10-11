@@ -108,19 +108,21 @@
       },
       "full": {
         "src/binnacle/application.py": 70.5,
-        "src/binnacle/deployment/darwin/plist.py": 77.0,
         "src/binnacle/deployment/darwin/provisioner.py": 89.5,
-        "src/binnacle/deployment/darwin/setup.py": 87.5,
         "src/binnacle/features/commands/command_contracts.py": 81.5,
-        "src/binnacle/features/commands/tools/run_command.py": 88.5,
         "src/binnacle/platform/composition.py": 69.0,
         "src/binnacle/platform/darwin/file_access.py": 89.5,
         "src/binnacle/platform/darwin/generation_runtime.py": 35.5,
         "src/binnacle/platform/darwin/ipc_transport.py": 15.0,
+        "src/binnacle/platform/darwin/job_group_fence.py": 15.0,
+        "src/binnacle/platform/darwin/job_manager_client.py": 59.0,
+        "src/binnacle/platform/darwin/job_manager_entry.py": 47.0,
+        "src/binnacle/platform/darwin/job_manager_stopping.py": 62.0,
+        "src/binnacle/platform/darwin/job_process_owner.py": 10.0,
         "src/binnacle/platform/darwin/process_authority.py": 69.5,
-        "src/binnacle/platform/darwin/process_backend.py": 62.5,
-        "src/binnacle/platform/darwin/service_launchd.py": 73.0,
-        "src/binnacle/server.py": 83.5
+        "src/binnacle/platform/darwin/process_backend.py": 61.0,
+        "src/binnacle/platform/darwin/search_access.py": 88.0,
+        "src/binnacle/platform/darwin/service_launchd.py": 73.0
       }
     }
   },

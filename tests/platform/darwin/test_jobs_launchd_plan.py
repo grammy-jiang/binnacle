@@ -273,6 +273,12 @@ def test_exit_timeout_covers_the_close_persist_budget() -> None:
     budget = sum(linux.values()) + c.JOBS_PERSIST_MARGIN_S
     assert c.JOBS_PERSIST_MARGIN_S > 0
     assert budget <= c.JOBS_EXIT_TIMEOUT_S
+    # SD-43 JCRP-F2 / SD-45: worst close() budget (handler release, TERM
+    # grace, KILL grace, reaper join); ExitTimeOut >= budget + 10 s and >= 30.
+    assert c.JOBS_CLOSE_BUDGET_S == 1.0 + sum(linux.values()) + 1.0
+    assert c.JOBS_EXIT_TIMEOUT_S >= c.JOBS_CLOSE_BUDGET_S + 10.0
+    assert c.JOBS_EXIT_TIMEOUT_S >= 30
+    assert c.JOBS_EXIT_TIMEOUT_S == 30  # SD-45: not lowered
     value = plistlib.loads(render_jobs_daemon_plist(_jobs_spec()))
     assert value["ExitTimeOut"] == c.JOBS_EXIT_TIMEOUT_S
 
@@ -309,8 +315,7 @@ def test_jobs_test_variant_shares_lifecycle_but_stays_user_domain(root: Path) ->
     assert {k: test_value[k] for k in shared} == {k: prod_value[k] for k in shared}
     assert test_value["KeepAlive"] is False
     assert test_value["LimitLoadToSessionType"] == "Background"
-    assert test_value["EnvironmentVariables"] == {
-        "BINNACLE_RUNTIME_DIR": str(root),
+    assert test_value["EnvironmentVariables"] == {  # no BINNACLE_RUNTIME_DIR (N5)
         "BINNACLE_SERVICE_ROLE": "manager",
         "HOME": str(root),
     }
@@ -374,9 +379,13 @@ def test_jobs_test_variant_refusals(root: Path) -> None:
                 label=JOBS_TEST_LABEL,
                 runtime_dir=root,
             )
+    # SD-43 N5: the manager entry refuses BINNACLE_RUNTIME_DIR; never carried.
+    env = dict(good["EnvironmentVariables"], BINNACLE_RUNTIME_DIR=str(root))
     with pytest.raises(ValueError, match="plist_scope_refused"):
         validate_jobs_test_plist_bytes(
-            _jobs_test_plist(root), label=JOBS_TEST_LABEL, runtime_dir=root / "x"
+            plistlib.dumps(dict(good, EnvironmentVariables=env)),
+            label=JOBS_TEST_LABEL,
+            runtime_dir=root,
         )
 
 
@@ -461,3 +470,24 @@ def test_production_jobs_daemon_plan_is_refused_by_user_domain(service_root):
     daemon["Label"] = plan.lease.label
     with pytest.raises(NativeCapabilityError, match="scope_refused"):
         launchd.LaunchdUserServices(plan.lease)._validate_plist(daemon)
+
+
+def test_a3_manager_role_may_omit_but_never_misnames_the_runtime_dir(service_root):
+    # SD-43 N5: the manager entry refuses BINNACLE_RUNTIME_DIR; A3 still pins it
+    # when present, and every other role must name its own runtime root.
+    plan = make_jobs_test_plan(service_root)
+    data = plistlib.loads(plan.plist_bytes)
+    assert "BINNACLE_RUNTIME_DIR" not in data["EnvironmentVariables"]
+    owner = launchd.LaunchdUserServices(plan.lease)
+    owner._validate_plist(data)  # absent: accepted for the manager role
+    data["EnvironmentVariables"]["BINNACLE_RUNTIME_DIR"] = str(service_root)
+    owner._validate_plist(data)  # the A3 probes' manager plans keep it
+    for env in (
+        {"BINNACLE_RUNTIME_DIR": "/tmp/other"},
+        {"BINNACLE_SERVICE_ROLE": "probe"},
+    ):
+        refused = dict(
+            data, EnvironmentVariables={**data["EnvironmentVariables"], **env}
+        )
+        with pytest.raises(NativeCapabilityError, match="scope_refused"):
+            owner._validate_plist(refused)

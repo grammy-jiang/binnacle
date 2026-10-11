@@ -8,14 +8,21 @@ worker admission, observation read or receipt query.
 """
 
 from copy import deepcopy
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
+from types import SimpleNamespace
 
 import pytest
 from fastmcp.tools.base import Tool
 
 from binnacle.features.commands.job_awareness.models import HintCarrier
-from binnacle.mcp.job_awareness_hint import META_KEY, HintAdapter
+from binnacle.mcp.job_awareness_hint import (
+    META_KEY,
+    HintAdapter,
+    native_tool,
+    producer_identity,
+)
 from tests.contracts.job_awareness.synthetic_app import SCHEMA, Lab, in_loop, original
+from tests.contracts.job_awareness.test_hint_schema_support import executed
 from tests.contracts.job_awareness.test_hint_version_identity import NoWorkers
 
 BETA = {
@@ -37,6 +44,8 @@ def bound_adapter(lab, version=None, *, workers=True, carrier=HintCarrier.META):
 
 async def assert_suppressed(lab, adapter, value, admitted=False, **producer):
     before = value.model_dump_json()
+    if "tool" in producer:  # direct calls name a producer through a test receipt
+        producer = {"execution": executed(value, producer.pop("tool")), **producer}
     assert await HintAdapter.adapt(adapter, value, **producer) is value  # nosec B101 - pytest assertion
     assert value.model_dump_json() == before  # nosec B101 - pytest assertion
     assert (adapter.last_meter is not None) is admitted  # nosec B101 - worker admission
@@ -50,6 +59,38 @@ class Duck:
     version: str | None = None
     output_schema: dict[str, object] = SCHEMA
     parameters: dict[str, object] = {}  # noqa: RUF012 - inert test fixture
+
+
+@dataclass
+class Record:
+    """An instance-dict duck: the bound fields live in its own ``__dict__``."""
+
+    name: str = "synthetic"
+    version: str | None = None
+    output_schema: dict[str, object] = field(default_factory=lambda: dict(SCHEMA))
+    parameters: dict[str, object] = field(default_factory=dict)
+
+
+@pytest.mark.parametrize("version", [None, "1"])
+def test_instance_dict_duck_has_no_producer_identity(version):
+    """ADV-G4-04: only the exact-type guard rejects these ducks.
+
+    Each duck's instance ``__dict__`` holds a valid name, version and schema,
+    so every later field check in ``producer_identity`` would accept it. The
+    class-attribute ``Duck`` above has an empty instance dict and cannot
+    detect removal of the guard; these can.
+    """
+    control = native(version)
+    assert producer_identity(control) is not None  # nosec B101 - control
+    fields = dict(object.__getattribute__(control, "__dict__"))
+    ducks = [
+        SimpleNamespace(**fields),
+        SimpleNamespace(name="synthetic", version=version, output_schema=SCHEMA),
+        Record(version=version),
+    ]
+    for duck in ducks:
+        assert native_tool(duck) is False  # nosec B101 - pytest assertion
+        assert producer_identity(duck) is None  # nosec B101 - pytest assertion
 
 
 @pytest.mark.parametrize(
@@ -203,7 +244,9 @@ async def test_control_bound_object_with_canonically_equal_schema_hints(
                 tool=native(version, schema),
             )
             value = original()
-            result = await HintAdapter.adapt(adapter, value, tool=adapter.tool)
+            result = await HintAdapter.adapt(
+                adapter, value, execution=executed(value, adapter.tool)
+            )
             assert result is not value  # nosec B101 - pytest assertion
             text = (
                 result.meta[META_KEY]
@@ -228,9 +271,12 @@ async def test_resolved_bound_tool_still_requires_a_valid_result_and_opt_in():
 
 
 def test_adapter_has_no_string_identity_entry():
-    """Caller-supplied name/version strings are no longer an identity input."""
+    """Caller-supplied names, versions and Tool objects are not an identity input.
+
+    ADV-G4-01: the only producer input is an execution receipt.
+    """
     import inspect
 
     params = inspect.signature(HintAdapter.adapt).parameters
-    assert "tool" in params  # nosec B101 - pytest assertion
-    assert not {"tool_name", "tool_version"} & set(params)  # nosec B101 - pytest assertion
+    assert "execution" in params  # nosec B101 - pytest assertion
+    assert not {"tool", "tool_name", "tool_version", "name"} & set(params)  # nosec B101 - pytest assertion

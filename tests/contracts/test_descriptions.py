@@ -79,9 +79,9 @@ def test_search_text_keeps_grep_equivalence():
 
 
 def linux_equal_part(name: str, text: str) -> str:
-    """Darwin text minus its declared disclosure; Linux text unchanged.
+    """Darwin text equals the Linux text; Linux text unchanged.
 
-    STEER-04 (amended JCR-4): command tools carry no disclosure suffix.
+    STEER-04 (amended JCR-4) and SD-50: no tool carries a disclosure suffix.
     """
     if sys.platform == "linux":
         return text
@@ -91,12 +91,7 @@ def linux_equal_part(name: str, text: str) -> str:
             "default"
         ]["tools"]
     }[name]
-    assert text.startswith(linux), name  # the rest equals the Linux text
-    suffix = text[len(linux) :].strip()
-    if name == "search_text":  # J6's declared Darwin size-limit difference
-        assert suffix.startswith("Darwin per-file size limit: 16 MiB"), suffix
-    else:
-        assert suffix == "", name
+    assert text == linux, name
     return linux
 
 

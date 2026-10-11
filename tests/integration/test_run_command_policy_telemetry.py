@@ -140,6 +140,9 @@ def test_real_tool_ignores_pytest_only_inside_generated_source(
 ):
     """Do not auto-background a normal, short write because of import pytest."""
     info = mcp.types.Implementation(name="openai-mcp-test", version="1")
+    # This exercises the embedded engine. Darwin auto composes the manager
+    # (JCR-2), which no test runs; Linux fixed its owner at import.
+    monkeypatch.setattr(server.get_settings().jobs, "owner", "embedded")
     run_policy(
         RunCommandSettings(
             auto_background_patterns={"openai-mcp": (r"(?i)\bpytest\b",)}

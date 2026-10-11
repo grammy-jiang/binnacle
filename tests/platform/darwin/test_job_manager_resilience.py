@@ -392,3 +392,66 @@ def test_verified_teardown_signal_skips_stale_or_reused_targets():
         if proc.poll() is None:
             proc.kill()  # own unreaped child
             proc.wait()
+
+
+# --- P2 pre-review repairs (R4 J1g-a2, SD-49) -------------------------------
+
+
+def procargs(argc, path, *fields, pad=None):
+    """A KERN_PROCARGS2 buffer: argc, exec path, 8-byte NUL padding, strings."""
+    pad = (-(len(path) + 1)) % 8 if pad is None else pad  # native: path + NUL
+    head = argc.to_bytes(4, sys.byteorder) + path + b"\0" * (1 + pad)
+    return head + b"".join(field + b"\0" for field in fields)
+
+
+@pytest.mark.parametrize(
+    ("buffer", "expected"),
+    [
+        (procargs(3, b"/bin/x", b"x", b"", b"tail", b"K=v"), "x  tail"),
+        (procargs(1, b"/bin/x", b"x", b"SECRET=1", b"P=2"), "x"),
+        (procargs(2, b"/bin/x", b"", b"a", b"K=v"), None),  # empty argv[0]
+        (procargs(1, b"/bin/x", b"x", pad=2), None),  # misaligned padding
+        (procargs(3, b"/bin/x", b"x", b"K=v"), None),  # argc > fields present
+        (procargs(3, b"/bin/x", b"x", b"\xff", b"K=v"), None),  # undecodable
+        (procargs(1, b"/bin/x")[:-1] + b"x", None),  # no argv terminator
+        (b"\x01\x00", None),  # short buffer
+    ],
+)
+def test_procargs2_parse_is_argv_only_and_fails_closed(monkeypatch, buffer, expected):
+    """PRE-J1g-F1: never a field past argv (envp); any doubt -> None (comm)."""
+    monkeypatch.setattr(entry, "_sysctl", lambda mib, limit: buffer)
+    assert entry.command_line(1, 4096) == expected
+    padded = procargs(1, b"/x", b"ab" * 9)
+    monkeypatch.setattr(entry, "_sysctl", lambda mib, limit: padded)
+    assert entry.command_line(1, 5) == "ababa"  # bounded after the join
+
+
+def test_start_refused_once_the_manager_is_stopping(tmp_path, jobs_dir):
+    """PRE-J1g-F6: no job is launched into close() (owner_closing parity)."""
+    owner = ReferenceOwner()
+    manager = manager_for(owner, jobs_dir)
+    manager.stopping.set()
+    try:
+        reply = manager.handle(req(tmp_path, "sleep 30"))
+        assert reply == {
+            "ok": False,
+            "error": "could not start job: job manager stopping",
+        }
+        assert not any(jobs_dir.glob("*/meta.json"))
+    finally:
+        manager.close()
+
+
+def test_manager_entry_refuses_without_waitid(monkeypatch, caplog):
+    """JCR-F1: no os.waitid (macOS Python < 3.13) -> refuse before any lease."""
+    from unittest import mock
+
+    from binnacle.platform.darwin import job_group_fence as fence
+
+    monkeypatch.delattr(os, "waitid", raising=False)
+    lease, owner = mock.Mock(), mock.Mock()
+    monkeypatch.setattr(entry, "open_service_lease", lease)
+    monkeypatch.setattr(entry, "compose_owner", owner)
+    assert entry.main([]) == entry.EX_CONFIG
+    assert fence.WAITID_REQUIRED in caplog.text
+    assert not lease.called and not owner.called  # no lease, no owner, no spawn

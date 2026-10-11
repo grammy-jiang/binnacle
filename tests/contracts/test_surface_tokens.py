@@ -21,6 +21,8 @@ cannot move without a recorded reason.
 
 import json
 
+from fastmcp import FastMCP
+
 from binnacle.config import TokenizerTelemetrySettings
 from binnacle.observability.token_telemetry import _load_encoding
 from tests.contracts.surface_support import PROFILES, served
@@ -65,9 +67,9 @@ def _compact(value: object) -> str:
     return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
 
 
-def _texts() -> dict[str, list[str]]:
+def _texts(mcp_server: FastMCP | None = None) -> dict[str, list[str]]:
     """The counted text per part: the instructions and each served tool."""
-    tools, instructions = served(PROFILES["chatgpt"])
+    tools, instructions = served(PROFILES["chatgpt"], mcp_server=mcp_server)
     parts = {"instructions": [instructions or ""]}
     for tool in tools:
         schema = dict(tool.input_schema)
@@ -83,16 +85,20 @@ def _texts() -> dict[str, list[str]]:
     return parts
 
 
-def measure() -> dict[str, int]:
+def measure(mcp_server: FastMCP | None = None) -> dict[str, int]:
     encoder = _load_encoding(ENCODING)
     return {
         part: sum(len(encoder.encode(text)) for text in texts)
-        for part, texts in _texts().items()
+        for part, texts in _texts(mcp_server).items()
     }
 
 
 def test_chatgpt_surface_is_within_its_token_budget():
-    counts = measure()
+    assert_within_budget(measure())
+
+
+def assert_within_budget(counts: dict[str, int]) -> None:
+    """The budget rule; Darwin's owner=manager surface reuses it (SD-50)."""
     total = sum(counts.values())
     limit = TOKEN_BUDGET * (1 + TOLERANCE)
     assert total <= limit, (

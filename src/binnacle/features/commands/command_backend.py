@@ -292,8 +292,17 @@ class DarwinManagerCommandBackend:
         return store.read_log_range(self.jobs_dir, job_id, start, max_bytes)
 
     def job_processes(self, job_id: str, max_cmd_chars: int = 200) -> list[dict]:
-        # No process authority in the MCP server; never inspect a pid from disk.
-        return []
+        # JCRP-F6: the manager lists its own verified, running group read-only;
+        # the MCP server never inspects a pid from disk. Unavailable -> [].
+        processes = getattr(self.client, "processes", None)
+        if processes is None:
+            return []
+        try:
+            reply = processes(self.socket_path, job_id, max_cmd_chars=max_cmd_chars)
+        except (CommandFailure, RuntimeError, OSError):
+            return []
+        listing = reply.get("processes")
+        return listing if isinstance(listing, list) else []
 
     def disclose_status(self, job_id: str, reply: CommandReply) -> CommandReply:
         """Add D-1 (owner lost), SD-41 (unverified) and D-2 (sampled) text."""

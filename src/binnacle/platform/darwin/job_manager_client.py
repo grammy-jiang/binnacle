@@ -96,3 +96,11 @@ class DarwinJobClient:
         payload = {"version": PROTOCOL_VERSION, "op": "stop", "job_id": job_id}
         payload["call_id"] = call_id
         return self.request(socket_path, payload, timeout_s=10.0)
+
+    def processes(
+        self, socket_path: Path, job_id: str, *, max_cmd_chars: int = 200
+    ) -> dict[str, Any]:
+        """JCRP-F6 additive op: the manager's read-only listing of its own group."""
+        payload = {"version": PROTOCOL_VERSION, "op": "processes", "job_id": job_id}
+        payload["max_cmd_chars"] = max_cmd_chars
+        return self.request(socket_path, payload, timeout_s=5.0)

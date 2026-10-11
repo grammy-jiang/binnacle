@@ -207,3 +207,27 @@ def test_partial_kill_only_still_returns_explicit_delivery_failure():
             logger=logging.getLogger("test.binnacle.job_stop"),
         )
     assert history == ["terminate", "kill", "close"]
+
+
+@pytest.mark.parametrize("error", [UnverifiedJobProcess(), ProcessLookupError()])
+def test_lease_failure_after_concurrent_stop_waits_for_durable_exit(error):
+    """A leader killed by a concurrent stop must not be reported as unfinished."""
+    events = []
+    backend = SimpleNamespace(
+        identity_from_record=lambda meta: object(),
+        open_job_signals=lambda token: (_ for _ in ()).throw(error),
+    )
+    final = {"state": "exited", "signal": 15}
+    result = job_stop.stop_embedded(
+        "fake-job",
+        process_backend=backend,
+        job_state=lambda job: {"state": "running"},
+        read_meta=lambda job: {"pid": 10, "starttime": 1, "stop_requested": True},
+        await_exit=lambda job, timeout: events.append(("wait", timeout)) or final,
+        stop_sigterm_grace_s=1.5,
+        stop_sigkill_grace_s=0.75,
+        current_call_id=lambda: "synthetic-call",
+        logger=logging.getLogger("test.binnacle.job_stop"),
+    )
+    assert result is final
+    assert events == [("wait", 0.75)]
