@@ -160,9 +160,11 @@ Apply performs two distinct operations:
   globally “unpublished”. Fork/differently named upstreams, differing
   `pushRemote`/`remote.pushDefault`, explicit selected-remote push refspecs or
   push URLs block apply. Explicit `push.default` must be `simple`; multiple or
-  URL-rewritten selected-remote URLs are conservatively refused too. Ignored
-  paths colliding with incoming tracked files (including case aliases and file/directory swaps) also block
-  apply before local master moves. Feature fast-forward uses
+  URL-rewritten selected-remote URLs are conservatively refused too. Publication
+  settings are checked in both the repository and feature worktree, including
+  worktree-specific configuration. Ignored paths colliding with incoming tracked
+  files (including case aliases and file/directory swaps) also block apply before
+  local master moves. Feature fast-forward uses
   `git merge --ff-only --no-squash --no-autostash --no-overwrite-ignore`; Git versions
   without the guard fail closed. Nonempty effective feature `mergeOptions`
   refuse before either local branch moves. Every inventory worktree's symbolic

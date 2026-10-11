@@ -32,12 +32,17 @@ isolated_git = support.isolated_git
         ("push.default", "matching"),
     ],
 )
+@pytest.mark.parametrize("scope", ["repository", "worktree"])
 def test_ambiguous_publication_blocks_ff(
-    case: Fixture, capsys: pytest.CaptureFixture[str], key: str, value: str
+    case: Fixture, capsys: pytest.CaptureFixture[str], key: str, value: str, scope: str
 ) -> None:
     git(case.repo, "remote", "add", "fork", str(case.remote))
     git(case.wt, "push", "fork", "HEAD:alternate")
-    git(case.repo, "config", key, value)
+    if scope == "worktree":
+        git(case.repo, "config", "extensions.worktreeConfig", "true")
+        git(case.wt, "config", "--worktree", key, value)
+    else:
+        git(case.repo, "config", key, value)
     case.advance()
     code, report = case.run(capsys, "--apply")
     assert code == 2 and "Ambiguous publication" in str(report["refusals"])

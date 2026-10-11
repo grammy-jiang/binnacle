@@ -215,12 +215,13 @@ class SyncCore:
             f"remote.{self.remote}.pushurl": "",
         }
         errors = []
-        for key, value in expected.items():
-            values = self.git(
-                self.repo, "config", "--get-all", key, ok=(0, 1)
-            ).splitlines()
-            if values and (not value or values != [value]):
-                errors.append(key)
+        for checkout in (self.repo, self.wt):
+            for key, value in expected.items():
+                values = self.git(
+                    checkout, "config", "--get-all", key, ok=(0, 1)
+                ).splitlines()
+                if values and (not value or values != [value]):
+                    errors.append(f"{checkout}: {key}")
         return tuple(errors)
 
     def remote_heads(self) -> dict[str, str]:
