@@ -133,6 +133,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "platform/darwin/file_traversal.py",
             "platform/darwin/generation_runtime.py",
             "platform/darwin/ipc_transport.py",
+            "platform/darwin/job_manager_service.py",
             "platform/darwin/job_process_owner.py",
             "platform/darwin/log_cursor.py",
             "platform/darwin/log_source.py",
