@@ -9,6 +9,7 @@ group this test started is signalled (RULE-NO-PKILL).
 """
 
 import asyncio
+import json
 import platform
 import subprocess
 
@@ -22,6 +23,7 @@ from tests.platform.darwin.test_durable_tool_wiring import (
     _run,
     _SpoolClient,
 )
+from tests.platform.darwin.test_r5_l2b_processes import linux_builder_keys
 
 _DARWIN = pytest.mark.skipif(
     platform.system() != "Darwin", reason="native Darwin KERN_PROC_PGRP listing"
@@ -36,7 +38,8 @@ class _ListingClient(_SpoolClient):
         self.items = items
 
     def processes(self, socket_path, job_id, *, max_cmd_chars):
-        return {"ok": True, "job_id": job_id, "processes": self.items}
+        reply = {"ok": True, "job_id": job_id, "processes": self.items}
+        return json.loads(json.dumps(reply, sort_keys=True))  # the A3 wire form
 
 
 def _strict_job_status(tmp_path, items):
@@ -77,3 +80,18 @@ def test_running_job_status_without_cpu_s_passes_the_strict_client(tmp_path, lis
 def test_null_cpu_s_is_rejected_by_the_pinned_schema(tmp_path, listed):
     with pytest.raises(RuntimeError, match=r"(?s)Invalid structured content.*cpu_s"):
         _strict_job_status(tmp_path, [{**listed[0], "cpu_s": None}])
+
+
+@_DARWIN
+def test_job_status_bytes_list_item_keys_in_the_linux_order(
+    tmp_path, listed, monkeypatch
+):
+    """STEER-03: after the sort_keys IPC hop the MCP bytes follow Linux."""
+    linux = linux_builder_keys(tmp_path, monkeypatch)
+    result = _strict_job_status(tmp_path, listed)
+    wire = json.dumps(result.structured_content)  # the structured result bytes
+    (item,) = json.loads(wire)["processes"]
+    assert list(item) == [key for key in linux if key in listed[0]]
+    keys = [f'"{key}":' for key in item]
+    start = wire.index('"processes":')
+    assert sorted(keys, key=lambda k: wire.index(k, start)) == keys

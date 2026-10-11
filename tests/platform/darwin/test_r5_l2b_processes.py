@@ -8,6 +8,7 @@ not allow null, so it stays absent until the Supervisor rules again. The
 kinfo_proc records here are synthetic, so the module runs on every host.
 """
 
+import json
 import struct
 import time
 from pathlib import Path
@@ -125,3 +126,47 @@ def test_denied_sysctl_lists_nothing(monkeypatch):
 
     monkeypatch.setattr(entry, "_sysctl", denied)
     assert entry.group_listing(500, 200) == []
+
+
+def linux_builder_keys(tmp_path, monkeypatch):
+    """The key order Linux job_processes builds, from one fake /proc entry."""
+    from types import SimpleNamespace
+
+    from binnacle.platform.linux import job_process
+
+    proc = tmp_path / "proc" / "4242"
+    proc.mkdir(parents=True)
+    rest = ["S", "1", "4242"] + ["0"] * 19  # state ppid pgrp ... starttime
+    (proc / "stat").write_text("4242 (sleep) " + " ".join(rest))
+    (proc / "cmdline").write_bytes(b"sleep\x0030\x00")
+    entry_ = SimpleNamespace(name="4242", path=str(proc))
+    monkeypatch.setattr(job_process.os, "scandir", lambda path: [entry_])
+    monkeypatch.setattr(job_process, "_uptime_s", lambda: 1.0)
+    (item,) = job_process.job_processes(4242)
+    monkeypatch.undo()
+    return list(item)
+
+
+def test_backend_rebuilds_ipc_items_in_the_linux_builder_order(tmp_path, monkeypatch):
+    from unittest import mock
+
+    from binnacle.features.commands.command_backend import (
+        DarwinManagerCommandBackend,
+    )
+
+    linux = linux_builder_keys(tmp_path, monkeypatch)
+    items = [
+        {"pid": 7, "state": "?", "etime_s": 1.5, "cmd": "sleep 1"},
+        {"pid": 8, "state": "S", "etime_s": 0.1, "cpu_s": 0.0, "cmd": "x"},
+        {"pid": 9, "ppid": 1, "state": "S", "cmd": "old manager"},  # version skew
+    ]
+    wire = json.loads(json.dumps({"ok": True, "processes": items}, sort_keys=True))
+    backend = object.__new__(DarwinManagerCommandBackend)
+    backend._socket_path = "/nonexistent/jobs.sock"
+    backend.client = mock.Mock(**{"processes.return_value": wire})
+    listed = backend.job_processes("abc")
+    assert listed == items  # values untouched, nothing dropped
+    for got, sent in zip(listed, items, strict=True):
+        own = [key for key in linux if key in sent]
+        assert list(got)[: len(own)] == own  # Linux order first
+        assert list(got)[len(own) :] == sorted(set(sent) - set(linux))
