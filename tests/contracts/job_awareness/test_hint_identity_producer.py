@@ -1,7 +1,8 @@
 """Q0-SEC-03 class: the producer is the resolved native Tool object, never strings.
 
-The adapter proceeds only when the resolved producing Tool has the bound name,
-the bound version and a canonical-JSON-identical output schema. An unavailable,
+The adapter proceeds only when the resolved producing Tool is the bound object
+with an exact native type and still has the bound name, the bound version and
+a canonical-JSON-identical output schema (CHATGPT-POST-01/02). An unavailable,
 foreign, malformed or hostile producer returns the original result before any
 worker admission, observation read or receipt query.
 """
@@ -184,15 +185,25 @@ async def test_hostile_producer_fields_run_no_callbacks():
 @pytest.mark.parametrize("carrier", [HintCarrier.META, HintCarrier.TEXT])
 @pytest.mark.parametrize("version", [None, "1"])
 @in_loop
-async def test_control_resolved_bound_or_canonically_equal_tool_hints(carrier, version):
-    """Positive control: the bound object, or a distinct Tool with the same
-    canonical schema (other key order, deep copy), keeps exactly one hint."""
+async def test_control_bound_object_with_canonically_equal_schema_hints(
+    carrier, version
+):
+    """Positive control: the bound object itself keeps exactly one hint, also
+    when its schema is a canonically equal spelling (other key order, deep copy).
+
+    CHATGPT-POST-01 (Supervisor decision): this control previously also passed
+    a distinct Tool object with an equal triple. Value equality is no longer
+    provenance; that case now suppresses in test_hint_identity_provenance.py.
+    """
     reordered = {k: deepcopy(SCHEMA[k]) for k in reversed(list(SCHEMA))}
     with Lab() as lab:
-        adapter = bound_adapter(lab, version, carrier=carrier)
-        for count, producer in enumerate((adapter.tool, native(version, reordered)), 1):
+        for count, schema in enumerate((SCHEMA, reordered), 1):
+            adapter = replace(
+                bound_adapter(lab, version, carrier=carrier),
+                tool=native(version, schema),
+            )
             value = original()
-            result = await HintAdapter.adapt(adapter, value, tool=producer)
+            result = await HintAdapter.adapt(adapter, value, tool=adapter.tool)
             assert result is not value  # nosec B101 - pytest assertion
             text = (
                 result.meta[META_KEY]

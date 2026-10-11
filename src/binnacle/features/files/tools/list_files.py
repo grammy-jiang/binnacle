@@ -199,13 +199,17 @@ def list_files_impl(
     if file_access is not None:
         file_access.require("list_files")
         with file_access.operation(path, "list_files") as (grant, relative, display):
+            cap = settings.max_results_cap
+            wanted = max(1, min(max_results, cap))
+            # Ask for the full cap so the total behind a "showing first N of M"
+            # note is known, as it is on Linux.
             listing = file_access.provider.list_entries(
                 grant,
                 ListRequest(
                     relative,
                     glob,
                     include_hidden,
-                    max(1, min(max_results, settings.max_results_cap)),
+                    cap,
                     10000,
                     settings.rg_timeout_s,
                 ),
@@ -227,16 +231,48 @@ def list_files_impl(
                 if entry.size_bytes is not None:
                     item["bytes"] = entry.size_bytes
                 entries.append(item)
-            return ToolResult(
-                content=f"Listed {len(entries)} entries in {display}.",
-                structured_content={
-                    "path": str(display),
-                    "mode": "glob" if glob else "list",
-                    "entries": entries,
-                    "count": len(entries),
-                    "truncated": listing.truncated,
-                },
-            )
+            total = len(entries)
+            shown = entries[:wanted]
+            # Beyond the provider cap the true total is unknown: keep the
+            # provider's own truncation flag and no total-bearing sentence.
+            truncated = total > wanted or listing.truncated
+            exact_total = not listing.truncated
+            payload: dict = {
+                "path": str(display),
+                "mode": "glob" if glob else "list",
+                "entries": shown,
+                "count": len(shown),
+                "truncated": truncated,
+            }
+            summary = f"Listed {len(shown)} entries in {display}."
+            if glob:
+                if not shown:
+                    payload["note"] = (
+                        f"No files match {glob!r} under {display} "
+                        f"(gitignored and hidden files are skipped by default)."
+                    )
+                    summary = f"No files match {glob!r} under {display}."
+                elif truncated and exact_total:
+                    payload["note"] = (
+                        f"Showing first {wanted} of {total} matches; "
+                        f"narrow the glob or raise max_results."
+                    )
+                    summary = (
+                        f"Found {total} files matching {glob!r} under {display}; "
+                        f"showing newest {wanted}."
+                    )
+                elif not truncated:
+                    summary = (
+                        f"Found {len(shown)} files matching {glob!r} "
+                        f"under {display} (newest first)."
+                    )
+            elif truncated and exact_total:
+                payload["note"] = (
+                    f"Showing first {wanted} of {total} entries; "
+                    f"raise max_results or use a glob."
+                )
+                summary = f"Listed first {len(shown)} of {total} entries in {display}."
+            return ToolResult(content=summary, structured_content=payload)
     resolved = resolve_path(path, roots=roots)
     if not resolved.exists():
         raise CodedToolError(

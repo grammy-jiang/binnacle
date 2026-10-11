@@ -15,9 +15,7 @@ import os
 import re
 import secrets
 import shutil
-import signal
 import socket
-import subprocess
 import sys
 import tempfile
 import threading
@@ -29,11 +27,13 @@ from typing import Any
 
 import pytest
 
+from tests.platform.darwin import _signal_safety as safety
+
 FULL_PARITY = "FULL_PARITY_NO_GO"
 TOOLS = "read_file list_files search_text edit_file write_file run_command job_status stop_job"
 REGISTERED_TOOLS = tuple(TOOLS.split())
 LIMITED_TOOLS = tuple(t for t in REGISTERED_TOOLS if t != "stop_job")
-PER_FILE_LIMIT = 16 * 1024 * 1024
+PER_FILE_LIMIT = 16 * 1024 * 1024  # big.txt = Pi LINUX-AGG-CAP one_long_line bytes
 STOP_JOB_TEXT = (
     "stop_job is unavailable on macOS. "
     "run_command is available in foreground mode only (no background jobs)."
@@ -289,7 +289,7 @@ def test_file_tools_happy_paths_and_denials(endpoint: Endpoint) -> None:
     assert "hello e0" in json.dumps(out["read"]["data"]) + out["read"]["text"]
     assert (root / "w.txt").read_text() == "edited\n"
     assert all(o["error"] for k, o in out.items() if k.startswith("deny_")), out
-    assert "secret" not in out["deny_root_escape"]["text"]
+    assert out["deny_root_escape"]["text"] == f"Path outside allowed roots ({root}): {sec}"  # fmt: skip
     assert (outside / "secret.txt").read_text() == "hello secret\n"
     assert not (outside / "x.txt").exists() and not (outside / "y").exists()
 
@@ -363,10 +363,10 @@ def test_list_files_and_search_text_on_fixture(endpoint: Endpoint) -> None:
     assert rel("list_all", "path") >= {"docs", "hello.txt", "big.txt"}
     assert rel("list_glob_md", "path") == {"docs/note.md"}
     assert rel("search_glob_py", "file") == {"docs/a.py"}
-    assert rel("search_all", "file") == {"hello.txt", "docs/note.md", "docs/a.py"}
-    assert out["search_all"]["data"]["truncated"] is True
-    assert "larger than the per-file limit" in out["search_all"]["text"]
-    assert "truncated=true" in out["search_all"]["text"]
+    d, names = out["search_all"]["data"], {"hello.txt", "docs/note.md", "docs/a.py"}
+    assert rel("search_all", "file") == {*names, "big.txt"}
+    assert d["truncated"] is False and "note" not in d
+    assert out["search_all"]["text"] == f"Found 4 matches for 'hello' under {r}."
     for label, o in out.items():
         if label.startswith("deny_"):
             assert o["error"] and "secret" not in o["text"], (label, o)
@@ -396,6 +396,7 @@ def test_run_command_sd18(endpoint: Endpoint) -> None:
         endpoint, [(k, "run_command", {"workdir": wd, **v}) for k, v in cmds.items()]
     )
     esc_pid = int(esc.read_text()) if esc.exists() else None
+    esc_rec = safety.observe(esc_pid) if esc_pid is not None else None
     evidence: dict[str, Any] = {"full_parity": FULL_PARITY, "calls": out}
     try:
         assert out["echo"]["data"]["output"] == "hi\n"
@@ -423,13 +424,10 @@ def test_run_command_sd18(endpoint: Endpoint) -> None:
     finally:
         # Kill ONLY the exact recorded escapee, after confirming what it is.
         if esc_pid is not None and not _gone(esc_pid, timeout=0):
-            ps = ["ps", "-p", str(esc_pid), "-o", "command="]
-            cmd = subprocess.run(
-                ps, capture_output=True, text=True, check=False
-            ).stdout.strip()
+            cmd = safety.command_of(esc_pid)
             evidence["escapee_command"] = cmd
-            if cmd == "sleep 602":
-                os.kill(esc_pid, signal.SIGKILL)
+            if cmd == "sleep 602" and esc_rec is not None:
+                safety.kill_verified(esc_pid, esc_rec.birth)
         evidence["escapee_dead"] = esc_pid is None or _gone(esc_pid)
         _record("sd18-run-command", evidence)
     assert evidence["escapee_dead"]

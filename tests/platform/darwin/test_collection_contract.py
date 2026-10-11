@@ -9,6 +9,7 @@ Linux and macOS, and nothing here skips a whole platform.
 import ast
 import importlib
 import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -420,18 +421,27 @@ def test_reusing_the_linux_alias_on_another_test_fails_the_policy():
     assert sel.check_skip_policy(sources, alias_uses=LINUX_PIN_USE_COUNTS) != []
 
 
-def test_collected_linux_pin_nodes_match_the_pinned_counts():
-    """The expanded pytest nodes carrying the alias (-m skipif) are pinned."""
+def test_collected_linux_pin_nodes_match_the_pinned_counts(tmp_path):
+    """The expanded pytest nodes carrying the alias (-m skipif) are pinned.
+
+    Collecting tests/integration imports ``binnacle.features.commands.jobs``
+    through its conftest, and that module requires a resolved jobs socket.
+    Only the Linux host composition fills it in; on Darwin it stays unset by
+    design, so collection fails before any node is counted. The child
+    collector therefore gets an explicit, never-created socket path.
+    """
     cmd = [sys.executable, "-m", "pytest", "--collect-only", "-q", "-m", "skipif"]
     cmd += ["-p", "no:randomly", "-p", "no:cacheprovider", *LINUX_PIN_NODE_COUNTS]
-    out = subprocess.run(
-        cmd, cwd=ROOT, capture_output=True, text=True, check=False
-    ).stdout
+    env = {**os.environ, "BINNACLE_JOBS__SOCKET_PATH": str(tmp_path / "jobs.sock")}
+    proc = subprocess.run(
+        cmd, cwd=ROOT, env=env, capture_output=True, text=True, check=False
+    )
+    out = proc.stdout
     found: dict[str, int] = {}
     for line in out.splitlines():
         if "::" in line:
             found[line.split("::", 1)[0]] = found.get(line.split("::", 1)[0], 0) + 1
-    assert found == LINUX_PIN_NODE_COUNTS, out[-2000:]
+    assert found == LINUX_PIN_NODE_COUNTS, (out + proc.stderr)[-2000:]
 
 
 def test_module_level_linux_only_is_limited_to_the_pinned_job_engine_modules():

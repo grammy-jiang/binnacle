@@ -115,6 +115,31 @@ def _bootout_observed(target: str, pid: int, deadline: float) -> bool:
         raise _unknown("launchd_unavailable")
 
 
+_LIMIT_KEYS = ("SoftResourceLimits", "HardResourceLimits")
+
+
+def _positive_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _private_umask(value: object) -> bool:
+    """Only masks that at least deny group/world write (jobs use 0o077)."""
+    return (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and 0 <= value <= 0o777
+        and value & 0o022 == 0o022
+    )
+
+
+def _limits(value: object) -> bool:
+    return (
+        isinstance(value, dict)
+        and value.keys() <= {"NumberOfFiles", "NumberOfProcesses"}
+        and all(_positive_int(item) for item in value.values())
+    )
+
+
 class LaunchdUserServices:
     def __init__(self, lease: ServiceLease) -> None:
         if lease.uid != os.getuid() or not lease.label.startswith(
@@ -203,6 +228,12 @@ class LaunchdUserServices:
             "StandardErrorPath",
             "ExitTimeOut",
             "ProcessType",
+            # The com.binnacle.jobs test variant mirrors the production plan.
+            "ThrottleInterval",
+            "AbandonProcessGroup",
+            "SoftResourceLimits",
+            "HardResourceLimits",
+            "Umask",
         }
         env = value.get("EnvironmentVariables", {})
         argv = value.get("ProgramArguments")
@@ -219,6 +250,12 @@ class LaunchdUserServices:
             or not Path(argv[0]).is_absolute()
             or value.get("KeepAlive", False) is not False
             or value.get("LimitLoadToSessionType") != "Background"
+            # Only the inert value: abandoning the group would let a test
+            # service leave its own group members behind after bootout.
+            or value.get("AbandonProcessGroup", False) is not False
+            or not all(_limits(value.get(key, {})) for key in _LIMIT_KEYS)
+            or not _positive_int(value.get("ThrottleInterval", 1))
+            or not _private_umask(value.get("Umask", 0o077))
         ):
             raise _unknown("launchd_plist_scope_refused")
 

@@ -70,7 +70,7 @@
     "LINUX": 62
   },
   "coverage_complete": true,
-  "implementation_commit": "8c0b17d6bea8abef686d44659089322ae4e751d1",
+  "implementation_commit": "9f958798bf9cbe289ad4cc8daa0714bbb8d0a305",
   "production_module_count": 196,
   "rows": [
     {
@@ -5420,7 +5420,9 @@
         "__future__.annotations",
         "binnacle.mcp.job_awareness_hint_identity",
         "binnacle.mcp.job_awareness_hint_identity.Identity",
+        "binnacle.mcp.job_awareness_hint_identity.NATIVE_TOOL_TYPES",
         "binnacle.mcp.job_awareness_hint_identity.canonical_schema",
+        "binnacle.mcp.job_awareness_hint_identity.native_tool",
         "binnacle.mcp.job_awareness_hint_identity.producer_identity",
         "binnacle.mcp.job_awareness_hint_schema",
         "binnacle.mcp.job_awareness_hint_schema.Schema",
@@ -5457,7 +5459,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/mcp/job_awareness_hint.py",
       "rationale": "FastMCP-native integration; MCP framework remains solely responsible for Providers and Middleware",
-      "sha256": "f52081ac5540f5fae15acf47d2949b29bbf5316c36d8fef3c34f821de73fe5dd",
+      "sha256": "aaf970ed11b222fc31017e2332e930879e4aaf4527ab8b086495f8867082aa2a",
       "stage": "OS6",
       "was_in_baseline": false
     },
@@ -5470,6 +5472,8 @@
         "binnacle.mcp.job_awareness_hint_walk.walk",
         "fastmcp.tools.base",
         "fastmcp.tools.base.Tool",
+        "fastmcp.tools.function_tool",
+        "fastmcp.tools.function_tool.FunctionTool",
         "json",
         "typing",
         "typing.Any"
@@ -5480,7 +5484,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/mcp/job_awareness_hint_identity.py",
       "rationale": "FastMCP-native integration; MCP framework remains solely responsible for Providers and Middleware",
-      "sha256": "d4ae384dba114ec1a4094a68840be4520ee65537079c9396544dcb615829810d",
+      "sha256": "e461e366de908c5effb8c4770b57f92f95e98a544275f8bdcc3f4c05216ce23a",
       "stage": "OS6",
       "was_in_baseline": false
     },

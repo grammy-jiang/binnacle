@@ -229,11 +229,9 @@ def test_glob_listing_filters_special_and_unreadable_entries(
         }
 
 
-@pytest.mark.parametrize("mode", ["oversize", "remaining", "exhausted", "output"])
-def test_search_budget_continues_or_preserves_matches_and_explains_truncation(
-    tmp_path, mode
-):
-    from binnacle.config import RootsSettings
+def _search_text(root, pattern, context_lines, *, darwin=True, max_results=100, **cfg):
+    """search_text_impl via the Darwin adapter, or the shared Linux rg path."""
+    from binnacle.config import RootsSettings, SearchTextSettings
     from binnacle.features.files.paths import FileToolAccess
     from binnacle.features.search.tools.search_text import search_text_impl
     from binnacle.platform.contracts.capability_contracts import (
@@ -241,6 +239,31 @@ def test_search_budget_continues_or_preserves_matches_and_explains_truncation(
         CapabilityState,
     )
 
+    files = DarwinFileAccess()
+    roots = RootsSettings(default_root=root, extra_roots=())
+    access = FileToolAccess(
+        roots=roots,
+        files=files,
+        search=DarwinSearchAccess(files, rg_bin="rg"),
+        generation="budget-test",
+        capability=Capability(CapabilityState.LIMITED, "test_only", "opened-object"),
+    )
+    try:
+        args = (pattern, str(root), None, False, context_lines, False, max_results)
+        settings = SearchTextSettings(**cfg)
+        if not darwin:
+            return search_text_impl(*args, roots=roots, settings=settings, rg_bin="rg")
+        return search_text_impl(
+            *args, roots=roots, file_access=access, settings=settings
+        )
+    finally:
+        access.close()
+
+
+@pytest.mark.parametrize("mode", ["oversize", "remaining", "exhausted", "output"])
+def test_search_budget_continues_or_preserves_matches_and_explains_truncation(
+    tmp_path, mode
+):
     root = tmp_path.resolve()
     budget = 16 * 1024 * 1024
     (root / "00-first.txt").write_bytes(b"hello\n")
@@ -255,39 +278,143 @@ def test_search_budget_continues_or_preserves_matches_and_explains_truncation(
     else:
         (root / "a.txt").write_bytes(b"hello " + b"x" * (9 * 1024 * 1024))
     (root / "hello.txt").write_text("hello e0\n")
-    files = DarwinFileAccess()
-    roots = RootsSettings(default_root=root, extra_roots=())
-    access = FileToolAccess(
-        roots=roots,
-        files=files,
-        search=DarwinSearchAccess(files, rg_bin="rg"),
-        generation="budget-test",
-        capability=Capability(CapabilityState.LIMITED, "test_only", "opened-object"),
-    )
-    try:
-        result = search_text_impl(
-            "hello.*" if mode == "output" else "hello",
-            str(root),
-            None,
-            False,
-            0,
-            False,
-            100,
-            roots=roots,
-            file_access=access,
-        )
-        payload = result.structured_content
-        text = result.content[0].text
-        assert payload["truncated"] and "truncated=true" in text
-        assert payload["entries"][0]["file"] == str(root / "00-first.txt")
-        if mode in ("oversize", "remaining"):
-            assert payload["count"] == 2
-            assert "skipped_oversize=" in text and "remaining input budget" in text
-        else:
-            assert payload["count"] == 1
-            assert (
-                f"Aggregate {'input' if mode == 'exhausted' else 'output'} budget exhausted"
-                in text
+    pattern = "hello.*" if mode == "output" else "hello"
+    result = _search_text(root, pattern, 0)
+    payload = result.structured_content
+    text = result.content[0].text
+    # Linux rg searches every byte and consumes all rg output: Pi CASES.json
+    # st.basic (21 MB fx.big: truncated=false, no note) and, for [output], Pi
+    # LINUX-AGG-CAP.json tcc_output (count=3, truncated=false, same bytes).
+    names = ["00-first.txt", "hello.txt"]
+    names[1:1] = ["a.txt"] if mode == "output" else []
+    assert payload["truncated"] is False and "truncated=true" not in text
+    assert payload["count"] == len(names)
+    assert [e["file"] for e in payload["entries"]] == [str(root / n) for n in names]
+    assert text == f"Found {len(names)} matches for {pattern!r} under {root}."
+
+
+MiB = 1024 * 1024
+# Pi LINUX-AGG-CAP.json (review R-J6b-a1, agg_cap_linux.py): byte-identical
+# fixtures; measured Linux count, truncated, entry count and entry files, equal
+# for context_lines None and 0. Over 16 MiB of rg JSON except the control.
+LINUX_AGG_CAP = {
+    "control_fx_big": (
+        "needle",
+        {"sub/n.txt": b"alpha\nbeta needle\ngamma\n", "huge.txt": b"a" * 21_000_000},
+        (1, False, 1, ["sub/n.txt"]),
+    ),
+    "one_long_line": (
+        "hello",
+        {"hello.txt": b"hello\n", "big.txt": b"hello" + b"A" * (16 * MiB + 1024)},
+        (2, False, 2, ["big.txt", "hello.txt"]),
+    ),
+    "few_long_lines": (
+        "needle",
+        {
+            "long.txt": b"".join(
+                b"needle " + b"b" * (2 * MiB) + b"\n" for _ in range(10)
+            ),
+            "small.txt": b"needle small\n",
+        },
+        (11, False, 11, ["long.txt", "small.txt"]),
+    ),
+    "many_matches": (
+        "needle",
+        {
+            "many.txt": b"".join(
+                b"needle %06d padding padding padding padding padding\n" % i
+                for i in range(250_000)
             )
-    finally:
-        access.close()
+        },
+        (250_000, True, 100, ["many.txt"]),
+    ),
+    "tcc_output": (
+        "hello.*",
+        {
+            "00-first.txt": b"hello\n",
+            "a.txt": b"hello " + b"x" * (9 * MiB),
+            "hello.txt": b"hello e0\n",
+        },
+        (3, False, 3, ["00-first.txt", "a.txt", "hello.txt"]),
+    ),
+}
+
+
+@pytest.mark.parametrize("context_lines", [None, 0])
+@pytest.mark.parametrize("case", sorted(LINUX_AGG_CAP))
+def test_search_over_16_mib_of_rg_output_equals_linux(tmp_path, case, context_lines):
+    pattern, fixture, (count, truncated, n_entries, names) = LINUX_AGG_CAP[case]
+    root = tmp_path.resolve()
+    for rel, data in fixture.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_bytes(data)
+    result = _search_text(root, pattern, context_lines)
+    payload, text = result.structured_content, result.content[0].text
+    entries = payload["entries"]
+    assert (payload["count"], payload["truncated"], len(entries)) == (
+        count,
+        truncated,
+        n_entries,
+    )
+    assert sorted({e["file"].removeprefix(f"{root}/") for e in entries}) == names
+    # Entry text (clipped long lines, context) equals the shared Linux rg path;
+    # Linux rg emits entries in unspecified order, Darwin in path order.
+    linux = _search_text(root, pattern, context_lines, darwin=False)
+    key = lambda e: (e["file"], e["line"])
+    assert sorted(entries, key=key) == sorted(
+        linux.structured_content["entries"], key=key
+    )
+    if not truncated:  # Capped-result note/wording belong to the shared layer (J8).
+        assert text == f"Found {count} matches for {pattern!r} under {root}."
+        assert "note" not in payload
+
+
+LONG = b"x" * 8200 + b"\n"
+# Pi LINUX-MEMLIMIT.json (re-review R-J6b-a2, memlimit_linux.py sha256 278bb7ce...):
+# byte-identical fixtures; Linux count, truncated, entry count, entry text length
+# (none empty) for default settings and two larger valid settings.
+LINUX_MEMLIMIT = {
+    "auto_ctx_long_lines": (
+        b"".join(b"needle %02d\n" % i + LONG * 100 for i in range(25)),
+        (None, 100, {}),
+        (25, False, 25, 9),
+    ),
+    "auto_ctx_2000_char_lines": (
+        b"".join(
+            b"needle %03d\n" % i + (b"y" * 2000 + b"\n") * 100 for i in range(120)
+        ),
+        (None, 100, {}),
+        (120, True, 100, 10),
+    ),
+    "explicit_ctx_one_match": (
+        LONG * 2100 + b"needle one\n" + b"tail\n",
+        (2100, 100, {}),
+        (1, True, 1, 10),
+    ),
+    "max_line_chars_9000": (
+        b"needle " + b"z" * 8993 + b"\n",
+        (0, 100, {"max_line_chars": 9000}),
+        (1, False, 1, 9000),
+    ),
+    "max_results_cap_12000": (
+        b"".join(b"needle %05d\n" % i for i in range(12000)),
+        (0, 12000, {"max_results_cap": 12000, "result_max_bytes": 4_000_000}),
+        (12000, False, 12000, 12),
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(LINUX_MEMLIMIT))
+def test_search_never_blanks_a_line_linux_displays(tmp_path, case):
+    data, (ctx, max_results, cfg), expected = LINUX_MEMLIMIT[case]
+    (root := tmp_path.resolve()).joinpath("f.txt").write_bytes(data)
+    kwargs = {"max_results": max_results, **cfg}
+    payload = _search_text(root, "needle", ctx, **kwargs).structured_content
+    entries = payload["entries"]
+    lens = {len(e["text"]) for e in entries}
+    assert (payload["count"], payload["truncated"], len(entries), lens) == (
+        *expected[:3],
+        {expected[3]},
+    )
+    linux = _search_text(root, "needle", ctx, darwin=False, **kwargs)
+    assert entries == linux.structured_content["entries"]  # Context included.

@@ -10,10 +10,12 @@ import subprocess
 import sys
 from contextlib import closing
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 
 from binnacle.platform.contracts.capability_contracts import (
+    AuthorityUnknown,
     BudgetExceeded,
     CapabilityState,
     CapabilityUnavailable,
@@ -50,28 +52,24 @@ def request(**kwargs):
 def content(events):
     return sorted(
         (
-            event["type"],
-            event["data"]["path"],
-            event["data"]["line_number"],
-            event["data"]["lines"],
-            event["data"].get("submatches"),
+            e["type"],
+            e["data"].get("path", {}).get("text", ""),
+            e["data"]["line_number"],
+            e["data"]["lines"],
+            e["data"].get("submatches"),
         )
-        for event in [
-            {
-                "type": e["type"],
-                "data": {
-                    **e["data"],
-                    "path": e["data"].get("path", {}).get("text", ""),
-                },
-            }
-            for e in events
-            if e["type"] in ("match", "context")
-        ]
+        for e in events
+        if e["type"] in ("match", "context")
     )
 
 
+def reaped(child):
+    pipes = (child.stdin, child.stdout, child.stderr)
+    return child.returncode is not None and all(pipe.closed for pipe in pipes)
+
+
 def baseline(root, rg, req):
-    argv = [rg, "--no-config", "--json", "--smart-case"]
+    argv = [rg, "--no-config", "--json", "--smart-case", "--text"]
     if req.fixed_strings:
         argv.append("--fixed-strings")
     if req.context_lines:
@@ -127,13 +125,8 @@ def test_native_local_ignore_and_glob_parity(tree):
     (root / "skip/hidden-by-rule.txt").write_text("needle")
     (root / "nested").mkdir()
     (root / "nested/.ignore").write_text("local.txt\n")
-    for name in (
-        "keep.txt",
-        "noise.log",
-        "omit.txt",
-        "nested/local.txt",
-        "nested/good.txt",
-    ):
+    names = ("keep.txt", "noise.log", "omit.txt", "nested/local.txt")
+    for name in (*names, "nested/good.txt"):
         (root / name).write_text("needle\n")
     result = search.search(grant, request())
     assert content(result.events) == content(baseline(root, rg, request()))
@@ -181,7 +174,7 @@ def test_repository_ignore_and_binary_equality_with_rg(tree, hidden):
     make_repository_fixture(root)
     batch = search.search(grant, request())
     assert content(batch.events) == content(baseline(root, rg, request()))
-    assert batch.events[-1]["data"]["stats"]["binary_files_skipped"] == 1
+    assert batch.events[-1]["data"]["stats"]["binary_files_skipped"] == 0
     argv = [rg, "--no-config", "--files"]
     if hidden:
         argv += ["--hidden", "--glob", "!**/.git/**"]
@@ -218,16 +211,15 @@ def test_native_rg_bad_pattern_empty_tree_and_missing_binary(tree):
     assert search.search(grant, request()).files_searched == 0
 
 
-def test_search_budgets_report_truncation_without_partial_line_matches(tree):
-    root, _, grant, search, _ = tree
+def test_search_byte_budget_never_blanks_or_truncates_rg_output(tree):
+    root, _, grant, search, rg = tree
     (root / "file").write_text("needle\n" * 100)
-    result = search.search(grant, request(max_bytes=10))
-    assert (
-        result.truncated and not content(result.events) and result.files_searched == 0
-    )
-    (root / "file").write_text("needle\n")
-    result = search.search(grant, request(max_bytes=100))
-    assert result.truncated  # JSON output budget, not just input bytes.
+    for budget in (10, 100):  # Like Linux: every match keeps its text, no cap.
+        result = search.search(grant, req := request(max_bytes=budget))
+        assert not result.truncated and result.files_searched == 1
+        assert content(result.events) == content(baseline(root, rg, req))
+        stats = set(result.events[-1]["data"]["stats"])
+        assert not {"output_budget_exhausted", "skipped_text_over_memory_limit"} & stats
     (root / "other").write_text("needle\n")
     assert search.search(grant, request(max_files=1)).truncated
     for req in (
@@ -266,13 +258,9 @@ def test_search_leaf_swap_between_enumeration_and_open_is_denied(
     assert result.events[-1]["data"]["stats"]["skipped_changed"] == 1
     assert "SECRET" not in repr(result.events)
     monkeypatch.setattr(files, "list_entries", original_list)
+    gone = "file/missing" if replacement == "directory" else "file"
     with pytest.raises(UnsafePath):
-        search.search(
-            grant,
-            request(
-                relative_path="file/missing" if replacement == "directory" else "file"
-            ),
-        )
+        search.search(grant, request(relative_path=gone))
     assert outside.read_text() == "needle SECRET"
 
 
@@ -292,10 +280,7 @@ def test_native_timeout_and_cancel_reap_direct_child(tree, monkeypatch):
     monkeypatch.setattr(search_access.subprocess, "Popen", slow_rg)
     with pytest.raises(BudgetExceeded, match="rg_timeout"):
         search.search(grant, request(timeout_s=0.1))
-    assert children[0].returncode is not None
-    assert all(
-        p.closed for p in (children[0].stdin, children[0].stdout, children[0].stderr)
-    )
+    assert reaped(children[0])
 
     def cancelled(*args):
         raise KeyboardInterrupt
@@ -303,10 +288,7 @@ def test_native_timeout_and_cancel_reap_direct_child(tree, monkeypatch):
     monkeypatch.setattr(search_access, "_pump", cancelled)
     with pytest.raises(KeyboardInterrupt):
         search.search(grant, request())
-    assert children[1].returncode is not None
-    assert all(
-        p.closed for p in (children[1].stdin, children[1].stdout, children[1].stderr)
-    )
+    assert reaped(children[1])
 
 
 def test_non_utf8_filename_remapped_as_rg_bytes(tree):
@@ -326,22 +308,22 @@ def test_non_utf8_filename_remapped_as_rg_bytes(tree):
     assert match["data"]["path"] == {"bytes": "YmFkLf8="}
 
 
-def test_binary_files_are_skipped_and_counted(tree):
+def test_binary_files_are_searched_as_text(tree):
     root, files, grant, search, _ = tree
     (root / "binary").write_bytes(b"needle\0binary\n")
     (root / "text").write_text("needle\n")
-    for req in (request(), request(relative_path="binary")):
+    for req, expected in (
+        (request(), {"binary", "text"}),
+        (request(relative_path="binary"), {"binary"}),
+    ):
         batch = search.search(grant, req)
-        assert batch.events[-1]["data"]["stats"]["binary_files_skipped"] == 1
-        assert all(e[1] != "binary" for e in content(batch.events))
+        assert batch.events[-1]["data"]["stats"]["binary_files_skipped"] == 0
+        assert not batch.truncated
+        assert {e[1] for e in content(batch.events)} == expected
     with pytest.raises(CapabilityUnavailable, match="rg_rejected"):
         search.search(grant, request(relative_path="binary", pattern="["))
-    assert {
-        e.relative_path
-        for e in files.list_entries(
-            grant, ListRequest(".", "**/*", False, 100, 1000, 5)
-        ).entries
-    } == {"binary", "text"}
+    listing = files.list_entries(grant, ListRequest(".", "**/*", False, 100, 1000, 5))
+    assert {e.relative_path for e in listing.entries} == {"binary", "text"}
 
 
 def test_subdirectory_inherits_only_ignore_files_within_grant(tree, monkeypatch):
@@ -383,8 +365,8 @@ def test_real_ripgrep_child_cleanup_on_expired_deadline_and_cancel(tree, monkeyp
         children.append(child)
         return child
 
-    def expired(child, data, deadline, max_output):
-        return original_pump(child, data, 0, max_output)
+    def expired(child, source, deadline, max_output):
+        return original_pump(child, source, 0, max_output)
 
     monkeypatch.setattr(search_access.subprocess, "Popen", capture)
     monkeypatch.setattr(search_access, "_pump", expired)
@@ -397,15 +379,10 @@ def test_real_ripgrep_child_cleanup_on_expired_deadline_and_cancel(tree, monkeyp
     monkeypatch.setattr(search_access, "_pump", cancelled)
     with pytest.raises(KeyboardInterrupt):
         search.search(grant, request())
-    assert len(children) == 2
-    for child in children:
-        assert child.returncode is not None
-        assert all(pipe.closed for pipe in (child.stdin, child.stdout, child.stderr))
+    assert len(children) == 2 and all(map(reaped, children))
 
 
 def test_pump_oserror_is_typed_and_reaps_child(tree, monkeypatch):
-    from binnacle.platform.contracts.capability_contracts import AuthorityUnknown
-
     root, _, grant, search, _ = tree
     (root / "file").write_text("needle")
     real_popen = subprocess.Popen
@@ -423,10 +400,7 @@ def test_pump_oserror_is_typed_and_reaps_child(tree, monkeypatch):
     monkeypatch.setattr(search_access, "_pump", failed)
     with pytest.raises(AuthorityUnknown, match="file_io_failed"):
         search.search(grant, request())
-    assert children[0].returncode is not None
-    assert all(
-        p.closed for p in (children[0].stdin, children[0].stdout, children[0].stderr)
-    )
+    assert reaped(children[0])
 
 
 def test_rg_path_is_captured_at_composition(tree, monkeypatch):
@@ -448,17 +422,11 @@ def test_event_stream_shape_multi_file(tree):
     summaries = [e for e in result.events if e["type"] == "summary"]
     assert len(summaries) == 1 and result.events[-1] == summaries[0]
     expected = next(e for e in baseline(root, rg, request()) if e["type"] == "summary")
-    for key in (
-        "searches",
-        "searches_with_match",
-        "matched_lines",
-        "matches",
-        "bytes_searched",
-    ):
+    keys = ("searches", "searches_with_match", "matched_lines", "matches")
+    for key in (*keys, "bytes_searched"):
         assert summaries[0]["data"]["stats"][key] == expected["data"]["stats"][key]
-    assert [
-        e["data"]["path"]["text"] for e in result.events if e["type"] == "begin"
-    ] == ["a", "m", "z"]
+    begins = [e["data"]["path"]["text"] for e in result.events if e["type"] == "begin"]
+    assert begins == ["a", "m", "z"]
 
 
 @pytest.mark.parametrize(
@@ -472,9 +440,8 @@ def test_ignore_explicit_scope_and_hidden_negation(tree, policy):
         (root / name).write_text("needle\n")
     for scope in (".", "sub"):
         req = request(relative_path=scope)
-        assert content(search.search(grant, req).events) == content(
-            baseline(root, rg, req)
-        )
+        batch = search.search(grant, req)
+        assert content(batch.events) == content(baseline(root, rg, req))
 
 
 @pytest.mark.parametrize("error", [errno.EPERM, errno.EILSEQ])
@@ -487,3 +454,45 @@ def test_non_utf8_skip_guard_is_specific(tree, monkeypatch, error):
     monkeypatch.setattr(os, "open", rejected)
     with pytest.raises(pytest.skip.Exception, match="APFS"):
         test_non_utf8_filename_remapped_as_rg_bytes(tree)
+
+
+def test_large_files_stream_whole_through_the_descriptor_like_linux(tree, monkeypatch):
+    root, _, grant, search, rg = tree
+    big = b"needle head\n" + b"a" * (21 * 1024 * 1024) + b"\nneedle tail\n"
+    (root / "huge.txt").write_bytes(big)
+    (root / "small.txt").write_text("needle small\n")
+    reads, real_source, fail = [], search_access._descriptor_source, False
+
+    def recording(opened):  # Records every descriptor read; fails EIO on demand.
+        def read(size):
+            if fail and reads and opened.display_path == "huge.txt":
+                raise AuthorityUnknown("file_io_failed", None)
+            reads.append(len(data := opened.read(size)))
+            return data
+
+        return real_source(SimpleNamespace(read=read))
+
+    monkeypatch.setattr(search_access, "_descriptor_source", recording)
+    req = request(max_bytes=16 * 1024 * 1024)  # The search_text aggregate budget.
+    result = search.search(grant, req)
+    assert not result.truncated and result.files_searched == 2
+    lines = [e[1:3] for e in content(result.events)]
+    assert lines == [("huge.txt", 1), ("huge.txt", 3), ("small.txt", 1)]
+    assert content(result.events) == content(baseline(root, rg, req))
+    stats = result.events[-1]["data"]["stats"]
+    assert stats["bytes_searched"] == len(big) + 13 > req.max_bytes
+    assert stats["skipped_io_error"] == 0 and "skipped_oversize" not in stats
+    assert max(reads) == search_access.CHUNK and sum(reads) == len(big) + 13  # Bounded
+    # A mid-stream read failure is an explicit I/O limit, never truncation.
+    fail, reads[:] = True, []
+    result = search.search(grant, req)
+    stats = result.events[-1]["data"]["stats"]
+    assert not result.truncated and stats["skipped_io_error"] == 1
+    assert [e[1] for e in content(result.events)] == ["small.txt"]
+    with pytest.raises(AuthorityUnknown, match="file_io_failed"):
+        search.search(grant, request(relative_path="huge.txt"))
+    with pytest.raises(CapabilityUnavailable, match="rg_rejected"):
+        search.search(grant, request(pattern="["))  # rg exits; feeding stops.
+    bad = b'{"type":"match","data":{"lines":{"text":"a"},"line_number":null,"p":"%s'
+    with pytest.raises(CapabilityUnavailable, match="rg_invalid_output"):
+        search_access._events(bad % (b"p" * (1 << 21)), "x", True)  # Bounded scan.

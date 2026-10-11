@@ -12,8 +12,10 @@ from fastmcp.tools.base import Tool, ToolResult
 from mcp.types import ContentBlock, TextContent
 
 from binnacle.mcp.job_awareness_hint_identity import (
+    NATIVE_TOOL_TYPES,
     Identity,
     canonical_schema,
+    native_tool,
     producer_identity,
 )
 from binnacle.mcp.job_awareness_hint_schema import Schema, equal
@@ -27,6 +29,7 @@ from binnacle.mcp.job_awareness_hint_walk import (
 
 __all__ = [
     "META_KEY",
+    "NATIVE_TOOL_TYPES",
     "HintAdapter",
     "HintBindings",
     "Identity",
@@ -36,6 +39,7 @@ __all__ = [
     "Workers",
     "canonical_schema",
     "equal",
+    "native_tool",
     "producer_identity",
     "walk",
 ]
@@ -92,6 +96,7 @@ class HintAdapter:
     tool_version: str | None = field(init=False)
     schema: Any = field(init=False)
     identity: Identity | None = field(init=False)
+    bound_tool: Tool = field(init=False, repr=False, compare=False)
     server_info: Any = None  # controller snapshot of the pinned native server stamp
     enabled: bool = False
     carrier: Enum | None = None
@@ -102,12 +107,13 @@ class HintAdapter:
         if type(self.bindings) is not HintBindings:
             raise ValueError("explicit hint bindings required")
         if (
-            not isinstance(self.tool, Tool)
+            not native_tool(self.tool)  # exact type first: no subclass hook runs
             or type(self.tool.name) is not str
             or not 1 <= len(self.tool.name) <= 128
             or (self.tool.version is not None and type(self.tool.version) is not str)
         ):
             raise ValueError("explicit native tool binding required")
+        self.bound_tool = self.tool  # provenance snapshot of the registration
         self.tool_name = self.tool.name
         self.tool_version = self.tool.version
         self.carrier = self.bindings.meta if self.carrier is None else self.carrier
@@ -125,16 +131,21 @@ class HintAdapter:
     ) -> ToolResult:
         """Suppress unknown producers before worker admission or awareness reads.
 
-        Identity rule: ``tool`` must be the native Tool object that FastMCP
-        resolved for this call (injection, mounted providers, transforms and
-        version selection already applied). The adapter proceeds only when that
-        object's exact name, exact version and canonical-JSON output schema all
-        equal the bound tool's, and the structured result then validates
-        against that schema. Caller-supplied name or version strings, request
-        selectors and object identity are never an identity. A missing, None,
-        non-Tool or malformed producer is unknown and returns the original
-        result unchanged. No schema or identity is inferred from a result.
-        Registrations and routing stay fixed for this adapter's lifetime.
+        Provenance rule (CHATGPT-POST-01/02): ``tool`` must be the native Tool
+        object that FastMCP resolved for this call (injection, mounted
+        providers, transforms and version selection already applied), and it
+        must BE the bound registered tool object (``is``) with a type that is
+        exactly one of ``NATIVE_TOOL_TYPES`` (no subclasses). Its exact name,
+        exact version and canonical-JSON output schema must also still equal
+        the bound identity, and the structured result must validate against
+        that schema. A value-equal but different object, any injected,
+        mounted, proxied or transformed wrapper, any subclass, and a missing,
+        None, non-Tool or malformed producer are unknown: the original result
+        returns unchanged with no worker admission, observation read or
+        receipt query. Caller-supplied name or version strings and request
+        selectors are never an identity. No schema or identity is inferred
+        from a result. Registrations and routing stay fixed for this adapter's
+        lifetime.
         """
         if (
             self.enabled is not True
@@ -143,6 +154,8 @@ class HintAdapter:
             or self.schema is None
             or self.identity is None
         ):
+            return original
+        if tool is not self.bound_tool or not native_tool(tool):
             return original
         producer = producer_identity(tool)
         if producer is None or producer != self.identity:
