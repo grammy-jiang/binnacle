@@ -1,9 +1,9 @@
-"""Darwin process adapter: disabled runtime, reviewable foreground mechanism.
+"""Darwin process adapter: scope-injected, bounded foreground mechanism.
 
-FULL_PARITY_NO_GO. The public foreground entrypoint intentionally cannot be
-enabled by configuration, environment, witness state or request fields. R1 and
-CR1 approval of the exact candidate plus B0 wiring are still required. Native
-tests exercise the private runner directly; this is not runtime acceptance.
+FULL_PARITY_NO_GO. Only composition can inject the foreground runner, following
+the source-controlled release scope. Configuration, environment, witness state
+and request fields cannot enable it. The committed scope remains unavailable;
+test-supplied candidate scopes are not release acceptance.
 Durable launch/stop and historical PID adoption remain unavailable.
 On completion the private runner terminates background members of its owned
 group before reaping the leader. Processes that leave the group (setpgid,
@@ -47,8 +47,34 @@ from binnacle.platform.darwin.process_authority import (
 
 
 class DarwinProcessBackend:
-    def __init__(self, *, witness: OwnedWitness | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        witness: OwnedWitness | None = None,
+        foreground_runner: _ForegroundRunner | None = None,
+    ) -> None:
         self._witness = witness
+        self._foreground_runner = foreground_runner
+
+    @property
+    def foreground_enabled(self) -> bool:
+        return isinstance(self._foreground_runner, _ForegroundRunner)
+
+    def validate_release_states(self, states: Mapping[str, str]) -> None:
+        if states.get("stop_job", "UNAVAILABLE") != "UNAVAILABLE":
+            raise RuntimeError("Darwin stop_job must remain UNAVAILABLE (gate: never)")
+        enabled = any(
+            states.get(tool, "UNAVAILABLE") != "UNAVAILABLE"
+            for tool in ("run_command", "job_status")
+        )
+        if enabled and (
+            states.get("run_command") != "LIMITED"
+            or states.get("job_status", "UNAVAILABLE") not in ("LIMITED", "UNAVAILABLE")
+            or not self.foreground_enabled
+        ):
+            raise RuntimeError(
+                "Darwin Commands scope requires the A2 foreground runtime gate"
+            )
 
     def authority(self, job_id: str) -> AuthorityObservation:
         return observe_authority(job_id, witness=self._witness)
@@ -60,7 +86,7 @@ class DarwinProcessBackend:
         cancel: Event,
         on_direct_child_exit: DirectChildExitObserver | None = None,
     ) -> ForegroundResult:
-        """Keep execution and the owned-reaper observer inert until acceptance.
+        """Refuse without a scope-injected runner; retain the sole owner otherwise.
 
         Once enabled, the optional observer receives the sole wait4 rusage once
         under the owner lock/generation, including timeout/cancel cleanup. It
@@ -69,7 +95,11 @@ class DarwinProcessBackend:
         or private runner access is needed. Callback failure is a typed error,
         never a retry or a job-wide resource measurement.
         """
-        raise _unavailable("native_capability_unavailable")
+        if self._foreground_runner is None:
+            raise _unavailable("native_capability_unavailable")
+        return self._foreground_runner.run_foreground(
+            request, cancel=cancel, on_direct_child_exit=on_direct_child_exit
+        )
 
     def launch(
         self,
@@ -234,11 +264,10 @@ class _CommandPipes:
 
 @dataclass(frozen=True)
 class _ForegroundRunner:
-    """Private native qualification harness; no public runtime enable switch.
+    """Native mechanism injected only at the source-controlled scope boundary.
 
     Capture settings once at composition, never widen the captured limit from a
-    request. B0 must supply the accepted settings and exclusive-reaper host when
-    a future reviewed change opens the public gate.
+    request. The host must reserve exclusive child reaping for this owner.
     """
 
     foreground_limit_s: float
