@@ -1,7 +1,7 @@
 {
-  "schema_revision": "binnacle-darwin-r3-interface-1.1.0",
+  "schema_revision": "binnacle-darwin-r4-interface-1.2.0",
   "source_base_sha": "c2234f16bdfb1a17500b99101d3184b797ebb673",
-  "status": "TARGET_POLICY_PENDING_CR0_NOT_NATIVE_ACCEPTANCE",
+  "status": "PROPOSED_PENDING_SUPERVISOR_1_2_0_REVIEW",
   "evidence_root": "run inputs directory; paths relative to inputs/",
   "historical_evidence_sha256": {
     "index": {
@@ -1689,19 +1689,61 @@
         "target": "limited",
         "runtime": "UNAVAILABLE",
         "enabled": false,
-        "scope": "After A2/R1/CR1 approval only: bounded foreground owned-child execution, descendants_unverified=true; background/over-limit raises darwin_background_jobs_unavailable. Until acceptance: MCP unavailable error before spawn."
+        "scope": "After A2/R1/CR1 approval only: bounded foreground owned-child execution, descendants_unverified=true; background/over-limit raises darwin_background_jobs_unavailable. Until acceptance: MCP unavailable error before spawn.",
+        "owner_conditioned_1_2_0": {
+          "embedded": "DARWIN_EMBEDDED_RELEASE_SCOPE row unchanged",
+          "manager": {
+            "target": "full_with_disclosure",
+            "runtime_until_jcr": "UNAVAILABLE",
+            "runtime_after_jcr": "AVAILABLE",
+            "enabling_gate": "J-CR",
+            "disclosures": [
+              "D-1: jobs of a lost manager are UNKNOWN; never adopted, never exited",
+              "D-2: CPU/RSS accounting is sampled; membership_closed=false",
+              "descendants_unverified=true: new sessions/process groups are not tracked"
+            ]
+          }
+        }
       },
       "job_status": {
         "target": "limited",
         "runtime": "UNAVAILABLE",
         "enabled": false,
-        "scope": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+        "scope": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim",
+        "owner_conditioned_1_2_0": {
+          "embedded": "DARWIN_EMBEDDED_RELEASE_SCOPE row unchanged",
+          "manager": {
+            "target": "full_with_disclosure",
+            "runtime_until_jcr": "UNAVAILABLE",
+            "runtime_after_jcr": "AVAILABLE",
+            "enabling_gate": "J-CR",
+            "disclosures": [
+              "D-1: jobs of a lost manager are UNKNOWN; never adopted, never exited",
+              "D-2: CPU/RSS accounting is sampled; membership_closed=false",
+              "descendants_unverified=true: new sessions/process groups are not tracked"
+            ]
+          }
+        }
       },
       "stop_job": {
         "target": "unavailable",
         "runtime": "UNAVAILABLE",
         "enabled": false,
-        "scope": "MCP tool error before side effects; remains discoverable with explicit unavailable description"
+        "scope": "MCP tool error before side effects; remains discoverable with explicit unavailable description",
+        "owner_conditioned_1_2_0": {
+          "embedded": "DARWIN_EMBEDDED_RELEASE_SCOPE row unchanged; stop_job UNAVAILABLE on every host",
+          "manager": {
+            "target": "full_with_disclosure",
+            "runtime_until_jcr": "UNAVAILABLE",
+            "runtime_after_jcr": "AVAILABLE",
+            "enabling_gate": "J-CR",
+            "disclosures": [
+              "D-1: jobs of a lost manager are UNKNOWN; never adopted, never exited",
+              "D-2: CPU/RSS accounting is sampled; membership_closed=false",
+              "descendants_unverified=true: new sessions/process groups are not tracked"
+            ]
+          }
+        }
       }
     }
   },
@@ -1711,5 +1753,18 @@
     "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
     "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
   },
-  "freeze_authority": "Revision 1.1.0 remains proposed until Supervisor re-reviews this exact signed commit and issues CR0 APPROVE."
+  "freeze_authority": "Revision 1.2.0 remains proposed until the Supervisor reviews this exact signed commit (CR0-style review required by JCR-1). J1/J2/J4 must not consume it before that review. Committed Darwin command rows stay UNAVAILABLE until J-CR.",
+  "revision_history": [
+    {
+      "schema_revision": "binnacle-darwin-r3-interface-1.1.0",
+      "source_base_sha": "c2234f16bdfb1a17500b99101d3184b797ebb673",
+      "status": "TARGET_POLICY_PENDING_CR0_NOT_NATIVE_ACCEPTANCE",
+      "freeze_authority": "Revision 1.1.0 remains proposed until Supervisor re-reviews this exact signed commit and issues CR0 APPROVE."
+    }
+  ],
+  "revision_1_2_0": {
+    "source_base_sha": "9f958798bf9cbe289ad4cc8daa0714bbb8d0a305",
+    "decision": "Rows are chosen from the composed job owner. Manager command rows target AVAILABLE with explicit disclosures (D-1, D-2, descendants_unverified) and stay UNAVAILABLE until J-CR. No runtime fallback to embedded execution or LIMITED rows (JCR-2).",
+    "see": "api-contract.json#/revision_1_2_0"
+  }
 }

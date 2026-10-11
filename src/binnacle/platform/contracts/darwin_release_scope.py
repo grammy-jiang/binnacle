@@ -2,6 +2,12 @@
 
 No environment, configuration, CLI or request flag participates in this table.
 Composition may receive an explicit replacement mapping in tests only.
+
+Interface 1.2.0: rows are chosen from the composed job owner. The embedded
+owner keeps the reviewed LIMITED rows below. The manager owner targets
+"full_with_disclosure": AVAILABLE plus an explicit, non-empty disclosure scope.
+There is no FULL_WITH_DISCLOSURE capability state, and an unreachable manager
+never selects LIMITED rows. Manager command rows stay UNAVAILABLE until J-CR.
 """
 
 from collections.abc import Mapping
@@ -9,6 +15,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 from binnacle.platform.contracts.capability_contracts import Capability, CapabilityState
+from binnacle.platform.contracts.process_contracts import JobOwnerKind
 
 
 @dataclass(frozen=True)
@@ -17,6 +24,7 @@ class ReleaseDecision:
     decision_target: str
     enabling_gate: str
     decision_reference: str
+    disclosures: tuple[str, ...] = ()
 
 
 def _pending(tool: str, gate: str) -> ReleaseDecision:
@@ -85,3 +93,106 @@ DARWIN_RELEASE_SCOPE: Mapping[str, ReleaseDecision] = MappingProxyType(
     }
 )
 FILE_TOOLS = ("read_file", "list_files", "search_text", "edit_file", "write_file")
+COMMAND_TOOLS = ("run_command", "job_status", "stop_job")
+
+FULL_WITH_DISCLOSURE = "full_with_disclosure"
+MANAGER_DISCLOSURES: tuple[str, ...] = (
+    "D-1: jobs of a lost manager are UNKNOWN; never adopted, never exited",
+    "D-2: CPU/RSS accounting is sampled; membership_closed=false",
+    "descendants_unverified=true: new sessions/process groups are not tracked",
+)
+_REQUIRED_DISCLOSURES = ("D-1:", "descendants_unverified=true")
+
+
+def _manager_pending(tool: str) -> ReleaseDecision:
+    return ReleaseDecision(
+        Capability(CapabilityState.UNAVAILABLE, "review_pending", tool),
+        FULL_WITH_DISCLOSURE,
+        "J-CR",
+        f"R4 DARWIN-DURABLE-JOBS-DESIGN.md#10; JCR-DESIGN-REVIEW.json; {tool}",
+        MANAGER_DISCLOSURES,
+    )
+
+
+DARWIN_EMBEDDED_RELEASE_SCOPE = DARWIN_RELEASE_SCOPE
+DARWIN_MANAGER_RELEASE_SCOPE: Mapping[str, ReleaseDecision] = MappingProxyType(
+    {
+        **{tool: DARWIN_RELEASE_SCOPE[tool] for tool in FILE_TOOLS},
+        **{tool: _manager_pending(tool) for tool in COMMAND_TOOLS},
+    }
+)
+
+
+def resolve_darwin_job_owner(configured: str) -> JobOwnerKind:
+    """JCR-2: Darwin production composes the manager; embedded only when explicit.
+
+    Reachability never participates: an unreachable manager is a per-call
+    JOB_MANAGER_UNAVAILABLE error, picked up again as soon as it answers.
+    """
+    if configured in ("auto", "manager"):
+        return "manager"
+    if configured == "embedded":
+        return "embedded"
+    raise RuntimeError(f"unknown Darwin job owner {configured!r}")
+
+
+def release_scope_for_owner(owner: JobOwnerKind) -> Mapping[str, ReleaseDecision]:
+    """Select and validate committed rows of the composed owner, never reachability.
+
+    Runtime gates (the A2 foreground runner for embedded) are checked again
+    where the execution is composed.
+    """
+    if owner not in ("manager", "embedded"):
+        raise RuntimeError(f"unknown Darwin job owner {owner!r}")
+    scope = DARWIN_MANAGER_RELEASE_SCOPE if owner == "manager" else DARWIN_RELEASE_SCOPE
+    validate_release_rows(scope, owner)
+    validate_owner_command_states(
+        {tool: scope[tool].capability.state.value for tool in COMMAND_TOOLS}, owner
+    )
+    return scope
+
+
+def validate_release_rows(
+    scope: Mapping[str, ReleaseDecision], owner: JobOwnerKind
+) -> None:
+    """AVAILABLE command rows exist only under the manager, with full disclosure."""
+    for tool in COMMAND_TOOLS:
+        row = scope.get(tool)
+        if row is None or row.capability.state != CapabilityState.AVAILABLE:
+            continue
+        if owner != "manager" or row.decision_target != FULL_WITH_DISCLOSURE:
+            raise RuntimeError(f"Darwin {tool} AVAILABLE requires the manager owner")
+        if not all(
+            any(item.startswith(needle) for item in row.disclosures)
+            for needle in _REQUIRED_DISCLOSURES
+        ):
+            raise RuntimeError(f"Darwin {tool} AVAILABLE requires its disclosures")
+
+
+def validate_owner_command_states(
+    states: Mapping[str, str], owner: JobOwnerKind, execution: object = None
+) -> None:
+    """Owner-conditioned invariant (1.2.0); replaces the unconditional stop_job rule.
+
+    Embedded: stop_job stays UNAVAILABLE. Manager (JCR-2): command rows are
+    only UNAVAILABLE or AVAILABLE, never LIMITED, and no embedded execution
+    is composed beside it. Host-independent, like the rule it replaces.
+    """
+    if owner == "embedded":
+        if states.get("stop_job", "UNAVAILABLE") != "UNAVAILABLE":
+            raise RuntimeError("Darwin stop_job must remain UNAVAILABLE when embedded")
+        return
+    if owner != "manager":
+        raise RuntimeError(f"unknown Darwin job owner {owner!r}")
+    if execution is not None:
+        raise RuntimeError("Darwin manager owner composes no embedded execution")
+    for tool in COMMAND_TOOLS:
+        if states.get(tool, "UNAVAILABLE") not in ("UNAVAILABLE", "AVAILABLE"):
+            raise RuntimeError(
+                f"Darwin manager owner serves {tool} only UNAVAILABLE or AVAILABLE"
+            )
+    if states.get("run_command", "UNAVAILABLE") != "AVAILABLE" and any(
+        states.get(tool, "UNAVAILABLE") == "AVAILABLE"
+        for tool in ("job_status", "stop_job")
+    ):
+        raise RuntimeError("Darwin manager job tools require run_command AVAILABLE")

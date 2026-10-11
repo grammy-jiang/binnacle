@@ -90,25 +90,11 @@ def test_release_scope_requires_review_and_production_cannot_override():
     from binnacle.platform.contracts.capability_contracts import CapabilityState
     from binnacle.platform.contracts.darwin_release_scope import DARWIN_RELEASE_SCOPE
 
-    assert set(DARWIN_RELEASE_SCOPE) == {
-        "read_file",
-        "list_files",
-        "search_text",
-        "edit_file",
-        "write_file",
-        "run_command",
-        "job_status",
-        "stop_job",
-    }
-    approved = {
-        "read_file",
-        "edit_file",
-        "write_file",
-        "run_command",
-        "job_status",
-        "list_files",
-        "search_text",
-    }
+    assert set(DARWIN_RELEASE_SCOPE) == set(
+        ["read_file", "list_files", "search_text", "edit_file", "write_file"]
+        + ["run_command", "job_status", "stop_job"]
+    )
+    approved = set(DARWIN_RELEASE_SCOPE) - {"stop_job"}
     enabled = {
         tool
         for tool, row in DARWIN_RELEASE_SCOPE.items()
@@ -212,9 +198,7 @@ def test_linux_file_lookup_skips_only_darwin_runtime_requirement(monkeypatch):
         capability=Capability(CapabilityState.LIMITED, "test", "run_command"),
     )
     assert composition.native_file_capability() is None
-    assert (
-        composition.native_file_capability(release_scope=scope, execution=None) is None
-    )
+    assert composition.native_file_capability(release_scope=scope) is None
 
 
 def test_production_scope_controls_real_server_without_test_override(tmp_path):
@@ -314,6 +298,53 @@ for profile, name in PROFILES.items():
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_interface_120_rows_follow_the_composed_owner(monkeypatch):
+    from dataclasses import replace
+    from typing import get_args
+
+    from binnacle.platform import composition as c
+    from binnacle.platform.contracts import darwin_release_scope as rs
+    from binnacle.platform.contracts import process_contracts as pc
+
+    owners = [rs.resolve_darwin_job_owner(v) for v in ("auto", "manager", "embedded")]
+    assert owners == ["manager", "manager", "embedded"]  # JCR-2: never implicit
+    assert rs.release_scope_for_owner("embedded") is rs.DARWIN_RELEASE_SCOPE
+    manager, cmd = rs.release_scope_for_owner("manager"), rs.COMMAND_TOOLS
+    assert all(manager[t] == rs.DARWIN_RELEASE_SCOPE[t] for t in rs.FILE_TOOLS)
+    rows = {(manager[t].capability.state, manager[t].enabling_gate) for t in cmd}
+    assert rows == {(CapabilityState.UNAVAILABLE, "J-CR")}  # until J-CR
+    assert {manager[t].disclosures for t in cmd} == {rs.MANAGER_DISCLOSURES}
+    labels = [d.split(":")[0] for d in rs.MANAGER_DISCLOSURES]
+    assert labels == ["D-1", "D-2", "descendants_unverified=true"]
+    a = CapabilityState.AVAILABLE
+    on = {t: replace(manager[t], capability=Capability(a, "t", t)) for t in cmd}
+    monkeypatch.setattr(c.platform, "system", lambda: "Darwin")
+    full = {**manager, **on}
+    bare = {**full, **{t: replace(on[t], disclosures=()) for t in on}}
+    cap = c.native_file_capability(release_scope=full, owner="manager")
+    assert cap.state == CapabilityState.LIMITED
+    for scope, owner, match in (
+        (full, "embedded", "stop_job must remain UNAVAILABLE"),
+        (rs.DARWIN_RELEASE_SCOPE, "manager", "only UNAVAILABLE or AVAILABLE"),
+        ({**manager, "stop_job": on["stop_job"]}, "manager", "require run_command"),
+        (bare, "manager", "requires its disclosures"),
+    ):
+        with pytest.raises(RuntimeError, match=match):
+            c.native_file_capability(release_scope=scope, owner=owner)
+    with pytest.raises(RuntimeError, match="no embedded execution"):
+        c.create_foreground_execution(command_states={}, owner="manager")
+    members = sorted(n for n in vars(pc.DarwinJobOwner) if not n.startswith("_"))
+    assert members == sorted(
+        ["owner_instance_id", "spawn", "wait", "reap_exits"]
+        + ["signal_owned_group", "authority", "close"]
+    )
+    spawn = pc.DarwinJobOwner.spawn.__code__.co_varnames
+    assert " ".join(spawn) == "self job_id argv workdir env stdin output"
+    assert get_args(pc.OwnedJobAuthority) == ("OWNED", "UNKNOWN")
+    client = Path(__file__).parents[2] / "src/binnacle/features/commands/job_client.py"
+    assert f'"{pc.JOB_MANAGER_UNAVAILABLE} at ' in client.read_text()
 
 
 _DARWIN_ONLY = pytest.mark.skipif(

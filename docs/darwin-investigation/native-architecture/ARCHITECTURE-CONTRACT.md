@@ -1,6 +1,7 @@
 # Darwin native architecture contract
 
-Revision: `binnacle-darwin-r3-interface-1.1.0`.
+Revision: `binnacle-darwin-r4-interface-1.2.0` (proposed; see the 1.2.0 section).
+Previous revision: `binnacle-darwin-r3-interface-1.1.0`.
 Source base: `c2234f16bdfb1a17500b99101d3184b797ebb673`.
 Revision base: `372c5036595bcb7deaa38dce9d3b123725f21ee1`.
 Implementation-lane base: `068114f87e9d0159471d0bd001683457ad4c4368`.
@@ -82,6 +83,35 @@ combined output bytes, cursors, unit templates and stable-manager restart gate
 remain unchanged. Existing Linux safety defects require A1's independently
 reviewed repair; source equality is not evidence that those defects are safe.
 No Linux production host or service is touched by A0.
+
+## Revision 1.2.0: durable-job owner and release scope
+
+Source base `9f958798bf9cbe289ad4cc8daa0714bbb8d0a305` (R4 lane J0). This
+section adds to 1.1.0 and replaces only the unconditional stop_job rule.
+
+- **Owner kinds.** `JobOwnerKind` is `manager` or `embedded`. On Darwin,
+  `auto` and `manager` compose the manager. `embedded` exists only by explicit
+  configuration, for tests and rollback (JCR-2).
+- **Rows follow the composed owner.** `release_scope_for_owner` returns the
+  embedded table (today's reviewed LIMITED rows) or the manager table. The
+  choice never depends on whether the manager answers. An unreachable manager
+  gives the Linux per-call error `job manager unavailable`. There is no
+  fallback to embedded execution or LIMITED rows.
+- **Full with disclosure.** No new capability state. A manager command row is
+  `AVAILABLE` with `decision_target="full_with_disclosure"` and disclosures
+  D-1, D-2 and `descendants_unverified=true`. Until J-CR these rows are
+  committed `UNAVAILABLE`.
+- **Owner-conditioned invariant.** Embedded: stop_job stays `UNAVAILABLE` on
+  every host. Manager: each command row is only `UNAVAILABLE` or `AVAILABLE`;
+  job_status and stop_job need run_command `AVAILABLE`; no embedded
+  `ForegroundExecution` is composed.
+- **DarwinJobOwner.** One instance per manager process. `spawn` uses
+  `posix_spawn(setsid=True)` and arms kqueue `NOTE_EXIT` before it returns.
+  `reap_exits` is the only `waitpid` caller (SIGCHLD stays `SIG_DFL`). `wait`
+  waits on the reaper. `signal_owned_group` signals an owned pgid only while
+  membership is proven. `authority` is `OWNED` or `UNKNOWN`; a pid read from
+  disk is never adopted. `close` is the normal stop: owned groups are
+  terminated, then killed, reaped and recorded as `owner_restart` (no orphans).
 
 ## Typed availability and errors
 

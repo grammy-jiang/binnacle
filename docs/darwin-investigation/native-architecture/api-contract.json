@@ -1,8 +1,17 @@
 {
-  "schema_revision": "binnacle-darwin-r3-interface-1.1.0",
+  "schema_revision": "binnacle-darwin-r4-interface-1.2.0",
   "source_base_sha": "c2234f16bdfb1a17500b99101d3184b797ebb673",
-  "status": "PROPOSED_PENDING_R0_CR0",
-  "freeze_authority": "Revision 1.1.0 remains proposed until Supervisor re-reviews this exact signed commit and issues CR0 APPROVE.",
+  "status": "PROPOSED_PENDING_SUPERVISOR_1_2_0_REVIEW",
+  "freeze_authority": "Revision 1.2.0 remains proposed until the Supervisor reviews this exact signed commit (CR0-style review required by JCR-1). J1/J2/J4 must not consume it before that review. Committed Darwin command rows stay UNAVAILABLE until J-CR.",
+  "revision_history": [
+    {
+      "schema_revision": "binnacle-darwin-r3-interface-1.1.0",
+      "source_base_sha": "c2234f16bdfb1a17500b99101d3184b797ebb673",
+      "status": "PROPOSED_PENDING_R0_CR0",
+      "freeze_authority": "Revision 1.1.0 remains proposed until Supervisor re-reviews this exact signed commit and issues CR0 APPROVE.",
+      "retained": "All 1.1.0 sections remain below unchanged except schema_revision/status/freeze_authority, enums.TargetState (additive) and the additive manager_owner entries in tool_capability_matrix."
+    }
+  ],
   "python_minimum": "3.10",
   "declaration_prelude": "from __future__ import annotations; standard typing/collections.abc Protocol, Literal, Mapping, Sequence, Callable; dataclasses.dataclass; enum.Enum; pathlib.Path; threading.Event. Cross-module names resolve uniquely from module declarations or preserved base interfaces. No declaration is executable product code in A0.",
   "enums": {
@@ -15,7 +24,8 @@
     "TargetState": [
       "full",
       "limited",
-      "unavailable"
+      "unavailable",
+      "full_with_disclosure"
     ]
   },
   "existing_interfaces": [
@@ -902,7 +912,24 @@
           "A0-R0-03",
           "CR0-04"
         ],
-        "materialization_gate": "/runtime_materialization"
+        "materialization_gate": "/runtime_materialization",
+        "embedded_owner": {
+          "rows": "DARWIN_EMBEDDED_RELEASE_SCOPE (unchanged)",
+          "stop_job_invariant": "unchanged"
+        },
+        "manager_owner": {
+          "target_state": "full_with_disclosure",
+          "state_until_jcr": "UNAVAILABLE",
+          "state_after_jcr": "AVAILABLE",
+          "reason_code": "review_pending",
+          "enabling_gate": "J-CR",
+          "disclosures": [
+            "D-1: jobs of a lost manager are UNKNOWN; never adopted, never exited",
+            "D-2: CPU/RSS accounting is sampled; membership_closed=false",
+            "descendants_unverified=true: new sessions/process groups are not tracked"
+          ],
+          "unreachable_manager": "per-call 'job manager unavailable' error; no LIMITED rows, no embedded execution"
+        }
       }
     },
     "job_status": {
@@ -922,7 +949,24 @@
           "A0-R0-01",
           "A0-R0-03"
         ],
-        "materialization_gate": "/runtime_materialization"
+        "materialization_gate": "/runtime_materialization",
+        "embedded_owner": {
+          "rows": "DARWIN_EMBEDDED_RELEASE_SCOPE (unchanged)",
+          "stop_job_invariant": "unchanged"
+        },
+        "manager_owner": {
+          "target_state": "full_with_disclosure",
+          "state_until_jcr": "UNAVAILABLE",
+          "state_after_jcr": "AVAILABLE",
+          "reason_code": "review_pending",
+          "enabling_gate": "J-CR",
+          "disclosures": [
+            "D-1: jobs of a lost manager are UNKNOWN; never adopted, never exited",
+            "D-2: CPU/RSS accounting is sampled; membership_closed=false",
+            "descendants_unverified=true: new sessions/process groups are not tracked"
+          ],
+          "unreachable_manager": "per-call 'job manager unavailable' error; no LIMITED rows, no embedded execution"
+        }
       }
     },
     "stop_job": {
@@ -942,7 +986,24 @@
           "A0-R0-01",
           "A0-R0-03"
         ],
-        "materialization_gate": "/runtime_materialization"
+        "materialization_gate": "/runtime_materialization",
+        "embedded_owner": {
+          "rows": "DARWIN_EMBEDDED_RELEASE_SCOPE (unchanged)",
+          "stop_job_invariant": "UNAVAILABLE on every host"
+        },
+        "manager_owner": {
+          "target_state": "full_with_disclosure",
+          "state_until_jcr": "UNAVAILABLE",
+          "state_after_jcr": "AVAILABLE",
+          "reason_code": "review_pending",
+          "enabling_gate": "J-CR",
+          "disclosures": [
+            "D-1: jobs of a lost manager are UNKNOWN; never adopted, never exited",
+            "D-2: CPU/RSS accounting is sampled; membership_closed=false",
+            "descendants_unverified=true: new sessions/process groups are not tracked"
+          ],
+          "unreachable_manager": "per-call 'job manager unavailable' error; no LIMITED rows, no embedded execution"
+        }
       }
     }
   },
@@ -1796,5 +1857,104 @@
       "missing approval zero spawn"
     ],
     "acceptance": "A2 exact-source native implementation plus R1 adversarial review AND CR1 approval, B0 wiring and current owner proof required. CR0 architecture approval alone cannot enable runtime. If CR1 declines, runtime stays UNAVAILABLE."
+  },
+  "revision_1_2_0": {
+    "schema_revision": "binnacle-darwin-r4-interface-1.2.0",
+    "previous_revision": "binnacle-darwin-r3-interface-1.1.0",
+    "source_base_sha": "9f958798bf9cbe289ad4cc8daa0714bbb8d0a305",
+    "lane": "R4 J0",
+    "task_id": "J0-a1",
+    "inputs": {
+      "DARWIN-DURABLE-JOBS-DESIGN.md": "c5ceddb4e65d76683080bed79216e7c871e55ec0f7d9b988250fb0a51a48c6bb",
+      "JCR-DESIGN-REVIEW.json": "verdict APPROVE WITH AMENDMENTS (JCR-1..JCR-6 binding)",
+      "R4-REQ-J1J2-no-orphans.json": "SD-29"
+    },
+    "capability_states_unchanged": [
+      "AVAILABLE",
+      "LIMITED",
+      "UNKNOWN",
+      "UNAVAILABLE"
+    ],
+    "changes": [
+      {
+        "id": "JCR-1",
+        "change": "Capability states unchanged (four states). FULL_WITH_DISCLOSURE is represented as CapabilityState.AVAILABLE plus decision_target='full_with_disclosure' plus a non-empty ReleaseDecision.disclosures that must include D-1 and descendants_unverified=true. validate_release_rows refuses AVAILABLE command rows under the embedded owner, without full_with_disclosure, or without the disclosures."
+      },
+      {
+        "id": "JCR-1/table",
+        "change": "Release table is owner-keyed: DARWIN_EMBEDDED_RELEASE_SCOPE (= the unchanged DARWIN_RELEASE_SCOPE LIMITED rows) and DARWIN_MANAGER_RELEASE_SCOPE (file rows identical; run_command/job_status/stop_job committed UNAVAILABLE, reason review_pending, enabling_gate J-CR, decision_target full_with_disclosure)."
+      },
+      {
+        "id": "JCR-2",
+        "change": "resolve_darwin_job_owner: 'auto' and 'manager' compose the manager on Darwin; 'embedded' only by explicit configuration. Rows are chosen from the composed owner kind only, never from manager reachability; an unreachable manager is a per-call error starting with 'job manager unavailable' (the Linux job_client text) and is picked up when it answers. The manager owner never serves LIMITED or UNKNOWN command rows and never composes an embedded ForegroundExecution."
+      },
+      {
+        "id": "composition.py:261",
+        "change": "The unconditional 'stop_job must remain UNAVAILABLE' assertion is replaced by validate_owner_command_states: embedded keeps stop_job UNAVAILABLE on every host; manager allows each command row only UNAVAILABLE or AVAILABLE, and job_status/stop_job AVAILABLE only with run_command AVAILABLE."
+      },
+      {
+        "id": "DarwinJobOwner",
+        "change": "Frozen manager-resident owner protocol: spawn (posix_spawn setsid, exit watch armed before return), wait, reap_exits (kqueue NOTE_EXIT, sole waitpid caller), signal_owned_group (owned pgid only while membership proven), authority (OWNED/UNKNOWN), close (normal stop)."
+      },
+      {
+        "id": "R4-REQ-J1J2-no-orphans",
+        "change": "DarwinJobOwner.close is the normal owner stop: every owned group led by an unreaped leader receives terminate, the Linux stop grace, then kill; leaders are reaped and returned with termination_reason 'owner_restart' for the manager to persist before exit. A group that cannot be reaped stays UNKNOWN, never exited."
+      }
+    ],
+    "declarations": {
+      "src/binnacle/platform/contracts/process_contracts.py": [
+        "JobOwnerKind = Literal['manager', 'embedded']",
+        "OwnedJobAuthority = Literal['OWNED', 'UNKNOWN']",
+        "JOB_MANAGER_UNAVAILABLE = 'job manager unavailable'",
+        "OWNER_LOST_STOP_REFUSED = 'job stop is unavailable for jobs whose owner was lost'",
+        "class JobManagerUnavailable(RuntimeError)",
+        "class JobOwnerLost(RuntimeError)",
+        "class OwnedJobProcess()  # frozen, slots",
+        "OwnedJobProcess.job_id: str",
+        "OwnedJobProcess.pid: int",
+        "OwnedJobProcess.pgid: int",
+        "OwnedJobProcess.birth: int",
+        "OwnedJobProcess.owner_instance_id: str",
+        "OwnedJobProcess.boot_id: str",
+        "class OwnedJobExit()  # frozen, slots",
+        "OwnedJobExit.job_id: str",
+        "OwnedJobExit.exit_code: int | None",
+        "OwnedJobExit.signal: int | None",
+        "OwnedJobExit.termination_reason: Literal['normal_exit', 'signal', 'stop_requested', 'owner_restart']",
+        "class OwnedJobObservation()  # frozen, slots",
+        "OwnedJobObservation.job_id: str",
+        "OwnedJobObservation.authority: OwnedJobAuthority",
+        "OwnedJobObservation.alive: bool | None",
+        "OwnedJobObservation.reason_code: str",
+        "class DarwinJobOwner(Protocol)",
+        "DarwinJobOwner.@property\ndef owner_instance_id(self) -> str",
+        "DarwinJobOwner.def spawn(self, job_id: str, argv: Sequence[str], *, workdir: Path, env: Mapping[str, str], stdin: BinaryIO, output: BinaryIO) -> OwnedJobProcess",
+        "DarwinJobOwner.def wait(self, job_id: str, timeout: float | None) -> OwnedJobExit | None",
+        "DarwinJobOwner.def reap_exits(self, timeout: float | None) -> Sequence[OwnedJobExit]",
+        "DarwinJobOwner.def signal_owned_group(self, job_id: str, intent: Literal['terminate', 'kill']) -> None",
+        "DarwinJobOwner.def authority(self, job_id: str) -> OwnedJobObservation",
+        "DarwinJobOwner.def close(self) -> Sequence[OwnedJobExit]"
+      ],
+      "src/binnacle/platform/contracts/darwin_release_scope.py": [
+        "ReleaseDecision.disclosures: tuple[str, ...] = ()  # additive field",
+        "COMMAND_TOOLS = ('run_command', 'job_status', 'stop_job')",
+        "FULL_WITH_DISCLOSURE = 'full_with_disclosure'  # decision_target, not a CapabilityState",
+        "MANAGER_DISCLOSURES: tuple[str, ...]  # D-1, D-2, descendants_unverified=true",
+        "DARWIN_EMBEDDED_RELEASE_SCOPE = DARWIN_RELEASE_SCOPE  # unchanged reviewed LIMITED rows",
+        "DARWIN_MANAGER_RELEASE_SCOPE: Mapping[str, ReleaseDecision]  # file rows identical; command rows UNAVAILABLE review_pending, gate J-CR",
+        "def resolve_darwin_job_owner(configured: str) -> JobOwnerKind",
+        "def release_scope_for_owner(owner: JobOwnerKind) -> Mapping[str, ReleaseDecision]",
+        "def validate_release_rows(scope: Mapping[str, ReleaseDecision], owner: JobOwnerKind) -> None",
+        "def validate_owner_command_states(states: Mapping[str, str], owner: JobOwnerKind, execution: object = None) -> None"
+      ],
+      "src/binnacle/platform/composition.py": [
+        "def validate_native_command_states(states: Mapping[str, str], *, execution: ForegroundExecution | None = None, owner: JobOwnerKind = 'embedded') -> None",
+        "def native_file_capability(*, release_scope=None, execution=None, owner='embedded')",
+        "def create_foreground_execution(*, command_states=None, foreground_limit_s=50, wait_max_s=50, owner='embedded') -> ForegroundExecution"
+      ]
+    },
+    "linux_unchanged": "No A1 Linux engine path changed (job_stop, job_store, job_owner, jobs, job_manager, job_client, job_resource_history); ProcessBackend and all 1.1.0 declarations unchanged; additions only.",
+    "transitional": "owner defaults to 'embedded' only so the pre-J4 call sites in application.py keep today's LIMITED foreground composition; J4 must pass the composed owner explicitly.",
+    "status": "PROPOSED_PENDING_SUPERVISOR_1_2_0_REVIEW"
   }
 }
