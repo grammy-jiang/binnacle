@@ -82,7 +82,15 @@ def test_release_scope_requires_review_and_production_cannot_override():
         "job_status",
         "stop_job",
     }
-    approved = {"read_file", "edit_file", "write_file", "run_command", "job_status"}
+    approved = {
+        "read_file",
+        "edit_file",
+        "write_file",
+        "run_command",
+        "job_status",
+        "list_files",
+        "search_text",
+    }
     enabled = {
         tool
         for tool, row in DARWIN_RELEASE_SCOPE.items()
@@ -101,12 +109,20 @@ def test_release_scope_requires_review_and_production_cannot_override():
             verdict = (
                 "CR1A-SUPERVISOR-REVIEW.json"
                 if tool in ("run_command", "job_status")
+                else "CR2-SUPERVISOR-REVIEW-PART2.json"
+                if tool in ("list_files", "search_text")
                 else "CR2-SUPERVISOR-REVIEW-PART1.json"
             )
             assert verdict in row.decision_reference
-            assert "fd7343b" in row.decision_reference
             assert (
-                "0e23f99" if tool in ("run_command", "job_status") else "ad5f22f"
+                "38e330e" if tool in ("list_files", "search_text") else "fd7343b"
+            ) in row.decision_reference
+            assert (
+                "0e23f99"
+                if tool in ("run_command", "job_status")
+                else "38e330e"
+                if tool in ("list_files", "search_text")
+                else "ad5f22f"
             ) in row.decision_reference
         else:
             assert (
