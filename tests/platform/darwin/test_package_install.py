@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import dataclasses
 import json
 import os
@@ -15,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+from binnacle.deployment.darwin import provisioner as prov_mod
 from binnacle.deployment.darwin import setup
 from binnacle.deployment.darwin.plist import render_plist, validate_test_label
 from binnacle.deployment.darwin.provisioner import (
@@ -321,6 +323,136 @@ def test_cli_roundtrip_and_global_label_refused(root: Path) -> None:
         )
         == 1
     )
+
+
+def _swap_to_symlink(victim: Path, outside: Path) -> None:
+    victim.rename(victim.with_name(victim.name + "-moved"))
+    victim.symlink_to(outside)
+
+
+def _snapshot(outside: Path) -> dict[str, bytes]:
+    return {
+        str(p.relative_to(outside)): p.read_bytes() if p.is_file() else b""
+        for p in sorted(outside.rglob("*"))
+    }
+
+
+def _outside_fixture(tmp_path: Path) -> tuple[Path, dict[str, bytes]]:
+    outside = tmp_path / "outside"
+    for sub in ("backups", "plans", "receipts"):
+        (outside / sub).mkdir(mode=0o700, parents=True)
+    (outside / f"{LABEL}.plist").write_bytes(b"outside-sentinel")
+    return outside, _snapshot(outside)
+
+
+def test_root_swap_after_pin_fails_closed_without_bootstrap(
+    root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (root / f"{LABEL}.plist").write_bytes(b"prior")
+    lc = FakeLifecycle()
+    prov, plan = _plan(root, lc)
+    outside, before = _outside_fixture(tmp_path)
+    original = prov_mod.open_private_root
+
+    def swap_after_open(path: Path, uid: int) -> int:
+        fd = original(path, uid)
+        _swap_to_symlink(path, outside)
+        return fd
+
+    monkeypatch.setattr(prov_mod, "open_private_root", swap_after_open)
+    with pytest.raises(UnsafePath):
+        prov.apply(plan)
+    assert _snapshot(outside) == before
+    assert lc.calls == []
+    # The original (moved) object was restored to its prior bytes.
+    assert (root.parent / "root-moved" / f"{LABEL}.plist").read_bytes() == b"prior"
+
+
+def test_backups_swap_after_open_stays_on_original_object(
+    root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (root / f"{LABEL}.plist").write_bytes(b"prior")
+    lc = FakeLifecycle()
+    prov, plan = _plan(root, lc)
+    outside, before = _outside_fixture(tmp_path)
+    original = prov_mod.open_private_subdir
+
+    def swap_after_open(root_fd: int, name: str, uid: int) -> int:
+        fd = original(root_fd, name, uid)
+        _swap_to_symlink(root / name, outside)
+        return fd
+
+    monkeypatch.setattr(prov_mod, "open_private_subdir", swap_after_open)
+    prov.apply(plan)
+    assert _snapshot(outside) == before
+    assert (root / "backups-moved" / f"{LABEL}.prior").read_bytes() == b"prior"
+    # Rollback re-pins by nofollow open: the symlinked backups is refused.
+    monkeypatch.undo()
+    with pytest.raises(UnsafePath):
+        prov.rollback(plan)
+    assert _snapshot(outside) == before
+
+
+def test_root_swap_between_write_and_bootstrap_is_refused(
+    root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lc = FakeLifecycle()
+    prov, plan = _plan(root, lc)
+    outside, before = _outside_fixture(tmp_path)
+    original = DarwinProvisioner._verify_handoff
+
+    def swap_then_verify(self, root_fd, plan):
+        _swap_to_symlink(root, outside)
+        original(self, root_fd, plan)
+
+    monkeypatch.setattr(DarwinProvisioner, "_verify_handoff", swap_then_verify)
+    with pytest.raises(UnsafePath) as info:
+        prov.apply(plan)
+    assert info.value.code == "handoff_path_moved"
+    assert _snapshot(outside) == before
+    assert lc.calls == []
+    assert not (root.parent / "root-moved" / f"{LABEL}.plist").exists()
+
+
+def test_plist_replaced_by_symlink_before_bootstrap_is_refused(
+    root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lc = FakeLifecycle()
+    prov, plan = _plan(root, lc)
+    outside, before = _outside_fixture(tmp_path)
+    original = DarwinProvisioner._verify_handoff
+
+    def swap_file(self, root_fd, plan):
+        plan.plist_path.unlink()
+        plan.plist_path.symlink_to(outside / f"{LABEL}.plist")
+        original(self, root_fd, plan)
+
+    monkeypatch.setattr(DarwinProvisioner, "_verify_handoff", swap_file)
+    with pytest.raises(UnsafePath):
+        prov.apply(plan)
+    assert _snapshot(outside) == before
+    assert lc.calls == []
+
+
+@pytest.mark.parametrize("sub", ["plans", "receipts"])
+def test_cli_subdir_swap_after_open_does_not_escape(
+    root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sub: str
+) -> None:
+    outside, before = _outside_fixture(tmp_path)
+    original = setup.pinned_subdir
+
+    @contextlib.contextmanager
+    def swapping(root_fd: int, name: str, uid: int):
+        with original(root_fd, name, uid) as fd:
+            if name == sub:
+                _swap_to_symlink(root / name, outside)
+            yield fd
+
+    monkeypatch.setattr(setup, "pinned_subdir", swapping)
+    base = ["--root", str(root), "--label", LABEL]
+    setup.main(["plan", *base, "--exec", "/usr/bin/true"], lifecycle=FakeLifecycle())
+    assert _snapshot(outside) == before
+    assert (root / f"{sub}-moved").is_dir()
 
 
 def test_darwin_modules_import_without_linux_services() -> None:
