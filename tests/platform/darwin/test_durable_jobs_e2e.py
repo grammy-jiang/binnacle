@@ -1,7 +1,8 @@
 """R4 J5 end-to-end durable jobs: real J1 owner + J2 manager in a test subprocess.
 
-State is a private tmp root and 127.0.0.1 port. MCP cases use test-only AVAILABLE
-rows (committed rows stay UNAVAILABLE until J-CR); launchd uses r4test.j5 labels.
+State is a private tmp root and 127.0.0.1 port. MCP cases pass AVAILABLE rows
+through the test-only release_scope seam (the committed manager rows are AVAILABLE
+from J4f 0aa7efb, gated by J-CR); launchd uses r4test.j5 labels.
 """
 
 from __future__ import annotations
@@ -411,14 +412,12 @@ def test_mcp_unreachable_manager_fails_closed_then_unknown_never_adopted(
     pgid = track(mcp.stack, job["job_id"])
     mcp.stack.end(signal.SIGKILL)
     ident_args = {"job_id": job["job_id"]}
-    for tool, args in (
-        ("run_command", {"command": "touch x"}),
-        ("stop_job", ident_args),
-    ):
-        reply = mcp.call(tool, args)  # per-call error, never a fallback
+    for tool, kw in (("run_command", {"command": "touch x"}), ("stop_job", ident_args)):
+        reply = mcp.call(tool, kw)  # per-call error, never a fallback
         assert reply["isError"] and pc.JOB_MANAGER_UNAVAILABLE in reply["text"], tool
     status = mcp.call("job_status", {"job_id": job["job_id"]})  # read-only spool
-    assert status["state"] == "running" and not status["isError"]
+    assert status["state"] == "unknown" and not status["isError"]  # SD-41
+    assert "state unverified" in status["text"] and "gone" not in status["text"]
     mcp.stack.start()  # a new incarnation never adopts the orphaned leader
     status = mcp.call("job_status", {"job_id": job["job_id"]})
     assert status["state"] == "unknown" and status.get("exit_code") is None
