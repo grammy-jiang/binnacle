@@ -9,6 +9,8 @@ jemalloc builds abort on this Pi's 16 KB kernel pages (Copilot lesson).
 import os
 import stat
 import subprocess
+from collections.abc import Callable, Iterator
+from contextlib import ExitStack, contextmanager
 from pathlib import Path, PurePath
 from typing import Annotated
 
@@ -18,6 +20,7 @@ from pydantic import Field
 
 from binnacle.config import ListFilesSettings, RootsSettings, get_settings
 from binnacle.errors import CodedToolError
+from binnacle.features.files import fd_walk
 from binnacle.features.files.paths import (
     FileToolAccess,
     full_match,
@@ -61,109 +64,93 @@ def _file_entry(p: Path) -> dict | None:
         return None
 
 
-MAX_LINK_HOPS = 40  # Darwin platform/darwin/file_access.py MAX_LINK_HOPS.
+# The r5/r6 names stay importable here; fd_walk holds the shared walk.
+MAX_LINK_HOPS = fd_walk.MAX_LINK_HOPS
+_absolute_in_root = fd_walk.absolute_in_root
 
 
-def _inside(path: Path, allowed: tuple[Path, ...]) -> bool:
-    return any(path.is_relative_to(root) for root in allowed)
+@contextmanager
+def _opened(
+    top: Path, parts: tuple[str, ...], shown: Path
+) -> Iterator[tuple[list[int], int]]:
+    """The descriptor chain from the root being listed, and the listed fd.
 
-
-def _absolute_in_root(text: str, root: str) -> list[str] | None:
-    """Lexical gate for absolute link text (r6 X2; Darwin file_access.py twin).
-
-    The components of text below root, or None: any '..' component, or text
-    outside root. Only '' and '.' components are dropped; the filesystem is
-    never consulted, so text that steps out and back is no existence oracle.
-    A trailing '/' or '/.' keeps one '' marker, so the walk requires a
-    directory there, as it does for relative text (RX2-F2).
+    Every component is opened no-follow, one at a time (SD-74): a component
+    swapped for a symlink or a file after resolve_path fails here instead of
+    being followed out of the root. The chain only traverses (O_PATH on
+    Linux); the listed directory alone is opened O_RDONLY to be read.
     """
-    raw = text.split("/")
-    parts = [part for part in raw if part not in ("", ".")]
-    base = [part for part in root.split("/") if part]
-    if ".." in parts or parts[: len(base)] != base:
-        return None
-    below = parts[len(base) :]
-    return [*below, ""] if raw[-1] in ("", ".") else below
+    with ExitStack() as opened:
+        try:
+            # Only the listed directory itself is opened readable.
+            readable = fd_walk.DIRECTORY_FLAGS
+            root_fd = opened.enter_context(
+                fd_walk.open_root(top) if parts else fd_walk.open_root(top, readable)
+            )
+            chain = opened.enter_context(
+                fd_walk.directory_chain(root_fd, parts, readable)
+            )
+        except FileNotFoundError as exc:
+            raise CodedToolError(
+                "directory_not_found", f"Directory not found: {shown}."
+            ) from exc
+        except NotADirectoryError as exc:
+            raise CodedToolError(
+                "path_changed",
+                f"Directory changed during the listing: {shown}. "
+                f"A path component is no longer a directory; list it again.",
+            ) from exc
+        except PermissionError as exc:
+            raise fd_walk.permission_denied(shown) from exc
+        # Links resolve through the open chain; the listed fd ends it (F3).
+        yield chain, chain[-1]
 
 
-def _link_target(link: Path, allowed: tuple[Path, ...]) -> Path | None:
-    """Walk a link's text as Darwin's link_target_info does; None = omit.
+def _entry_info(
+    fd: int, name: str, follow: Callable[[str], os.stat_result | None]
+) -> os.stat_result | None:
+    """ONE no-follow read of name, or of its contained target if it is a link.
 
-    Absolute text must first pass _absolute_in_root for the innermost root
-    that holds the link; the walk then starts at that root. Every component
-    is checked with lstat and must stay inside a root, so any step out of
-    the roots (also out-and-back), an absolute intermediate link, more than
-    MAX_LINK_HOPS links, a dangling link or a loop yields None.
-    """
-    try:
-        text = os.readlink(link)
-        pending = text.split("/")
-        current, hops = link.parent, 1
-        if pending[0] == "":
-            homes = [root for root in allowed if link.parent.is_relative_to(root)]
-            if not homes:
-                return None
-            current = max(homes, key=lambda root: len(root.parts))
-            below = _absolute_in_root(text, str(current))
-            if below is None:
-                return None  # '..' or another root: omitted, as on Darwin.
-            pending = below
-        while pending:
-            part = pending.pop(0)
-            if part in ("", "."):
-                continue
-            current = current.parent if part == ".." else current / part
-            if not _inside(current, allowed):
-                return None
-            info = os.lstat(current)
-            if stat.S_ISLNK(info.st_mode):
-                hops += 1
-                target = os.readlink(current)
-                if hops > MAX_LINK_HOPS or target.startswith("/"):
-                    return None
-                pending[:0] = target.split("/")
-                current = current.parent
-            elif pending and not stat.S_ISDIR(info.st_mode):
-                return None
-    except OSError:
-        return None
-    return current
-
-
-def _list_entry(p: Path, allowed: tuple[Path, ...]) -> dict | None:
-    """Type p from ONE lstat of its contained target (p itself if not a link).
-
-    The entry never re-follows the link: a target that is a link by now, or
-    any lstat failure (Darwin file_traversal.py walk: EACCES/ENOENT entries
-    are omitted), omits the entry before it is counted (SD-60).
+    The entry never re-follows the link: any lstat failure (Darwin
+    file_traversal.py walk: EACCES/ENOENT entries are omitted) or a link
+    whose target does not resolve inside the root being listed omits the
+    entry before it is counted (SD-60).
     """
     try:
-        info = os.lstat(p)
-        if stat.S_ISLNK(info.st_mode):
-            target = _link_target(p, allowed)
-            if target is None or not _inside(target, allowed):
-                return None
-            info = os.lstat(target)
-            if stat.S_ISLNK(info.st_mode):
-                return None
+        info = os.lstat(name, dir_fd=fd)
     except OSError:
         return None
-    if stat.S_ISDIR(info.st_mode):
-        return {"path": str(p), "type": "dir"}
-    return {"path": str(p), "type": "file", "bytes": info.st_size}
+    return follow(name) if stat.S_ISLNK(info.st_mode) else info
 
 
 def _list_mode(
     root: Path, max_results: int, include_hidden: bool, allowed: tuple[Path, ...]
 ) -> ToolResult:
-    listed = [
-        (p, e)
-        for p in root.iterdir()
-        if p.name != ".git"
-        and (include_hidden or not p.name.startswith("."))
-        and (e := _list_entry(p, allowed)) is not None
-    ]
-    listed.sort(key=lambda pe: (0 if pe[1]["type"] == "dir" else 1, pe[0].name.lower()))
+    # Links resolve inside the innermost root holding root, as Darwin's grant
+    # descriptor walk does: '..' into an outer root is omitted (SD-74).
+    top = max(
+        (r for r in allowed if root.is_relative_to(r)), key=lambda r: len(r.parts)
+    )
+    parts = root.relative_to(top).parts
+    listed = []
+    with _opened(top, parts, root) as (chain, fd):
+
+        def follow(name: str) -> os.stat_result | None:
+            return fd_walk.link_target_info(
+                chain[0], parts, name, str(top), chain=chain
+            )
+
+        for name in os.listdir(fd):
+            if name == ".git" or (not include_hidden and name.startswith(".")):
+                continue
+            info = _entry_info(fd, name, follow)
+            if info is None:
+                continue
+            entry: dict = {"path": str(root / name), "type": "dir"}
+            if not stat.S_ISDIR(info.st_mode):
+                entry.update(type="file", bytes=info.st_size)
+            listed.append((name, entry))
+    listed.sort(key=lambda ne: (0 if ne[1]["type"] == "dir" else 1, ne[0].lower()))
     truncated = len(listed) > max_results
     entries = [e for _, e in listed[:max_results]]
     payload = {
