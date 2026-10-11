@@ -22,8 +22,8 @@ OWNER_REASON = re.compile(r"^(A\d|B0|E0|T0|baseline): \S.*")
 # LINUX_PIN_FILES hold one alias-based per-test skipif(sys.platform != "linux").
 _PINS = """contracts/descriptions contracts/golden_outputs contracts/job_schemas
     contracts/job_spool_compat contracts/job_status_cursor_internal
-    contracts/os_stage1_wire_parity contracts/protocol contracts/search_text_surface
-    contracts/server_composition contracts/tool_surface contracts/visibility
+    contracts/os_stage1_wire_parity contracts/search_text_surface
+    contracts/server_composition contracts/tool_surface
     integration/composition_workflows integration/os_pure_application"""
 LINUX_PIN_FILES = [
     p.replace("/", "/test_").join(("tests/", ".py")) for p in re.findall(r"\S+", _PINS)
@@ -39,6 +39,7 @@ platform/darwin/test_ipc_launchd.py | A3: per-test opt-in real launchd bootstrap
 platform/darwin/test_search_parity.py | A4: in-body skip when APFS rejects a non-UTF-8 filename
 platform/darwin/test_package_install.py | A6: per-test Apple-silicon (arm64) native package install
 platform/darwin/test_composition_contract.py | B0: in-body skip of the real-socket peer check off Darwin
+contracts/test_darwin_interface.py | B0: Darwin root-grant lifecycle tests need native descriptors (R2D-T0A6-01 fix ecf6aea)
 """
 ALLOWED_PLATFORM_SKIPS = {
     **{
@@ -78,6 +79,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_search_parity.py": 1,
     "tests/platform/darwin/test_package_install.py": 1,
     "tests/platform/darwin/test_composition_contract.py": 3,
+    "tests/contracts/test_darwin_interface.py": 1,
     **dict.fromkeys(LINUX_PIN_FILES, 1),
 }
 

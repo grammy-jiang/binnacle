@@ -3,7 +3,9 @@
 import asyncio
 import hashlib
 import sys
+import tempfile
 from collections import Counter
+from pathlib import Path
 
 import mcp.types
 import pytest
@@ -26,6 +28,16 @@ LINUX_ONLY = pytest.mark.skipif(
         "Linux text/hash and roots pin; Darwin text pinned by tests/contracts/test_darwin_interface.py::test_native_wire_schema_preserves_v101_with_declared_description_exception"
     ),
 )
+
+
+@pytest.fixture()
+def tmp_path(tmp_path):
+    """On Darwin the configured roots hold /tmp, not pytest's /private/var/folders."""
+    if sys.platform != "darwin":
+        yield tmp_path
+        return
+    with tempfile.TemporaryDirectory(prefix="t0-", dir="/tmp") as directory:
+        yield Path(directory)
 
 
 PROFILES = [
@@ -172,7 +184,6 @@ def test_fresh_root_validation_parity(tool, arguments, field):
     assert fresh.content == exported.content
 
 
-@LINUX_ONLY
 @pytest.mark.parametrize("mode", ["2026-07-28", "legacy"])
 def test_two_roots_and_clients_keep_visibility_isolated(mode, tmp_path):
     async def go():

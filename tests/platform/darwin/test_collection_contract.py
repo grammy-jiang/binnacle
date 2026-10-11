@@ -326,16 +326,14 @@ def test_uplink_linux_only_skip_marks_individual_cases_not_the_module():
 # alias on another test fails check_skip_policy until this table is edited.
 _PIN_TABLE = """
 descriptions 1 1
-golden_outputs 7 7
+golden_outputs 1 1
 job_schemas 4 4
 job_spool_compat 4 4
 job_status_cursor_internal 12 12
 os_stage1_wire_parity 2 2
-protocol 4 4
 search_text_surface 2 2
-server_composition 3 8
+server_composition 2 6
 tool_surface 2 4
-visibility 1 1
 """
 _PIN_ROWS = [r.split() for r in _PIN_TABLE.strip().splitlines()]
 LINUX_PIN_USE_COUNTS = {f"tests/contracts/test_{n}.py": int(u) for n, u, _ in _PIN_ROWS}
@@ -348,7 +346,7 @@ for _file, _uses in (
 ):
     _rel = f"tests/integration/test_{_file}.py"
     LINUX_PIN_USE_COUNTS[_rel] = LINUX_PIN_NODE_COUNTS[_rel] = _uses
-LINUX_PIN_TOTAL_NODES = 53
+LINUX_PIN_TOTAL_NODES = 40
 
 
 def _repo_sources() -> dict[str, str]:
@@ -373,7 +371,7 @@ def test_linux_alias_use_counts_are_pinned_per_file():
 def test_reusing_the_linux_alias_on_another_test_fails_the_policy():
     """Negative: an extra @LINUX_ONLY in a pinned file needs a reviewable edit."""
     sel = _selection_module()
-    rel = "tests/contracts/test_visibility.py"
+    rel = "tests/contracts/test_descriptions.py"
     sources = _repo_sources()
     sources[rel] += "\n\n@LINUX_ONLY\ndef test_smuggled_linux_pin():\n    pass\n"
     problems = sel.check_skip_policy(

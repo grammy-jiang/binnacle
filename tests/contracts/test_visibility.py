@@ -1,7 +1,6 @@
 """Implementation gate for binnacle/visibility.py (per-client tool hiding)."""
 
 import asyncio
-import sys
 
 import mcp.types
 import pytest
@@ -11,12 +10,6 @@ from fastmcp.exceptions import ToolError
 from binnacle import server
 from binnacle.mcp.identity import ClientIdentity
 from binnacle.mcp.visibility import ClientToolVisibility
-
-LINUX_ONLY = pytest.mark.skipif(
-    sys.platform != "linux",
-    reason="Linux roots/grants for hidden-tool call; Darwin opened grants closed",
-)
-
 
 FULL = {
     "read_file",
@@ -62,7 +55,6 @@ def test_other_client_unaffected():
     assert tool_names("claude-code") == FULL
 
 
-@LINUX_ONLY
 def test_hidden_tool_call_is_refused():
     async def run():
         info = mcp.types.Implementation(name="openai-mcp(ChatGPT)", version="1")
