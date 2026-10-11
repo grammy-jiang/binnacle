@@ -8,10 +8,12 @@ import fnmatch
 import re
 
 # These bindings contain ordinary injected contracts, never host selection.
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path, PurePath, PurePosixPath
+from threading import RLock
+from uuid import uuid4
 
 from binnacle.config import RootsSettings, get_settings
 from binnacle.errors import CodedToolError
@@ -226,6 +228,8 @@ class FileToolAccess:
         generation: str,
         capability: Capability,
         capabilities: Mapping[str, Capability] | None = None,
+        provider_factory: Callable[[], tuple[FileAccess, SearchAccess | None]]
+        | None = None,
     ) -> None:
         self.files = files
         self.search = search
@@ -234,18 +238,64 @@ class FileToolAccess:
         self.default_root = roots.default_root.expanduser()
         self.grants: dict[Path, RootGrant] = {}
         self.closed = False
-        if capability.state != CapabilityState.LIMITED or files is None:
+        self._lock = RLock()
+        self._active = 0
+        self._factory = provider_factory
+        self._generation = generation
+        self._pairs: tuple[tuple[Path, Path], ...] = ()
+        if capability.state != CapabilityState.LIMITED or (
+            files is None and provider_factory is None
+        ):
             return
-        try:
+        # Roots are captured once; later lifespans reopen exactly these
+        # canonical directories, never a re-resolved alias.
+        self._pairs = tuple(
+            (alias.expanduser(), canonical)
             for alias, canonical in zip(
                 roots.allowed, roots.canonical_allowed, strict=True
-            ):
-                grant = files.grant(canonical, generation=generation)
-                self.grants[alias.expanduser()] = grant
-                self.grants[canonical] = grant
+            )
+        )
+        if provider_factory is not None:
+            # Provider-backed access serves only inside an active lifespan.
+            self.files = self.search = None
+            self.closed = True
+            return
+        try:
+            self._open_grants(generation)
         except BaseException:
             self.close()
             raise
+
+    def _open_grants(self, generation: str) -> None:
+        if self.files is None:
+            raise CodedToolError(
+                "native_capability_unavailable", "File provider missing."
+            )
+        for alias, canonical in self._pairs:
+            grant = self.files.grant(canonical, generation=generation)
+            self.grants[alias] = grant
+            self.grants[canonical] = grant
+
+    def enter(self) -> None:
+        """Start (or join) an application generation; the first entry opens grants."""
+        with self._lock:
+            if self._factory is not None and self._active == 0 and self._pairs:
+                files, search = self._factory()
+                self.files, self.search, self.grants = files, search, {}
+                try:
+                    self._open_grants(f"{self._generation}-{uuid4().hex}")
+                except BaseException:
+                    self._close_locked()
+                    raise
+                self.closed = False
+            self._active += 1
+
+    def exit(self) -> None:
+        """Leave a generation; the last exit closes every grant."""
+        with self._lock:
+            self._active = max(0, self._active - 1)
+            if self._active == 0:
+                self._close_locked()
 
     def require(self, tool: str) -> None:
         capability = (
@@ -266,16 +316,19 @@ class FileToolAccess:
         return self.files
 
     def select(self, raw: str) -> tuple[RootGrant, str, Path]:
-        if self.closed:
-            raise CodedToolError("native_access_closed", "Opened grants are closed.")
-        if self.files is None or self.capability.state != CapabilityState.LIMITED:
-            raise CodedToolError(
-                "native_capability_unavailable",
-                "native_capability_unavailable: Files and search are unavailable on macOS.",
+        with self._lock:
+            if self.closed:
+                raise CodedToolError(
+                    "native_access_closed", "Opened grants are closed."
+                )
+            if self.files is None or self.capability.state != CapabilityState.LIMITED:
+                raise CodedToolError(
+                    "native_capability_unavailable",
+                    "native_capability_unavailable: Files and search are unavailable on macOS.",
+                )
+            return select_root_grant(
+                raw, default_root=self.default_root, grants=dict(self.grants)
             )
-        return select_root_grant(
-            raw, default_root=self.default_root, grants=self.grants
-        )
 
     @contextmanager
     def operation(self, raw: str) -> Iterator[tuple[RootGrant, str, Path]]:
@@ -315,12 +368,22 @@ class FileToolAccess:
                 opened.close()
 
     def close(self) -> None:
-        if not self.closed:
-            self.closed = True
-            for grant in self.grants.values():
-                grant.close()
-            if self.files is not None:
-                self.files.close()
+        with self._lock:
+            self._close_locked()
+
+    def _close_locked(self) -> None:
+        if self.closed:
+            return
+        self.closed = True
+        for grant in self.grants.values():
+            grant.close()
+        files = self.files
+        if self._factory is not None:
+            # A closed generation keeps no descriptor-bearing provider.
+            self.files = self.search = None
+            self.grants = {}
+        if files is not None:
+            files.close()
 
 
 def focused_file_access(roots: RootsSettings) -> FileToolAccess | None:

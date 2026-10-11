@@ -5,11 +5,13 @@ import json
 import platform
 from pathlib import Path
 
+import pytest
 from fastmcp import Client
 
 from binnacle.application import create_application
 from binnacle.config import RootsSettings, Settings
 from binnacle.features.commands.restricted_backend import RestrictedCommandBackend
+from binnacle.features.files import paths
 from binnacle.features.files.paths import FileToolAccess
 from binnacle.platform.contracts.capability_contracts import Capability, CapabilityState
 
@@ -312,3 +314,116 @@ for profile, name in PROFILES.items():
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+_DARWIN_ONLY = pytest.mark.skipif(
+    platform.system() != "Darwin", reason="native Files lifecycle"
+)
+
+
+def _generation_app(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from binnacle.application import compose_native_tools
+    from binnacle.platform import composition
+    from binnacle.platform.contracts.darwin_release_scope import DARWIN_RELEASE_SCOPE
+
+    monkeypatch.setattr(composition.platform, "system", lambda: "Darwin")
+    root = (tmp_path / "root").resolve()
+    root.mkdir()
+    (root / "file").write_text("hello")
+    settings = Settings(roots=RootsSettings(default_root=root, extra_roots=()))
+    scope = {
+        tool: replace(
+            row, capability=Capability(CapabilityState.UNAVAILABLE, "test", tool)
+        )
+        for tool, row in DARWIN_RELEASE_SCOPE.items()
+    }
+    for tool in ("read_file", "list_files"):
+        scope[tool] = replace(
+            scope[tool], capability=Capability(CapabilityState.LIMITED, "test", tool)
+        )
+    access, backend = compose_native_tools(settings=settings, release_scope=scope)
+    app = create_application(
+        settings=settings, token="test", backend=backend, file_access=access
+    )
+    return app, access, root
+
+
+async def _both_tools_succeed(client, root):
+    read = await client.call_tool("read_file", {"path": str(root / "file")})
+    assert read.structured_content["content"] == "hello"
+    listing = await client.call_tool("list_files", {"path": str(root)})
+    assert not listing.is_error
+
+
+@_DARWIN_ONLY
+def test_sequential_clients_on_one_server_reopen_grants(tmp_path, monkeypatch):
+    app, access, root = _generation_app(tmp_path, monkeypatch)
+
+    async def exercise():
+        for _ in range(2):
+            async with Client(app) as client:
+                await _both_tools_succeed(client, root)
+            assert access.closed and not access.grants
+
+    asyncio.run(exercise())
+
+
+@_DARWIN_ONLY
+def test_overlapping_clients_share_one_generation_until_last_exit(
+    tmp_path, monkeypatch
+):
+    app, access, root = _generation_app(tmp_path, monkeypatch)
+
+    async def exercise():
+        async with Client(app) as first:
+            grants = dict(access.grants)
+            async with Client(app) as second:
+                await _both_tools_succeed(second, root)
+            assert not access.closed and access.grants == grants
+            await _both_tools_succeed(first, root)
+        assert access.closed
+
+    asyncio.run(exercise())
+
+
+@_DARWIN_ONLY
+def test_call_after_last_exit_is_typed_unavailable_not_stale(tmp_path, monkeypatch):
+    app, access, root = _generation_app(tmp_path, monkeypatch)
+
+    async def exercise():
+        async with Client(app) as client:
+            await _both_tools_succeed(client, root)
+        assert access.files is None and access.search is None
+        with pytest.raises(paths.CodedToolError) as caught:
+            access.select(str(root / "file"))
+        assert caught.value.telemetry_code == "native_access_closed"
+        with pytest.raises(paths.CodedToolError) as caught:
+            access.read(str(root / "file"), 100)
+        assert caught.value.telemetry_code == "native_access_closed"
+
+    asyncio.run(exercise())
+
+
+@_DARWIN_ONLY
+def test_no_descriptor_leak_across_twenty_lifespans(tmp_path, monkeypatch):
+    import os
+
+    app, _access, root = _generation_app(tmp_path, monkeypatch)
+
+    def open_fds():
+        return len(os.listdir("/dev/fd"))
+
+    async def cycle():
+        async with Client(app) as client:
+            await _both_tools_succeed(client, root)
+
+    async def exercise():
+        await cycle()  # warm lazy imports and loop descriptors
+        before = open_fds()
+        for _ in range(20):
+            await cycle()
+        assert open_fds() <= before
+
+    asyncio.run(exercise())
