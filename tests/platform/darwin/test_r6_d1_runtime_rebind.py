@@ -26,11 +26,17 @@ import pytest
 
 from binnacle.features.commands import job_client
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
+from binnacle.platform.darwin import generation_runtime as runtime
 from binnacle.platform.darwin import job_manager_entry as entry
 from binnacle.platform.darwin.generation_runtime import denied
 from tests.platform.darwin.test_job_manager_entry import ping_when_ready
 from tests.platform.darwin.test_job_manager_resilience import wait_for
-from tests.platform.darwin.test_job_manager_service import meta_of
+from tests.platform.darwin.test_job_manager_service import (
+    ReferenceOwner,
+    manager_for,
+    meta_of,
+    write_record,
+)
 from tests.platform.darwin.test_r6_d2_stop_marker_start import (
     start_entry,
     write_marker,
@@ -197,11 +203,22 @@ def test_sun_path_boundary_and_a_space_in_the_path():
 
 
 class FakeManager:
-    def __init__(self, running: int) -> None:
-        self.running = running
+    """Records on disk; ``state`` answers in the manager's D3 vocabulary."""
 
-    def job_counts(self) -> tuple[int, int]:
-        return self.running, 0
+    owner_instance_id = "me"
+
+    def __init__(self, jobs_dir: Path, **records: tuple[str, str]) -> None:
+        self.jobs_dir, self.states = jobs_dir, {}
+        for job_id, (owner_id, state) in records.items():  # job_id=(owner, state)
+            write_record(jobs_dir, job_id, owner_instance_id=owner_id)
+            self.states[job_id] = state
+
+    def state(self, job_id: str) -> str:
+        return self.states[job_id]
+
+    def job_counts(self) -> tuple[int, int]:  # what the base (r6 D1) rule read
+        states = list(self.states.values())
+        return states.count("running"), states.count("unknown")
 
     def handle(self, payload):
         return {"ok": True}
@@ -234,7 +251,7 @@ def test_owned_jobs_turn_every_endpoint_loss_into_a_rebind(monkeypatch, tmp_path
     leases = scripted_serving(monkeypatch, failures=3)
     first, stop = Lease(), threading.Event()
     entry.serve_endpoint(
-        FakeManager(running=1),
+        FakeManager(tmp_path / "jobs", a=("me", "running")),
         socket_path=tmp_path / "jobs.sock",
         lease=first,
         stop=stop,
@@ -249,7 +266,7 @@ def test_first_binding_failure_without_jobs_keeps_the_startup_contract(
     leases = scripted_serving(monkeypatch, failures=1)
     with pytest.raises(NativeCapabilityError, match="runtime_root_unsafe"):
         entry.serve_endpoint(
-            FakeManager(running=0),
+            FakeManager(tmp_path / "jobs"),
             socket_path=tmp_path / "jobs.sock",
             lease=Lease(),
             stop=threading.Event(),
@@ -263,9 +280,132 @@ def test_a_set_stop_is_never_turned_into_a_rebind(monkeypatch, tmp_path):
     stop.set()
     with pytest.raises(NativeCapabilityError):
         entry.serve_endpoint(
-            FakeManager(running=1),
+            FakeManager(tmp_path / "jobs", a=("me", "running")),
             socket_path=tmp_path / "jobs.sock",
             lease=Lease(),
             stop=stop,
         )
     assert len(leases) == 1
+
+
+# --- R6-D21-a3 (SD-69): SR6-F3 owns_jobs and SR6-F4 bounded rebind attempts ---
+
+
+def test_only_unknown_own_records_keep_the_manager_rebinding(monkeypatch, tmp_path):
+    """SR6-F3: any doubt counts as owning; a lost first endpoint never exits."""
+    leases = scripted_serving(monkeypatch, failures=3)
+    first, stop = Lease(), threading.Event()
+    manager = FakeManager(tmp_path / "jobs", a=("me", "unknown"), b=("me", "exited"))
+    entry.serve_endpoint(
+        manager, socket_path=tmp_path / "jobs.sock", lease=first, stop=stop
+    )
+    assert leases == [first, "fresh-1", "fresh-2", "fresh-3"] and stop.is_set()
+
+
+def test_other_incarnations_unknown_records_keep_the_startup_contract(
+    monkeypatch, tmp_path
+):
+    """SR6-F3: retained UNKNOWN records of earlier incarnations are not ours."""
+    leases = scripted_serving(monkeypatch, failures=1)
+    manager = FakeManager(tmp_path / "jobs", a=("previous", "unknown"))
+    with pytest.raises(NativeCapabilityError, match="runtime_root_unsafe"):
+        entry.serve_endpoint(
+            manager,
+            socket_path=tmp_path / "jobs.sock",
+            lease=Lease(),
+            stop=threading.Event(),
+        )
+    assert len(leases) == 1
+
+
+def test_owns_jobs_counts_running_or_unknown_records_of_this_incarnation(tmp_path):
+    jobs, owner = tmp_path / "jobs", ReferenceOwner()
+    manager = manager_for(owner, jobs)
+    me = owner.owner_instance_id
+    assert entry.owns_jobs(manager) is False  # no records
+    write_record(jobs, "a" * 12, owner_instance_id="previous", authority="UNKNOWN")
+    write_record(jobs, "b" * 12, owner_instance_id="previous")  # foreign, unfinished
+    write_record(jobs, "c" * 12, owner_instance_id=me, exit_code=0)  # ours, exited
+    assert manager.job_counts() == (0, 2) and entry.owns_jobs(manager) is False
+    # Ours, unfinished, but the owner no longer reports it OWNED+alive: unknown.
+    write_record(jobs, "d" * 12, owner_instance_id=me)
+    assert manager.state("d" * 12) == "unknown" and entry.owns_jobs(manager) is True
+
+
+def test_owns_jobs_fails_safe_on_any_error(tmp_path):
+    class Broken(FakeManager):
+        def state(self, job_id):
+            raise OSError("authority unreadable")
+
+    broken = Broken(tmp_path / "jobs", a=("me", "unknown"))
+    assert entry.owns_jobs(broken) is True
+
+
+class Clock:
+    """Injected monotonic/wall clock: no real rebind sleeps."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def time(self) -> float:
+        return self.now
+
+
+class SteppingStop(threading.Event):
+    """``wait(delay)`` advances the injected clock instead of sleeping."""
+
+    def __init__(self, clock: Clock) -> None:
+        super().__init__()
+        self.clock, self.waits = clock, 0
+
+    def wait(self, timeout=None):
+        self.clock.now += timeout or 0.0
+        self.waits += 1
+        return self.is_set()
+
+
+def test_failed_rebinds_release_leases_and_rate_limit_warnings(
+    monkeypatch, tmp_path, caplog
+):
+    """SR6-F4: N failed attempts leave at most 1 extra _ROOTS entry and emit a
+    warning for the first loss, then at most one per REBIND_WARN_S."""
+    import binnacle.platform.darwin.ipc_transport as transport
+
+    attempts, failures, clock = [], 200, Clock()
+    with tempfile.TemporaryDirectory(prefix="r6-d21a3-", dir="/tmp") as value:
+        root = Path(value).resolve() / "rt"  # recreated 0700 by the real fresh_lease
+        sock, first = root / "jobs.sock", Lease()
+
+        def serve(socket_path, *, lease, handler, stop):
+            attempts.append(lease)
+            assert lease is first or lease in runtime._ROOTS  # minted, registered
+            if len(attempts) <= failures:
+                raise denied("runtime_root_unsafe")
+            stop.set()
+
+        monkeypatch.setattr(transport, "serve_authenticated", serve)
+        monkeypatch.setattr(entry, "time", clock)
+        before = set(runtime._ROOTS)
+        stop = SteppingStop(clock)
+        with caplog.at_level("WARNING", logger="binnacle.job_manager"):
+            entry.serve_endpoint(
+                FakeManager(tmp_path / "jobs", a=("me", "running")),
+                socket_path=sock,
+                lease=first,
+                stop=stop,
+            )
+        extra = set(runtime._ROOTS) - before
+        assert len(attempts) == failures + 1 and stop.waits == failures
+        assert len(extra) <= 1 and extra <= {attempts[-1]}  # only the live lease
+        assert all(lease not in runtime._ROOTS for lease in attempts[1:-1])
+        runtime.release_lease(attempts[-1], None)  # test cleanup
+    lost = [r for r in caplog.records if "job_manager_endpoint_lost" in r.message]
+    elapsed = clock.now - 1000.0  # the injected backoff, about 5 s per attempt
+    assert lost and "suppressed=0" in lost[0].message  # the first loss is logged
+    assert len(lost) <= 1 + elapsed / entry.REBIND_WARN_S + 1
+    assert len(lost) < failures / 10  # bounded, not one per attempt
+    suppressed = sum(int(r.message.rsplit("=", 1)[1]) for r in lost[1:])
+    assert suppressed + len(lost) <= failures  # every attempt counted at most once

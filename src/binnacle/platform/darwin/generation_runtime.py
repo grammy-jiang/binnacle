@@ -33,6 +33,7 @@ from binnacle.platform.contracts.runtime_path_contracts import RuntimePaths
 
 _ROOTS: dict[ServiceLease, Path] = {}
 _LOCKS: set[int] = set()
+release_lease = _ROOTS.pop  # SR6-F4: forget a superseded lease (None if absent)
 
 
 def _close_lock(lock: int) -> None:

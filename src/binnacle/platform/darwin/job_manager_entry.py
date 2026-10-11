@@ -48,13 +48,17 @@ from binnacle.platform.darwin.generation_runtime import (
     open_private_root,
     open_service_lease,
     private_file,
+    release_lease,
     resolve_runtime_paths,
+    unlink_owned,
 )
 from binnacle.platform.darwin.job_group_fence import WAITID_REQUIRED
 from binnacle.platform.darwin.job_manager_service import (
     MANAGER_LABEL,
     DarwinJobManager,
     jobs_dir_writer,
+    list_job_ids,
+    read_meta,
 )
 from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
 
@@ -62,12 +66,14 @@ log = logging.getLogger("binnacle.job_manager")
 EX_FAILED, EX_USAGE, EX_TEMPFAIL, EX_CONFIG = 1, 64, 75, 78  # sysexits.h
 STOP_MARKER_SUFFIX = ".stop"
 STOP_PENDING_CODE = "manager_stopping"  # D2: typed, retryable start refusal
+STOP_MARKER_AGE_S = (-5.0, 300.0)  # SR6-F1: honored only for -5 s <= age < 300 s
 CONFIG_FILE_ENV = "BINNACLE_CONFIG_FILE"
 # env_nested_delimiter overrides, and the runtime root the client would not share
 _OVERRIDES = ("BINNACLE_JOBS__", "BINNACLE_RUN_COMMAND__", "BINNACLE_RUNTIME_DIR")
 BOOT_SESSION = re.compile(r"[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}")
 SUN_PATH_MAX = 104  # Darwin sockaddr_un.sun_path bytes, terminating NUL included
 REBIND_DELAY_S = (0.1, 5.0)  # D1: first and longest wait before an endpoint rebind
+REBIND_WARN_S = 60.0  # SR6-F4: one endpoint-loss warning per code per 60 s
 
 
 def serve_job_manager(
@@ -128,9 +134,12 @@ def require_socket_path(socket_path: Path) -> None:
 
 
 def owns_jobs(manager: DarwinJobManager) -> bool:
-    """Any doubt counts as owning: the manager never exits on uncertainty."""
+    """Any doubt counts as owning (SR6-F3: running or unknown, this incarnation's)."""
     try:
-        return manager.job_counts()[0] > 0
+        jobs, me = manager.jobs_dir, manager.owner_instance_id
+        metas = {i: read_meta(jobs, i) or {} for i in list_job_ids(jobs)}
+        mine = [i for i, meta in metas.items() if meta.get("owner_instance_id") == me]
+        return any(manager.state(i) != "exited" for i in mine)
     except Exception:  # noqa: BLE001 - fail safe: keep serving the jobs
         return True
 
@@ -138,11 +147,9 @@ def owns_jobs(manager: DarwinJobManager) -> bool:
 def fresh_lease(socket_path: Path, label: str) -> ServiceLease:
     """D1: recreate the private 0700 runtime root if gone; a new generation."""
     require_socket_path(socket_path)
-    os.close(open_private_root(socket_path.parent, create=True))
-    generation = secrets.token_hex(16)
-    return open_service_lease(
-        root=socket_path.parent, label=label, generation=generation
-    )
+    root, generation = socket_path.parent, secrets.token_hex(16)
+    os.close(open_private_root(root, create=True))
+    return open_service_lease(root=root, label=label, generation=generation)
 
 
 def serve_endpoint(
@@ -154,35 +161,36 @@ def serve_endpoint(
 ) -> None:
     """D1: serve until ``stop``, rebinding a lost endpoint while owning jobs.
 
-    A failure of the first binding while this incarnation owns no job keeps
-    the startup contract (it raises: non-zero exit, launchd restarts a fresh
-    incarnation, nothing is lost). Otherwise every loss - socket or credential
-    file removed or replaced, runtime root removed - is followed by a rebind
-    under a fresh lease after a capped backoff. The jobs-dir writer lock is
-    held throughout, so a rebind never admits a second writer. Unrecognised
-    endpoint debris is never adopted or removed (A3 reclaim refuses it): the
-    manager keeps its jobs and retries until that entry is gone.
-    """
-    from binnacle.platform.darwin.ipc_transport import serve_authenticated
+    A first-binding failure while owning no job raises (startup contract). Any
+    other loss of socket, .auth or root rebinds under a fresh lease after a
+    capped backoff, even without jobs once rebound (SR6-N1). The jobs-dir writer
+    lock is held throughout; foreign debris is never adopted (A3 reclaim).
+    SR6-F4: a superseded fresh lease is released before the next is minted."""
+    from binnacle.platform.darwin.ipc_transport import serve_authenticated as serve
 
     current: ServiceLease | None = lease
-    delay = REBIND_DELAY_S[0]
+    delay, quiet = REBIND_DELAY_S[0], dict[str, tuple[float, int]]()
     while True:
         started = time.monotonic()
         try:
             if current is None:
                 current = fresh_lease(socket_path, lease.label)
-            handler = manager.handle
-            serve_authenticated(socket_path, lease=current, handler=handler, stop=stop)
+            serve(socket_path, lease=current, handler=manager.handle, stop=stop)
             return  # serving ends only once ``stop`` is set
         except (NativeCapabilityError, OSError, ValueError) as exc:
             if stop.is_set() or (current is lease and not owns_jobs(manager)):
                 raise
             code = getattr(exc, "code", type(exc).__name__)
-            event = "event=job_manager_endpoint_lost code=%s rebind_in_s=%.1f"
-            log.warning(event, code, delay)
+            warned_at, suppressed = quiet.get(code, (float("-inf"), 0))
+            if time.monotonic() - warned_at >= REBIND_WARN_S:  # per code (SR6-F4)
+                event = "event=job_manager_endpoint_lost code=%s rebind_in_s=%.1f"
+                log.warning(event + " suppressed=%d", code, delay, suppressed)
+                warned_at, suppressed = time.monotonic(), -1  # this one is logged
+            quiet[code] = (warned_at, suppressed + 1)
         if time.monotonic() - started > REBIND_DELAY_S[1]:
             delay = REBIND_DELAY_S[0]  # a long-served endpoint restarts the backoff
+        if current is not None and current is not lease:
+            release_lease(current, None)  # the live (first) lease is never released
         current = None
         if stop.wait(delay):
             return
@@ -280,7 +288,11 @@ def compose_owner(boot: str) -> DarwinJobProcessOwner:
     return DarwinJobProcessOwner(boot_id=boot, start_reaper=False)
 
 
-def _stop_marker(socket_path: Path, owner_instance_id: str, *, consume: bool) -> bool:
+def stop_marker_names(socket_path: Path, owner: str, *, consume: bool = False) -> bool:
+    """D2 peek (``consume``: remove it). SR6-F1: only a FRESH own marker counts.
+
+    Fresh: ``STOP_MARKER_AGE_S`` by the read file's ``st_mtime`` (format as
+    before). A stale own marker logs a warning and is removed (the inode read)."""
     name = socket_path.name + STOP_MARKER_SUFFIX
     try:
         root = open_private_root(socket_path.parent)
@@ -289,26 +301,25 @@ def _stop_marker(socket_path: Path, owner_instance_id: str, *, consume: bool) ->
     try:
         try:
             with os.fdopen(private_file(root, name), "rb") as stream:
+                info = os.fstat(stream.fileno())
                 value = bounded_json(stream.read(65537))
         except (OSError, ValueError, NativeCapabilityError):
             return False
-        if consume:
-            with suppress(OSError):
-                os.unlink(name, dir_fd=root)
+        age, mine = time.time() - info.st_mtime, value.get("owner_instance_id") == owner
+        fresh = STOP_MARKER_AGE_S[0] <= age < STOP_MARKER_AGE_S[1]
+        if mine and not fresh:
+            log.warning("event=stop_marker_stale age_s=%.0f", age)
+        if consume or (mine and not fresh):
+            with suppress(OSError):  # never another entry, never a link target
+                unlink_owned(root, name, (info.st_dev, info.st_ino))
     finally:
         os.close(root)
-    return value.get("owner_instance_id") == owner_instance_id
+    return mine and fresh
 
 
-def stop_pending_refusal(
-    socket_path: Path, owner_instance_id: str
-) -> dict[str, object] | None:
-    """D2: refuse ``start`` while the quiet-window marker names this incarnation.
-
-    Typed and retryable; the text is the existing manager-unavailable class
-    (no new tool text), and the caller creates no job record.
-    """
-    if not stop_marker_names(socket_path, owner_instance_id):
+def stop_pending_refusal(socket_path: Path, owner: str) -> dict[str, object] | None:
+    """D2: typed, retryable; the existing manager-unavailable text, no record."""
+    if not stop_marker_names(socket_path, owner):
         return None
     log.info("event=job_start_refused reason=stop_marker")
     error = f"{JOB_MANAGER_UNAVAILABLE} at {socket_path}: {STOP_PENDING_CODE}"
@@ -317,12 +328,7 @@ def stop_pending_refusal(
 
 def provisioner_stop(socket_path: Path, owner_instance_id: str) -> bool:
     """Consume the quiet-window stop marker; it must name this incarnation."""
-    return _stop_marker(socket_path, owner_instance_id, consume=True)
-
-
-def stop_marker_names(socket_path: Path, owner_instance_id: str) -> bool:
-    """D2: read-only peek; a marker naming another incarnation is ignored."""
-    return _stop_marker(socket_path, owner_instance_id, consume=False)
+    return stop_marker_names(socket_path, owner_instance_id, consume=True)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
