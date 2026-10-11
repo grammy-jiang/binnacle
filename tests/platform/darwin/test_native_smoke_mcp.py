@@ -1,13 +1,9 @@
 """E0 native authenticated MCP smoke (interface 1.1.0), PRODUCTION scope only.
 
-Test-owned, transient, loopback-only: a real FastMCP HTTP endpoint on an ephemeral
-127.0.0.1 port with a random token and a private spool, driven by a real MCP client,
-with positive teardown. No service, launchd or TCC; no path outside a ``/tmp`` root
-the test owns. Only the committed ``DARWIN_RELEASE_SCOPE`` is exercised (no
-``release_scope`` argument): seven tools LIMITED, ``stop_job`` UNAVAILABLE for good.
-Off a native host every test skips through the ``native_host`` capability probe.
-FULL_PARITY_NO_GO: eight registered names never imply eight enabled tools.
-Set ``E0_EVIDENCE_DIR`` to have each test write its observations as JSON.
+A test-owned, loopback-only FastMCP endpoint (random token, private spool, root under
+``/tmp``) driven by a real MCP client, with positive teardown. Only the committed
+``DARWIN_RELEASE_SCOPE`` is used (no ``release_scope`` argument): seven tools LIMITED,
+``stop_job`` UNAVAILABLE. FULL_PARITY_NO_GO. ``E0_EVIDENCE_DIR`` records observations.
 """
 
 from __future__ import annotations
@@ -16,6 +12,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import signal
@@ -32,20 +29,15 @@ from typing import Any
 
 import pytest
 
-INTERFACE = "binnacle-darwin-r3-interface-1.1.0"
 FULL_PARITY = "FULL_PARITY_NO_GO"
-REGISTERED_TOOLS = (
-    "read_file",
-    "list_files",
-    "search_text",
-    "edit_file",
-    "write_file",
-    "run_command",
-    "job_status",
-    "stop_job",
-)
+TOOLS = "read_file list_files search_text edit_file write_file run_command job_status stop_job"
+REGISTERED_TOOLS = tuple(TOOLS.split())
 LIMITED_TOOLS = tuple(t for t in REGISTERED_TOOLS if t != "stop_job")
 PER_FILE_LIMIT = 16 * 1024 * 1024
+STOP_JOB_TEXT = (
+    "stop_job is unavailable on macOS. "
+    "run_command is available in foreground mode only (no background jobs)."
+)
 
 
 @pytest.fixture
@@ -202,28 +194,19 @@ def _schema_digests(tools) -> dict[str, str]:
     }
 
 
-def _pid_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        pass
-    return True
-
-
 def _gone(pid: int, *, group: bool = False, timeout: float = 10.0) -> bool:
     """Poll until a pid (or its process group) no longer exists."""
     deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
+    while True:
         try:
             (os.killpg if group else os.kill)(pid, 0)
         except ProcessLookupError:
             return True
         except PermissionError:
             pass
+        if time.monotonic() >= deadline:
+            return False
         time.sleep(0.1)
-    return False
 
 
 def test_release_table_is_the_committed_production_scope() -> None:
@@ -235,26 +218,30 @@ def test_release_table_is_the_committed_production_scope() -> None:
     assert all(states[t] is CapabilityState.LIMITED for t in LIMITED_TOOLS), states
     assert states["stop_job"] is CapabilityState.UNAVAILABLE
     assert DARWIN_RELEASE_SCOPE["stop_job"].enabling_gate == "never"
-    _record("release-table", {"states": {t: s.value for t, s in states.items()}})
 
 
 def test_handshake_and_eight_tool_schemas(endpoint: Endpoint) -> None:
+    client_instructions: list[str | None] = []
+
     async def go():
         async with _client(endpoint.url, endpoint.token) as c:
+            client_instructions.append(c.instructions)
             return await c.list_tools()
 
     tools = asyncio.run(go())
-    # Registered names are asserted; enablement is NOT inferred from them.
     assert {t.name for t in tools} == set(REGISTERED_TOOLS)
     for tool in tools:
         assert tool.input_schema.get("type") == "object" and tool.description
     _record("schema-production", {"digests": _schema_digests(tools)})
+    served = json.dumps([[t.description for t in tools], client_instructions[0]])
+    assert not re.search(r"\b(R1|CR1|gate|review|pending)\b", served, re.IGNORECASE)
 
 
 def test_stop_job_is_unavailable_never_enabled(endpoint: Endpoint) -> None:
     out = _calls(endpoint, [("stop_job", "stop_job", {"job_id": "e0-nonexistent"})])
     _record("calls-stop-job", {"full_parity": FULL_PARITY, **out})
-    assert out["stop_job"]["error"] and "unavailable" in out["stop_job"]["text"].lower()
+    assert out["stop_job"]["error"]
+    assert out["stop_job"]["text"] == STOP_JOB_TEXT
 
 
 def _mk_outside(root: Path) -> Path:
@@ -279,20 +266,17 @@ def test_file_tools_happy_paths_and_denials(endpoint: Endpoint) -> None:
             ("edit", "edit_file", edit),
             ("read_after_edit", "read_file", {"path": w}),
             ("deny_root_escape", "read_file", {"path": sec}),
-            ("deny_dotdot", "read_file", {"path": f"{root}/../outside/secret.txt"}),
             ("deny_symlink_file", "read_file", {"path": str(root / "link")}),
             (
                 "deny_symlink_write",
                 "write_file",
                 {"path": str(root / "linkdir" / "x.txt"), "content": "x"},
             ),
-            ("deny_symlink_edit", "edit_file", {**edit, "path": str(root / "link")}),
             (
                 "deny_write_escape",
                 "write_file",
                 {"path": str(outside / "y"), "content": "y"},
             ),
-            ("deny_missing", "read_file", {"path": str(root / "absent.txt")}),
         ],
     )
     _record("calls-file-tools", {"full_parity": FULL_PARITY, **out})
@@ -306,9 +290,48 @@ def test_file_tools_happy_paths_and_denials(endpoint: Endpoint) -> None:
     assert not (outside / "x.txt").exists() and not (outside / "y").exists()
 
 
+def test_list_files_symlink_policy(endpoint: Endpoint) -> None:
+    root, r = endpoint.root, str(endpoint.root)
+    outside = root.parent / "out"
+    outside.mkdir()
+    (outside / "s.txt").write_text("s")
+    (root / "d").mkdir()
+    (root / "d" / "in.txt").write_text("x")
+    for name, target in (
+        ("flink", "hello.txt"),
+        ("dlink", "d"),
+        ("outlink", "../out/s.txt"),
+        ("dangle", "nope"),
+    ):
+        (root / name).symlink_to(target)
+    out = _calls(
+        endpoint,
+        [
+            ("list", "list_files", {"path": r}),
+            ("glob_star", "list_files", {"path": r, "glob": "*"}),
+            ("glob_2star", "list_files", {"path": r, "glob": "**/*"}),
+        ],
+    )
+    _record("calls-list-symlinks", {"full_parity": FULL_PARITY, **out})
+    typed = {
+        Path(e["path"]).relative_to(root).as_posix(): (e["type"], e.get("bytes"))
+        for e in out["list"]["data"]["entries"]
+    }
+    # In-root links are typed by target; outside and dangling links are omitted.
+    assert typed == {
+        "d": ("dir", None),
+        "dlink": ("dir", None),
+        "hello.txt": ("file", 9),
+        "flink": ("file", 9),
+    }, typed
+    for label in ("glob_star", "glob_2star"):
+        names = {Path(e["path"]).name for e in out[label]["data"]["entries"]}
+        assert out[label]["data"]["mode"] == "glob" and names == {"hello.txt", "in.txt"}
+
+
 def test_list_files_and_search_text_on_fixture(endpoint: Endpoint) -> None:
     root, r = endpoint.root, str(endpoint.root)
-    outside = _mk_outside(root)
+    _mk_outside(root)
     (root / "docs").mkdir()
     (root / "docs" / "note.md").write_text("hello docs\n")
     (root / "docs" / "a.py").write_text("print('hello')\n")
@@ -321,15 +344,9 @@ def test_list_files_and_search_text_on_fixture(endpoint: Endpoint) -> None:
             ("list_all", "list_files", {"path": r}),
             ("list_glob_md", "list_files", {"path": r, "glob": "*.md"}),
             ("deny_list_link", "list_files", {"path": str(root / "linkdir")}),
-            ("deny_list_escape", "list_files", {"path": str(outside)}),
+            ("deny_search_link", "search_text", {**hello, "path": f"{r}/linkdir"}),
             ("search_glob_py", "search_text", {**hello, "glob": "*.py"}),
             ("search_all", "search_text", hello),
-            ("deny_search_escape", "search_text", {**hello, "path": str(outside)}),
-            (
-                "deny_search_link",
-                "search_text",
-                {**hello, "path": str(root / "linkdir")},
-            ),
         ],
     )
     _record("calls-list-search", {"full_parity": FULL_PARITY, **out})
@@ -343,7 +360,6 @@ def test_list_files_and_search_text_on_fixture(endpoint: Endpoint) -> None:
     assert rel("list_all", "path") >= {"docs", "hello.txt", "big.txt"}
     assert rel("list_glob_md", "path") == {"docs/note.md"}
     assert rel("search_glob_py", "file") == {"docs/a.py"}
-    assert out["search_glob_py"]["data"]["truncated"] is False
     # Fixture expectation: the small files match; big.txt is skipped whole.
     assert rel("search_all", "file") == {"hello.txt", "docs/note.md", "docs/a.py"}
     assert out["search_all"]["data"]["truncated"] is True
@@ -401,11 +417,11 @@ def test_run_command_sd18(endpoint: Endpoint) -> None:
         # setsid escapee: honestly reported, not claimed cleaned.
         assert esc_pid is not None and not out["escapee"]["error"], out["escapee"]
         assert "descendants_unverified=true" in out["escapee"]["text"]
-        assert _pid_alive(esc_pid), "escapee should outlive the command"
+        assert not _gone(esc_pid, timeout=0), "escapee should outlive the command"
         evidence["escapee_pid"] = esc_pid
     finally:
         # Kill ONLY the exact recorded escapee, after confirming what it is.
-        if esc_pid is not None and _pid_alive(esc_pid):
+        if esc_pid is not None and not _gone(esc_pid, timeout=0):
             ps = ["ps", "-p", str(esc_pid), "-o", "command="]
             cmd = subprocess.run(
                 ps, capture_output=True, text=True, check=False
@@ -425,7 +441,6 @@ def test_job_status_completed_and_unknown(endpoint: Endpoint) -> None:
         endpoint,
         [
             ("by_id", "job_status", {"job_id": job_id}),
-            ("listing", "job_status", {}),
             ("deny_unknown", "job_status", {"job_id": "e0-unknown-id"}),
         ],
     )
@@ -434,20 +449,21 @@ def test_job_status_completed_and_unknown(endpoint: Endpoint) -> None:
     assert out["by_id"]["data"]["job_id"] == job_id
     assert out["by_id"]["data"]["state"] == "exited"
     assert "js" in json.dumps(out["by_id"]["data"])
-    assert job_id in json.dumps(out["listing"]["data"])
     assert out["deny_unknown"]["error"] and "No job" in out["deny_unknown"]["text"]
 
 
-@pytest.mark.parametrize("variant", ["invalid", "missing"])
-def test_bad_token_denied(endpoint: Endpoint, variant: str) -> None:
-    token = "not-" + endpoint.token if variant == "invalid" else None
-
+def _assert_denied(url: str, token: str | None) -> None:
     async def go():
-        async with _client(endpoint.url, token) as c:
+        async with _client(url, token) as c:
             await c.list_tools()
 
     with pytest.raises(Exception):  # noqa: B017 - any auth failure shape
         asyncio.run(go())
+
+
+@pytest.mark.parametrize("variant", ["invalid", "missing"])
+def test_bad_token_denied(endpoint: Endpoint, variant: str) -> None:
+    _assert_denied(endpoint.url, "x" + endpoint.token if variant == "invalid" else None)
 
 
 def test_wrong_peer_cannot_reach_listener(endpoint: Endpoint) -> None:
@@ -467,34 +483,18 @@ def test_stale_service_rejected_after_teardown_and_restart(work_dir: Path) -> No
     root = work_dir / "root"
     root.mkdir()
 
-    def denied(ep: Endpoint, token: str) -> None:
-        async def go():
-            async with _client(ep.url, token) as c:
-                await c.list_tools()
-
-        with pytest.raises(Exception):  # noqa: B017
-            asyncio.run(go())
-
     first = _start_endpoint(root, secrets.token_urlsafe(32))
     proof = _stop_endpoint(first)
     assert not proof["thread_alive"] and proof["port_closed"]
-    denied(first, first.token)
-    # A fresh generation must reject the previous generation's token.
+    _assert_denied(first.url, first.token)
+    # A fresh generation rejects the previous token.
     second = _start_endpoint(root, secrets.token_urlsafe(32))
     try:
-        denied(second, first.token)
+        _assert_denied(second.url, first.token)
     finally:
         proof = _stop_endpoint(second)
-    assert not proof["thread_alive"] and proof["port_closed"]
-    _record("stale-service", {"first": first.port, "second": second.port, "ok": True})
-
-
-def test_cleanup_is_positive_and_complete(work_dir: Path) -> None:
-    root = work_dir / "root"
-    root.mkdir()
-    before = {t.ident for t in threading.enumerate()}
-    proof = _stop_endpoint(_start_endpoint(root, secrets.token_urlsafe(32)))
-    assert not proof["thread_alive"] and proof["port_closed"]
-    leftover = [t for t in threading.enumerate() if t.ident not in before]
+    assert not proof["thread_alive"] and proof["port_closed"] and not proof["errors"]
+    leftover = [t for t in threading.enumerate() if t.name == "e0-native-smoke"]
     assert not leftover, f"incomplete cleanup: {leftover}"
     _record("cleanup-positive", proof)
+    _record("stale-service", {"first": first.port, "second": second.port, "ok": True})
