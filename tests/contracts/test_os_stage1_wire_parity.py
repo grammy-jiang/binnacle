@@ -13,7 +13,9 @@ from tests.contracts.surface_support import served
 
 LINUX_ONLY = pytest.mark.skipif(
     sys.platform != "linux",
-    reason="v1.0.1 Linux exact raw MCP wire models; Darwin search_text description differs",
+    reason=(
+        "Linux text pin; Darwin text pinned by tests/contracts/test_darwin_interface.py::test_native_wire_schema_preserves_v101_with_declared_description_exception"
+    ),
 )
 
 

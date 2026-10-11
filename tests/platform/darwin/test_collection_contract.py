@@ -319,3 +319,80 @@ def test_uplink_linux_only_skip_marks_individual_cases_not_the_module():
         )
     ]
     assert 0 < len(narrow) < len(functions)
+
+
+# -- Linux-only pins: the LINUX_ONLY alias is pinned per file ---------------
+# (uses = decorated tests/params, nodes = collected pytest nodes). Reusing the
+# alias on another test fails check_skip_policy until this table is edited.
+_PIN_TABLE = """
+descriptions 1 1
+golden_outputs 7 7
+job_schemas 4 4
+job_spool_compat 4 4
+job_status_cursor_internal 12 12
+os_stage1_wire_parity 2 2
+protocol 4 4
+search_text_surface 2 2
+server_composition 3 8
+tool_surface 2 4
+visibility 1 1
+"""
+_PIN_ROWS = [r.split() for r in _PIN_TABLE.strip().splitlines()]
+LINUX_PIN_USE_COUNTS = {f"tests/contracts/test_{n}.py": int(u) for n, u, _ in _PIN_ROWS}
+LINUX_PIN_NODE_COUNTS = {
+    f"tests/contracts/test_{n}.py": int(c) for n, _, c in _PIN_ROWS
+}
+for _file, _uses in (
+    ("composition_workflows", 3),
+    ("os_pure_application", 1),
+):
+    _rel = f"tests/integration/test_{_file}.py"
+    LINUX_PIN_USE_COUNTS[_rel] = LINUX_PIN_NODE_COUNTS[_rel] = _uses
+LINUX_PIN_TOTAL_NODES = 53
+
+
+def _repo_sources() -> dict[str, str]:
+    return {
+        p.relative_to(ROOT).as_posix(): p.read_text()
+        for p in (ROOT / "tests").rglob("*.py")
+    }
+
+
+def test_linux_alias_use_counts_are_pinned_per_file():
+    sel = _selection_module()
+    assert set(LINUX_PIN_USE_COUNTS) == set(sel.LINUX_PIN_FILES)
+    assert sum(LINUX_PIN_NODE_COUNTS.values()) == LINUX_PIN_TOTAL_NODES
+    problems = sel.check_skip_policy(
+        _repo_sources(),
+        counts=sel.PLATFORM_SITE_COUNTS,
+        alias_uses=LINUX_PIN_USE_COUNTS,
+    )
+    assert problems == []
+
+
+def test_reusing_the_linux_alias_on_another_test_fails_the_policy():
+    """Negative: an extra @LINUX_ONLY in a pinned file needs a reviewable edit."""
+    sel = _selection_module()
+    rel = "tests/contracts/test_visibility.py"
+    sources = _repo_sources()
+    sources[rel] += "\n\n@LINUX_ONLY\ndef test_smuggled_linux_pin():\n    pass\n"
+    problems = sel.check_skip_policy(
+        sources, counts=sel.PLATFORM_SITE_COUNTS, alias_uses=LINUX_PIN_USE_COUNTS
+    )
+    assert len(problems) == 1 and "LINUX_ONLY uses" in problems[0], problems
+    sources[rel] = sources[rel].replace("@LINUX_ONLY\n", "")
+    assert sel.check_skip_policy(sources, alias_uses=LINUX_PIN_USE_COUNTS) != []
+
+
+def test_collected_linux_pin_nodes_match_the_pinned_counts():
+    """The expanded pytest nodes carrying the alias (-m skipif) are pinned."""
+    cmd = [sys.executable, "-m", "pytest", "--collect-only", "-q", "-m", "skipif"]
+    cmd += ["-p", "no:randomly", "-p", "no:cacheprovider", *LINUX_PIN_NODE_COUNTS]
+    out = subprocess.run(
+        cmd, cwd=ROOT, capture_output=True, text=True, check=False
+    ).stdout
+    found: dict[str, int] = {}
+    for line in out.splitlines():
+        if "::" in line:
+            found[line.split("::", 1)[0]] = found.get(line.split("::", 1)[0], 0) + 1
+    assert found == LINUX_PIN_NODE_COUNTS, out[-2000:]

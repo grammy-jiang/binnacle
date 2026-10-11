@@ -22,7 +22,9 @@ from tests.contracts.test_tool_surface import INSTRUCTIONS_SHA256, SURFACE_SHA25
 
 LINUX_ONLY = pytest.mark.skipif(
     sys.platform != "linux",
-    reason="Linux composition/surface hashes; Darwin Commands scope needs the A2 foreground gate",
+    reason=(
+        "Linux text/hash and roots pin; Darwin text pinned by tests/contracts/test_darwin_interface.py::test_native_wire_schema_preserves_v101_with_declared_description_exception"
+    ),
 )
 
 
@@ -41,8 +43,8 @@ ROOT_LOCAL: list[str] = []
     "factory",
     [
         pytest.param(server.create_server, id="root"),
-        pytest.param(create_files_server, id="files", marks=LINUX_ONLY),
-        pytest.param(create_search_server, id="search", marks=LINUX_ONLY),
+        pytest.param(create_files_server, id="files"),
+        pytest.param(create_search_server, id="search"),
         pytest.param(create_commands_server, id="commands"),
     ],
 )
@@ -53,7 +55,6 @@ def test_factories_reject_duplicate_local_registration(factory):
         root.tool(lambda: None, name="local_duplicate_probe")
 
 
-@LINUX_ONLY
 @pytest.mark.parametrize(
     ("factory", "names"),
     [

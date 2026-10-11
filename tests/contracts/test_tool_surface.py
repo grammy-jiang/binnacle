@@ -37,7 +37,9 @@ from tests.contracts.surface_support import (
 
 LINUX_ONLY = pytest.mark.skipif(
     sys.platform != "linux",
-    reason="Linux tool-surface hashes (run_command/stop_job); Darwin surface differs",
+    reason=(
+        "Linux text pin; Darwin text checked by tests/contracts/test_darwin_interface.py::test_native_wire_schema_preserves_v101_with_declared_description_exception and tests/unit/core/test_os_host_composition.py::test_server_instructions_are_host_aware and tests/contracts/test_darwin_interface.py::test_production_scope_controls_real_server_without_test_override and tests/platform/darwin/test_composition_contract.py::test_native_server_import_has_no_linux_engine"
+    ),
 )
 
 
@@ -65,6 +67,10 @@ SURFACE_SHA256 = {
 }
 TOOL_COUNT = {"chatgpt": 6, "default": 8}
 INSTRUCTIONS_SHA256 = "55cafa03a706b86aaab8d53b45030a76177f9da70767ca09de608d20573d5339"
+# Darwin serves its own host-aware instructions (35cafac); pinned natively.
+DARWIN_INSTRUCTIONS_SHA256 = (
+    "22cc54dc5d8f3e813c42d095250e06f0542439c448aa2c4e2a3d2be915041541"
+)
 
 
 def _hashes(client_name: str | None, mode: str | None = None) -> dict[str, str]:
@@ -90,7 +96,10 @@ def test_tool_count(profile):
 def test_server_instructions_are_pinned(profile):
     _, instructions = served(PROFILES[profile])
     assert instructions is not None
-    assert hashlib.sha256(instructions.encode()).hexdigest() == INSTRUCTIONS_SHA256
+    expected = (
+        INSTRUCTIONS_SHA256 if sys.platform == "linux" else DARWIN_INSTRUCTIONS_SHA256
+    )
+    assert hashlib.sha256(instructions.encode()).hexdigest() == expected
 
 
 @LINUX_ONLY

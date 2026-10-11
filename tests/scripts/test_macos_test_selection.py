@@ -28,37 +28,22 @@ _PINS = """contracts/descriptions contracts/golden_outputs contracts/job_schemas
 LINUX_PIN_FILES = [
     p.replace("/", "/test_").join(("tests/", ".py")) for p in re.findall(r"\S+", _PINS)
 ]
+_ROWS = """
+system/test_uplink_network.py | baseline: Linux SO_BINDTODEVICE / iproute2 only
+live/test_deployment_smoke.py | baseline: opt-in live host (BINNACLE_LIVE=1)
+scripts/test_macos_collection_native.py | T0: Darwin host probe (sw_vers); the rest of the module runs everywhere
+platform/darwin/test_foreground_commands.py | A2: per-test Darwin posix_spawn owned-child mechanism
+platform/darwin/test_process_native.py | A2: per-test Darwin kqueue/posix_spawn child and witness probes
+platform/darwin/test_ipc_generation.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID contract
+platform/darwin/test_ipc_launchd.py | A3: per-test opt-in real launchd bootstrap (BINNACLE_A3_LAUNCHD=1)
+platform/darwin/test_search_parity.py | A4: in-body skip when APFS rejects a non-UTF-8 filename
+platform/darwin/test_package_install.py | A6: per-test Apple-silicon (arm64) native package install
+platform/darwin/test_composition_contract.py | B0: in-body skip of the real-socket peer check off Darwin
+"""
 ALLOWED_PLATFORM_SKIPS = {
-    "tests/system/test_uplink_network.py": (
-        "baseline: Linux SO_BINDTODEVICE / iproute2 only"
-    ),
-    "tests/live/test_deployment_smoke.py": (
-        "baseline: opt-in live host (BINNACLE_LIVE=1)"
-    ),
-    "tests/scripts/test_macos_collection_native.py": (
-        "T0: Darwin host probe (sw_vers); the rest of the module runs everywhere"
-    ),
-    "tests/platform/darwin/test_foreground_commands.py": (
-        "A2: per-test Darwin posix_spawn owned-child mechanism"
-    ),
-    "tests/platform/darwin/test_process_native.py": (
-        "A2: per-test Darwin kqueue/posix_spawn child and witness probes"
-    ),
-    "tests/platform/darwin/test_ipc_generation.py": (
-        "A3: per-test Darwin getpeereid/LOCAL_PEERPID contract"
-    ),
-    "tests/platform/darwin/test_ipc_launchd.py": (
-        "A3: per-test opt-in real launchd bootstrap (BINNACLE_A3_LAUNCHD=1)"
-    ),
-    "tests/platform/darwin/test_search_parity.py": (
-        "A4: in-body skip when APFS rejects a non-UTF-8 filename"
-    ),
-    "tests/platform/darwin/test_package_install.py": (
-        "A6: per-test Apple-silicon (arm64) native package install"
-    ),
-    "tests/platform/darwin/test_composition_contract.py": (
-        "B0: in-body skip of the real-socket peer check off Darwin"
-    ),
+    **{
+        f"tests/{k}": v for k, v in (r.split(" | ") for r in _ROWS.strip().splitlines())
+    },
     **dict.fromkeys(LINUX_PIN_FILES, "T0: per-test Linux-only golden/host pin"),
 }
 # A condition naming an imported flag or helper the scanner cannot read
@@ -406,6 +391,7 @@ def check_skip_policy(
     *,
     exists: Mapping[str, bool] | None = None,
     counts: Mapping[str, int] | None = None,
+    alias_uses: Mapping[str, int] | None = None,
     importorskips: Collection[tuple[str, str]] = ALLOWED_MODULE_IMPORTORSKIPS,
 ) -> list[str]:
     """Violations of the skip policy for ``{posix_path: source}``; [] is clean."""
@@ -435,6 +421,15 @@ def check_skip_policy(
                     "ALLOWED_PLATFORM_SKIPS row with an owned reason"
                 )
             platform_sites += site.platform
+        if alias_uses and rel in alias_uses:
+            names = (n for n in ast.walk(ast.parse(source)) if isinstance(n, ast.Name))
+            used = sum(
+                n.id == "LINUX_ONLY" and isinstance(n.ctx, ast.Load) for n in names
+            )
+            if used != alias_uses[rel]:
+                problems.append(
+                    f"{rel}: {used} LINUX_ONLY uses; row pins {alias_uses[rel]}"
+                )
         if counts is not None and rel in table and platform_sites != counts.get(rel):
             problems.append(
                 f"{rel}: {platform_sites} platform skip sites but the row pins "

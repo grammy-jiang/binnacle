@@ -26,7 +26,9 @@ from tests.contracts.surface_support import digest, served, surface
 
 LINUX_ONLY = pytest.mark.skipif(
     sys.platform != "linux",
-    reason="Linux search_text surface hash/text pin; Darwin appends native search limits",
+    reason=(
+        "Linux description pin; Darwin schema pinned by test_darwin_interface/test_composition_contract"
+    ),
 )
 
 

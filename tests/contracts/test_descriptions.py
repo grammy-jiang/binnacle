@@ -12,6 +12,7 @@ returned a job_id" (50 blind listings), read_file's no-paging rule.
 """
 
 import asyncio
+import hashlib
 import sys
 from pathlib import Path
 
@@ -22,9 +23,14 @@ from binnacle import server
 
 LINUX_ONLY = pytest.mark.skipif(
     sys.platform != "linux",
-    reason="Linux tool-description text/budget pins; Darwin descriptions carry native-limit disclosures",
+    reason=(
+        "Linux text pin; Darwin text checked by tests/contracts/test_darwin_interface.py::test_native_wire_schema_preserves_v101_with_declared_description_exception and tests/unit/core/test_os_host_composition.py::test_server_instructions_are_host_aware and tests/contracts/test_darwin_interface.py::test_production_scope_controls_real_server_without_test_override and tests/platform/darwin/test_composition_contract.py::test_native_server_import_has_no_linux_engine"
+    ),
 )
 
+DARWIN_JOB_STATUS_SHA256 = (
+    "3381fe4e272af99f22657d3b5b2a9d00026834516de82fa1b7ef3280058274a3"
+)
 
 PROJECT_RULES = (
     Path(__file__).resolve().parents[2]
@@ -67,6 +73,10 @@ def test_search_text_keeps_grep_equivalence():
 
 
 def test_job_status_keeps_the_only_needed_clause_and_wait_contract():
+    if sys.platform != "linux":  # Darwin serves its own text (35cafac); exact pin
+        digest = hashlib.sha256(descriptions()["job_status"].encode()).hexdigest()
+        assert digest == DARWIN_JOB_STATUS_SHA256
+        return
     d = descriptions()["job_status"].lower()
     assert "only needed when run_command returned a job_id" in d
     assert "positive wait blocks up to the requested duration (max 50 seconds)" in d
@@ -102,7 +112,6 @@ def test_read_file_keeps_limit_and_no_paging():
     assert "edit_file" not in d  # hidden from ChatGPT, the only client
 
 
-@LINUX_ONLY
 def test_descriptions_keep_generic_handoff_small_and_avoid_project_planning():
     d = descriptions()
     for name in (
