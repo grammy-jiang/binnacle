@@ -37,11 +37,11 @@ import weakref
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from fastmcp.server.dependencies import get_server
 from fastmcp.tools import tool_transform
-from fastmcp.tools.base import Tool
+from fastmcp.tools.base import Tool, ToolResult
 from fastmcp.tools.function_tool import FunctionTool
 
 from binnacle.mcp.job_awareness_hint_walk import Meter, walk
@@ -187,8 +187,11 @@ async def witnessed_call(
 
     No receipt is issued when the dispatch raised or was cancelled (the
     exception propagates), when no body or more than one body completed, when
-    a body completed on another (mounted) server or under a tool transform, or
-    when there is no dispatching server.
+    a body completed on another (mounted) server or under a tool transform,
+    when there is no dispatching server, or when the result is not an exact
+    ToolResult. With a receipt, the caller gets a per-call shallow copy of
+    the result: a body or a caching middleware may return one ToolResult
+    object for several calls, and the receipt binds this call's object only.
     """
     dispatch = _Dispatch(_server())
     token = _DISPATCH.set(dispatch)
@@ -198,15 +201,18 @@ async def witnessed_call(
         _DISPATCH.reset(token)
         with _LOCK:
             records = tuple(dispatch.records)
-    if dispatch.server is None or len(records) != 1:
+    if type(result) is not ToolResult or dispatch.server is None:
+        return result, None
+    if len(records) != 1:
         return result, None
     tool, poisoned = records[0]
     if poisoned or tool is None or not native_tool(tool):
         return result, None
-    execution = Execution(tool, result)
+    fresh = cast(R, cast(ToolResult, result).model_copy())
+    execution = Execution(tool, fresh)
     with _LOCK:
         _ISSUED.add(execution)
-    return result, execution
+    return fresh, execution
 
 
 def claim(execution: object, result: object) -> object | None:
