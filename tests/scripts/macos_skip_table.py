@@ -82,6 +82,7 @@ platform/darwin/test_durable_tool_wiring.py | B0: per-test Darwin manager-owner 
 platform/darwin/test_durable_manager_e2e.py | B0: per-test Darwin real com.binnacle.jobs end-to-end for the manager-composed command tools (R4 J4, split from test_durable_tool_wiring.py)
 platform/darwin/test_r5_l2_parity.py | B0: per-test Darwin manager composition and caller_form workdir on the real macOS filesystem (r5 L2, SD-50; STEER-01); the Linux-host cases run everywhere
 platform/darwin/test_r5_l2b_strict_client.py | B0: per-test Darwin KERN_PROC_PGRP group_listing through the strict in-memory client (r5 L2b, SD-61 STEER-02b)
+platform/darwin/test_r5_l2c_output_snapshot.py | B0: per-test Darwin real com.binnacle.jobs burst-writer output/output_bytes one-snapshot repro (r5 L2c); the pairing unit test runs everywhere
 platform/darwin/test_ipc_launchd.py | A3: per-test opt-in real launchd bootstrap (BINNACLE_A3_LAUNCHD=1)
 platform/darwin/test_search_parity.py | A4: in-body skip when APFS rejects a non-UTF-8 filename
 platform/darwin/test_package_install.py | A6: per-test Apple-silicon (arm64) native package install
@@ -131,6 +132,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_durable_manager_e2e.py": 1,
     "tests/platform/darwin/test_r5_l2_parity.py": 1,
     "tests/platform/darwin/test_r5_l2b_strict_client.py": 1,
+    "tests/platform/darwin/test_r5_l2c_output_snapshot.py": 1,
     "tests/platform/darwin/test_ipc_launchd.py": 3,
     "tests/platform/darwin/test_search_parity.py": 1,
     "tests/platform/darwin/test_package_install.py": 1,
