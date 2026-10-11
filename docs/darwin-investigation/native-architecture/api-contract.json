@@ -1,8 +1,8 @@
 {
-  "schema_revision": "binnacle-darwin-r3-interface-1.0.0",
+  "schema_revision": "binnacle-darwin-r3-interface-1.1.0",
   "source_base_sha": "c2234f16bdfb1a17500b99101d3184b797ebb673",
   "status": "PROPOSED_PENDING_R0_CR0",
-  "freeze_authority": "Supervisor CR0 only; revision ID is pinned proposal, not approval",
+  "freeze_authority": "Revision 1.1.0 remains proposed until Supervisor re-reviews this exact signed commit and issues CR0 APPROVE.",
   "python_minimum": "3.10",
   "declaration_prelude": "from __future__ import annotations; standard typing/collections.abc Protocol, Literal, Mapping, Sequence, Callable; dataclasses.dataclass; enum.Enum; pathlib.Path; threading.Event. Cross-module names resolve uniquely from module declarations or preserved base interfaces. No declaration is executable product code in A0.",
   "enums": {
@@ -201,20 +201,33 @@
       "owner": "B0",
       "status": "proposed_not_implemented",
       "imports": [],
-      "declarations": "@dataclass(frozen=True)\nclass StopIntent:\n    job_id: str\n    owner_epoch: str\n    request_id: str\n@dataclass(frozen=True)\nclass StopReceipt:\n    intent: StopIntent\n    state: Literal[\"admitted\", \"signaling\", \"closed\", \"unknown\", \"failed\"]\n    target_set_closed: bool\n    outcome_persisted: bool\nclass StopCoordinator(Protocol):\n    def admit(self, job_id: str) -> StopIntent: ...\n    def open_signals(self, intent: StopIntent) -> JobSignalLease: ...\n    def observe(self, intent: StopIntent, *, timeout_s: float) -> StopReceipt: ...\n    def record(self, receipt: StopReceipt) -> StopReceipt: ...",
+      "declarations": "@dataclass(frozen=True)\nclass StopIntent:\n    job_id: str\n    job_incarnation: str\n    owner_epoch: str\n    request_id: str\n@dataclass(frozen=True)\nclass StopReceipt:\n    intent: StopIntent\n    state: Literal[\"admitted\", \"signaling\", \"closed\", \"unknown\", \"failed\"]\n    target_set_closed: bool\n    leader_terminal: bool\n    executor_quiesced: bool\n    outcome_persisted: bool\nclass StopExecutor(Protocol):\n    @property\n    def intent(self) -> StopIntent: ...\n    def quiesce(self) -> None: ...\n@dataclass(frozen=True)\nclass StopAdmission:\n    intent: StopIntent\n    executor: StopExecutor | None\nclass StopCoordinator(Protocol):\n    def admit(self, job_id: str) -> StopAdmission: ...\n    def join(self, intent: StopIntent, *, timeout_s: float) -> StopReceipt: ...\n    def open_signals(self, executor: StopExecutor) -> JobSignalLease: ...\n    def observe(self, executor: StopExecutor, *, timeout_s: float) -> StopReceipt: ...\n    def record(self, executor: StopExecutor, receipt: StopReceipt) -> StopReceipt: ...\n    def terminal_guard(self, job_id: str) -> StopReceipt | None: ...",
       "semantics": [
-        "admit serializes stop/reaper by job+owner epoch and durably commits before returning; persistence error means no signal. Same active job generation/request is idempotent.",
-        "open_signals pins verified targets for the admitted epoch or refuses; it does not signal. observe must account for all authorized targets, not only leader exit.",
-        "record atomically validates owner/request epoch and commits outcome. Success requires closed target set AND persisted closed receipt; errors never convert to success. Existing Linux record fields and RPC v1 preserved; new admission metadata is additive and old readers stay readable.",
-        "B0 owns store/owner/reaper coordinator wiring; A1 owns orchestration. No second source writer."
+        "Normative state machine is /stop_protocol. All readers, writers and reapers must use it; signatures alone are insufficient.",
+        "StopIntent identifiers are data, not authority. Only coordinator-issued, nontransferable StopExecutor object identity has execution authority. The coordinator checks the current incarnation, operation and owner fencing on every call and every lease.signal.",
+        "admit durably prepares before returning. Exactly one caller obtains executor; all concurrent requests for the same job incarnation join the SAME unresolved intent regardless of caller/call ID. Joiners cannot acquire a signal lease or signal.",
+        "join waits without a metadata transaction, then calls terminal_guard. Timeout returns unresolved unknown with outcome_persisted=False or raises a controlled error; it never starts a second executor.",
+        "quiesce is idempotent, blocks until in-flight signal calls finish, invalidates every lease signal entrypoint and closes owned signal handles. Failure to prove quiescence prevents resolution. It does not reap a child.",
+        "record checks coordinator-held evidence, not caller-supplied receipt booleans, and resolves only the same prepared operation after full closure, terminal leader proof and executor quiescence. No success before file AND directory sync. Failed/unknown receipts leave prepare unresolved.",
+        "terminal_guard returns None only for a positively readable record with no stop intent or legacy uncertainty. For any unresolved/failed/unreadable/ambiguous state it raises JobSignalDeliveryError (Linux) or AuthorityUnknown (Darwin). Closed receipts are returned only after all resolution barriers. None is not authorization to infer leader exit; ordinary verified exit policy still applies.",
+        "A1 exclusively implements Linux coordinator/storage/read/reaper/RPC/retention and stop_with_intent orchestration. B0a declares this shared seam only; later B0 preserves controlled errors from A1 APIs and never edits A1 paths. R1/CR1 independently reviews complete A1 safety."
       ],
       "signatures": [
-        "StopCoordinator.def admit(self, job_id: str) -> StopIntent",
-        "StopCoordinator.def open_signals(self, intent: StopIntent) -> JobSignalLease",
-        "StopCoordinator.def observe(self, intent: StopIntent, *, timeout_s: float) -> StopReceipt",
-        "StopCoordinator.def record(self, receipt: StopReceipt) -> StopReceipt"
+        "StopExecutor.@property\ndef intent(self) -> StopIntent",
+        "StopExecutor.def quiesce(self) -> None",
+        "StopCoordinator.def admit(self, job_id: str) -> StopAdmission",
+        "StopCoordinator.def join(self, intent: StopIntent, *, timeout_s: float) -> StopReceipt",
+        "StopCoordinator.def open_signals(self, executor: StopExecutor) -> JobSignalLease",
+        "StopCoordinator.def observe(self, executor: StopExecutor, *, timeout_s: float) -> StopReceipt",
+        "StopCoordinator.def record(self, executor: StopExecutor, receipt: StopReceipt) -> StopReceipt",
+        "StopCoordinator.def terminal_guard(self, job_id: str) -> StopReceipt | None"
       ],
-      "implements": {}
+      "implements": {},
+      "finding_refs": [
+        "A0-R0-02",
+        "R0-C2",
+        "CR0-05"
+      ]
     },
     {
       "module": "binnacle.features.commands.job_stop",
@@ -227,14 +240,19 @@
       ],
       "declarations": "def stop_with_intent(job_id: str, *, coordinator: StopCoordinator, term_grace_s: float, kill_grace_s: float) -> StopReceipt: ...",
       "semantics": [
-        "A1 additive entrypoint: admit first, then open one lease, TERM, observe full closure, KILL on same lease only if needed, record final receipt before acknowledgement; close lease in finally.",
-        "Durable admission survives crash before/after signal. Epoch mismatch/store failure/partial delivery/uncertain closure produce failed or unknown receipt/error, never stopped. Concurrent reaper uses the same coordinator serialization; no historic PID recovery.",
-        "B0 integrates this entrypoint into shared owner flow after A1 independent review; legacy stop_embedded remains import compatible."
+        "Call admit. If executor is None, join the returned intent with a bounded timeout; never open signals on the joining path. Executor path opens one lease, TERM, observe complete closure, optionally KILL on the same lease, observe again.",
+        "In finally, close the lease and quiesce the executor before record. Record only evidence for this exact intent; a failed/unknown result preserves unresolved prepare. Closed success requires target_set_closed, leader_terminal, executor_quiesced and outcome_persisted all true after checked barriers.",
+        "No metadata lock held across signals/waits. A1 coordinator owns the execution fence and terminal guards. Existing stop_embedded stays import compatible; A1 routes all actual Linux repaired stops through this seam and prevents legacy bypasses. B0 never edits the Linux engine."
       ],
       "signatures": [
         "def stop_with_intent(job_id: str, *, coordinator: StopCoordinator, term_grace_s: float, kill_grace_s: float) -> StopReceipt"
       ],
-      "implements": {}
+      "implements": {},
+      "finding_refs": [
+        "A0-R0-02",
+        "R0-C2",
+        "CR0-05"
+      ]
     },
     {
       "module": "binnacle.platform.contracts.darwin_contracts",
@@ -242,18 +260,24 @@
       "owner": "B0",
       "status": "proposed_not_implemented",
       "imports": [],
-      "declarations": "@dataclass(frozen=True)\nclass OwnerGeneration:\n    manager_epoch: str\n    witness_epoch: str\n    job_id: str\n@dataclass(frozen=True)\nclass AuthorityObservation:\n    capability: Capability\n    generation: OwnerGeneration | None\n    membership_closed: bool\n    can_signal: bool\nclass OwnedWitness(Protocol):\n    def observe(self, job_id: str) -> AuthorityObservation: ...\n    def reconnect(self, generation: OwnerGeneration) -> AuthorityObservation: ...\n    def close(self) -> None: ...",
+      "declarations": "@dataclass(frozen=True)\nclass OwnerGeneration:\n    manager_epoch: str\n    witness_epoch: str\n    job_id: str\n@dataclass(frozen=True)\nclass AuthorityObservation:\n    capability: Capability\n    generation: OwnerGeneration | None\n    membership_closed: bool\n    can_signal: bool\nclass OwnedWitness(Protocol):\n    def observe(self, job_id: str) -> AuthorityObservation: ...\n    def reconnect(self, generation: OwnerGeneration) -> AuthorityObservation: ...\n    def close(self) -> None: ...\n@dataclass(frozen=True)\nclass ForegroundRequest:\n    command: str\n    workdir: Path\n    stdin: str | None\n    wait_seconds: float\n    background: bool\n    foreground_limit_s: float\n    max_output_bytes: int\n@dataclass(frozen=True)\nclass ForegroundResult:\n    execution_id: str\n    owner_generation: str\n    exit_code: int | None\n    signal: int | None\n    output: bytes\n    output_bytes: int\n    truncated: bool\n    duration_s: float\n    descendants_unverified: Literal[True]\nclass ForegroundExecution(Protocol):\n    def run_foreground(self, request: ForegroundRequest, *, cancel: Event) -> ForegroundResult: ...",
       "semantics": [
         "Generation strings are identifiers, never bearer secrets or ownership proof. Authenticated live channel and positive enrollment are required.",
-        "In this revision can_signal=False in shipped Darwin adapters. A2 may exercise owned direct-child mechanisms only in isolated tests.",
-        "Loss of manager and witness yields UNKNOWN, membership_closed=False, can_signal=False. Reconnect cannot reconstruct capabilities from persisted PID/PGID/birth/boot."
+        "AuthorityObservation.can_signal=False for history/witness-based durable jobs in this revision. ForegroundExecution has separate ephemeral live-parent authority governed by /foreground_execution; it grants no public stop_job or cold adoption capability.",
+        "Loss of manager and witness yields UNKNOWN, membership_closed=False, can_signal=False. Reconnect cannot reconstruct capabilities from persisted PID/PGID/birth/boot.",
+        "ForegroundResult reports leader completion only; descendants_unverified is always True. The foreground owner alone spawns, signals and reaps. ForegroundResult/Request never enter Linux RPC or spool schemas."
       ],
       "signatures": [
         "OwnedWitness.def observe(self, job_id: str) -> AuthorityObservation",
         "OwnedWitness.def reconnect(self, generation: OwnerGeneration) -> AuthorityObservation",
-        "OwnedWitness.def close(self) -> None"
+        "OwnedWitness.def close(self) -> None",
+        "ForegroundExecution.def run_foreground(self, request: ForegroundRequest, *, cancel: Event) -> ForegroundResult"
       ],
-      "implements": {}
+      "implements": {},
+      "finding_refs": [
+        "CR0-04",
+        "A0-R0-01"
+      ]
     },
     {
       "module": "binnacle.platform.contracts.file_access_contracts",
@@ -261,29 +285,41 @@
       "owner": "B0",
       "status": "proposed_not_implemented",
       "imports": [],
-      "declarations": "class RootGrant(Protocol):\n    @property\n    def generation(self) -> str: ...\n    def close(self) -> None: ...\nclass OpenedFile(Protocol):\n    @property\n    def display_path(self) -> str: ...\n    def read(self, max_bytes: int) -> bytes: ...\n    def close(self) -> None: ...\n@dataclass(frozen=True)\nclass FileEntry:\n    relative_path: str\n    kind: Literal[\"file\", \"directory\", \"other\"]\n    size_bytes: int | None\nclass FileAccess(Protocol):\n    def grant(self, root: Path, *, generation: str) -> RootGrant: ...\n    def open_read(self, grant: RootGrant, relative_path: str) -> OpenedFile: ...\n    def list_entries(self, grant: RootGrant, relative_path: str, *, max_entries: int) -> Sequence[FileEntry]: ...\n    def write_bytes(self, grant: RootGrant, relative_path: str, data: bytes, *, expected_sha256: str | None = None) -> int: ...\n    def close(self) -> None: ...\n@dataclass(frozen=True)\nclass SearchRequest:\n    relative_path: str\n    pattern: str\n    fixed_strings: bool\n    context_lines: int\n    glob: str | None\n    timeout_s: float\n    max_bytes: int\n    max_files: int\n@dataclass(frozen=True)\nclass SearchBatch:\n    events: Sequence[Mapping[str, object]]\n    truncated: bool\n    files_searched: int\n    capability: Capability\nclass SearchAccess(Protocol):\n    def search(self, grant: RootGrant, request: SearchRequest) -> SearchBatch: ...",
+      "declarations": "class RootGrant(Protocol):\n    @property\n    def generation(self) -> str: ...\n    def close(self) -> None: ...\n@dataclass(frozen=True)\nclass FileMetadata:\n    size_bytes: int\n    device: int\n    inode: int\n    modified_ns: int\nclass OpenedFile(Protocol):\n    @property\n    def display_path(self) -> str: ...\n    def metadata(self) -> FileMetadata: ...\n    def read(self, max_bytes: int) -> bytes: ...\n    def close(self) -> None: ...\n@dataclass(frozen=True)\nclass FileEntry:\n    relative_path: str\n    kind: Literal[\"file\", \"directory\", \"other\"]\n    size_bytes: int | None\n    modified_ns: int | None\n@dataclass(frozen=True)\nclass ListRequest:\n    relative_path: str\n    glob: str | None\n    include_hidden: bool\n    max_entries: int\n    max_visited: int\n    timeout_s: float\n@dataclass(frozen=True)\nclass FileListing:\n    entries: Sequence[FileEntry]\n    truncated: bool\n@dataclass(frozen=True)\nclass WriteReceipt:\n    bytes_written: int\n    previous_bytes: int | None\n    action: Literal[\"created\", \"overwritten\"]\nclass FileAccess(Protocol):\n    def grant(self, root: Path, *, generation: str) -> RootGrant: ...\n    def open_read(self, grant: RootGrant, relative_path: str) -> OpenedFile: ...\n    def list_entries(self, grant: RootGrant, request: ListRequest) -> FileListing: ...\n    def nearby_hint(self, grant: RootGrant, relative_path: str, *, max_entries: int) -> Sequence[str]: ...\n    def write_bytes(self, grant: RootGrant, relative_path: str, data: bytes, *, create_parents: bool = False, max_new_parents: int = 32, expected_sha256: str | None = None) -> WriteReceipt: ...\n    def close(self) -> None: ...\n@dataclass(frozen=True)\nclass SearchRequest:\n    relative_path: str\n    pattern: str\n    fixed_strings: bool\n    context_lines: int\n    glob: str | None\n    timeout_s: float\n    max_bytes: int\n    max_files: int\n@dataclass(frozen=True)\nclass SearchBatch:\n    events: Sequence[Mapping[str, object]]\n    truncated: bool\n    files_searched: int\n    capability: Capability\nclass SearchAccess(Protocol):\n    def search(self, grant: RootGrant, request: SearchRequest) -> SearchBatch: ...",
       "semantics": [
         "RootGrant and OpenedFile own descriptors; idempotent close, use-after-close rejected. Caller closes in finally; app lifetime owns grants.",
         "Captured configured canonical root is opened once. Traverse relative components with dir_fd and no-follow checks; reject absolute path, dotdot, symlink/reparse ambiguity. Never reopen an authorized pathname.",
         "Opened-object semantics: grant follows the original directory object across rename, never replacement path. Newly encountered moved/symlink objects are rejected if authority cannot be proved. No continuous pathname confinement or hostile same-UID guarantee.",
         "Regular files only for content. Read has a hard byte budget. Missing/denied/TCC-possible paths never become empty results.",
         "write_bytes owns parent FD, temporary file, flush/fsync/rename cleanup. expected_sha256 guards detected content conflicts for edits, not hostile concurrent-writer serializability. No follow of existing symlink; reject hardlinked mutation unless writing a replacement entry.",
-        "Search enumerates through grant and supplies each authorized open regular file to rg stdin, uses bounded resources and remaps stdin events to relative display path. Never pass an unchecked root path or /dev/fd directory to recursive rg. Ignore/glob parity requires native tests; unsupported cases error explicitly."
+        "Search enumerates through grant and supplies each authorized open regular file to rg stdin, uses bounded resources and remaps stdin events to relative display path. Never pass an unchecked root path or /dev/fd directory to recursive rg. Ignore/glob parity requires native tests; unsupported cases error explicitly.",
+        "metadata uses fstat on the same opened regular file; read enforces max_bytes against actual bytes even if file grows. Display paths are formatting only. Core cannot call exists/stat/read_bytes on display paths.",
+        "list_entries owns all directory descriptors and traversal. ListRequest.glob=None means bounded one-level dirs-first listing; glob means bounded recursive authorized traversal with existing ignore/hidden policy and newest-first ordering. FileListing.truncated reports budget exhaustion, never silently claims exhaustive results. No recursive pathname rg --files.",
+        "write_bytes(create_parents=True) creates each missing parent with mkdir relative to a verified descriptor then opens and verifies it no-follow before continuing; never Path.mkdir. Enforce max_new_parents and fail explicitly on exhausted budget. Default False for edits. Parent creation may remain after later write failure; no all-operation rollback claim.",
+        "WriteReceipt derives previous_bytes/action from the descriptor-verified destination at the write step, not a prior Core pathname stat. For expected_sha256 require an existing regular file and compare its opened bytes before replacement; mismatch or disappearance fails. This detects observed conflicts, not atomic compare-and-swap against hostile writers.",
+        "nearby_hint enumerates only the deepest authorized existing parent using the same grant and no-follow traversal with a hard result bound; inaccessible/ambiguous parents yield no hint with the original explicit error preserved. Never open an unauthorized ancestor to improve a diagnostic.",
+        "SearchRequest maps the current tool smart-case/ignore/hidden defaults; unsupported policy combinations fail explicitly. Ignore files and ancestor rules can be read only through authorized descriptors; if semantics would require outside-root reads, refuse that mode. No environmental config may widen scope.",
+        "B0 dispatches every operation in /file_tool_wiring to A4 adapters, including both list modes, parent creation and diagnostics; default Linux path remains unchanged. Missing Darwin adapter is CapabilityUnavailable, never Linux/path fallback."
       ],
       "signatures": [
         "RootGrant.@property\ndef generation(self) -> str",
         "RootGrant.def close(self) -> None",
         "OpenedFile.@property\ndef display_path(self) -> str",
+        "OpenedFile.def metadata(self) -> FileMetadata",
         "OpenedFile.def read(self, max_bytes: int) -> bytes",
         "OpenedFile.def close(self) -> None",
         "FileAccess.def grant(self, root: Path, *, generation: str) -> RootGrant",
         "FileAccess.def open_read(self, grant: RootGrant, relative_path: str) -> OpenedFile",
-        "FileAccess.def list_entries(self, grant: RootGrant, relative_path: str, *, max_entries: int) -> Sequence[FileEntry]",
-        "FileAccess.def write_bytes(self, grant: RootGrant, relative_path: str, data: bytes, *, expected_sha256: str | None=None) -> int",
+        "FileAccess.def list_entries(self, grant: RootGrant, request: ListRequest) -> FileListing",
+        "FileAccess.def nearby_hint(self, grant: RootGrant, relative_path: str, *, max_entries: int) -> Sequence[str]",
+        "FileAccess.def write_bytes(self, grant: RootGrant, relative_path: str, data: bytes, *, create_parents: bool=False, max_new_parents: int=32, expected_sha256: str | None=None) -> WriteReceipt",
         "FileAccess.def close(self) -> None",
         "SearchAccess.def search(self, grant: RootGrant, request: SearchRequest) -> SearchBatch"
       ],
-      "implements": {}
+      "implements": {},
+      "finding_refs": [
+        "R0-C4"
+      ]
     },
     {
       "module": "binnacle.platform.contracts.native_service_contracts",
@@ -335,22 +371,29 @@
         "binnacle.platform.contracts.process_contracts",
         "binnacle.platform.contracts.darwin_contracts"
       ],
-      "declarations": "class DarwinProcessBackend:\n    def __init__(self, *, witness: OwnedWitness | None = None) -> None: ...\n    def authority(self, job_id: str) -> AuthorityObservation: ...",
+      "declarations": "class DarwinProcessBackend:\n    def __init__(self, *, witness: OwnedWitness | None = None) -> None: ...\n    def authority(self, job_id: str) -> AuthorityObservation: ...\n    def run_foreground(self, request: ForegroundRequest, *, cancel: Event) -> ForegroundResult: ...",
       "semantics": [
-        "Implements every unchanged ProcessBackend method. launch and signal_job raise CapabilityUnavailable; open_job_signals raises UnverifiedJobProcess.",
+        "Unchanged durable ProcessBackend.launch and signal_job raise CapabilityUnavailable; open_job_signals raises UnverifiedJobProcess. The separate run_foreground entrypoint implements ForegroundExecution after the acceptance gate; it cannot create durable background jobs.",
         "identity_from_record returns None absent current authenticated enrollment; historical Linux records are never Darwin capabilities.",
         "Legacy boolean alive/sets/lists cannot represent UNKNOWN: raise AuthorityUnknown rather than return False/empty for uncertainty. starttime returns None if unavailable; boot_id is observational only.",
-        "New typed observation is additive; B0 must never route UNKNOWN through legacy negative/exit inference."
+        "New typed observation is additive; B0 must never route UNKNOWN through legacy negative/exit inference.",
+        "A2 implements /foreground_execution through public posix_spawn and an owned new process group with one live spawning/reaping owner. No private libproc mechanism or post-reap signal."
       ],
       "signatures": [
         "DarwinProcessBackend.def __init__(self, *, witness: OwnedWitness | None=None) -> None",
-        "DarwinProcessBackend.def authority(self, job_id: str) -> AuthorityObservation"
+        "DarwinProcessBackend.def authority(self, job_id: str) -> AuthorityObservation",
+        "DarwinProcessBackend.def run_foreground(self, request: ForegroundRequest, *, cancel: Event) -> ForegroundResult"
       ],
       "implements": {
         "DarwinProcessBackend": [
-          "ProcessBackend"
+          "ProcessBackend",
+          "ForegroundExecution"
         ]
-      }
+      },
+      "finding_refs": [
+        "CR0-04",
+        "A0-R0-01"
+      ]
     },
     {
       "module": "binnacle.platform.darwin.process_authority",
@@ -362,12 +405,16 @@
       ],
       "declarations": "def observe_authority(job_id: str, *, witness: OwnedWitness | None) -> AuthorityObservation: ...",
       "semantics": [
-        "Read-only authority observation; never enumerate numeric PIDs to adopt a job."
+        "Read-only authority observation; never enumerate numeric PIDs to adopt a job.",
+        "A2 owns the in-memory foreground owner/leader fence: serialize cancel/timeout signal checks with the sole reap operation; reject different process owner, lost generation or reaped leader. Witness observe_authority remains read-only and is not foreground signal authority."
       ],
       "signatures": [
         "def observe_authority(job_id: str, *, witness: OwnedWitness | None) -> AuthorityObservation"
       ],
-      "implements": {}
+      "implements": {},
+      "finding_refs": [
+        "CR0-04"
+      ]
     },
     {
       "module": "binnacle.platform.darwin.witness_protocol",
@@ -649,20 +696,26 @@
         "binnacle.features.commands.command_contracts",
         "binnacle.platform.contracts.capability_contracts"
       ],
-      "declarations": "class RestrictedDarwinCommandBackend:\n    def __init__(self, *, history_root: Path, generation: str, warmup_s: float, max_output_chars: int) -> None: ...",
+      "declarations": "class RestrictedDarwinCommandBackend:\n    def __init__(self, *, history_root: Path, generation: str, warmup_s: float, max_output_chars: int, foreground: ForegroundExecution | None = None) -> None: ...\n    def run_foreground(self, request: ForegroundRequest, *, cancel: Event) -> ForegroundResult: ...",
       "semantics": [
-        "Implements CommandBackend. start_and_wait and stop_job raise CapabilityUnavailable with stable reason darwin_commands_unavailable before any process action.",
+        "Implements CommandBackend history only; start_and_wait and stop_job always raise CapabilityUnavailable with darwin_commands_unavailable. Separate run_foreground checks acceptance then delegates to A2; if adapter or approval is absent raises native_capability_unavailable before spawn. Never route foreground execution through start_and_wait.",
         "job_state/list_jobs/read_log/read_log_range/await_exit read only authorized Darwin history; preserve unknown, cursor/truncation rules. job_processes raises AuthorityUnknown if no live proof; no metadata-derived PID enumeration.",
-        "No current history is a valid empty listing; inaccessible/corrupt history must error. owner_mode is darwin-history; no native jobs launched through public tools this revision."
+        "No current history is a valid empty listing; inaccessible/corrupt history errors. owner_mode is darwin-history. B0 records bounded foreground output/history under its own Darwin history path only; no Linux jobs/store import. Unknown owner-loss records never acquire process authority."
       ],
       "signatures": [
-        "RestrictedDarwinCommandBackend.def __init__(self, *, history_root: Path, generation: str, warmup_s: float, max_output_chars: int) -> None"
+        "RestrictedDarwinCommandBackend.def __init__(self, *, history_root: Path, generation: str, warmup_s: float, max_output_chars: int, foreground: ForegroundExecution | None=None) -> None",
+        "RestrictedDarwinCommandBackend.def run_foreground(self, request: ForegroundRequest, *, cancel: Event) -> ForegroundResult"
       ],
       "implements": {
         "RestrictedDarwinCommandBackend": [
-          "CommandBackend"
+          "CommandBackend",
+          "ForegroundExecution"
         ]
-      }
+      },
+      "finding_refs": [
+        "CR0-04",
+        "A0-R0-01"
+      ]
     },
     {
       "module": "binnacle.platform.composition",
@@ -686,6 +739,48 @@
         "def create_native_provisioner(*, root: Path, services: LaunchdUserServices) -> NativeProvisioner"
       ],
       "implements": {}
+    },
+    {
+      "module": "binnacle.features.commands.command_execution",
+      "path": "src/binnacle/features/commands/command_execution.py",
+      "owner": "B0",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.darwin_contracts",
+        "binnacle.features.commands.command_contracts"
+      ],
+      "declarations": "def run_foreground_command(request: ForegroundRequest, *, foreground: ForegroundExecution, cancel: Event, tail_lines: int | None = None) -> CommandReply: ...",
+      "semantics": [
+        "Darwin-only path formats A2 ForegroundResult with descendants_unverified=true, state=exited (leader only) and background_job=False. Errors remain controlled tool errors. tools/run_command.py branches to this path before Linux DispatchPlan/auto-background/start_and_wait. Preserve Linux run_command function behavior."
+      ],
+      "finding_refs": [
+        "CR0-04"
+      ],
+      "signatures": [
+        "def run_foreground_command(request: ForegroundRequest, *, foreground: ForegroundExecution, cancel: Event, tail_lines: int | None=None) -> CommandReply"
+      ],
+      "implements": {}
+    },
+    {
+      "module": "binnacle.features.files.paths",
+      "path": "src/binnacle/features/files/paths.py",
+      "owner": "B0",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.file_access_contracts"
+      ],
+      "declarations": "def select_root_grant(path: str, *, grants: Mapping[Path, RootGrant], base: Path, home: Path) -> tuple[RootGrant, str]: ...",
+      "semantics": [
+        "CR0-06/R0-C4: lexical request mapping only using captured base/home and canonical-root-to-grant map; reject escapes, choose the most specific configured root, return a generation-bound grant and relative components. No resolve/stat/open or new root authorization at request time. Component authority is checked by A4 descriptor traversal. Existing resolve_path remains the Linux default."
+      ],
+      "signatures": [
+        "def select_root_grant(path: str, *, grants: Mapping[Path, RootGrant], base: Path, home: Path) -> tuple[RootGrant, str]"
+      ],
+      "implements": {},
+      "finding_refs": [
+        "R0-C4",
+        "CR0-06"
+      ]
     }
   ],
   "tool_capability_matrix": {
@@ -696,12 +791,17 @@
         "surface_sha256": "54ed0646b239adce52a7b872a26203f1d7547199d952d5eb78e8156cad1d0c30"
       },
       "darwin": {
-        "state": "LIMITED",
+        "state": "UNAVAILABLE",
         "target_state": "limited",
-        "enable_only_after_native_review": true,
-        "runtime_default_before_acceptance": "UNAVAILABLE",
         "scope": "opened-root Files/Search or read-only durable history; no process stop/launch authority",
-        "error_if_unavailable": "native_capability_unavailable"
+        "error_if_unavailable": "native_capability_unavailable",
+        "runtime_enabled": false,
+        "registered_in_default_surface": true,
+        "finding_refs": [
+          "A0-R0-01",
+          "A0-R0-03"
+        ],
+        "materialization_gate": "/runtime_materialization"
       }
     },
     "list_files": {
@@ -711,12 +811,17 @@
         "surface_sha256": "3199643b89945d9c6a5f15522cf884d697b1e6b946c4a2528839304b471c24a2"
       },
       "darwin": {
-        "state": "LIMITED",
+        "state": "UNAVAILABLE",
         "target_state": "limited",
-        "enable_only_after_native_review": true,
-        "runtime_default_before_acceptance": "UNAVAILABLE",
         "scope": "opened-root Files/Search or read-only durable history; no process stop/launch authority",
-        "error_if_unavailable": "native_capability_unavailable"
+        "error_if_unavailable": "native_capability_unavailable",
+        "runtime_enabled": false,
+        "registered_in_default_surface": true,
+        "finding_refs": [
+          "A0-R0-01",
+          "A0-R0-03"
+        ],
+        "materialization_gate": "/runtime_materialization"
       }
     },
     "search_text": {
@@ -726,12 +831,17 @@
         "surface_sha256": "bd6f6e576567dad6fd759fac233667aa4b6089d546b90079832fa4761739848a"
       },
       "darwin": {
-        "state": "LIMITED",
+        "state": "UNAVAILABLE",
         "target_state": "limited",
-        "enable_only_after_native_review": true,
-        "runtime_default_before_acceptance": "UNAVAILABLE",
         "scope": "opened-root Files/Search or read-only durable history; no process stop/launch authority",
-        "error_if_unavailable": "native_capability_unavailable"
+        "error_if_unavailable": "native_capability_unavailable",
+        "runtime_enabled": false,
+        "registered_in_default_surface": true,
+        "finding_refs": [
+          "A0-R0-01",
+          "A0-R0-03"
+        ],
+        "materialization_gate": "/runtime_materialization"
       }
     },
     "edit_file": {
@@ -741,12 +851,17 @@
         "surface_sha256": "de1636ef9ac176c7876f6418caaef428e33f8918e6c77cdc67fa55991684a83b"
       },
       "darwin": {
-        "state": "LIMITED",
+        "state": "UNAVAILABLE",
         "target_state": "limited",
-        "enable_only_after_native_review": true,
-        "runtime_default_before_acceptance": "UNAVAILABLE",
         "scope": "opened-root Files/Search or read-only durable history; no process stop/launch authority",
-        "error_if_unavailable": "native_capability_unavailable"
+        "error_if_unavailable": "native_capability_unavailable",
+        "runtime_enabled": false,
+        "registered_in_default_surface": true,
+        "finding_refs": [
+          "A0-R0-01",
+          "A0-R0-03"
+        ],
+        "materialization_gate": "/runtime_materialization"
       }
     },
     "write_file": {
@@ -756,12 +871,17 @@
         "surface_sha256": "caed318767151115e1715c2cfb27400fa545019cbf3508c7cfb6de426a919e31"
       },
       "darwin": {
-        "state": "LIMITED",
+        "state": "UNAVAILABLE",
         "target_state": "limited",
-        "enable_only_after_native_review": true,
-        "runtime_default_before_acceptance": "UNAVAILABLE",
         "scope": "opened-root Files/Search or read-only durable history; no process stop/launch authority",
-        "error_if_unavailable": "native_capability_unavailable"
+        "error_if_unavailable": "native_capability_unavailable",
+        "runtime_enabled": false,
+        "registered_in_default_surface": true,
+        "finding_refs": [
+          "A0-R0-01",
+          "A0-R0-03"
+        ],
+        "materialization_gate": "/runtime_materialization"
       }
     },
     "run_command": {
@@ -772,11 +892,17 @@
       },
       "darwin": {
         "state": "UNAVAILABLE",
-        "target_state": "unavailable",
-        "enable_only_after_native_review": false,
-        "runtime_default_before_acceptance": "UNAVAILABLE",
-        "scope": "opened-root Files/Search or read-only durable history; no process stop/launch authority",
-        "error_if_unavailable": "darwin_commands_unavailable"
+        "target_state": "limited",
+        "scope": "CR0-04 foreground owned-child only; descendants_unverified=true; no durable background or adoption.",
+        "error_if_unavailable": "native_capability_unavailable",
+        "runtime_enabled": false,
+        "registered_in_default_surface": true,
+        "finding_refs": [
+          "A0-R0-01",
+          "A0-R0-03",
+          "CR0-04"
+        ],
+        "materialization_gate": "/runtime_materialization"
       }
     },
     "job_status": {
@@ -786,12 +912,17 @@
         "surface_sha256": "943496173b29f5c8cf9746fb355fd5ccf4d7351089b6841202e0d8279aa7f1a3"
       },
       "darwin": {
-        "state": "LIMITED",
+        "state": "UNAVAILABLE",
         "target_state": "limited",
-        "enable_only_after_native_review": true,
-        "runtime_default_before_acceptance": "UNAVAILABLE",
         "scope": "opened-root Files/Search or read-only durable history; no process stop/launch authority",
-        "error_if_unavailable": "native_capability_unavailable"
+        "error_if_unavailable": "native_capability_unavailable",
+        "runtime_enabled": false,
+        "registered_in_default_surface": true,
+        "finding_refs": [
+          "A0-R0-01",
+          "A0-R0-03"
+        ],
+        "materialization_gate": "/runtime_materialization"
       }
     },
     "stop_job": {
@@ -803,10 +934,15 @@
       "darwin": {
         "state": "UNAVAILABLE",
         "target_state": "unavailable",
-        "enable_only_after_native_review": false,
-        "runtime_default_before_acceptance": "UNAVAILABLE",
-        "scope": "opened-root Files/Search or read-only durable history; no process stop/launch authority",
-        "error_if_unavailable": "darwin_commands_unavailable"
+        "scope": "No public native launch or stop operation in this revision.",
+        "error_if_unavailable": "darwin_commands_unavailable",
+        "runtime_enabled": false,
+        "registered_in_default_surface": true,
+        "finding_refs": [
+          "A0-R0-01",
+          "A0-R0-03"
+        ],
+        "materialization_gate": "/runtime_materialization"
       }
     }
   },
@@ -832,7 +968,7 @@
   },
   "wire_policy": {
     "linux": "all input/output schemas, descriptions, annotations, order, profile visibility 8/6/6/8 and instructions preserved byte/hash-equivalently",
-    "darwin": "same eight registered tool names and argument/output schemas; OS-specific descriptions/instructions must truthfully state disabled Commands and bounded Files/Search/history. Capability errors use existing CodedToolError MCP error path, never fabricated successful payloads. Do not claim Linux composite surface digest parity for different Darwin descriptions.",
+    "darwin": "Same eight names, argument schemas and visibility. Output schemas preserved except the CR0-04 Darwin-only run_command descendants_unverified=true field. Descriptions/instructions disclose foreground limits, disabled stop_job and bounded Files/Search/history. Controlled error envelope on unavailable/unknown; no Linux composite digest parity claim.",
     "no_new_tools": true,
     "linux_rpc_version": 1,
     "darwin_transport_envelope_version": 1
@@ -846,8 +982,819 @@
   "freeze_protocol": [
     "R0 reviews exact docs commit and all artifact hashes",
     "CR0 accepts revision and exact ownership/card amendments",
-    "Task Manager records FROZEN-API-CONTRACT.json containing revision, docs commit, api/ownership/capability SHA-256 and CR0 receipt",
-    "Single B0-contract precursor creates shared declarations/initializers; source-bound check before dependent adapter cards",
+    "Task Manager records FROZEN-API-CONTRACT.json containing revision, docs commit, all four document SHA-256 values, full_parity=FULL_PARITY_NO_GO, CAPABILITY-DECISION scope_decision and CR0 receipt",
+    "After CR0 APPROVE, sole B0a precursor creates only PATH-OWNERS contract_precursor_card.write_paths. A1 may work in parallel but consumes accepted B0a declarations before compile checks. A2-A6/T0 start only after accepted B0a; B0 integration is a later nonoverlapping phase.",
     "Any interface/owner/capability change increments revision and returns to CR0; authors cannot silently extend it"
-  ]
+  ],
+  "revision_base_sha": "372c5036595bcb7deaa38dce9d3b123725f21ee1",
+  "implementation_base_sha": "068114f87e9d0159471d0bd001683457ad4c4368",
+  "revision_evidence": {
+    "A0-R0-01": {
+      "review": {
+        "root": "inputs",
+        "path": "r0/R0-REVIEW.json",
+        "sha256": "2977f84264465de10ad32915b4cccd07971db2af6ebdf584ad54d4bf965271a6",
+        "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/a0_draft_review/findings/0",
+      "sources": [
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/CAPABILITY-CURRENT.json",
+          "sha256": "039e80dadb9fb069bbbd3715763e6433ef23196605f6a271a17650fab5c38203",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        }
+      ]
+    },
+    "A0-R0-02": {
+      "review": {
+        "root": "inputs",
+        "path": "r0/R0-REVIEW.json",
+        "sha256": "2977f84264465de10ad32915b4cccd07971db2af6ebdf584ad54d4bf965271a6",
+        "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/a0_draft_review/findings/1",
+      "sources": [
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_stop.py",
+          "sha256": "d1919904b43b31397bd0dea6be1b859f574748a4a6aa92d63821b99b8ee5da32",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_store.py",
+          "sha256": "be29a6335d37341486ea5ac5cdc53b43d304b8d692d0a66ee5f2d76b5a17a4d3",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_owner.py",
+          "sha256": "b08e0505d1dd41ff1241c56a643157954a9a99729b1df20e5a91181e06f51a55",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/jobs.py",
+          "sha256": "3a0d142af742600c6134d2abf4837bddeaf5e8168f44e893747285043322411f",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_manager.py",
+          "sha256": "b71ce32f682aceacd0441331aa4998c5b32f9d6017f25b0f3f33f197f7930c68",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_client.py",
+          "sha256": "a4fedd3abf045f8ea964891611e6d1fa2aee3d8c91d9c2cb0a783d849d99f914",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_resource_history.py",
+          "sha256": "af81be5ed9a195459c9bb3df465e8c6cdebab214507adb2e6e16e3a117226c5c",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        }
+      ]
+    },
+    "A0-R0-03": {
+      "review": {
+        "root": "inputs",
+        "path": "r0/R0-REVIEW.json",
+        "sha256": "2977f84264465de10ad32915b4cccd07971db2af6ebdf584ad54d4bf965271a6",
+        "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/a0_draft_review/findings/2",
+      "sources": [
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/A/N2-OWNERSHIP.json",
+          "sha256": "346f06e667371dda93430e9f6731adf5f6774197fd462fa33430b48dd6f38de5",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/B/N2-API.json",
+          "sha256": "2208d5a172f8e980b718d778e742787d1d81c5fd5bf651046587170850f06e86",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        }
+      ]
+    },
+    "R0-C2": {
+      "review": {
+        "root": "inputs",
+        "path": "r0/R0-REVIEW.json",
+        "sha256": "2977f84264465de10ad32915b4cccd07971db2af6ebdf584ad54d4bf965271a6",
+        "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/categories/1",
+      "sources": [
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_store.py",
+          "sha256": "be29a6335d37341486ea5ac5cdc53b43d304b8d692d0a66ee5f2d76b5a17a4d3",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_owner.py",
+          "sha256": "b08e0505d1dd41ff1241c56a643157954a9a99729b1df20e5a91181e06f51a55",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/jobs.py",
+          "sha256": "3a0d142af742600c6134d2abf4837bddeaf5e8168f44e893747285043322411f",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_manager.py",
+          "sha256": "b71ce32f682aceacd0441331aa4998c5b32f9d6017f25b0f3f33f197f7930c68",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_client.py",
+          "sha256": "a4fedd3abf045f8ea964891611e6d1fa2aee3d8c91d9c2cb0a783d849d99f914",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_resource_history.py",
+          "sha256": "af81be5ed9a195459c9bb3df465e8c6cdebab214507adb2e6e16e3a117226c5c",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        }
+      ]
+    },
+    "R0-C4": {
+      "review": {
+        "root": "inputs",
+        "path": "r0/R0-REVIEW.json",
+        "sha256": "2977f84264465de10ad32915b4cccd07971db2af6ebdf584ad54d4bf965271a6",
+        "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/categories/3",
+      "sources": [
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/paths.py",
+          "sha256": "e958060e31669172608ced4ee8c8a53ed643da1f8817e5aebddadd34db3331a8",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/search/search_text_rg.py",
+          "sha256": "1773e08e52233a42c8de0e1ad96fff6212f367f8a8ee7bafc6118624f2df637a",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/tools/read_file.py",
+          "sha256": "ad5bff4cb80433df6a10d484be999ba7fbcddd662b12c0ea257098b4bead1a9e",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/tools/list_files.py",
+          "sha256": "3873130f4c4e715972dbe5021ecd92e03993f33023e012e9e29ee251b9033354",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/tools/write_file.py",
+          "sha256": "9b09331ed3d7377d7c16a7130a6f322e66bcd794b8589a2ae9a7e79022fc286d",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/tools/edit_file.py",
+          "sha256": "c645e6f5d5d608237813cef52e1864d91295528f40fd8c52ccd8e0030597e6fe",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        }
+      ]
+    },
+    "R0-C9": {
+      "review": {
+        "root": "inputs",
+        "path": "r0/R0-REVIEW.json",
+        "sha256": "2977f84264465de10ad32915b4cccd07971db2af6ebdf584ad54d4bf965271a6",
+        "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/categories/8",
+      "sources": [
+        {
+          "root": "repository",
+          "path": "pyproject.toml",
+          "sha256": "3ef33d80700da96d7be479badfc5aef55c42c7062e9d8eca246b3ff78a700517",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "docs/testing.md",
+          "sha256": "24e97f4fafcb753c0bb347af5d47fc3a2079332d580b0d38903cb07551e633ee",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "tests/conftest.py",
+          "sha256": "2ced4609e58cd3c5ff3a6db9be66c1255fd44b1e4ea73ced02f94dd7f1e81624",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        }
+      ]
+    },
+    "CR0-01": {
+      "review": {
+        "root": "inputs",
+        "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+        "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+        "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/revise_items/0",
+      "sources": [
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/CAPABILITY-CURRENT.json",
+          "sha256": "039e80dadb9fb069bbbd3715763e6433ef23196605f6a271a17650fab5c38203",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        }
+      ]
+    },
+    "CR0-02": {
+      "review": {
+        "root": "inputs",
+        "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+        "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+        "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/revise_items/1",
+      "sources": [
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_stop.py",
+          "sha256": "d1919904b43b31397bd0dea6be1b859f574748a4a6aa92d63821b99b8ee5da32",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_store.py",
+          "sha256": "be29a6335d37341486ea5ac5cdc53b43d304b8d692d0a66ee5f2d76b5a17a4d3",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_owner.py",
+          "sha256": "b08e0505d1dd41ff1241c56a643157954a9a99729b1df20e5a91181e06f51a55",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/jobs.py",
+          "sha256": "3a0d142af742600c6134d2abf4837bddeaf5e8168f44e893747285043322411f",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_manager.py",
+          "sha256": "b71ce32f682aceacd0441331aa4998c5b32f9d6017f25b0f3f33f197f7930c68",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_client.py",
+          "sha256": "a4fedd3abf045f8ea964891611e6d1fa2aee3d8c91d9c2cb0a783d849d99f914",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_resource_history.py",
+          "sha256": "af81be5ed9a195459c9bb3df465e8c6cdebab214507adb2e6e16e3a117226c5c",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        }
+      ]
+    },
+    "CR0-03": {
+      "review": {
+        "root": "inputs",
+        "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+        "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+        "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/revise_items/2",
+      "sources": [
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/A/N2-OWNERSHIP.json",
+          "sha256": "346f06e667371dda93430e9f6731adf5f6774197fd462fa33430b48dd6f38de5",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/B/N2-API.json",
+          "sha256": "2208d5a172f8e980b718d778e742787d1d81c5fd5bf651046587170850f06e86",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        }
+      ]
+    },
+    "CR0-04": {
+      "review": {
+        "root": "inputs",
+        "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+        "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+        "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/revise_items/3",
+      "sources": [
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/A/N2-OWNERSHIP.json",
+          "sha256": "346f06e667371dda93430e9f6731adf5f6774197fd462fa33430b48dd6f38de5",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/B/N2-API.json",
+          "sha256": "2208d5a172f8e980b718d778e742787d1d81c5fd5bf651046587170850f06e86",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        }
+      ]
+    },
+    "CR0-05": {
+      "review": {
+        "root": "inputs",
+        "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+        "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+        "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/revise_items/4",
+      "sources": [
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_store.py",
+          "sha256": "be29a6335d37341486ea5ac5cdc53b43d304b8d692d0a66ee5f2d76b5a17a4d3",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_owner.py",
+          "sha256": "b08e0505d1dd41ff1241c56a643157954a9a99729b1df20e5a91181e06f51a55",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/jobs.py",
+          "sha256": "3a0d142af742600c6134d2abf4837bddeaf5e8168f44e893747285043322411f",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_manager.py",
+          "sha256": "b71ce32f682aceacd0441331aa4998c5b32f9d6017f25b0f3f33f197f7930c68",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_client.py",
+          "sha256": "a4fedd3abf045f8ea964891611e6d1fa2aee3d8c91d9c2cb0a783d849d99f914",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_resource_history.py",
+          "sha256": "af81be5ed9a195459c9bb3df465e8c6cdebab214507adb2e6e16e3a117226c5c",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        }
+      ]
+    },
+    "CR0-06": {
+      "review": {
+        "root": "inputs",
+        "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+        "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+        "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/revise_items/5",
+      "sources": [
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/paths.py",
+          "sha256": "e958060e31669172608ced4ee8c8a53ed643da1f8817e5aebddadd34db3331a8",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/search/search_text_rg.py",
+          "sha256": "1773e08e52233a42c8de0e1ad96fff6212f367f8a8ee7bafc6118624f2df637a",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/tools/read_file.py",
+          "sha256": "ad5bff4cb80433df6a10d484be999ba7fbcddd662b12c0ea257098b4bead1a9e",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/tools/list_files.py",
+          "sha256": "3873130f4c4e715972dbe5021ecd92e03993f33023e012e9e29ee251b9033354",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/tools/write_file.py",
+          "sha256": "9b09331ed3d7377d7c16a7130a6f322e66bcd794b8589a2ae9a7e79022fc286d",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/tools/edit_file.py",
+          "sha256": "c645e6f5d5d608237813cef52e1864d91295528f40fd8c52ccd8e0030597e6fe",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        }
+      ]
+    },
+    "CR0-07": {
+      "review": {
+        "root": "inputs",
+        "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+        "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+        "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/revise_items/6",
+      "sources": [
+        {
+          "root": "repository",
+          "path": "pyproject.toml",
+          "sha256": "3ef33d80700da96d7be479badfc5aef55c42c7062e9d8eca246b3ff78a700517",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "docs/testing.md",
+          "sha256": "24e97f4fafcb753c0bb347af5d47fc3a2079332d580b0d38903cb07551e633ee",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "tests/conftest.py",
+          "sha256": "2ced4609e58cd3c5ff3a6db9be66c1255fd44b1e4ea73ced02f94dd7f1e81624",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        }
+      ]
+    }
+  },
+  "full_parity": "FULL_PARITY_NO_GO",
+  "runtime_materialization": {
+    "finding_refs": [
+      "A0-R0-01",
+      "A0-R0-03",
+      "CR0-04"
+    ],
+    "target_fields_are_authority": false,
+    "unimplemented_runtime_state": "UNAVAILABLE",
+    "unimplemented_runtime_enabled": false,
+    "accepted_runtime_capabilities": [],
+    "required_before_enablement": [
+      "implemented adapter and B0 wiring at exact candidate commit/tree",
+      "native positive and negative receipts for that exact scope/build",
+      "independent R1/R2 source-bound review",
+      "CR1/CR2 scope acceptance and CR0 frozen revision/hashes",
+      "current generation and operation-specific authority observation"
+    ],
+    "rule": "All requirements are conjunctive. This packet supplies no runtime acceptance. Only limited targets may later materialize as LIMITED within reviewed scope; target_state never materializes runtime state. Missing implementation/acceptance is UNAVAILABLE and disabled; lost/contradictory current authority is UNKNOWN and disabled. No AVAILABLE Darwin runtime scope is authorized by this revision.",
+    "disabled_commands": [
+      "stop_job"
+    ],
+    "commands_rule": "stop_job remains unavailable for this revision. run_command can materialize LIMITED foreground-only after A2 implementation and R1 plus CR1 approval and B0 integration; all general materialization requirements still apply."
+  },
+  "stop_protocol": {
+    "finding_refs": [
+      "A0-R0-02",
+      "R0-C2",
+      "CR0-02",
+      "CR0-05"
+    ],
+    "identity_key": [
+      "job_id",
+      "job_incarnation",
+      "owner_epoch",
+      "request_id"
+    ],
+    "admission": [
+      "Serialize metadata read/merge/prepare and ownership decisions across processes using one stable owned lock domain per job incarnation; a process-local RLock, lock timeout or replaceable lock inode is insufficient. All store writers and retention use the same transaction boundary.",
+      "One active executor reservation per job incarnation, including outstanding operations from older owner epochs. Concurrent callers join its request_id; no alternate request/lease may bypass unresolved admission.",
+      "Persist an immutable unresolved prepare record with job incarnation, owner epoch and operation ID before opening signals: bounded temp write, flush, file fsync, atomic replace, directory fsync including newly created ancestor entries. Every error, including post-replace directory fsync, refuses admission and permits zero signals.",
+      "Keep the prepare record independently of the tentative resolution. Establish the executor lifetime fence before admission and keep it until quiescence. Do not hold metadata transactions across native signals, join waits or reaper waits."
+    ],
+    "execution": [
+      "Only the executor token opens one validated signal lease; TERM and optional KILL use that same lease. No numeric reacquisition or second child waiter. Close membership/birth admission and verify complete authorized target coverage; a disappearing leader, empty snapshot or reaper exit record is insufficient.",
+      "The sole existing owning waiter publishes leader exit evidence through a merge transaction that preserves prepare/partial flags and operation identity. Reaper publication never resolves a stop. Metrics/history finalization uses the same merge guard.",
+      "Partial delivery, failed diagnostic persistence, cancellation or loss leaves the prior durable prepare intact. Prevent future signal entry, wait for in-flight calls, close leases and establish executor quiescence in finally; lack of proof stays unresolved."
+    ],
+    "resolution": [
+      "Reject resolution without the exact prepared identity or with a stale/mismatched executor. Require independently checked full target-set closure, terminal leader evidence and quiescence of the sole executor before making a tentative closed receipt.",
+      "Write and fsync tentative resolution, atomically replace, then fsync its directory under the common transaction. Only after all barriers succeed may the coordinator set outcome_persisted=True and release a closed result. Prepare remains available for crash reconciliation.",
+      "Visible closed bytes after failed directory sync are UNCOMMITTED. Invalidate cached success, retain unresolved prepare and raise. Readers cannot trust disk state=closed, exit_code, signal or ended_at in isolation.",
+      "On restart or absence of a live commit acknowledgment, a guarded recovery transaction must validate the matching prepare/resolution and closure evidence, positively fence/quiesce the old executor, and successfully re-sync the resolution file and directory before terminal acceptance. If any evidence is unavailable, retain UNKNOWN. A visible receipt or new owner epoch alone cannot authorize recovery."
+    ],
+    "terminal_reads": [
+      "Run terminal_guard within the same read/merge transaction on EVERY terminal path: stop retry, job_state/list_jobs, await_exit including timeout, owner RPC before ok=true, local fallback, command status and restart recovery. Resolve before ordinary exited mapping; expose the existing controlled error envelope if unresolved, without adding Linux wire states or fields.",
+      "Guard result and terminal metadata must come from one transaction/version; copying an earlier guard result across a concurrent admission is forbidden. Reaper-only terminal reads may retain internal leader evidence but cannot publish completed stop.",
+      "Legacy stop_requested or stop_signal_partial without a verified resolution, missing/corrupt/unreadable metadata or journal, uncertain durability and unknown ownership block success. Missing metadata in an existing job directory is uncertainty, not a nonexistent job."
+    ],
+    "retention_restart": [
+      "Retention cannot remove any unresolved intent, legacy uncertain stop, unreadable job or required prepare/resolution/closure evidence, including resource-history rows needed for resolution. Recheck eligibility under the shared transaction immediately before deletion.",
+      "Recovery cannot relabel uncertainty as stopped, adopt persisted PIDs or launch a successor signal executor until the previous executor is positively proven quiescent. Require live cooperative drain acknowledgment or non-inherited exclusive lifetime ownership with proven release; lease timeout, PID absence, generation change or broken socket is insufficient.",
+      "Restart and rollback quiet gates treat unresolved/unknown jobs as active. No stable manager restart while such jobs remain."
+    ],
+    "compatibility": [
+      "Linux v1/v2 legacy metadata, combined output and byte cursors remain readable; RPC protocol stays 1. Prepare/resolution data are internal additive state, never new public tool fields. New owner with old client returns existing error envelope for uncertainty.",
+      "Old-owner/new-client compatibility must be tested, but the unchanged old owner cannot be credited with the new stop guarantees. Full repaired-stop acceptance requires all writers/readers owning that spool to implement the barriers; mixed unsafe old owners remain an explicit limitation."
+    ],
+    "required_cases_before_linux_stop_acceptance": [
+      "STOP-ADMISSION",
+      "STOP-REAPER",
+      "STOP-RESOLUTION",
+      "STOP-PIDFD",
+      "WIRE-ABI"
+    ],
+    "test_status": "NOT_EXECUTED_PRODUCT; A0 validates specification only"
+  },
+  "file_tool_wiring": {
+    "finding_refs": [
+      "R0-C4",
+      "CR0-06"
+    ],
+    "adapter_owner": "A4",
+    "shared_wiring_owner": "B0",
+    "application": "B0 captures configured canonical roots once per application generation, opens RootGrants during composition and injects files/search adapters and a lexical request-to-(grant,relative_path) selector into existing native FastMCP child registrations. The selector performs no filesystem I/O. Root retarget requires a new generation; close handles in finally and grants at app teardown.",
+    "tools": {
+      "read_file": [
+        "FileAccess.open_read",
+        "OpenedFile.metadata",
+        "OpenedFile.read",
+        "OpenedFile.close",
+        "FileAccess.nearby_hint"
+      ],
+      "list_files": [
+        "FileAccess.list_entries",
+        "FileAccess.nearby_hint"
+      ],
+      "write_file": [
+        "FileAccess.write_bytes"
+      ],
+      "edit_file": [
+        "FileAccess.open_read",
+        "OpenedFile.metadata",
+        "OpenedFile.read",
+        "OpenedFile.close",
+        "FileAccess.write_bytes",
+        "FileAccess.nearby_hint"
+      ],
+      "search_text": [
+        "SearchAccess.search",
+        "FileAccess.nearby_hint"
+      ]
+    },
+    "tool_policy": {
+      "read_file": "Adapter opens/stat/reads regular file with byte bound; Core decodes and slices lines from bytes only.",
+      "list_files": "ListRequest handles one-level and recursive glob modes, hidden/ignore semantics, sorting and explicit truncation; never feed paths to legacy walkers.",
+      "write_file": "Encode verbatim UTF-8 in Core; write_bytes(create_parents=True) owns mkdir, parent validation, temporary file, replacement, cleanup and WriteReceipt.",
+      "edit_file": "Core preserves exact/whitespace-normalized matching and BOM/encoding on authorized bounded bytes, computes original sha256, then write_bytes(create_parents=False, expected_sha256=digest).",
+      "search_text": "Adapter traverses/open files through grant, feeds bytes to bounded rg stdin and returns remapped events; Core formats them without reopening paths."
+    },
+    "forbidden_on_darwin": [
+      "resolve_path then reopen",
+      "Core Path.exists/stat/iterdir/mkdir/read_bytes/write_bytes",
+      "legacy recursive rg cwd/path traversal",
+      "nearby_hint outside grant",
+      "Linux fallback when native adapter missing"
+    ],
+    "required_acceptance": "Native race/denial and differential tests for all five tools plus B0 call-routing tests. These declarations do not establish filesystem safety.",
+    "exact_wiring_points": {
+      "src/binnacle/platform/composition.py": [
+        "create_file_access",
+        "create_search_access"
+      ],
+      "src/binnacle/application.py": [
+        "create_application"
+      ],
+      "src/binnacle/features/files/files_server.py": [
+        "create_files_server"
+      ],
+      "src/binnacle/features/search/search_server.py": [
+        "create_search_server"
+      ],
+      "src/binnacle/features/files/paths.py": [
+        "resolve_path (Linux only)",
+        "select_root_grant (new lexical mapping only)"
+      ],
+      "src/binnacle/features/files/tools/read_file.py": [
+        "register",
+        "read_file_impl"
+      ],
+      "src/binnacle/features/files/tools/list_files.py": [
+        "register",
+        "list_files_impl",
+        "_list_mode (Linux only)",
+        "_glob_mode (Linux only)"
+      ],
+      "src/binnacle/features/files/tools/write_file.py": [
+        "register",
+        "write_file_impl"
+      ],
+      "src/binnacle/features/files/tools/edit_file.py": [
+        "register",
+        "edit_file_impl"
+      ],
+      "src/binnacle/features/search/tools/search_text.py": [
+        "register",
+        "search_text_impl"
+      ],
+      "src/binnacle/features/search/search_text_pipeline.py": [
+        "scan_exact",
+        "_scan_streaming (both Linux only; Darwin bypasses)"
+      ],
+      "src/binnacle/features/search/search_text_rg.py": [
+        "run_rg (Linux pathname execution only)"
+      ],
+      "src/binnacle/features/search/search_text_stream.py": [
+        "RgJsonStream",
+        "managed_rg_stream (Linux pathname execution only)"
+      ],
+      "src/binnacle/features/search/search_text_collect.py": [
+        "collect",
+        "attach_context (bytes/events only; no reopen on Darwin)"
+      ],
+      "src/binnacle/features/files/textio.py": [
+        "decode_text (bytes-only on Darwin)"
+      ]
+    }
+  },
+  "supervisor_steering": {
+    "root": "inputs",
+    "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+    "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+    "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
+  },
+  "foreground_execution": {
+    "finding_refs": [
+      "CR0-04",
+      "CR0-01",
+      "A0-R0-01",
+      "A0-R0-03"
+    ],
+    "target_state": "limited",
+    "runtime_state": "UNAVAILABLE",
+    "runtime_enabled": false,
+    "implementation_owner": "A2",
+    "wiring_owner": "B0",
+    "enablement_authorities": [
+      "R1",
+      "CR1"
+    ],
+    "mechanism": "The live spawning process uses posix_spawn (Python os.posix_spawn with setpgroup=0 or a public native equivalent) to start bash -c in a new process group whose leader is its unreaped direct child. No shell launched via Linux durable engine.",
+    "signal_reap_order": [
+      "Only that same live spawning process can signal the originally created group. Serialize leader-reaped state and all group signal calls under a single owner-local lock. No other thread, SIGCHLD handler, Popen poll/wait path or background waiter may reap this child.",
+      "Do not infer alive from PID lookup. Kernel parenthood plus sole ownership of an unreaped child anchors the identity; no adoption from PID/PGID metadata. Reserve the unreaped leader until all permitted cleanup signals finish. After any successful reap, invalidate group authority before releasing the lock; never signal again.",
+      "Timeout/cancel/over-limit uses bounded TERM then KILL if needed, while leader remains unreaped, then reaps exactly once. If leader has already been reaped, refuse further group signals and report descendants_unverified. Signal errors or failure to reap/close resources return explicit failure; never claim whole-tree cleanup.",
+      "Normal completion requires sole-owner wait evidence and bounded output drain; escaped descendants may keep pipe FDs open, so pipe EOF cannot cause an unbounded wait. Close pipes on drain budget exhaustion and report truncation."
+    ],
+    "background_policy": [
+      "background=true or requested wait_seconds exceeding foreground_limit_s is refused before spawn with darwin_background_jobs_unavailable. If a group already exists when background/over-limit is detected, kill it under the unreaped-leader rule before returning that error. Do not spawn merely to reject a request.",
+      "A running command reaching min(wait_seconds, foreground_limit_s) gets owned-group cleanup and darwin_background_jobs_unavailable; never return running/background_job=true or auto-background it. foreground_limit_s is positive, at most captured settings.wait_max_s (base maximum 50 seconds); no mutable per-call widening.",
+      "Cancellation initiates the same bounded group cleanup before request teardown and propagates a controlled cancellation/error. If owner authority is lost, report UNKNOWN/error; never delegate numeric group killing to a replacement process."
+    ],
+    "scope_limits": [
+      "setsid/double-fork or otherwise escaped descendants are outside authority; every result declares descendants_unverified=true and descriptions state this limit. Foreground means bounded owner wait, not complete descendant containment.",
+      "Owner death may leave the command unsupervised. Later history/status is UNKNOWN; no adoption or signaling by a restarted owner. A previously durably recorded leader exit can remain leader-only history, never descendant closure.",
+      "stop_job remains UNAVAILABLE. job_status is history/output only. No durable background execution or stable-manager continuation is promised."
+    ],
+    "wire_mapping": {
+      "linux": "No changes to Linux argument/output schemas, descriptions, spool or RPC.",
+      "darwin": "Same tool names and input schemas. CR0-04 explicitly adds descendants_unverified (boolean const true, required on every successful Darwin run_command output) to the Darwin-only output schema and payload. Text also says leader-only result; no whole-tree completion. Unknown owner state uses existing error envelope for run_command, never invents exited.",
+      "errors": "darwin_background_jobs_unavailable for explicit background/foreground-budget expiry; native_capability_unavailable before runtime acceptance; darwin_commands_unavailable for stop_job. Error text includes descendants_unverified=true when any child was spawned."
+    },
+    "required_native_cases": [
+      "normal exit",
+      "timeout",
+      "cancel racing leader exit/reap",
+      "background request zero spawn",
+      "over-limit request zero spawn",
+      "runtime over-limit owned group cleanup",
+      "setsid/double fork scope disclosure",
+      "escaped descendant holds pipe open",
+      "owner death then restart UNKNOWN/no adoption",
+      "post-reap signal forbidden",
+      "single reaper",
+      "missing approval zero spawn"
+    ],
+    "acceptance": "A2 exact-source native implementation plus R1 adversarial review AND CR1 approval, B0 wiring and current owner proof required. CR0 architecture approval alone cannot enable runtime. If CR1 declines, runtime stays UNAVAILABLE."
+  }
 }

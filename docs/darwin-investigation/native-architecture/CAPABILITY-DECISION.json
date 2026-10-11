@@ -1,5 +1,5 @@
 {
-  "schema_revision": "binnacle-darwin-r3-interface-1.0.0",
+  "schema_revision": "binnacle-darwin-r3-interface-1.1.0",
   "source_base_sha": "c2234f16bdfb1a17500b99101d3184b797ebb673",
   "status": "TARGET_POLICY_PENDING_CR0_NOT_NATIVE_ACCEPTANCE",
   "evidence_root": "run inputs directory; paths relative to inputs/",
@@ -44,7 +44,7 @@
     {
       "id": "N1.arm64_package_fastmcp",
       "target_state": "limited",
-      "runtime_state": "LIMITED",
+      "runtime_state": "UNAVAILABLE",
       "owner": "A6",
       "rationale": "Finite fake-platform schema and package proof supports native build work, not full runtime.",
       "evidence": [
@@ -59,14 +59,20 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N2.public_commands_launch",
-      "target_state": "unavailable",
+      "target_state": "limited",
       "runtime_state": "UNAVAILABLE",
       "owner": "A2",
-      "rationale": "Arbitrary shell descendants cannot be bounded/proven from existing research; do not advertise durable shell execution.",
+      "rationale": "CR0-04 foreground live spawning owner only; no durable background, cold adoption or descendant closure. Default disabled until A2 plus R1/CR1 acceptance.",
       "evidence": [
         {
           "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/A/N2-OWNERSHIP.json",
@@ -77,9 +83,22 @@
           "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/B/N2-API.json",
           "sha256": "2208d5a172f8e980b718d778e742787d1d81c5fd5bf651046587170850f06e86",
           "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+          "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+          "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03",
+        "CR0-04"
+      ]
     },
     {
       "id": "N2.public_commands_stop",
@@ -99,7 +118,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N2.cold_recovery",
@@ -114,12 +139,18 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N2.read_only_history",
       "target_state": "limited",
-      "runtime_state": "LIMITED",
+      "runtime_state": "UNAVAILABLE",
       "owner": "B0",
       "rationale": "Read persisted bytes/recorded results; uncertain active records stay unknown, never exited by inference.",
       "evidence": [
@@ -134,12 +165,18 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N3.user_launchd",
       "target_state": "limited",
-      "runtime_state": "LIMITED",
+      "runtime_state": "UNAVAILABLE",
       "owner": "A3",
       "rationale": "Test-owned user-domain service with separate frontend; readiness and teardown need native product proof.",
       "evidence": [
@@ -154,12 +191,18 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N4.authenticated_ipc",
       "target_state": "limited",
-      "runtime_state": "LIMITED",
+      "runtime_state": "UNAVAILABLE",
       "owner": "A3",
       "rationale": "Peer UID plus generation under cooperative same-UID trust, not malicious same-UID isolation.",
       "evidence": [
@@ -174,12 +217,18 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N4.opened_root_files",
       "target_state": "limited",
-      "runtime_state": "LIMITED",
+      "runtime_state": "UNAVAILABLE",
       "owner": "A4",
       "rationale": "Opened-object authority across rename; no continuous-path or hostile same-UID claim. TCC denial explicit.",
       "evidence": [
@@ -194,12 +243,18 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N4.descriptor_search",
       "target_state": "limited",
-      "runtime_state": "LIMITED",
+      "runtime_state": "UNAVAILABLE",
       "owner": "A4",
       "rationale": "Only authorized opened file bytes enter rg; no unsafe recursive reopen; parity must be demonstrated.",
       "evidence": [
@@ -214,12 +269,18 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N5.awake_unlocked_session",
       "target_state": "limited",
-      "runtime_state": "LIMITED",
+      "runtime_state": "UNAVAILABLE",
       "owner": "A3",
       "rationale": "Finite SSH observations do not establish continuous launchd lifetime. No interval claims inferred from endpoint states.",
       "evidence": [
@@ -234,7 +295,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N5.sleep_logout_preunlock",
@@ -249,12 +316,18 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.private_service_logs",
       "target_state": "limited",
-      "runtime_state": "LIMITED",
+      "runtime_state": "UNAVAILABLE",
       "owner": "A5",
       "rationale": "Finite owned launchd stdout/stderr proof; durable epochs, rotation, redaction and gaps need new tests.",
       "evidence": [
@@ -264,12 +337,18 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.direct_child_wait4",
       "target_state": "limited",
-      "runtime_state": "LIMITED",
+      "runtime_state": "UNAVAILABLE",
       "owner": "A5",
       "rationale": "Single owning reaper final direct-child metrics only; never job-wide totals.",
       "evidence": [
@@ -279,7 +358,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.private_libproc_samples",
@@ -299,7 +384,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.cpu.stat.usage_usec",
@@ -314,7 +405,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.cpu.stat.user_usec",
@@ -329,7 +426,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.cpu.stat.system_usec",
@@ -344,7 +447,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.memory.current",
@@ -359,7 +468,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.memory.peak",
@@ -374,7 +489,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.pids.current",
@@ -389,7 +510,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.io.stat.rbytes",
@@ -404,7 +531,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.io.stat.wbytes",
@@ -419,7 +552,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.memory.events.oom",
@@ -434,7 +573,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.scope.wait_empty",
@@ -449,7 +594,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.resource_history.final",
@@ -464,7 +615,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.memory.stat",
@@ -479,7 +636,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.memory.swap.current",
@@ -494,7 +657,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.memory.swap.peak",
@@ -509,7 +678,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.memory.swap.events",
@@ -524,7 +699,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.pids.peak",
@@ -539,7 +720,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.processes",
@@ -554,7 +741,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.io.stat.rios/wios",
@@ -569,7 +762,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "id": "N6.memory.events.oom_kill",
@@ -584,14 +783,20 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status.",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     }
   ],
   "tools": [
     {
       "tool": "read_file",
       "target_state": "limited",
-      "runtime_state": "LIMITED",
+      "runtime_state": "UNAVAILABLE",
       "capabilities": [
         "N4.opened_root_files"
       ],
@@ -607,12 +812,18 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "tool": "list_files",
       "target_state": "limited",
-      "runtime_state": "LIMITED",
+      "runtime_state": "UNAVAILABLE",
       "capabilities": [
         "N4.opened_root_files"
       ],
@@ -628,12 +839,18 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "tool": "search_text",
       "target_state": "limited",
-      "runtime_state": "LIMITED",
+      "runtime_state": "UNAVAILABLE",
       "capabilities": [
         "N4.descriptor_search"
       ],
@@ -649,12 +866,18 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "tool": "edit_file",
       "target_state": "limited",
-      "runtime_state": "LIMITED",
+      "runtime_state": "UNAVAILABLE",
       "capabilities": [
         "N4.opened_root_files"
       ],
@@ -670,12 +893,18 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "tool": "write_file",
       "target_state": "limited",
-      "runtime_state": "LIMITED",
+      "runtime_state": "UNAVAILABLE",
       "capabilities": [
         "N4.opened_root_files"
       ],
@@ -691,11 +920,17 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "tool": "run_command",
-      "target_state": "unavailable",
+      "target_state": "limited",
       "runtime_state": "UNAVAILABLE",
       "capabilities": [
         "N2.public_commands_launch"
@@ -710,14 +945,27 @@
           "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/B/N2-API.json",
           "sha256": "2208d5a172f8e980b718d778e742787d1d81c5fd5bf651046587170850f06e86",
           "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+          "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+          "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
         }
       ],
-      "public_behavior": "MCP tool error before side effects; remains discoverable with explicit unavailable description"
+      "public_behavior": "After A2/R1/CR1 approval only: bounded foreground owned-child execution, descendants_unverified=true; background/over-limit raises darwin_background_jobs_unavailable. Until acceptance: MCP unavailable error before spawn.",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03",
+        "CR0-04"
+      ]
     },
     {
       "tool": "job_status",
       "target_state": "limited",
-      "runtime_state": "LIMITED",
+      "runtime_state": "UNAVAILABLE",
       "capabilities": [
         "N2.read_only_history",
         "N6.direct_child_wait4"
@@ -734,7 +982,13 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim",
+      "runtime_enabled": false,
+      "runtime_reason": "implementation_and_acceptance_missing",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     },
     {
       "tool": "stop_job",
@@ -755,9 +1009,707 @@
           "class": "historical_bounded_evidence_not_candidate_acceptance"
         }
       ],
-      "public_behavior": "MCP tool error before side effects; remains discoverable with explicit unavailable description"
+      "public_behavior": "MCP tool error before side effects; remains discoverable with explicit unavailable description",
+      "runtime_enabled": false,
+      "runtime_reason": "disabled_by_policy",
+      "finding_refs": [
+        "A0-R0-01",
+        "A0-R0-03"
+      ]
     }
   ],
-  "promotion_rule": "No promotion to full or Commands enablement by adapter author. New revision, native negative evidence, R1/R2 review and CR0/CR1 exact-source decision required.",
-  "runtime_unknown_rule": "Insufficient observation is UNKNOWN; null metrics and no authority. Tool policy remains UNAVAILABLE for public launch/stop even with finite retained-witness test success."
+  "promotion_rule": "No promotion to full or stop_job enablement by an adapter author. run_command target is limited per CR0-04; only A2 implementation plus R1 AND CR1 approval and B0 wiring can enable that scope. Any expansion requires new revision and exact-source independent/Supervisor decision.",
+  "runtime_unknown_rule": "Insufficient observation is UNKNOWN, null metrics, no authority. Owner death cannot transfer foreground authority. stop_job stays UNAVAILABLE even after finite witness or foreground tests.",
+  "revision_base_sha": "372c5036595bcb7deaa38dce9d3b123725f21ee1",
+  "implementation_base_sha": "068114f87e9d0159471d0bd001683457ad4c4368",
+  "revision_evidence": {
+    "A0-R0-01": {
+      "review": {
+        "root": "inputs",
+        "path": "r0/R0-REVIEW.json",
+        "sha256": "2977f84264465de10ad32915b4cccd07971db2af6ebdf584ad54d4bf965271a6",
+        "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/a0_draft_review/findings/0",
+      "sources": [
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/CAPABILITY-CURRENT.json",
+          "sha256": "039e80dadb9fb069bbbd3715763e6433ef23196605f6a271a17650fab5c38203",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        }
+      ]
+    },
+    "A0-R0-02": {
+      "review": {
+        "root": "inputs",
+        "path": "r0/R0-REVIEW.json",
+        "sha256": "2977f84264465de10ad32915b4cccd07971db2af6ebdf584ad54d4bf965271a6",
+        "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/a0_draft_review/findings/1",
+      "sources": [
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_stop.py",
+          "sha256": "d1919904b43b31397bd0dea6be1b859f574748a4a6aa92d63821b99b8ee5da32",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_store.py",
+          "sha256": "be29a6335d37341486ea5ac5cdc53b43d304b8d692d0a66ee5f2d76b5a17a4d3",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_owner.py",
+          "sha256": "b08e0505d1dd41ff1241c56a643157954a9a99729b1df20e5a91181e06f51a55",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/jobs.py",
+          "sha256": "3a0d142af742600c6134d2abf4837bddeaf5e8168f44e893747285043322411f",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_manager.py",
+          "sha256": "b71ce32f682aceacd0441331aa4998c5b32f9d6017f25b0f3f33f197f7930c68",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_client.py",
+          "sha256": "a4fedd3abf045f8ea964891611e6d1fa2aee3d8c91d9c2cb0a783d849d99f914",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_resource_history.py",
+          "sha256": "af81be5ed9a195459c9bb3df465e8c6cdebab214507adb2e6e16e3a117226c5c",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        }
+      ]
+    },
+    "A0-R0-03": {
+      "review": {
+        "root": "inputs",
+        "path": "r0/R0-REVIEW.json",
+        "sha256": "2977f84264465de10ad32915b4cccd07971db2af6ebdf584ad54d4bf965271a6",
+        "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/a0_draft_review/findings/2",
+      "sources": [
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/A/N2-OWNERSHIP.json",
+          "sha256": "346f06e667371dda93430e9f6731adf5f6774197fd462fa33430b48dd6f38de5",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/B/N2-API.json",
+          "sha256": "2208d5a172f8e980b718d778e742787d1d81c5fd5bf651046587170850f06e86",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        }
+      ]
+    },
+    "R0-C2": {
+      "review": {
+        "root": "inputs",
+        "path": "r0/R0-REVIEW.json",
+        "sha256": "2977f84264465de10ad32915b4cccd07971db2af6ebdf584ad54d4bf965271a6",
+        "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/categories/1",
+      "sources": [
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_store.py",
+          "sha256": "be29a6335d37341486ea5ac5cdc53b43d304b8d692d0a66ee5f2d76b5a17a4d3",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_owner.py",
+          "sha256": "b08e0505d1dd41ff1241c56a643157954a9a99729b1df20e5a91181e06f51a55",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/jobs.py",
+          "sha256": "3a0d142af742600c6134d2abf4837bddeaf5e8168f44e893747285043322411f",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_manager.py",
+          "sha256": "b71ce32f682aceacd0441331aa4998c5b32f9d6017f25b0f3f33f197f7930c68",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_client.py",
+          "sha256": "a4fedd3abf045f8ea964891611e6d1fa2aee3d8c91d9c2cb0a783d849d99f914",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_resource_history.py",
+          "sha256": "af81be5ed9a195459c9bb3df465e8c6cdebab214507adb2e6e16e3a117226c5c",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        }
+      ]
+    },
+    "R0-C4": {
+      "review": {
+        "root": "inputs",
+        "path": "r0/R0-REVIEW.json",
+        "sha256": "2977f84264465de10ad32915b4cccd07971db2af6ebdf584ad54d4bf965271a6",
+        "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/categories/3",
+      "sources": [
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/paths.py",
+          "sha256": "e958060e31669172608ced4ee8c8a53ed643da1f8817e5aebddadd34db3331a8",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/search/search_text_rg.py",
+          "sha256": "1773e08e52233a42c8de0e1ad96fff6212f367f8a8ee7bafc6118624f2df637a",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/tools/read_file.py",
+          "sha256": "ad5bff4cb80433df6a10d484be999ba7fbcddd662b12c0ea257098b4bead1a9e",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/tools/list_files.py",
+          "sha256": "3873130f4c4e715972dbe5021ecd92e03993f33023e012e9e29ee251b9033354",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/tools/write_file.py",
+          "sha256": "9b09331ed3d7377d7c16a7130a6f322e66bcd794b8589a2ae9a7e79022fc286d",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/tools/edit_file.py",
+          "sha256": "c645e6f5d5d608237813cef52e1864d91295528f40fd8c52ccd8e0030597e6fe",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        }
+      ]
+    },
+    "R0-C9": {
+      "review": {
+        "root": "inputs",
+        "path": "r0/R0-REVIEW.json",
+        "sha256": "2977f84264465de10ad32915b4cccd07971db2af6ebdf584ad54d4bf965271a6",
+        "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/categories/8",
+      "sources": [
+        {
+          "root": "repository",
+          "path": "pyproject.toml",
+          "sha256": "3ef33d80700da96d7be479badfc5aef55c42c7062e9d8eca246b3ff78a700517",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "docs/testing.md",
+          "sha256": "24e97f4fafcb753c0bb347af5d47fc3a2079332d580b0d38903cb07551e633ee",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "tests/conftest.py",
+          "sha256": "2ced4609e58cd3c5ff3a6db9be66c1255fd44b1e4ea73ced02f94dd7f1e81624",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        }
+      ]
+    },
+    "CR0-01": {
+      "review": {
+        "root": "inputs",
+        "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+        "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+        "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/revise_items/0",
+      "sources": [
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/CAPABILITY-CURRENT.json",
+          "sha256": "039e80dadb9fb069bbbd3715763e6433ef23196605f6a271a17650fab5c38203",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        }
+      ]
+    },
+    "CR0-02": {
+      "review": {
+        "root": "inputs",
+        "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+        "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+        "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/revise_items/1",
+      "sources": [
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_stop.py",
+          "sha256": "d1919904b43b31397bd0dea6be1b859f574748a4a6aa92d63821b99b8ee5da32",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_store.py",
+          "sha256": "be29a6335d37341486ea5ac5cdc53b43d304b8d692d0a66ee5f2d76b5a17a4d3",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_owner.py",
+          "sha256": "b08e0505d1dd41ff1241c56a643157954a9a99729b1df20e5a91181e06f51a55",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/jobs.py",
+          "sha256": "3a0d142af742600c6134d2abf4837bddeaf5e8168f44e893747285043322411f",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_manager.py",
+          "sha256": "b71ce32f682aceacd0441331aa4998c5b32f9d6017f25b0f3f33f197f7930c68",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_client.py",
+          "sha256": "a4fedd3abf045f8ea964891611e6d1fa2aee3d8c91d9c2cb0a783d849d99f914",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_resource_history.py",
+          "sha256": "af81be5ed9a195459c9bb3df465e8c6cdebab214507adb2e6e16e3a117226c5c",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        }
+      ]
+    },
+    "CR0-03": {
+      "review": {
+        "root": "inputs",
+        "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+        "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+        "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/revise_items/2",
+      "sources": [
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/A/N2-OWNERSHIP.json",
+          "sha256": "346f06e667371dda93430e9f6731adf5f6774197fd462fa33430b48dd6f38de5",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/B/N2-API.json",
+          "sha256": "2208d5a172f8e980b718d778e742787d1d81c5fd5bf651046587170850f06e86",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        }
+      ]
+    },
+    "CR0-04": {
+      "review": {
+        "root": "inputs",
+        "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+        "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+        "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/revise_items/3",
+      "sources": [
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/A/N2-OWNERSHIP.json",
+          "sha256": "346f06e667371dda93430e9f6731adf5f6774197fd462fa33430b48dd6f38de5",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/B/N2-API.json",
+          "sha256": "2208d5a172f8e980b718d778e742787d1d81c5fd5bf651046587170850f06e86",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        }
+      ]
+    },
+    "CR0-05": {
+      "review": {
+        "root": "inputs",
+        "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+        "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+        "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/revise_items/4",
+      "sources": [
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_store.py",
+          "sha256": "be29a6335d37341486ea5ac5cdc53b43d304b8d692d0a66ee5f2d76b5a17a4d3",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_owner.py",
+          "sha256": "b08e0505d1dd41ff1241c56a643157954a9a99729b1df20e5a91181e06f51a55",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/jobs.py",
+          "sha256": "3a0d142af742600c6134d2abf4837bddeaf5e8168f44e893747285043322411f",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_manager.py",
+          "sha256": "b71ce32f682aceacd0441331aa4998c5b32f9d6017f25b0f3f33f197f7930c68",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_client.py",
+          "sha256": "a4fedd3abf045f8ea964891611e6d1fa2aee3d8c91d9c2cb0a783d849d99f914",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/commands/job_resource_history.py",
+          "sha256": "af81be5ed9a195459c9bb3df465e8c6cdebab214507adb2e6e16e3a117226c5c",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        }
+      ]
+    },
+    "CR0-06": {
+      "review": {
+        "root": "inputs",
+        "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+        "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+        "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/revise_items/5",
+      "sources": [
+        {
+          "root": "inputs",
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/paths.py",
+          "sha256": "e958060e31669172608ced4ee8c8a53ed643da1f8817e5aebddadd34db3331a8",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/search/search_text_rg.py",
+          "sha256": "1773e08e52233a42c8de0e1ad96fff6212f367f8a8ee7bafc6118624f2df637a",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/tools/read_file.py",
+          "sha256": "ad5bff4cb80433df6a10d484be999ba7fbcddd662b12c0ea257098b4bead1a9e",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/tools/list_files.py",
+          "sha256": "3873130f4c4e715972dbe5021ecd92e03993f33023e012e9e29ee251b9033354",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/tools/write_file.py",
+          "sha256": "9b09331ed3d7377d7c16a7130a6f322e66bcd794b8589a2ae9a7e79022fc286d",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "src/binnacle/features/files/tools/edit_file.py",
+          "sha256": "c645e6f5d5d608237813cef52e1864d91295528f40fd8c52ccd8e0030597e6fe",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        }
+      ]
+    },
+    "CR0-07": {
+      "review": {
+        "root": "inputs",
+        "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+        "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+        "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
+      },
+      "review_pointer": "/revise_items/6",
+      "sources": [
+        {
+          "root": "repository",
+          "path": "pyproject.toml",
+          "sha256": "3ef33d80700da96d7be479badfc5aef55c42c7062e9d8eca246b3ff78a700517",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "docs/testing.md",
+          "sha256": "24e97f4fafcb753c0bb347af5d47fc3a2079332d580b0d38903cb07551e633ee",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        },
+        {
+          "root": "repository",
+          "path": "tests/conftest.py",
+          "sha256": "2ced4609e58cd3c5ff3a6db9be66c1255fd44b1e4ea73ced02f94dd7f1e81624",
+          "source_class": "historical_or_source_evidence_not_candidate_runtime_acceptance",
+          "commit": "c2234f16bdfb1a17500b99101d3184b797ebb673"
+        }
+      ]
+    }
+  },
+  "full_parity": "FULL_PARITY_NO_GO",
+  "runtime_materialization": {
+    "finding_refs": [
+      "A0-R0-01",
+      "A0-R0-03",
+      "CR0-04"
+    ],
+    "target_fields_are_authority": false,
+    "unimplemented_runtime_state": "UNAVAILABLE",
+    "unimplemented_runtime_enabled": false,
+    "accepted_runtime_capabilities": [],
+    "required_before_enablement": [
+      "implemented adapter and B0 wiring at exact candidate commit/tree",
+      "native positive and negative receipts for that exact scope/build",
+      "independent R1/R2 source-bound review",
+      "CR1/CR2 scope acceptance and CR0 frozen revision/hashes",
+      "current generation and operation-specific authority observation"
+    ],
+    "rule": "All requirements are conjunctive. This packet supplies no runtime acceptance. Only limited targets may later materialize as LIMITED within reviewed scope; target_state never materializes runtime state. Missing implementation/acceptance is UNAVAILABLE and disabled; lost/contradictory current authority is UNKNOWN and disabled. No AVAILABLE Darwin runtime scope is authorized by this revision.",
+    "disabled_commands": [
+      "stop_job"
+    ],
+    "commands_rule": "stop_job remains unavailable for this revision. run_command can materialize LIMITED foreground-only after A2 implementation and R1 plus CR1 approval and B0 integration; all general materialization requirements still apply."
+  },
+  "scope_decision": {
+    "finding_refs": [
+      "A0-R0-03",
+      "A0-R0-01",
+      "CR0-04"
+    ],
+    "supported_runtime": [],
+    "limited_targets_pending_native_acceptance": [
+      "N1.arm64_package_fastmcp",
+      "N2.public_commands_launch",
+      "N2.read_only_history",
+      "N3.user_launchd",
+      "N4.authenticated_ipc",
+      "N4.opened_root_files",
+      "N4.descriptor_search",
+      "N5.awake_unlocked_session",
+      "N6.private_service_logs",
+      "N6.direct_child_wait4"
+    ],
+    "unavailable_in_this_revision": [
+      "N2.public_commands_stop",
+      "N2.cold_recovery",
+      "N5.sleep_logout_preunlock",
+      "N6.private_libproc_samples",
+      "N6.cpu.stat.usage_usec",
+      "N6.cpu.stat.user_usec",
+      "N6.cpu.stat.system_usec",
+      "N6.memory.current",
+      "N6.memory.peak",
+      "N6.pids.current",
+      "N6.io.stat.rbytes",
+      "N6.io.stat.wbytes",
+      "N6.memory.events.oom",
+      "N6.scope.wait_empty",
+      "N6.resource_history.final",
+      "N6.memory.stat",
+      "N6.memory.swap.current",
+      "N6.memory.swap.peak",
+      "N6.memory.swap.events",
+      "N6.pids.peak",
+      "N6.processes",
+      "N6.io.stat.rios/wios",
+      "N6.memory.events.oom_kill"
+    ],
+    "unverified": "Every proposed native product adapter and B0 integration. Historical N1-N6 finite results do not certify this product revision.",
+    "limited_component_acceptance": "Permitted only after the materialization gate; does not change FULL_PARITY_NO_GO.",
+    "packet_propagation": "FROZEN-API-CONTRACT.json and every CR0-CR3, handoff and release packet must include full_parity=FULL_PARITY_NO_GO, this scope_decision, revision, exact four document hashes and component acceptance receipts (empty until obtained). Eight registered names cannot override this decision.",
+    "tool_by_tool": {
+      "read_file": {
+        "target": "limited",
+        "runtime": "UNAVAILABLE",
+        "enabled": false,
+        "scope": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+      },
+      "list_files": {
+        "target": "limited",
+        "runtime": "UNAVAILABLE",
+        "enabled": false,
+        "scope": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+      },
+      "search_text": {
+        "target": "limited",
+        "runtime": "UNAVAILABLE",
+        "enabled": false,
+        "scope": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+      },
+      "edit_file": {
+        "target": "limited",
+        "runtime": "UNAVAILABLE",
+        "enabled": false,
+        "scope": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+      },
+      "write_file": {
+        "target": "limited",
+        "runtime": "UNAVAILABLE",
+        "enabled": false,
+        "scope": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+      },
+      "run_command": {
+        "target": "limited",
+        "runtime": "UNAVAILABLE",
+        "enabled": false,
+        "scope": "After A2/R1/CR1 approval only: bounded foreground owned-child execution, descendants_unverified=true; background/over-limit raises darwin_background_jobs_unavailable. Until acceptance: MCP unavailable error before spawn."
+      },
+      "job_status": {
+        "target": "limited",
+        "runtime": "UNAVAILABLE",
+        "enabled": false,
+        "scope": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+      },
+      "stop_job": {
+        "target": "unavailable",
+        "runtime": "UNAVAILABLE",
+        "enabled": false,
+        "scope": "MCP tool error before side effects; remains discoverable with explicit unavailable description"
+      }
+    }
+  },
+  "supervisor_steering": {
+    "root": "inputs",
+    "path": "cr0/CR0-SUPERVISOR-REVIEW.json",
+    "sha256": "c194dc0530c3bea13720e02a41c02fed4a19ce1a7395d711433b83277e99dace",
+    "source_class": "binding_supervisor_architecture_decision_not_candidate_runtime_acceptance"
+  },
+  "freeze_authority": "Revision 1.1.0 remains proposed until Supervisor re-reviews this exact signed commit and issues CR0 APPROVE."
 }

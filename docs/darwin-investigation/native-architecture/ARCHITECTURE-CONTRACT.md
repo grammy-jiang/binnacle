@@ -1,8 +1,19 @@
 # Darwin native architecture contract
 
-Revision: `binnacle-darwin-r3-interface-1.0.0`.
+Revision: `binnacle-darwin-r3-interface-1.1.0`.
 Source base: `c2234f16bdfb1a17500b99101d3184b797ebb673`.
-Status: **proposed; R0 review and Supervisor CR0 freeze pending**.
+Revision base: `372c5036595bcb7deaa38dce9d3b123725f21ee1`.
+Implementation-lane base: `068114f87e9d0159471d0bd001683457ad4c4368`.
+Status: **revised proposal; exact signed-commit CR0 approval pending**.
+Overall decision: **FULL_PARITY_NO_GO**, independent of limited-component approval.
+
+The 1.1.0 changes resolve A0-R0-01 through A0-R0-03, R0 categories C2/C4/C9,
+and CR0-01 through CR0-07. Each revised rule cites these IDs below. Their exact
+review and source path/SHA-256 references are in `revision_evidence` in each
+JSON document and the finding map in [REVISION-NOTES.md](REVISION-NOTES.md).
+The original source base above remains the immutable Linux evidence base;
+SD-10's implementation base changes only the branch-sync workflow, not these
+product sources. This revision does not certify native execution.
 
 This is an implementation contract, not a claim that the native adapters exist,
 passed tests, or are approved for release. `api-contract.json` is the normative
@@ -19,14 +30,20 @@ SHA-256 of all four documents, and the CR0 receipt. Authors consume that exact
 packet. An interface, capability, or ownership change requires a new revision
 and explicit task-card amendment before another writer starts.
 
-The original manifest does not assign shared contract files or the Darwin
-package initializer. B0 is their **exclusive proposed owner**. This document
-does not grant a live source lease or expand an already running task card.
-The Task Manager must issue a CR0-approved **B0-contract prerequisite card**
-for shared declarations and inert package initializers, then allow adapter
-cards to consume its accepted commit. B0's later integration card still follows
-A2–A6/T0. The two B0 phases cannot run concurrently. This resolves the otherwise
-circular dependency on shared declarations without creating a second writer.
+**CR0-05/CR0-07:** B0 remains the sole shared-contract declaration owner.
+The exact `contract_precursor_card.write_paths` in `PATH-OWNERS.json` define
+**B0a**: shared declarations and inert initializers only. It starts after CR0
+APPROVE. A1 may author the Linux repair concurrently from this frozen seam, but
+consumes the accepted B0a commit before compile/integration checks; it cannot
+copy shared declarations into its own files. A2–A6/T0 wait for accepted B0a.
+B0a and later B0 integration are sequential phases of one writer. No concrete
+adapter, fixture behavior, tool wiring or Linux job engine edit belongs to B0a.
+The Task Manager must issue the exact amended cards before dispatch.
+
+**CR0-03:** The frozen packet and every CR0–CR3/handoff/release packet carry
+`full_parity=FULL_PARITY_NO_GO` and the tool-by-tool limited/unavailable scope,
+along with the documentation commit, all four hashes and decision receipts.
+A limited-component acceptance cannot change that overall decision.
 
 The exact-path map narrows original globs to existing base-tree matches and
 explicit new files. Other files are read-only. Additional modules, tests,
@@ -77,11 +94,18 @@ No Linux production host or service is touched by A0.
 | `UNKNOWN` | Current evidence is insufficient, missing or contradictory | No destructive action or inference of absence |
 | `UNAVAILABLE` | Unsupported mechanism or deliberately disabled operation | Explicit refusal before side effects |
 
-`Capability(state, reason_code, scope, evidence_id)` is immutable. Runtime state
-is distinct from the target state `full/limited/unavailable` in the decision
-file. A planned limited capability starts unavailable until its implementation
-and required evidence exist. A missing observation stays unknown; it cannot be
-converted to a measured zero, dead process, empty scope, or successful stop.
+**A0-R0-01 / CR0-01:** `Capability(state, reason_code, scope, evidence_id)` is
+immutable. Target policy (`full/limited/unavailable`) never grants runtime
+authority. Every proposed Darwin capability and all eight tools have runtime
+`UNAVAILABLE` and `runtime_enabled=false` in this packet. No adapter is accepted
+here. To materialize even `LIMITED`, require implemented adapter and wiring,
+exact-source native positive/negative receipts, independent R1/R2 review,
+applicable CR1/CR2 approval, the CR0 frozen revision, and current generation and
+operation authority. These requirements are conjunctive. After implementation,
+missing or contradictory current evidence yields `UNKNOWN` and disables the
+operation; it cannot become measured zero, dead process, empty scope or success.
+`stop_job` remains policy-disabled. CR0-04 permits only the specified foreground
+`run_command` target after A2 implementation and R1 **and** CR1 approval.
 
 `NativeCapabilityError` carries a stable code and typed capability. Its concrete
 subclasses are `CapabilityUnavailable`, `AuthorityUnknown`,
@@ -97,7 +121,8 @@ native stderr. Unavailable calls are MCP errors, not success-shaped placeholders
 All eight names remain registered in the default native surface. Existing
 client visibility policy still applies; registration does not mean operational
 parity. Darwin descriptions and server instructions must explicitly describe
-bounded support and disabled Commands. Preserve argument and output schemas;
+bounded support, foreground limits and disabled `stop_job`. Preserve argument
+schemas; CR0-04 adds only the Darwin `run_command` output flag described below;
 do not claim identical Linux composite digests when Darwin prose differs.
 
 | Tool | macOS target | Required behavior |
@@ -107,17 +132,61 @@ do not claim identical Linux composite digests when Darwin prose differs.
 | `write_file` | limited | Descriptor-relative replacement with verified parent, no symlink following |
 | `edit_file` | limited | Existing exact-string policy on authorized bytes, conflict detection and descriptor-relative replacement |
 | `search_text` | limited | Search only authorized opened file bytes with bounded ripgrep execution |
-| `run_command` | unavailable | Fail with `darwin_commands_unavailable` before launching any job |
+| `run_command` | limited target; runtime unavailable | After A2/R1/CR1 acceptance: bounded foreground owned-child execution; always disclose `descendants_unverified=true` |
 | `job_status` | limited | Read authorized Darwin history/output; unresolved active state remains unknown |
 | `stop_job` | unavailable | Fail with `darwin_commands_unavailable`; no numeric PID/PGID signal fallback |
 
-This deliberately declines full native Commands for this revision. A2 may
-implement and test finite owned-child/witness mechanisms, but those tests do
-not enable the public shell or stop tools. A scope increase needs new native
-membership, signal API, durable stop and loss evidence plus independent review
-and an explicit revised CR0/CR1 decision. E0 must assert unavailable errors as
-well as the real supported calls; eight listed tools are not eight functional
-tools. Darwin messages must not recommend disabled Commands as a workaround.
+**A0-R0-03 / CR0-03:** This is **FULL_PARITY_NO_GO**. The table lists targets,
+not enabled operations. All runtime defaults are unavailable until the exact
+scope is accepted. Files/Search and history are bounded targets; public durable
+background jobs and `stop_job` are unavailable. E0 must test real accepted calls
+and denial cases; eight registered names do not imply eight enabled tools.
+Descriptions and errors must never recommend an unavailable operation.
+
+**CR0-04 — foreground owned-child execution:** A2 implements the separate
+`ForegroundExecution.run_foreground(ForegroundRequest, cancel)` entrypoint in
+`DarwinProcessBackend`. Its ordinary durable `ProcessBackend.launch` and signal
+methods remain disabled. B0 injects the accepted foreground adapter and routes
+Darwin `tools/run_command.py::run_command_impl` through
+`command_execution.run_foreground_command` before the Linux `DispatchPlan`,
+auto-background policy or `CommandBackend.start_and_wait`. This retains Linux
+behavior and prevents an accidental durable-engine fallback.
+
+The live spawning process uses public `posix_spawn` with a new process group
+(`setpgroup=0`) for `bash -c`. Only that process may signal that group, and only
+while its leader remains an unreaped direct child. A2 serializes every signal
+with its sole reap operation: no second waiter, implicit `Popen.poll`, or
+SIGCHLD handler may consume the child. After reap, invalidate authority before
+unlocking and never signal again. Timeout/cancel cleanup uses bounded TERM/KILL
+while the leader remains unreaped, then one reap. Failures report an error and
+uncertainty; they never imply complete descendant cleanup.
+
+Explicit `background=true` or a requested wait above the captured foreground
+limit returns `darwin_background_jobs_unavailable` before spawn. If a group
+already exists when such a condition is detected, clean up that owned group
+first under the same unreaped-leader rule. Actual execution reaching
+`min(wait_seconds, foreground_limit_s)` also cleans up and returns that error,
+without auto-backgrounding. The limit is positive and at most the captured
+`settings.wait_max_s` (base maximum 50 seconds). Cancellation uses the same
+bounded cleanup before teardown. Output drain is bounded even when an escaped
+descendant keeps a pipe open; close it and report truncation on exhaustion.
+
+Descendants that leave the group, including `setsid` or double fork, are
+unverified. Every successful Darwin result has `descendants_unverified=true`
+in its typed result, structured payload and Darwin-only output schema, and its
+text describes leader completion only. This is the explicit CR0-04 exception
+to equal Darwin output schemas; Linux schemas and hashes are unchanged. Error
+text after spawn carries the same scope warning. Never return a Darwin
+`running`/`background_job=true` success. Owner death may leave a command
+unsupervised; later status is `UNKNOWN` absent already committed leader-only
+history, and a restarted owner never adopts or signals it. `job_status` exposes
+history/output only. `stop_job` stays unavailable even after foreground approval.
+
+The default stays `UNAVAILABLE` unless A2 implements and R1 plus CR1 approve this
+exact scope with B0 wiring. CR0 architecture approval alone does not enable it.
+If CR1 declines, the unavailable behavior remains the fallback. Native tests
+must cover reap/cancel races, post-reap rejection, group escapes, owner death,
+output drain, foreground expiry and zero-spawn refusal cases.
 
 ## Process authority, stop durability and recovery
 
@@ -129,17 +198,19 @@ abstract authenticated channel. `DarwinProcessBackend` implements the unchanged
 `OwnerGeneration(manager_epoch, witness_epoch, job_id)` identifies an epoch; it
 is neither a bearer credential nor a process capability. An
 `AuthorityObservation` contains capability, generation, membership closure, and
-`can_signal`. This revision always exposes `can_signal=False` in shipped Darwin
-code. A live trusted channel and positive enrollment are prerequisites for any
-future authority. A pid, pgid, birth time, boot identifier, launchd label or
-persisted record alone is never sufficient.
+`can_signal`. For durable/history/witness observations this revision exposes
+`can_signal=False`. CR0-04 foreground authority is a separate ephemeral live-parent
+capability and never a transferable observation or public `stop_job` right.
+A live trusted channel and positive enrollment are prerequisites for future
+durable/witness authority. A pid, pgid, birth time, boot identifier, launchd label
+or persisted record alone is never sufficient.
 
 Manager loss with a retained witness permits only authenticated observation and
 explicit generation reconciliation. Loss of both manager and witness yields
 `UNKNOWN`, `membership_closed=False`, and disabled stop. `identity_from_record`
 returns no usable identity without live proof. No historic PID/PGID adoption,
-`killpg` fallback, private `proc_signal_with_audittoken` support, or cross-version
-libproc stability claim is permitted. The supplied SDK evidence labels those
+recovery-time numeric `killpg` fallback, private `proc_signal_with_audittoken`
+support, or cross-version libproc stability claim is permitted. The supplied SDK evidence labels those
 process interfaces private; symbol presence and finite tests are not public
 API guarantees.
 
@@ -148,26 +219,60 @@ Legacy boolean/list interfaces cannot encode uncertainty. Darwin must raise
 completed exit from failed observation. B0 prevents such uncertainty from
 reaching existing Linux-style negative-to-exit inference. History remains
 readable, but unknown jobs never become stopped merely because the leader is
-absent. Restricted public Commands avoid bootstrapping the existing Linux job
-engine through a default backend.
+absent. The separate foreground entrypoint and restricted history backend avoid
+bootstrapping the existing Linux job engine through a default backend.
 
-A1 owns `features/commands/job_stop.py` and its exact assigned tests. Its stop
-policy must establish durable admission **before the first signal**, use one
-validated lease through TERM/KILL, and synchronize stop/reaper state by job
-and owner generation. Failed admission means no signal. After partial delivery,
-failed persistence, owner loss or uncertain target closure, report failure or
-unknown; leader exit alone cannot produce whole-job success. Reaper and stop
-must not overwrite each other's durable outcome or reap the same child twice.
-B0 alone owns shared owner/store/reaper wiring. A1 supplies the focused policy
-and shared-file integration requirements; no concurrent A1 edits to B0 paths.
-The additive `StopIntent`/`StopReceipt` and `stop_with_intent` declarations in the
-machine contract define the seam. Existing `stop_embedded` is retained for
-compatibility; B0 must route real new stop admission through the reviewed seam.
+**A0-R0-02 / CR0-02 / R0-C2 / CR0-05:** A1 exclusively owns Linux
+`job_stop`, `stop_coordinator`, `job_store`, `job_owner`, `jobs`, `job_manager`,
+`job_client`, and `job_resource_history`, plus the exact tests in PATH-OWNERS.
+B0 never edits those paths. They are the Linux durable engine; Darwin uses its
+separate foreground/history backend. B0a owns only portable seam declarations.
+B0's shared tool consumers preserve the controlled errors from A1's guarded
+APIs. The normative `stop_protocol` in `api-contract.json` governs all paths.
+
+`admit` returns a `StopAdmission`: exactly one caller receives a nontransferable
+`StopExecutor`; all concurrent callers for the same job incarnation join the
+same unresolved `StopIntent`, regardless of call ID. A joiner cannot open a
+lease or signal. The intent includes job incarnation, owner epoch and operation
+ID, but those strings are not authority. Every lease signal checks the live
+executor fence. No successor may run while an earlier executor might signal.
+
+Admission durably records immutable unresolved prepare state before any signal:
+write, file sync, atomic replacement and directory sync (including any newly
+created ancestor). Failed post-replace directory sync is a failed admission,
+with zero signals. All readers/writers/reapers use one stable interprocess
+transaction boundary; an `RLock` alone is insufficient. Release metadata locks
+before signals or waits so the reaper can progress. One validated signal lease
+spans TERM/KILL; one owning reaper consumes child exit. Reaper exit evidence and
+resource-history merges preserve unresolved prepare/partial flags and never
+resolve stop on leader exit alone.
+
+Resolution requires the **same admitted operation**, full authorized target
+closure with birth admission closed, terminal leader evidence, and positive
+executor quiescence. Close leases and wait for every in-flight signal before
+resolution. Persist and sync resolution file plus directory before returning
+`outcome_persisted=true`. Visible closed bytes after failed directory sync are
+uncommitted; leave prepare unresolved and invalidate cached success. Recovery
+must check matching prepare/resolution, closure evidence and old-executor
+quiescence and re-sync file/directory successfully before accepting those bytes.
+A new epoch, timeout, missing PID or broken socket is not quiescence proof.
+
+Every terminal path (`stop` retries, job state/list, `await_exit`, RPC before
+`ok=true`, local fallback, status, recovery) invokes `terminal_guard` in the same
+transaction/version as its metadata read. Missing/corrupt records, unresolved
+legacy `stop_requested`/`stop_signal_partial`, uncommitted resolution, or unknown
+ownership produce controlled existing errors; no new Linux wire state is
+needed. Retention keeps unresolved jobs and their required evidence and checks
+eligibility again under the transaction before deletion. Unknown jobs still
+block stable-manager restart/rollback. An unchanged old owner cannot be credited
+with these repaired guarantees; reverse ABI checks prove compatibility only.
+A1 must pass STOP-ADMISSION, STOP-REAPER, STOP-RESOLUTION, STOP-PIDFD and both RPC
+compatibility directions before R1/CR1 Linux stop acceptance.
 
 ## Descriptor-rooted Files and Search
 
-A4 implements `FileAccess` and `SearchAccess`. B0 connects these to the existing
-Files/Search tool implementations; A4 never edits their shared registration or
+**R0-C4 / CR0-06:** A4 implements `FileAccess` and `SearchAccess`. B0 connects
+these to the existing Files/Search tool implementations; A4 never edits their shared registration or
 Core modules. Tool schemas, text decoding, exact edit matching and budgets stay
 Core responsibilities. A4 owns filesystem opening, traversal and safe native
 ripgrep input. Linux's current path implementation remains its default.
@@ -188,6 +293,30 @@ hostile same-UID sandbox. The task card must preserve this documented semantic
 choice in moved-root tests. Grants and open files close deterministically at
 request/application teardown. No pathname-derived error hint may open an
 unauthorized ancestor.
+
+The `file_tool_wiring` map pins exact B0 application, child-server, registration
+and implementation methods. B0 injects grants and adapters before any legacy
+pathname check. Request-to-grant selection is lexical and performs no filesystem
+I/O. On Darwin every content/stat/traversal/mkdir/hint operation stays inside
+the adapter; a missing adapter refuses the call.
+
+| Tool | Descriptor-owning entrypoints (A4; wired by B0) |
+| --- | --- |
+| `read_file` | `open_read` → `metadata`/bounded `read` → `close`; safe `nearby_hint` on failure |
+| `list_files` | `list_entries(grant, ListRequest)` covers one-level and recursive glob listing |
+| `write_file` | `write_bytes(create_parents=True)` covers mkdir, replace and `WriteReceipt` |
+| `edit_file` | `open_read`/bounded `read`, Core matching, `write_bytes(expected_sha256=...)` with no parent creation |
+| `search_text` | `SearchAccess.search` owns traversal, file opens, rg stdin and cleanup |
+
+`OpenedFile.metadata` uses that file's descriptor. Listing has visit/time/result
+budgets and explicit truncation; it never delegates to recursive pathname
+`rg --files`. Parent creation uses descriptor-relative `mkdir`, followed by
+no-follow open/validation for every component, with a finite parent count.
+A failed write can leave newly created parents; no transaction-wide rollback is
+claimed. `nearby_hint` uses only an authorized existing parent and bounded
+entries; a denied hint preserves the original error without ancestor probing.
+`WriteReceipt` obtains prior size and created/overwritten status at the adapter
+write step. Core treats display paths as text, never `Path` authority.
 
 Writes use a verified parent descriptor, bounded temporary regular file,
 flush/fsync as required, descriptor-relative atomic replacement and precise
@@ -279,29 +408,31 @@ change durable job output byte cursors or Linux journal acquisition.
 
 | Lane | Exclusive responsibility |
 | --- | --- |
-| A1 | Linux stop admission/closure policy in assigned stop module and focused tests |
-| A2 | Darwin process observation, witness loss, safe disabled public Commands |
+| A1 | Entire Linux stop/store/owner/reaper/RPC/retention repair and assigned tests |
+| A2 | Darwin foreground owned-child execution, process observation and witness loss; runtime gated |
 | A3 | Runtime generations, authenticated IPC and test-owned launchd lifecycle |
 | A4 | Opened-root Files/Search native mechanics and negative races |
 | A5 | Private log epochs, redaction, scoped metrics and unavailable totals |
 | A6 | Darwin plist/provisioning transaction, package and test install CLI |
 | T0 | Explicit native test collection inventory and retained Linux assertions |
-| B0 | Shared declarations/initializers first; later single-writer Core/composition integration |
+| B0 | B0a declarations first, then shared tool/composition wiring; never A1 Linux engine paths |
 | E0 | Real authenticated native MCP calls, denial cases and positive teardown |
 
-The manifest names native test files without the default `test_` prefix. They
-must be passed as explicit pytest file selectors until B0 installs a narrowly
-scoped collection hook from T0's design. Collection receipts must show exact
-node IDs, not only a green exit code. Never blanket-skip Darwin adapters or
-weaken the original Linux assertions. B0 owns common test initializers and
-configuration; T0 cannot edit those shared files concurrently.
+**R0-C9 / CR0-07:** All new native test modules now have `test_` prefixes.
+No custom collection hook is permitted. PATH-OWNERS lists exact replacements;
+the Task Manager must amend lane cards (including T0) before dispatch. T0 proves
+ordinary discovery with exact collected node IDs once the tests exist. A0's
+filename validation is not a collection receipt for unimplemented tests. Never
+blanket-skip Darwin adapters or weaken original Linux assertions. B0 owns common
+initializers/configuration; T0 cannot edit those shared files concurrently.
 
 A0 validates JSON structure, cross-file references, parseable declarations,
 existing signature/hash pins, exact ownership expansion and canonical aliases.
 It runs static import analysis and read-only Linux source/wire-pin comparison.
-Negative fixtures reject a second shared-file owner and an attempted private
-libproc/cross-version signal claim. These checks prove document consistency;
-they do not prove native safety, current macOS behavior, R0 approval or CR0 freeze.
+Negative fixtures reject a second shared-file owner, B0 edits to A1 Linux paths,
+an attempted private libproc/cross-version signal claim, premature runtime
+enablement, a stop_job promotion and non-discoverable test filenames. These
+checks prove document consistency; they do not prove native safety, current macOS behavior, R0 approval or CR0 freeze.
 No Linux execution is needed for this documentation-only commit.
 
 Authors subsequently run their task-card native and Linux focused tests at their
