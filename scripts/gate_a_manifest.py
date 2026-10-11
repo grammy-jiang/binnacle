@@ -88,6 +88,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "features/commands/job_awareness/hint_render.py",
             "features/commands/job_awareness/receipt_schema.py",
             "features/commands/job_awareness/receipt_store.py",
+            "features/commands/job_awareness/session_route.py",
         },
         # Native FastMCP adapter modules; mirrors job-awareness-adapter-isolation.
         "job_awareness_adapter": {
@@ -95,6 +96,11 @@ def manifest_groups() -> dict[str, set[str]]:
             "mcp/job_awareness_hint_schema.py",
             "mcp/job_awareness_hint_walk.py",
             "mcp/job_awareness_hint_identity.py",
+        },
+        # E2 lab-only MCP session extraction (default off); mirrors
+        # job-awareness-lab-session-not-in-production.
+        "job_awareness_lab": {
+            "mcp/job_awareness_session.py",
         },
         "platform_contracts": {
             "platform/__init__.py",
