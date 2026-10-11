@@ -12,17 +12,25 @@ import argparse
 import base64
 import json
 import os
+import stat
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from binnacle.deployment.darwin.plist import validate_test_label
+from binnacle.deployment.darwin.plist import (
+    DEFAULT_ROLE,
+    SERVICE_ROLES,
+    validate_test_label,
+)
 from binnacle.deployment.darwin.provisioner import (
+    _LIMITED,
     DarwinProvisioner,
     LaunchdLifecycle,
     ProvisionError,
     ServiceLease,
     ServicePlan,
+    UnsafePath,
+    ensure_private_subdir,
     sha256_hex,
 )
 
@@ -36,31 +44,52 @@ def _plan_file(root: Path, label: str) -> Path:
     return root / "plans" / f"{label}.json"
 
 
+def _write_private(path: Path, text: str) -> None:
+    tmp = path.with_name(f".{path.name}.tmp{os.getpid()}")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 def _save_plan(root: Path, plan: ServicePlan) -> None:
-    (root / "plans").mkdir(mode=0o700, exist_ok=True)
+    plans = ensure_private_subdir(root, "plans", os.getuid())
     doc = {
         "label": plan.lease.label,
         "plist_b64": base64.b64encode(plan.plist_bytes).decode(),
-        "plist_path": str(plan.plist_path),
+        "plist_sha256": sha256_hex(plan.plist_bytes),
         "expected_previous_sha256": plan.expected_previous_sha256,
     }
-    _plan_file(root, plan.lease.label).write_text(json.dumps(doc, sort_keys=True))
+    _write_private(plans / f"{plan.lease.label}.json", json.dumps(doc, sort_keys=True))
 
 
 def _load_plan(root: Path, label: str) -> ServicePlan:
-    doc = json.loads(_plan_file(root, label).read_text())
+    ensure_private_subdir(root, "plans", os.getuid())
+    path = _plan_file(root, label)
+    st = os.lstat(path)
+    if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
+        raise UnsafePath("plan_file_not_private", _LIMITED)
+    doc = json.loads(path.read_text())
+    data = base64.b64decode(doc["plist_b64"])
+    if doc.get("label") != label or doc.get("plist_sha256") != sha256_hex(data):
+        raise UnsafePath("plan_file_tampered", _LIMITED)
+    # The plist path is derived, never taken from the (editable) plan file.
     return ServicePlan(
         _lease(root, label),
-        base64.b64decode(doc["plist_b64"]),
-        Path(doc["plist_path"]),
+        data,
+        root / f"{label}.plist",
         doc["expected_previous_sha256"],
     )
 
 
 def _emit(root: Path, label: str, doc: dict[str, object]) -> None:
-    (root / "receipts").mkdir(mode=0o700, exist_ok=True)
+    receipts = ensure_private_subdir(root, "receipts", os.getuid())
     text = json.dumps(doc, sort_keys=True, indent=1)
-    (root / "receipts" / f"{label}.{doc['action']}.json").write_text(text)
+    _write_private(receipts / f"{label}.{doc['action']}.json", text)
     print(text)
 
 
@@ -72,6 +101,7 @@ def main(
     ap.add_argument("--root", type=Path, required=True)
     ap.add_argument("--label", required=True)
     ap.add_argument("--workdir", type=Path)
+    ap.add_argument("--role", choices=SERVICE_ROLES, default=DEFAULT_ROLE)
     ap.add_argument("--exec", dest="exec_argv", nargs="+", default=None)
     args = ap.parse_args(argv)
     root: Path = args.root
@@ -92,6 +122,7 @@ def main(
                 argv=args.exec_argv,
                 environment={},
                 workdir=args.workdir or root,
+                role=args.role,
             )
             _save_plan(root, plan)
             receipt: dict[str, object] = {
