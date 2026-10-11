@@ -170,3 +170,25 @@ def test_backend_rebuilds_ipc_items_in_the_linux_builder_order(tmp_path, monkeyp
         own = [key for key in linux if key in sent]
         assert list(got)[: len(own)] == own  # Linux order first
         assert list(got)[len(own) :] == sorted(set(sent) - set(linux))
+
+
+DOCS = Path(__file__).parents[3] / "docs/darwin-investigation/native-architecture"
+
+
+@pytest.mark.parametrize("name", ["api-contract.json", "CAPABILITY-DECISION.json"])
+def test_docs_copies_of_the_d2_disclosure_equal_the_release_scope(name):
+    from binnacle.platform.contracts.darwin_release_scope import MANAGER_DISCLOSURES
+
+    (d2,) = [item for item in MANAGER_DISCLOSURES if item.startswith("D-2:")]
+
+    def strings(node):
+        if isinstance(node, dict):
+            node = list(node.values())
+        if isinstance(node, list):
+            for child in node:
+                yield from strings(child)
+        elif isinstance(node, str):
+            yield node
+
+    copies = [s for s in strings(json.loads((DOCS / name).read_text())) if "D-2:" in s]
+    assert copies and set(copies) == {d2}, copies  # one per command tool row

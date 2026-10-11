@@ -925,7 +925,7 @@
           "enabling_gate": "J-CR",
           "disclosures": [
             "D-1: jobs of a lost manager are UNKNOWN; never adopted, never exited",
-            "D-2: CPU/RSS accounting is sampled; membership_closed=false",
+            "D-2: process state may be '?' and CPU may be absent (or sampled) on Darwin; membership_closed=false",
             "descendants_unverified=true: new sessions/process groups are not tracked"
           ],
           "unreachable_manager": "per-call 'job manager unavailable' error; no LIMITED rows, no embedded execution"
@@ -962,7 +962,7 @@
           "enabling_gate": "J-CR",
           "disclosures": [
             "D-1: jobs of a lost manager are UNKNOWN; never adopted, never exited",
-            "D-2: CPU/RSS accounting is sampled; membership_closed=false",
+            "D-2: process state may be '?' and CPU may be absent (or sampled) on Darwin; membership_closed=false",
             "descendants_unverified=true: new sessions/process groups are not tracked"
           ],
           "unreachable_manager": "per-call 'job manager unavailable' error; no LIMITED rows, no embedded execution"
@@ -999,7 +999,7 @@
           "enabling_gate": "J-CR",
           "disclosures": [
             "D-1: jobs of a lost manager are UNKNOWN; never adopted, never exited",
-            "D-2: CPU/RSS accounting is sampled; membership_closed=false",
+            "D-2: process state may be '?' and CPU may be absent (or sampled) on Darwin; membership_closed=false",
             "descendants_unverified=true: new sessions/process groups are not tracked"
           ],
           "unreachable_manager": "per-call 'job manager unavailable' error; no LIMITED rows, no embedded execution"
