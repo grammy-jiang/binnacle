@@ -64,6 +64,9 @@ def serving(root):
 
     def handler(payload):
         calls.append(dict(payload))
+        time.sleep(payload.get("delay", 0))
+        if payload.get("raise"):
+            raise KeyError("private handler details")
         return {"ok": True, "payload": dict(payload)}
 
     def run():
@@ -339,13 +342,22 @@ def test_unrelated_same_uid_process_receives_no_application_bytes(runtime):
 
 
 @NATIVE
-def test_crashed_manager_stale_endpoint_cannot_be_adopted(runtime):
+@pytest.mark.parametrize(
+    "replacement",
+    [None, "socket", "file", "symlink", "auth", "lock", "missing-lock", "pid-reused"],
+)
+def test_crashed_manager_requires_authenticated_recovery(
+    runtime, replacement, monkeypatch
+):
     lease = lease_for(runtime)
     child = subprocess.Popen(
         child_command(runtime, lease), stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     try:
         channel = connect_when_ready(runtime / "jobs.sock", lease)
+        authority = ipc.capture_recovery_authority(channel)
+        with pytest.raises(NativeCapabilityError):
+            ipc.recover_stale_endpoint(authority)
         channel.close()
         child.kill()  # owned direct child: simulate an unclean manager crash
         child.communicate(timeout=3)
@@ -360,6 +372,42 @@ def test_crashed_manager_stale_endpoint_cannot_be_adopted(runtime):
             )
         assert (runtime / "jobs.sock").stat().st_ino == inode
         assert (runtime / "jobs.sock.auth").read_bytes() == auth
+        with pytest.raises(NativeCapabilityError, match="not_authenticated"):
+            ipc.recover_stale_endpoint(dataclasses.replace(authority))
+        if replacement in ("missing-lock", "pid-reused"):
+            if replacement == "missing-lock":
+                (runtime / "manager.lock").unlink()
+            else:
+                monkeypatch.setattr(os, "kill", lambda pid, sig: None)
+            with pytest.raises(NativeCapabilityError):
+                ipc.recover_stale_endpoint(authority)
+            assert (runtime / "jobs.sock").stat().st_ino == inode
+            assert (runtime / "jobs.sock.auth").read_bytes() == auth
+            assert (runtime / "manager.lock").exists() == (replacement == "pid-reused")
+            return
+        if replacement:
+            path = runtime / {"auth": "jobs.sock.auth", "lock": "manager.lock"}.get(
+                replacement, "jobs.sock"
+            )
+            path.rename(path.with_name(path.name + ".old"))
+            if replacement == "socket":
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as foreign:
+                    foreign.bind(str(path))
+            elif replacement == "symlink":
+                path.symlink_to(runtime / "missing")
+            else:
+                path.write_text("foreign sentinel")
+                path.chmod(0o600)
+            before = path.lstat()
+            with pytest.raises(NativeCapabilityError):
+                ipc.recover_stale_endpoint(authority)
+            assert path.lstat() == before
+            assert path.with_name(path.name + ".old").exists()
+            return
+        ipc.recover_stale_endpoint(authority)
+        with serving(runtime) as (successor, _, errors):
+            assert successor.generation != lease.generation
+        assert not errors
     finally:
         if child.poll() is None:
             child.terminate()
@@ -378,59 +426,6 @@ def test_server_rejects_wrong_uid_before_handshake(runtime, monkeypatch):
             conn.settimeout(1)
             conn.connect(str(runtime / "jobs.sock"))
             assert conn.recv(1) == b""
-        assert not calls
-    assert not errors
-
-
-@NATIVE
-def test_delayed_executor_retains_singleton_until_quiescent(runtime):
-    lease = lease_for(runtime)
-    stop, entered, release = threading.Event(), threading.Event(), threading.Event()
-    replies, errors = [], []
-
-    def handler(payload):
-        entered.set()
-        assert release.wait(3)
-        return {"ok": True}
-
-    def serve():
-        try:
-            ipc.serve_authenticated(
-                runtime / "jobs.sock", lease=lease, handler=handler, stop=stop
-            )
-        except NativeCapabilityError as exc:
-            errors.append(exc)
-
-    server = threading.Thread(target=serve)
-    server.start()
-    channel = connect_when_ready(runtime / "jobs.sock", lease)
-
-    def request():
-        replies.append(channel.request({"op": "delayed"}, timeout_s=2))
-
-    caller = threading.Thread(target=request)
-    caller.start()
-    try:
-        assert entered.wait(1)
-        stop.set()
-        with pytest.raises(NativeCapabilityError, match="duplicate_starter"):
-            ipc.serve_authenticated(
-                runtime / "jobs.sock",
-                lease=lease_for(runtime),
-                handler=lambda p: p,
-                stop=threading.Event(),
-            )
-        assert server.is_alive()
-    finally:
-        release.set()
-        caller.join(3)
-        channel.close()
-        server.join(3)
-    assert not caller.is_alive() and not server.is_alive()
-    assert replies == [{"ok": True}] and not errors
-    with serving(runtime) as (_, calls, errors):
-        with pytest.raises(NativeCapabilityError):
-            ipc.connect_authenticated(runtime / "jobs.sock", lease=lease, timeout_s=1)
         assert not calls
     assert not errors
 

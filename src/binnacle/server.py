@@ -174,42 +174,20 @@ def _load_token() -> str:
 
 def create_server() -> FastMCP:
     """Maintain the Linux production factory contract and its token bootstrap."""
-    from binnacle.application import create_application
+    from binnacle.application import compose_native_tools, create_application
     from binnacle.features.commands.command_backend import create_command_backend
-    from binnacle.features.files.paths import FileToolAccess
     from binnacle.platform.composition import host_os_family
-    from binnacle.platform.contracts.capability_contracts import (
-        Capability,
-        CapabilityState,
-    )
 
     file_access = None
     if host_os_family() == "darwin":
-        from binnacle.platform.composition import (
-            create_file_access,
-            create_search_access,
-        )
-
-        files = create_file_access()
-        search = (
-            create_search_access(files=files, rg_bin=get_settings().rg_bin)
-            if files is not None
-            else None
-        )
-        file_access = FileToolAccess(
-            roots=get_settings().roots,
-            files=files,
-            search=search,
-            generation="unavailable",
-            capability=Capability(
-                CapabilityState.UNAVAILABLE, "review_pending", "darwin_public_tools"
-            ),
-        )
+        file_access, backend = compose_native_tools(settings=get_settings())
+    else:
+        backend = create_command_backend()
     return create_application(
         file_access=file_access,
         settings=get_settings(),
         token=_load_token(),
-        backend=create_command_backend(),
+        backend=backend,
         files_factory=create_files_server,
         search_factory=create_search_server,
         commands_factory=create_commands_server,

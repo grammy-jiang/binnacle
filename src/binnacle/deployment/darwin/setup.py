@@ -16,51 +16,76 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from binnacle.deployment.darwin.plist import validate_test_label
+from binnacle.deployment.darwin.plist import (
+    DEFAULT_ROLE,
+    SERVICE_ROLES,
+    validate_test_label,
+)
 from binnacle.deployment.darwin.provisioner import (
+    _LIMITED,
     DarwinProvisioner,
     LaunchdLifecycle,
     ProvisionError,
     ServiceLease,
     ServicePlan,
+    UnsafePath,
+    pinned_root,
+    pinned_subdir,
+    read_regular_at,
     sha256_hex,
+    write_atomic_at,
 )
 
 
 def _lease(root: Path, label: str) -> ServiceLease:
-    st = os.lstat(root)
+    with pinned_root(root, os.getuid()) as fd:
+        st = os.fstat(fd)
     return ServiceLease(os.getuid(), label, "r3test", st.st_dev, st.st_ino)
 
 
-def _plan_file(root: Path, label: str) -> Path:
-    return root / "plans" / f"{label}.json"
-
-
 def _save_plan(root: Path, plan: ServicePlan) -> None:
-    (root / "plans").mkdir(mode=0o700, exist_ok=True)
     doc = {
         "label": plan.lease.label,
         "plist_b64": base64.b64encode(plan.plist_bytes).decode(),
-        "plist_path": str(plan.plist_path),
+        "plist_sha256": sha256_hex(plan.plist_bytes),
         "expected_previous_sha256": plan.expected_previous_sha256,
     }
-    _plan_file(root, plan.lease.label).write_text(json.dumps(doc, sort_keys=True))
+    uid = os.getuid()
+    with pinned_root(root, uid) as root_fd, pinned_subdir(root_fd, "plans", uid) as fd:
+        write_atomic_at(
+            fd, f"{plan.lease.label}.json", json.dumps(doc, sort_keys=True).encode()
+        )
 
 
 def _load_plan(root: Path, label: str) -> ServicePlan:
-    doc = json.loads(_plan_file(root, label).read_text())
+    uid = os.getuid()
+    with pinned_root(root, uid) as root_fd:
+        st = os.fstat(root_fd)
+        with pinned_subdir(root_fd, "plans", uid) as fd:
+            raw = read_regular_at(fd, f"{label}.json", private_uid=uid)
+    if raw is None:
+        raise FileNotFoundError("plan_file_missing")
+    doc = json.loads(raw)
+    data = base64.b64decode(doc["plist_b64"])
+    if doc.get("label") != label or doc.get("plist_sha256") != sha256_hex(data):
+        raise UnsafePath("plan_file_tampered", _LIMITED)
+    # The plist path is derived, never taken from the (editable) plan file.
     return ServicePlan(
-        _lease(root, label),
-        base64.b64decode(doc["plist_b64"]),
-        Path(doc["plist_path"]),
+        ServiceLease(uid, label, "r3test", st.st_dev, st.st_ino),
+        data,
+        root / f"{label}.plist",
         doc["expected_previous_sha256"],
     )
 
 
 def _emit(root: Path, label: str, doc: dict[str, object]) -> None:
-    (root / "receipts").mkdir(mode=0o700, exist_ok=True)
     text = json.dumps(doc, sort_keys=True, indent=1)
-    (root / "receipts" / f"{label}.{doc['action']}.json").write_text(text)
+    uid = os.getuid()
+    with (
+        pinned_root(root, uid) as root_fd,
+        pinned_subdir(root_fd, "receipts", uid) as fd,
+    ):
+        write_atomic_at(fd, f"{label}.{doc['action']}.json", text.encode())
     print(text)
 
 
@@ -72,6 +97,7 @@ def main(
     ap.add_argument("--root", type=Path, required=True)
     ap.add_argument("--label", required=True)
     ap.add_argument("--workdir", type=Path)
+    ap.add_argument("--role", choices=SERVICE_ROLES, default=DEFAULT_ROLE)
     ap.add_argument("--exec", dest="exec_argv", nargs="+", default=None)
     args = ap.parse_args(argv)
     root: Path = args.root
@@ -92,6 +118,7 @@ def main(
                 argv=args.exec_argv,
                 environment={},
                 workdir=args.workdir or root,
+                role=args.role,
             )
             _save_plan(root, plan)
             receipt: dict[str, object] = {

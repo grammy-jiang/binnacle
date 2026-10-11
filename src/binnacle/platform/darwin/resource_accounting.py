@@ -12,11 +12,14 @@ owning reaper hands to ``record_direct_child_exit``; this module never waits for
 polls or signals a process. That rusage covers the direct child plus only those
 descendants it reaped itself; escaped or orphaned descendants are excluded, so it
 is never a job total. A missing, evicted or pre-restart observation is
-``UNKNOWN`` with ``None``. Private libproc sampling stays disabled.
+``UNKNOWN`` with ``None``. Every recorded job id leaves a bounded digest
+tombstone, so a second collector is still refused after the observation itself
+was evicted or discarded. Private libproc sampling stays disabled.
 """
 
 from __future__ import annotations
 
+import hashlib
 import math
 import resource
 import sys
@@ -34,6 +37,9 @@ from binnacle.platform.contracts.capability_contracts import (
 from binnacle.platform.contracts.metric_log_contracts import MetricValue
 
 MAX_RECORDED_JOBS = 4096
+# Duplicate detection outlives observations: it covers the most recent
+# MAX_TOMBSTONES recorded job ids (16-byte digests, never the ids themselves).
+MAX_TOMBSTONES = 16 * MAX_RECORDED_JOBS
 DIRECT_CHILD_SCOPE = (
     "direct_child:final wait4 rusage from the sole owning reaper; includes only "
     "descendants the child reaped itself; never a job total"
@@ -103,6 +109,12 @@ def _maxrss_bytes(value: object) -> int:
     return value * _MAXRSS_UNIT_BYTES
 
 
+def _tombstone(job_id: str) -> bytes:
+    return hashlib.blake2b(
+        job_id.encode("utf-8", "surrogatepass"), digest_size=16
+    ).digest()
+
+
 def _value(
     state: CapabilityState,
     reason: str,
@@ -127,6 +139,7 @@ class DarwinResourceAccounting:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._exits: OrderedDict[str, DirectChildExit] = OrderedDict()
+        self._tombstones: OrderedDict[bytes, None] = OrderedDict()
 
     # Legacy ResourceAccounting compatibility: no cgroup is ever invented.
     def prepare(self, *, log_ready: bool = False) -> str | None:
@@ -154,6 +167,7 @@ class DarwinResourceAccounting:
 
         A second observation for the same job is refused: there is exactly one
         owning reaper, and a competing collector would be a contract breach.
+        The refusal survives eviction and ``discard_job`` via a tombstone.
         """
 
         if not isinstance(job_id, str) or not job_id:
@@ -164,15 +178,22 @@ class DarwinResourceAccounting:
             _maxrss_bytes(getattr(rusage, "ru_maxrss", None)),
             time.time() if observed_at is None else _finite(observed_at),
         )
+        tombstone = _tombstone(job_id)
         with self._lock:
-            if job_id in self._exits:
+            if job_id in self._exits or tombstone in self._tombstones:
                 raise ValueError("direct-child exit already recorded for this job")
             self._exits[job_id] = observation
+            self._tombstones[tombstone] = None
             while len(self._exits) > MAX_RECORDED_JOBS:
                 self._exits.popitem(last=False)
+            while len(self._tombstones) > MAX_TOMBSTONES:
+                self._tombstones.popitem(last=False)
 
     def discard_job(self, job_id: str) -> bool:
-        """Drop a job's in-memory observation; True only if one was removed."""
+        """Drop a job's in-memory observation; True only if one was removed.
+
+        The tombstone stays: a later observation for the job is still refused.
+        """
 
         with self._lock:
             return self._exits.pop(job_id, None) is not None
@@ -219,13 +240,19 @@ class DarwinResourceAccounting:
     def _direct_child_values(self, job_id: str) -> dict[str, MetricValue]:
         with self._lock:
             exit_ = self._exits.get(job_id)
+            forgotten = _tombstone(job_id) in self._tombstones
         if exit_ is None:
-            # Never recorded, still running, evicted or lost across a restart:
-            # indistinguishable here, so the value is unknown, never zero.
+            # Never recorded, still running or lost across a restart (missing),
+            # or recorded and then evicted/discarded: unknown, never zero.
+            reason = (
+                "direct_child_observation_evicted"
+                if forgotten
+                else "direct_child_observation_missing"
+            )
             return {
                 key: _value(
                     CapabilityState.UNKNOWN,
-                    "direct_child_observation_missing",
+                    reason,
                     unit=unit,
                     scope="direct_child",
                     scope_text=DIRECT_CHILD_SCOPE,

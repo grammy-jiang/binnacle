@@ -128,6 +128,7 @@ def edit_file_impl(
 ) -> ToolResult:
     settings = get_settings().edit_file if settings is None else settings
     if file_access is not None:
+        file_access.require("edit_file")
         resolved, _, original = file_access.read(path, 16 * 1024 * 1024)
     else:
         resolved = resolve_path(path, roots=roots)

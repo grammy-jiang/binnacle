@@ -6,13 +6,26 @@ This module is normal Python composition, not a FastMCP Provider or registry.
 """
 
 import platform
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Literal
+from threading import Event
+from typing import TYPE_CHECKING, Literal
 
-from binnacle.platform.contracts.darwin_contracts import OwnedWitness, OwnerGeneration
+from binnacle.platform.contracts.darwin_contracts import (
+    ForegroundExecution,
+    ForegroundRequest,
+    ForegroundResult,
+    OwnedWitness,
+    OwnerGeneration,
+)
+from binnacle.platform.contracts.darwin_release_scope import (
+    DARWIN_RELEASE_SCOPE,
+    FILE_TOOLS,
+)
 from binnacle.platform.contracts.file_access_contracts import FileAccess, SearchAccess
 from binnacle.platform.contracts.native_service_contracts import (
     AuthenticatedChannel,
+    NativeRequestHandler,
     ServiceLease,
 )
 from binnacle.platform.contracts.process_contracts import ProcessBackend
@@ -23,6 +36,10 @@ from binnacle.platform.contracts.service_lifecycle_contracts import (
     ManagedServiceInspector,
 )
 from binnacle.platform.contracts.service_log_contracts import ServiceLogSource
+
+if TYPE_CHECKING:
+    from binnacle.platform.darwin.process_backend import DarwinProcessBackend
+    from binnacle.platform.darwin.resource_accounting import DarwinResourceAccounting
 
 
 class UnsupportedHostOS(RuntimeError):
@@ -175,23 +192,59 @@ def create_service_log_writer(
     )
 
 
-def create_service_lease(*, root: Path, label: str, generation: str) -> ServiceLease:
+def create_service_lease(
+    *, root: Path, label: str, generation: str | None = None
+) -> ServiceLease:
+    """Create fresh per-start authority; explicit generations support test peers."""
     if host_os_family() != "darwin":
         raise UnsupportedHostOS("Native service lease requires Darwin")
     from binnacle.platform.darwin.generation_runtime import open_service_lease
 
+    if generation is None:
+        from secrets import token_hex
+
+        generation = token_hex(16)
     return open_service_lease(root=root, label=label, generation=generation)
 
 
 def connect_native_channel(*, socket_path: Path, lease: ServiceLease, timeout_s: float):
     if host_os_family() != "darwin":
         raise UnsupportedHostOS("Native authenticated channel requires Darwin")
+    import time
+
+    from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
     from binnacle.platform.darwin.ipc_transport import connect_authenticated
 
-    return connect_authenticated(socket_path, lease=lease, timeout_s=timeout_s)
+    # A3 caps channels at 16 with backlog 8. Retry only the authenticated
+    # connection/readiness handshake; never replay a dispatched RPC mutation.
+    deadline = time.monotonic() + timeout_s
+    while True:
+        try:
+            return connect_authenticated(socket_path, lease=lease, timeout_s=timeout_s)
+        except NativeCapabilityError as exc:
+            remaining = deadline - time.monotonic()
+            if (
+                exc.code not in ("ipc_connect_refused", "ipc_connect_timeout")
+                or remaining <= 0
+            ):
+                raise
+            time.sleep(min(0.02, remaining))
+            timeout_s = max(0.000001, deadline - time.monotonic())
 
 
-def serve_native_channel(*, socket_path: Path, lease: ServiceLease, handler, stop):
+def serve_native_channel(
+    *,
+    socket_path: Path,
+    lease: ServiceLease,
+    handler: NativeRequestHandler,
+    stop: Event,
+):
+    """Forward concurrent bounded handlers; callers own locks and idempotency.
+
+    Capacity is 16 channels with listen backlog 8; keep long-lived witness
+    channels well below capacity. Saturation can temporarily deny readiness.
+    No production Darwin manager or mutating RPC handler is enabled here.
+    """
     if host_os_family() != "darwin":
         raise UnsupportedHostOS("Native authenticated channel requires Darwin")
     from binnacle.platform.darwin.ipc_transport import serve_authenticated
@@ -199,27 +252,24 @@ def serve_native_channel(*, socket_path: Path, lease: ServiceLease, handler, sto
     serve_authenticated(socket_path, lease=lease, handler=handler, stop=stop)
 
 
-def native_file_capability():
-    """No review receipt has enabled the frozen Darwin public scope."""
+def native_file_capability(*, release_scope=DARWIN_RELEASE_SCOPE):
+    """Read the committed scope; explicit alternatives are test harness inputs."""
     if host_os_family() == "linux":
         return None
-    from binnacle.platform.contracts.capability_contracts import (
-        Capability,
-        CapabilityState,
-    )
+    from binnacle.platform.contracts.capability_contracts import CapabilityState
 
-    return Capability(
-        CapabilityState.UNAVAILABLE, "review_pending", "darwin_public_files"
+    capabilities = [release_scope[tool].capability for tool in FILE_TOOLS]
+    return next(
+        (cap for cap in capabilities if cap.state == CapabilityState.LIMITED),
+        capabilities[0],
     )
 
 
 def create_native_provisioner(*, root: Path, lease: ServiceLease):
-    """Map A6 values without treating incompatible A3/A5 handoffs as accepted.
+    """Map A6 inert plans; native lifecycle acceptance remains a separate gate.
 
-    A6 emits root/LaunchAgents plists with raw StandardOutPath/StandardErrorPath;
-    A3 requires a root-local plist and Background session scope. A5 requires
-    writer-owned redaction and epochs. Mutations cannot run until those frozen
-    owners supply a compatible handoff and independent review accepts it.
+    A6 omits raw launchd output paths. The service entrypoint writes records
+    through A5 with the generation embedded here, never to an unredacted file.
     """
     if host_os_family() != "darwin":
         raise UnsupportedHostOS("Native provisioning requires Darwin")
@@ -252,7 +302,13 @@ class _NativeProvisionerMapping:
         )
         try:
             plan = self._provisioner.plan(
-                mapped, argv=argv, environment=environment, workdir=workdir
+                mapped,
+                argv=argv,
+                environment={
+                    **environment,
+                    "BINNACLE_SERVICE_GENERATION": lease.generation,
+                },
+                workdir=workdir,
             )
         except local.ProvisionError as exc:
             self._raise_mapped(exc)
@@ -313,10 +369,103 @@ def create_owned_witness(
     return DarwinWitness(channel, generation)
 
 
-def create_foreground_execution():
-    """A2 public entrypoint remains runtime-disabled; never select its private runner."""
+class _ObservedForegroundExecution:
+    """Bind A2's sole-reaper observation to A5 without observing PIDs ourselves."""
+
+    def __init__(
+        self, process: "DarwinProcessBackend", accounting: "DarwinResourceAccounting"
+    ) -> None:
+        self.process = process
+        self.accounting = accounting
+
+    def run_foreground(
+        self, request: ForegroundRequest, *, cancel: Event
+    ) -> ForegroundResult:
+        from dataclasses import replace
+        from uuid import uuid4
+
+        observation_id = uuid4().hex
+        result = self.process.run_foreground(
+            request,
+            cancel=cancel,
+            on_direct_child_exit=lambda usage: self.accounting.record_direct_child_exit(
+                observation_id, usage
+            ),
+        )
+        return replace(result, execution_id=observation_id)
+
+
+def create_foreground_execution() -> ForegroundExecution:
+    """Bind public A2 and A5; the A2 entrypoint still refuses all execution."""
     if host_os_family() != "darwin":
         raise UnsupportedHostOS("Native foreground execution requires Darwin")
     from binnacle.platform.darwin.process_backend import DarwinProcessBackend
+    from binnacle.platform.darwin.resource_accounting import DarwinResourceAccounting
 
-    return DarwinProcessBackend()
+    return _ObservedForegroundExecution(
+        DarwinProcessBackend(), DarwinResourceAccounting()
+    )
+
+
+@contextmanager
+def native_service_output():
+    """Route A6 service stdout/stderr and root logging through A5's sole writer."""
+    import io
+    import logging
+    import os
+    from contextlib import redirect_stderr, redirect_stdout
+    from threading import RLock
+
+    root = os.environ.get("BINNACLE_RUNTIME_DIR")
+    role = os.environ.get("BINNACLE_SERVICE_ROLE")
+    if host_os_family() != "darwin" or root is None or role is None:
+        yield
+        return
+    generation = os.environ.get("BINNACLE_SERVICE_GENERATION")
+    if role not in ("frontend", "probe", "manager") or not generation:
+        raise UnsupportedHostOS("Native service log generation/role missing")
+    writer = create_service_log_writer(
+        root=Path(root), generation=generation, service=role
+    )
+    lock = RLock()
+
+    class Output(io.TextIOBase):
+        def __init__(self):
+            self.pending = ""
+            self.overflow = False
+
+        def write(self, text):
+            with lock:
+                for piece in text.splitlines(keepends=True):
+                    self.pending += piece
+                    if len(self.pending) > 65536:
+                        self.pending, self.overflow = "", True
+                    if piece.endswith("\n"):
+                        writer.write(
+                            "[oversized record omitted]"
+                            if self.overflow
+                            else self.pending
+                        )
+                        self.pending, self.overflow = "", False
+            return len(text)
+
+        def flush(self):
+            # Do not persist fragments: a credential may span separate writes.
+            with lock:
+                writer.sync()
+
+    writer.start()
+    output = Output()
+    logger = logging.getLogger()
+    old_handlers = logger.handlers[:]
+    handler = logging.StreamHandler(output)
+    logger.handlers = [handler]
+    try:
+        with redirect_stdout(output), redirect_stderr(output):
+            yield
+    finally:
+        logger.handlers = old_handlers
+        with lock:
+            if output.pending or output.overflow:
+                writer.write("[unterminated record omitted]")
+            writer.close()

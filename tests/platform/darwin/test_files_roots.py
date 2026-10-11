@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import os
+import socket
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from dataclasses import replace
+from tempfile import TemporaryDirectory
+from threading import Event
 
 import pytest
 
 from binnacle.platform.contracts.capability_contracts import BudgetExceeded, UnsafePath
 from binnacle.platform.contracts.file_access_contracts import FileAccess, ListRequest
-from binnacle.platform.darwin import file_access, file_traversal
+from binnacle.platform.darwin import file_access, file_traversal, search_access
 from binnacle.platform.darwin.file_access import DarwinFileAccess
 from binnacle.platform.darwin.file_traversal import validate_relative_path
 
@@ -256,8 +260,14 @@ def test_special_files_refused_without_blocking(tree):
     os.mkfifo(root / "fifo")
     with pytest.raises(UnsafePath, match="special_file"):
         read(files, grant, "fifo")
+    assert [
+        (e.relative_path, e.kind) for e in files.list_entries(grant, listing()).entries
+    ] == [("fifo", "other")]
     with pytest.raises(UnsafePath, match="special_file"):
-        files.list_entries(grant, listing())
+        files.write_bytes(grant, "fifo", b"no")
+    (root / "directory").mkdir()
+    with pytest.raises(UnsafePath, match="path_is_directory"):
+        files.write_bytes(grant, "directory", b"no")
 
 
 def test_listing_bounds_sorting_and_hidden_policy(tree, monkeypatch):
@@ -324,3 +334,111 @@ def test_private_destination_never_uses_world_readable_temporary(tree, monkeypat
     files.write_bytes(grant, "private", b"private bytes")
     assert observed == [0o600]
     assert target.stat().st_mode & 0o7777 == 0o600
+
+
+@pytest.mark.parametrize("mode", [0o4755, 0o2755, 0o1755])
+@pytest.mark.parametrize("edit", [False, True])
+def test_replacement_clears_special_permission_bits(tree, mode, edit):
+    root, files, grant = tree
+    target = root / "file"
+    target.write_bytes(b"old")
+    target.chmod(mode)
+    files.write_bytes(
+        grant,
+        "file",
+        b"new",
+        expected_sha256=hashlib.sha256(b"old").hexdigest() if edit else None,
+    )
+    assert target.stat().st_mode & 0o7777 == 0o755
+
+
+def test_listing_never_opens_symlinks_fifos_or_sockets(tree, monkeypatch):
+    root, files, grant = tree
+    (root / "link").symlink_to(root.parent)
+    os.mkfifo(root / "fifo")
+    with TemporaryDirectory(dir="/tmp") as short, socket.socket(socket.AF_UNIX) as sock:
+        sock.bind(short + "/socket")
+        os.rename(short + "/socket", root / "socket")
+        real_open = os.open
+
+        def guarded(path, flags, *args, **kwargs):
+            assert path not in {"link", "fifo", "socket"}
+            assert flags & os.O_NOCTTY
+            return real_open(path, flags, *args, **kwargs)
+
+        monkeypatch.setattr(os, "open", guarded)
+        for glob in (None, "**/*"):
+            entries = files.list_entries(grant, listing(glob=glob)).entries
+            assert {(e.relative_path, e.kind) for e in entries} == {
+                (n, "other") for n in ("link", "fifo", "socket")
+            }
+        monkeypatch.setattr(os, "open", real_open)
+
+
+@pytest.mark.parametrize("directory", [False, True])
+def test_listing_skips_entry_replaced_between_stat_and_open(
+    tree, monkeypatch, directory
+):
+    root, files, grant = tree
+    target = root / "race"
+    if directory:
+        target.mkdir()
+        (target / "secret").write_text("old")
+    else:
+        target.write_text("old")
+    (root / "good").write_text("good")
+    real_open = os.open
+
+    def swap(path, flags, *args, **kwargs):
+        if path == "race":
+            target.rename(root / "retained")
+            if directory:
+                target.mkdir()
+                (target / "secret").write_text("NEW")
+            else:
+                target.write_text("NEW")
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", swap)
+    result = files.list_entries(grant, listing(glob="**/*"))
+    assert not any(e.relative_path.startswith("race") for e in result.entries)
+    assert "good" in [e.relative_path for e in result.entries]
+
+
+def test_walk_does_not_serialize_read_or_close_grant(tree, monkeypatch):
+    root, files, grant = tree
+    (root / "file").write_text("owned")
+    entered, release = Event(), Event()
+    real_walk = file_traversal.Listing.walk
+
+    def blocked_walk(*args, **kwargs):
+        entered.set()
+        assert release.wait(5)
+        return real_walk(*args, **kwargs)
+
+    monkeypatch.setattr(file_traversal.Listing, "walk", blocked_walk)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        walk = pool.submit(files.list_entries, grant, listing())
+        try:
+            assert entered.wait(5)
+            assert pool.submit(read, files, grant, "file").result(timeout=2) == b"owned"
+            pool.submit(grant.close).result(timeout=2)
+        finally:
+            release.set()
+        assert walk.result(timeout=2).entries[0].relative_path == "file"
+
+
+def test_recursive_depth_has_descriptor_budget(tree):
+    root, files, grant = tree
+    current = root
+    for _ in range(file_traversal.MAX_WALK_DEPTH + 1):
+        current /= "d"
+        current.mkdir()
+    with pytest.raises(BudgetExceeded, match="traversal_depth"):
+        files.list_entries(grant, listing(glob="**/*"))
+
+
+def test_surrogate_filename_remapping_without_filesystem_support():
+    raw = b'{"type":"begin","data":{"path":{"text":"<stdin>"}}}\n'
+    events = search_access._events(raw, os.fsdecode(b"bad-\xff"), False)
+    assert events[0]["data"]["path"] == {"bytes": "YmFkLf8="}

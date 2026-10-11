@@ -10,15 +10,13 @@ from binnacle.features.commands.command_contracts import (
     CommandBackend,
     CommandFailure,
     CommandReply,
-)
-from binnacle.features.commands.run_command_evidence import record_auto_match
-from binnacle.features.commands.run_command_telemetry import DispatchPlan
-from binnacle.mcp.callctx import current_argument_names, current_call, current_client
-from binnacle.platform.contracts.darwin_contracts import (
     ForegroundExecution,
     ForegroundRequest,
     ForegroundResult,
 )
+from binnacle.features.commands.run_command_evidence import record_auto_match
+from binnacle.features.commands.run_command_telemetry import DispatchPlan
+from binnacle.mcp.callctx import current_argument_names, current_call, current_client
 
 log = logging.getLogger("binnacle.run_command")
 

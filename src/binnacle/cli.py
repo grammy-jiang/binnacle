@@ -80,17 +80,19 @@ def serve(
     """Run the MCP server in the foreground (what the systemd unit runs)."""
     import uvicorn
 
-    # Explicit, not "auto": startup fails loudly if the uvicorn[standard]
-    # performance stack (uvloop event loop, httptools parser) is missing,
-    # instead of silently degrading to the stdlib implementations.
-    uvicorn.run(
-        "binnacle.server:app",
-        host=host,
-        port=port,
-        reload=reload,
-        loop="uvloop",
-        http="httptools",
-    )
+    # Darwin uses the stdlib loop: reserve SIGCHLD for the A2 sole reaper.
+    # Linux retains its pinned uvloop/httptools production stack.
+    from binnacle.platform.composition import host_os_family, native_service_output
+
+    with native_service_output():
+        uvicorn.run(
+            "binnacle.server:app",
+            host=host,
+            port=port,
+            reload=reload,
+            loop="asyncio" if host_os_family() == "darwin" else "uvloop",
+            http="httptools",
+        )
 
 
 def _setup_unit_plans(

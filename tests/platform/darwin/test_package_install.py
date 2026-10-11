@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
+import base64
+import contextlib
+import dataclasses
+import json
 import os
 import platform
+import plistlib
+import stat
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
+from binnacle.deployment.darwin import provisioner as prov_mod
 from binnacle.deployment.darwin import setup
 from binnacle.deployment.darwin.plist import render_plist, validate_test_label
 from binnacle.deployment.darwin.provisioner import (
+    ApplyUnknown,
     CapabilityUnavailable,
     DarwinProvisioner,
     GenerationMismatch,
@@ -68,7 +76,7 @@ def test_plist_is_deterministic_and_inert(root: Path) -> None:
             argv=["/usr/bin/true"],
             environment={"B": "2", "A": "1"},
             workdir=root,
-            log_path=root / "l.log",
+            runtime_dir=root,
         )
 
     a = render()
@@ -86,9 +94,7 @@ def test_non_test_labels_refused(label: str) -> None:
 
 
 def test_apply_rollback_restores_exact_prior_bytes(root: Path) -> None:
-    pdir = root / "LaunchAgents"
-    pdir.mkdir(mode=0o700)
-    prior = pdir / f"{LABEL}.plist"
+    prior = root / f"{LABEL}.plist"
     prior.write_bytes(b"old")
     lc = FakeLifecycle()
     prov, plan = _plan(root, lc)
@@ -133,7 +139,6 @@ def test_foreign_plist_preserved_without_bootout(root: Path) -> None:
 def test_apply_rejects_stale_previous_digest(root: Path) -> None:
     lc = FakeLifecycle()
     prov, plan = _plan(root, lc)
-    plan.plist_path.parent.mkdir(mode=0o700)
     plan.plist_path.write_bytes(b"raced")
     with pytest.raises(GenerationMismatch):
         prov.apply(plan)
@@ -149,6 +154,134 @@ def test_bootstrap_failure_restores_prior(root: Path) -> None:
     with pytest.raises(RuntimeError):
         prov.apply(plan)
     assert not plan.plist_path.exists()
+
+
+class LoadThenRaise(FakeLifecycle):
+    def bootstrap(self, label: str, plist_path: Path) -> None:
+        super().bootstrap(label, plist_path)
+        raise RuntimeError("readiness_failed_after_load")
+
+
+def test_partial_apply_boots_out_then_restores(root: Path) -> None:
+    lc = LoadThenRaise()
+    prov, plan = _plan(root, lc)
+    with pytest.raises(RuntimeError):
+        prov.apply(plan)
+    assert lc.is_absent(LABEL)
+    assert lc.calls == ["bootstrap", "bootout"]
+    assert not plan.plist_path.exists()
+
+
+def test_partial_apply_with_stuck_label_keeps_plist_and_reports_unknown(
+    root: Path,
+) -> None:
+    lc = LoadThenRaise()
+    lc.stuck = True
+    prov, plan = _plan(root, lc)
+    with pytest.raises(ApplyUnknown) as info:
+        prov.apply(plan)
+    assert info.value.capability.state == "UNKNOWN"
+    assert plan.plist_path.read_bytes() == plan.plist_bytes
+    lc.stuck = False
+    assert prov.rollback(plan).absent
+    assert not plan.plist_path.exists()
+
+
+def test_apply_refuses_edited_plan_before_bootstrap(root: Path) -> None:
+    lc = FakeLifecycle()
+    prov, plan = _plan(root, lc)
+    body = plistlib.loads(plan.plist_bytes)
+    for key, value in (
+        ("Label", "com.apple.evil"),
+        ("RunAtLoad", True),
+        ("KeepAlive", True),
+        ("ProgramArguments", ["rel"]),
+    ):
+        bad = dict(body, **{key: value})
+        edited = dataclasses.replace(plan, plist_bytes=plistlib.dumps(bad))
+        with pytest.raises(UnsafePath):
+            prov.apply(edited)
+    assert lc.calls == []
+    assert not plan.plist_path.exists()
+
+
+@pytest.mark.parametrize("sub", ["backups"])
+def test_symlinked_subdir_refused(root: Path, tmp_path: Path, sub: str) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    os.symlink(outside, root / sub)
+    (root / f"{LABEL}.plist").write_bytes(b"old")
+    lc = FakeLifecycle()
+    prov, plan = _plan(root, lc)
+    with pytest.raises(UnsafePath):
+        prov.apply(plan)
+    assert list(outside.iterdir()) == []
+    assert lc.calls == []
+
+
+def test_open_mode_subdir_refused(root: Path) -> None:
+    (root / "backups").mkdir(mode=0o755)
+    (root / "backups").chmod(0o755)
+    (root / f"{LABEL}.plist").write_bytes(b"old")
+    prov, plan = _plan(root, FakeLifecycle())
+    with pytest.raises(UnsafePath):
+        prov.apply(plan)
+
+
+def test_repeated_rollback_with_prior_is_idempotent(root: Path) -> None:
+    (root / f"{LABEL}.plist").write_bytes(b"prior")
+    lc = FakeLifecycle()
+    prov, plan = _plan(root, lc)
+    prov.apply(plan)
+    assert prov.rollback(plan).absent
+    assert prov.rollback(plan).absent
+    assert plan.plist_path.read_bytes() == b"prior"
+
+
+def test_plist_matches_a3_accepted_format(root: Path) -> None:
+    _, plan = _plan(root, FakeLifecycle())
+    assert plan.plist_path.parent == root
+    value = plistlib.loads(plan.plist_bytes)
+    env = value["EnvironmentVariables"]
+    assert env["BINNACLE_SERVICE_ROLE"] in ("frontend", "probe", "manager")
+    assert env["BINNACLE_RUNTIME_DIR"] == str(root)
+    assert value["LimitLoadToSessionType"] == "Background"
+    assert value["KeepAlive"] is False and value["RunAtLoad"] is False
+    for key in ("Program", "UserName", "GroupName", "Sockets", "MachServices"):
+        assert key not in value
+
+
+def test_plist_has_no_raw_log_paths(root: Path) -> None:
+    _, plan = _plan(root, FakeLifecycle())
+    value = plistlib.loads(plan.plist_bytes)
+    assert "StandardOutPath" not in value and "StandardErrorPath" not in value
+    assert not (root / "logs").exists()
+
+
+def test_applied_plist_is_private_file(root: Path) -> None:
+    prov, plan = _plan(root, FakeLifecycle())
+    prov.apply(plan)
+    assert stat.S_IMODE(os.lstat(plan.plist_path).st_mode) == 0o600
+
+
+def test_cli_refuses_tampered_plan_file(root: Path) -> None:
+    lc = FakeLifecycle()
+    base = ["--root", str(root), "--label", LABEL]
+    assert setup.main(["plan", *base, "--exec", "/usr/bin/true"], lifecycle=lc) == 0
+    pf = root / "plans" / f"{LABEL}.json"
+    assert stat.S_IMODE(pf.stat().st_mode) == 0o600
+    doc = json.loads(pf.read_text())
+    body = plistlib.loads(base64.b64decode(doc["plist_b64"]))
+    body.update(Label="com.apple.evil", RunAtLoad=True, KeepAlive=True)
+    doc["plist_b64"] = base64.b64encode(plistlib.dumps(body)).decode()
+    pf.write_text(json.dumps(doc))
+    assert setup.main(["apply", *base], lifecycle=lc) == 2
+    # Attacker also fixes the digest: semantic validation still refuses.
+    doc["plist_sha256"] = sha256_hex(base64.b64decode(doc["plist_b64"]))
+    pf.write_text(json.dumps(doc))
+    assert setup.main(["apply", *base], lifecycle=lc) == 2
+    assert lc.calls == []
+    assert not (root / f"{LABEL}.plist").exists()
 
 
 def test_without_lifecycle_apply_is_unavailable(root: Path) -> None:
@@ -190,6 +323,136 @@ def test_cli_roundtrip_and_global_label_refused(root: Path) -> None:
         )
         == 1
     )
+
+
+def _swap_to_symlink(victim: Path, outside: Path) -> None:
+    victim.rename(victim.with_name(victim.name + "-moved"))
+    victim.symlink_to(outside)
+
+
+def _snapshot(outside: Path) -> dict[str, bytes]:
+    return {
+        str(p.relative_to(outside)): p.read_bytes() if p.is_file() else b""
+        for p in sorted(outside.rglob("*"))
+    }
+
+
+def _outside_fixture(tmp_path: Path) -> tuple[Path, dict[str, bytes]]:
+    outside = tmp_path / "outside"
+    for sub in ("backups", "plans", "receipts"):
+        (outside / sub).mkdir(mode=0o700, parents=True)
+    (outside / f"{LABEL}.plist").write_bytes(b"outside-sentinel")
+    return outside, _snapshot(outside)
+
+
+def test_root_swap_after_pin_fails_closed_without_bootstrap(
+    root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (root / f"{LABEL}.plist").write_bytes(b"prior")
+    lc = FakeLifecycle()
+    prov, plan = _plan(root, lc)
+    outside, before = _outside_fixture(tmp_path)
+    original = prov_mod.open_private_root
+
+    def swap_after_open(path: Path, uid: int) -> int:
+        fd = original(path, uid)
+        _swap_to_symlink(path, outside)
+        return fd
+
+    monkeypatch.setattr(prov_mod, "open_private_root", swap_after_open)
+    with pytest.raises(UnsafePath):
+        prov.apply(plan)
+    assert _snapshot(outside) == before
+    assert lc.calls == []
+    # The original (moved) object was restored to its prior bytes.
+    assert (root.parent / "root-moved" / f"{LABEL}.plist").read_bytes() == b"prior"
+
+
+def test_backups_swap_after_open_stays_on_original_object(
+    root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (root / f"{LABEL}.plist").write_bytes(b"prior")
+    lc = FakeLifecycle()
+    prov, plan = _plan(root, lc)
+    outside, before = _outside_fixture(tmp_path)
+    original = prov_mod.open_private_subdir
+
+    def swap_after_open(root_fd: int, name: str, uid: int) -> int:
+        fd = original(root_fd, name, uid)
+        _swap_to_symlink(root / name, outside)
+        return fd
+
+    monkeypatch.setattr(prov_mod, "open_private_subdir", swap_after_open)
+    prov.apply(plan)
+    assert _snapshot(outside) == before
+    assert (root / "backups-moved" / f"{LABEL}.prior").read_bytes() == b"prior"
+    # Rollback re-pins by nofollow open: the symlinked backups is refused.
+    monkeypatch.undo()
+    with pytest.raises(UnsafePath):
+        prov.rollback(plan)
+    assert _snapshot(outside) == before
+
+
+def test_root_swap_between_write_and_bootstrap_is_refused(
+    root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lc = FakeLifecycle()
+    prov, plan = _plan(root, lc)
+    outside, before = _outside_fixture(tmp_path)
+    original = DarwinProvisioner._verify_handoff
+
+    def swap_then_verify(self, root_fd, plan):
+        _swap_to_symlink(root, outside)
+        original(self, root_fd, plan)
+
+    monkeypatch.setattr(DarwinProvisioner, "_verify_handoff", swap_then_verify)
+    with pytest.raises(UnsafePath) as info:
+        prov.apply(plan)
+    assert info.value.code == "handoff_path_moved"
+    assert _snapshot(outside) == before
+    assert lc.calls == []
+    assert not (root.parent / "root-moved" / f"{LABEL}.plist").exists()
+
+
+def test_plist_replaced_by_symlink_before_bootstrap_is_refused(
+    root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lc = FakeLifecycle()
+    prov, plan = _plan(root, lc)
+    outside, before = _outside_fixture(tmp_path)
+    original = DarwinProvisioner._verify_handoff
+
+    def swap_file(self, root_fd, plan):
+        plan.plist_path.unlink()
+        plan.plist_path.symlink_to(outside / f"{LABEL}.plist")
+        original(self, root_fd, plan)
+
+    monkeypatch.setattr(DarwinProvisioner, "_verify_handoff", swap_file)
+    with pytest.raises(UnsafePath):
+        prov.apply(plan)
+    assert _snapshot(outside) == before
+    assert lc.calls == []
+
+
+@pytest.mark.parametrize("sub", ["plans", "receipts"])
+def test_cli_subdir_swap_after_open_does_not_escape(
+    root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sub: str
+) -> None:
+    outside, before = _outside_fixture(tmp_path)
+    original = setup.pinned_subdir
+
+    @contextlib.contextmanager
+    def swapping(root_fd: int, name: str, uid: int):
+        with original(root_fd, name, uid) as fd:
+            if name == sub:
+                _swap_to_symlink(root / name, outside)
+            yield fd
+
+    monkeypatch.setattr(setup, "pinned_subdir", swapping)
+    base = ["--root", str(root), "--label", LABEL]
+    setup.main(["plan", *base, "--exec", "/usr/bin/true"], lifecycle=FakeLifecycle())
+    assert _snapshot(outside) == before
+    assert (root / f"{sub}-moved").is_dir()
 
 
 def test_darwin_modules_import_without_linux_services() -> None:

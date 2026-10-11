@@ -67,6 +67,7 @@ def read_file_impl(
 ) -> ToolResult:
     settings = get_settings().read_file if settings is None else settings
     if file_access is not None:
+        file_access.require("read_file")
         resolved, size, data = file_access.read(path, settings.max_file_bytes)
     else:
         resolved = resolve_path(path, roots=roots)

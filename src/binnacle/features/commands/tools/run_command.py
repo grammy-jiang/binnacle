@@ -19,12 +19,11 @@ from binnacle.features.commands.command_backend import create_command_backend
 from binnacle.features.commands.command_contracts import (
     CommandBackend,
     CommandFailure,
+    ForegroundRequest,
+    RestrictedCommandBackend,
     require_command_available,
 )
-from binnacle.features.commands.restricted_backend import RestrictedCommandBackend
 from binnacle.features.files.paths import resolve_path
-from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
-from binnacle.platform.contracts.darwin_contracts import ForegroundRequest
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -163,6 +162,7 @@ def register(
             "Darwin foreground execution is UNAVAILABLE pending R1 + CR1 approval. "
             "Background processes are terminated when the command finishes. "
             "Processes that start a new session (setsid) are not tracked. "
+            "New sessions/process groups are not tracked or terminated. "
             "Durable background jobs and stop_job are unavailable; FULL_PARITY_NO_GO."
         )
 
@@ -230,7 +230,7 @@ async def run_native_command_impl(
         )
         if result.exit_code is None and result.signal is None:
             raise CommandFailure("darwin_foreground_completion_unknown")
-    except (CommandFailure, NativeCapabilityError) as exc:
+    except CommandFailure as exc:
         raise ToolError(str(exc)) from exc
     reply = command_execution.foreground_reply(
         result, max_output_chars=backend.max_output_chars, tail_lines=tail_lines

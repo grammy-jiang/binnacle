@@ -15,6 +15,9 @@ ADAPTERS = (
 )
 DOMAIN = ("command_execution.py", "command_status.py", "command_contracts.py")
 STANDARD = {"dataclasses", "pathlib", "typing", "logging", "time"}
+STANDARD |= {"asyncio", "threading"}  # Worker dispatch and owned cancellation event.
+STANDARD |= {"collections.abc", "functools"}  # Async adapter signature preservation.
+STANDARD |= {"platform"}  # Refuse uncomposed native callers before Linux imports.
 DOMAIN_IMPORTS = {
     "binnacle.features.commands.command_contracts",
     "binnacle.features.commands.job_output",

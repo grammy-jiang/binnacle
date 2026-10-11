@@ -54,9 +54,8 @@ def scenario() -> dict[str, object]:
     with tempfile.TemporaryDirectory(prefix="r3setup") as tmp:
         root = Path(tmp).resolve() / "root"
         root.mkdir(mode=0o700)
-        plist = root / "LaunchAgents" / f"{LABEL}.plist"
+        plist = root / f"{LABEL}.plist"
         prior = b"prior-owned-bytes"
-        plist.parent.mkdir(mode=0o700)
         plist.write_bytes(prior)
         lc = RecordingLifecycle()
         out["plan_rc"] = _run(root, lc, "plan")
@@ -76,6 +75,7 @@ def scenario() -> dict[str, object]:
         out["incomplete_rollback_plist_kept"] = plist.exists()
         lc2.stuck = False
         out["retry_rollback_rc"] = _run(root, lc2, "rollback")
+        out["repeat_rollback_idempotent_rc"] = _run(root, lc2, "rollback")
         # Negative: foreign bytes appear -> preserved, nothing booted out.
         _run(root, lc2, "plan")
         _run(root, lc2, "apply")
@@ -106,6 +106,7 @@ def scenario() -> dict[str, object]:
         and out["incomplete_rollback_rc"] == 3
         and out["incomplete_rollback_plist_kept"] is True
         and out["retry_rollback_rc"] == 0
+        and out["repeat_rollback_idempotent_rc"] == 0
         and out["foreign_rollback_rc"] == 2
         and out["foreign_preserved"] is True
         and out["foreign_no_bootout"] is True

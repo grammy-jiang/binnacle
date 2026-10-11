@@ -23,7 +23,7 @@ import re
 import secrets
 import stat
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from binnacle.platform.contracts.capability_contracts import (
@@ -35,6 +35,7 @@ from binnacle.platform.contracts.capability_contracts import (
     UnsafePath,
 )
 from binnacle.platform.contracts.metric_log_contracts import LogCursor
+from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 
 CURSOR_SCHEMA = "binnacle-darwin-log-cursor-v1"
 MAX_CURSOR_FILE_BYTES = 1024
@@ -56,6 +57,10 @@ _PRIVATE_BITS = stat.S_IRWXG | stat.S_IRWXO
 def expired(reason: str) -> CursorExpired:
     capability = Capability(CapabilityState.UNKNOWN, reason, CURSOR_SCOPE)
     return CursorExpired("log_cursor_expired", capability)
+
+
+def service_error(reason: str) -> ServiceLogError:
+    return ServiceLogError(f"private service log unavailable: {reason}")
 
 
 def _unknown(reason: str) -> AuthorityUnknown:
@@ -324,6 +329,26 @@ def save_manifest(service_dir: Path, manifest: Manifest) -> None:
     write_private_atomic(service_dir / "manifest.json", json.dumps(body).encode())
 
 
+def mark_crashed(service_dir: Path, manifest: Manifest) -> Manifest:
+    """Earlier writers that never closed cleanly end in a crash gap."""
+
+    entries = []
+    for entry in manifest.entries:
+        if entry.end == "open":
+            info = lstat_or_none(service_dir / entry.file_name)
+            if info is not None and (info.st_dev, info.st_ino) == (
+                entry.device,
+                entry.inode,
+            ):
+                entry = replace(
+                    entry, end="crashed", final_size=info.st_size, last_at=info.st_mtime
+                )
+            else:  # missing or replaced: its records are lost coverage
+                entry = replace(entry, end="crashed", pruned=True)
+        entries.append(entry)
+    return replace(manifest, entries=tuple(entries))
+
+
 def service_directory(root: Path, service: str) -> Path:
     if not isinstance(service, str) or not IDENTIFIER.fullmatch(service):
         raise _unsafe("service_name_invalid")
@@ -423,3 +448,38 @@ def check_budget(max_bytes: int, max_lines: int, byte_cap: int, line_cap: int) -
             f"private_service_log:max_bytes={byte_cap}:max_lines={line_cap}",
         )
         raise BudgetExceeded("log_read_budget_exceeded", capability)
+
+
+def crashed_at(service_dir: Path, entry: EpochEntry) -> float:
+    """Last write of a crashed epoch; its start when that is unobservable."""
+
+    if entry.end == "crashed" and entry.last_at is not None:
+        return entry.last_at
+    info = lstat_or_none(service_dir / entry.file_name)
+    return entry.started_at if info is None else info.st_mtime
+
+
+def window_records(
+    data: bytes, low: float, high: float, budget: list[int], *, whole: bool
+) -> list[tuple[float, bytes]]:
+    """Records stamped within ``[low, high]``; any malformed record raises."""
+
+    lines = data.split(b"\n")
+    tail = lines.pop()
+    if tail and whole:
+        lines.append(tail)
+    budget[1] -= len(lines)
+    if budget[1] < 0:
+        raise service_error("window_exceeds_read_budget")
+    found = []
+    for line in lines:
+        stamp, sep, text = line.partition(b" ")
+        try:
+            at = float(stamp)
+        except ValueError:
+            raise service_error("record_malformed") from None
+        if not sep or not math.isfinite(at):
+            raise service_error("record_malformed")
+        if low <= at <= high:
+            found.append((at, text))
+    return found
