@@ -483,6 +483,8 @@ def test_ignore_explicit_scope_and_hidden_negation(tree, policy):
 
 @pytest.mark.parametrize("error", [errno.EPERM, errno.EILSEQ])
 def test_non_utf8_skip_guard_is_specific(tree, monkeypatch, error):
+    monkeypatch.setattr(sys, "platform", "darwin")  # Test the APFS guard on Linux too.
+
     def rejected(*args, **kwargs):
         raise OSError(error, "invalid filename")
 
