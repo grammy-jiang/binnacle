@@ -87,6 +87,9 @@ def job_status_impl(
         wait_max = get_settings().run_command.wait_max_s
     backend = create_command_backend() if backend is None else backend
     try:
+        if cursor is not None and job_id is None:
+            # Pure argument validation answers first, as on Linux, on every host.
+            raise CommandFailure("cursor requires job_id")
         require_command_available(backend)
         reply = command_status.job_status(
             job_id,

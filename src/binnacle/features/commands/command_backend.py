@@ -2,6 +2,7 @@
 
 import platform
 import time
+from collections.abc import Callable
 from importlib import import_module
 from pathlib import Path
 
@@ -94,6 +95,8 @@ DARWIN_MANAGER_REVIEW_PENDING = (
     "release review; there is no embedded fallback."
 )
 _COMMAND_TOOLS = ("run_command", "job_status", "stop_job")
+# R-J2-F4: a reaped leader can precede its persisted record; bridge that window.
+EXIT_RECORD_GRACE_S = 2.0
 
 
 def darwin_manager_description(docstring: str | None) -> str:
@@ -101,19 +104,6 @@ def darwin_manager_description(docstring: str | None) -> str:
     from inspect import cleandoc
 
     return cleandoc(docstring or "") + "\n\n" + DARWIN_COMMAND_DISCLOSURE
-
-
-class _UncomposedJobClient:
-    """Fail closed: never execute locally when no manager client is composed."""
-
-    def _refuse(self, *args, **kwargs):
-        from binnacle.platform.contracts.process_contracts import (
-            JOB_MANAGER_UNAVAILABLE,
-        )
-
-        raise CommandFailure(f"{JOB_MANAGER_UNAVAILABLE}: client not composed")
-
-    start = stop = ping = _refuse
 
 
 class DarwinManagerCommandBackend:
@@ -132,20 +122,34 @@ class DarwinManagerCommandBackend:
         self,
         *,
         jobs_dir: Path,
-        socket_path: Path,
+        socket_path: Path | Callable[[], Path],
         release_states: dict[str, str],
         warmup_s: float,
         max_output_chars: int,
-        client=None,
+        client,
     ) -> None:
         self.jobs_dir = Path(jobs_dir)
-        self.socket_path = Path(socket_path)
+        # A resolver runs per call, so startup never depends on the runtime dir.
+        self._socket_path = socket_path
         self.release_states = dict(release_states)
         self.warmup_s = warmup_s
         self.max_output_chars = max_output_chars
-        # The A3 DarwinJobClient is injected by platform composition; until that
-        # factory exists the uncomposed client fails closed per call.
-        self.client = _UncomposedJobClient() if client is None else client
+        # composition.create_job_client(): features never import platform.darwin.
+        self.client = client
+
+    @property
+    def socket_path(self) -> Path:
+        if not callable(self._socket_path):
+            return Path(self._socket_path)
+        try:
+            return self._socket_path()
+        except (OSError, RuntimeError) as exc:
+            from binnacle.platform.contracts.process_contracts import (
+                JOB_MANAGER_UNAVAILABLE,
+            )
+
+            code = getattr(exc, "code", type(exc).__name__)
+            raise CommandFailure(f"{JOB_MANAGER_UNAVAILABLE}: {code}") from exc
 
     def require_available(self) -> None:
         # Committed rows, never reachability, decide availability (JCR-2).
@@ -165,7 +169,12 @@ class DarwinManagerCommandBackend:
             wait_seconds=wait_seconds,
             call_id=current_call.get(),
         )
-        return str(response["job_id"])
+        job_id = str(response["job_id"])
+        if response.get("state") != "running":
+            # The reply state is never final (R-J2-F4): the spool record is.
+            # Wait briefly for the manager to persist the exit, like Linux.
+            self.await_exit(job_id, EXIT_RECORD_GRACE_S)
+        return job_id
 
     def _meta(self, job_id: str) -> dict | None:
         from binnacle.features.commands import job_store
@@ -275,6 +284,7 @@ class DarwinManagerCommandBackend:
 
 
 _native_release_states: dict[str, str] | None = None
+_native_backend_factory: Callable[[], CommandBackend] | None = None
 
 
 def configure_native_release_states(states: dict[str, str] | None) -> None:
@@ -283,13 +293,24 @@ def configure_native_release_states(states: dict[str, str] | None) -> None:
     _native_release_states = None if states is None else dict(states)
 
 
+def configure_native_command_backend(
+    factory: Callable[[], CommandBackend] | None,
+) -> None:
+    """Receive the composed-owner backend factory from the composition root."""
+    global _native_backend_factory
+    _native_backend_factory = factory
+
+
 def create_command_backend() -> CommandBackend:
     """Capture engine settings at default selection, before accepting requests."""
     # Uncomposed callers on other hosts get an inert backend, never Linux jobs.
     # Native executors are injected by the application composition root.
     if platform.system() != "Linux":
-        # Release states are handed in by the application composition root, so
-        # the focused Commands child serves the same metadata; no execution here.
+        # The composition root hands in the composed owner's backend (or its
+        # release states), so the focused Commands child serves the same
+        # metadata as the root; no embedded execution here.
+        if _native_backend_factory is not None:
+            return _native_backend_factory()
         return RestrictedCommandBackend(release_states=_native_release_states)
     import_module("binnacle.features.commands.jobs")
     import_module("binnacle.features.commands.job_owner")

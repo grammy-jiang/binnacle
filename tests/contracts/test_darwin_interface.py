@@ -61,8 +61,14 @@ def test_native_wire_schema_preserves_v101_with_declared_description_exception(
     assert "new sessions/process groups are not tracked or terminated" in description
     assert "foreground execution is unavailable on macos" in description
     assert "descendants_unverified=true" in description
-    original = next(tool for tool in baseline["tools"] if tool["name"] == "run_command")
+    linux = {tool["name"]: tool for tool in baseline["tools"]}
+    original = linux["run_command"]
     native["description"] = original["description"]
+    params, old = (tool["inputSchema"]["properties"] for tool in (native, original))
+    assert "refused" in params["background"]["description"]  # R4 J4: no job_id
+    for name in ("background", "wait_seconds"):
+        assert "job_id" not in params[name]["description"]
+        params[name]["description"] = old[name]["description"]
     for name, needle in (
         ("stop_job", "unavailable on macos"),
         ("job_status", "lost on restart"),
@@ -70,17 +76,11 @@ def test_native_wire_schema_preserves_v101_with_declared_description_exception(
         declared = next(tool for tool in actual if tool["name"] == name)
         assert needle in declared["description"].lower()
         assert "sigterm" not in declared["description"].lower()
-        declared["description"] = next(
-            tool["description"] for tool in baseline["tools"] if tool["name"] == name
-        )
+        declared["description"] = linux[name]["description"]
     search = next(tool for tool in actual if tool["name"] == "search_text")
     assert "per-file size limit: 16 MiB (16,777,216 bytes)" in search["description"]
     assert "remaining aggregate 16 MiB input budget" in search["description"]
-    search["description"] = next(
-        tool["description"]
-        for tool in baseline["tools"]
-        if tool["name"] == "search_text"
-    )
+    search["description"] = linux["search_text"]["description"]
     assert actual == baseline["tools"]
 
 
@@ -197,8 +197,8 @@ def test_linux_file_lookup_skips_only_darwin_runtime_requirement(monkeypatch):
         scope["run_command"],
         capability=Capability(CapabilityState.LIMITED, "test", "run_command"),
     )
-    assert composition.native_file_capability() is None
-    assert composition.native_file_capability(release_scope=scope) is None
+    for kwargs in ({}, {"release_scope": scope}):
+        assert composition.native_file_capability(owner="embedded", **kwargs) is None
 
 
 def test_production_scope_controls_real_server_without_test_override(tmp_path):
@@ -218,7 +218,7 @@ import asyncio, sys
 from pathlib import Path
 from fastmcp import Client
 from binnacle.server import mcp
-from binnacle.platform.contracts.darwin_release_scope import DARWIN_RELEASE_SCOPE
+from binnacle.platform.contracts.darwin_release_scope import release_scope_for_owner as rows
 if sys.platform != "darwin":
     assert not any(m.startswith("binnacle.platform.darwin") for m in sys.modules)
     sys.exit(0)
@@ -237,7 +237,7 @@ async def check():
             ("stop_job", {"job_id": "foreign"}),
         ):
             result = await client.call_tool(name, args, raise_on_error=False)
-            enabled = DARWIN_RELEASE_SCOPE[name].capability.state.value == "LIMITED"
+            enabled = rows("manager")[name].capability.state.value in ("LIMITED", "AVAILABLE")  # CR0-1.2.0 point 4: auto is the manager
             assert result.is_error != enabled, (name, result)
             if not enabled:
                 assert "unavailable" in str(result.content).lower(), (name, result)

@@ -22,6 +22,7 @@ from starlette.responses import JSONResponse
 from binnacle.config import Settings
 from binnacle.features.commands.command_backend import (
     DarwinManagerCommandBackend,
+    configure_native_command_backend,
     configure_native_release_states,
 )
 from binnacle.features.commands.command_contracts import (
@@ -63,12 +64,46 @@ from binnacle.platform.contracts.process_contracts import (
     JobOwnerKind,
 )
 
+_COMMAND_TOOLS = ("run_command", "job_status", "stop_job")
+
 configure_native_release_states(
-    {
-        tool: DARWIN_RELEASE_SCOPE[tool].capability.state.value
-        for tool in ("run_command", "job_status", "stop_job")
-    }
+    {tool: DARWIN_RELEASE_SCOPE[tool].capability.state.value for tool in _COMMAND_TOOLS}
 )
+
+
+def _manager_command_backend(
+    settings: Settings, command_states: Mapping[str, str]
+) -> DarwinManagerCommandBackend:
+    """The Darwin manager owner's stateless Commands backend (R4 J4)."""
+    from binnacle.platform.composition import create_job_client, create_runtime_paths
+
+    return DarwinManagerCommandBackend(
+        jobs_dir=settings.jobs.dir,
+        socket_path=settings.jobs.socket_path
+        or (lambda: create_runtime_paths().jobs_socket),
+        release_states=dict(command_states),
+        warmup_s=settings.jobs.warmup_s,
+        max_output_chars=settings.jobs.max_output_chars,
+        client=create_job_client(),
+    )
+
+
+def _focused_command_backend() -> CommandBackend:
+    """The focused Commands child composes the same owner as the root."""
+    from binnacle.config import get_settings
+
+    if platform.system() != "Darwin":
+        return RestrictedCommandBackend(release_states={})
+    settings = get_settings()
+    owner = resolve_darwin_job_owner(settings.jobs.owner)
+    scope = release_scope_for_owner(owner)
+    states = {tool: scope[tool].capability.state.value for tool in _COMMAND_TOOLS}
+    if owner == "manager":
+        return _manager_command_backend(settings, states)
+    return RestrictedCommandBackend(release_states=states)
+
+
+configure_native_command_backend(_focused_command_backend)
 
 _LINUX_INSTRUCTIONS = (
     "binnacle: a Raspberry Pi 5 development workstation. Paths live under "
@@ -245,7 +280,6 @@ def compose_native_tools(
         UnsupportedHostOS,
         create_file_access,
         create_foreground_execution,
-        create_runtime_paths,
         create_search_access,
         native_file_capability,
     )
@@ -293,18 +327,10 @@ def compose_native_tools(
         capabilities={tool: release_scope[tool].capability for tool in FILE_TOOLS},
     )
     command_states = {
-        tool: release_scope[tool].capability.state.value
-        for tool in ("run_command", "job_status", "stop_job")
+        tool: release_scope[tool].capability.state.value for tool in _COMMAND_TOOLS
     }
     if owner == "manager":
-        socket_path = settings.jobs.socket_path or create_runtime_paths().jobs_socket
-        return access, DarwinManagerCommandBackend(
-            jobs_dir=settings.jobs.dir,
-            socket_path=socket_path,
-            release_states=command_states,
-            warmup_s=settings.jobs.warmup_s,
-            max_output_chars=settings.jobs.max_output_chars,
-        )
+        return access, _manager_command_backend(settings, command_states)
     backend = _ForegroundCommandBackend(
         execution=execution,
         keep_newest=settings.jobs.keep_newest,

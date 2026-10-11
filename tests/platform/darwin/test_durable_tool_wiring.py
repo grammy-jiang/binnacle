@@ -10,6 +10,7 @@ import inspect
 import json
 import platform
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -60,6 +61,13 @@ class _SpoolClient:
             "starttime": 1,
             "started_at": time.time(),
         }
+        if command.startswith("LATE"):  # reaped, record not yet persisted
+            (directory / "out.log").write_bytes(b"late\n")
+            self._write(job_id, meta)
+            final = {**meta, "exit_code": 0, "signal": None, "ended_at": time.time()}
+            final["termination_reason"] = "normal_exit"
+            threading.Timer(0.1, self._write, (job_id, final)).start()
+            return {"ok": True, "job_id": job_id, "state": "unknown"}
         if command.startswith("RUNNING"):
             (directory / "out.log").write_bytes(b"partial\n")
             self._write(job_id, meta)
@@ -141,6 +149,7 @@ def test_production_composes_manager_owner_and_fails_closed(tmp_path):
     assert settings.jobs.owner == "auto"  # CR0 point 4: auto is manager on Darwin
     _, backend = compose_native_tools(settings=settings)
     assert isinstance(backend, cb.DarwinManagerCommandBackend)
+    assert type(backend.client).__name__ == "DarwinJobClient"
     # The committed rows stay UNAVAILABLE until J-CR; no embedded fallback.
     assert set(backend.release_states.values()) == {"UNAVAILABLE"}
     assert "com.binnacle.jobs" in _server_instructions("manager")
@@ -171,9 +180,9 @@ def test_explicit_embedded_owner_keeps_limited_composition(tmp_path):
 
 @_DARWIN
 def test_unreachable_manager_is_the_linux_per_call_error(tmp_path):
-    from binnacle.platform.darwin.job_manager_service import DarwinJobClient
+    from binnacle.platform.composition import create_job_client
 
-    settings, root, backend = _manager(tmp_path, client=DarwinJobClient())
+    settings, root, backend = _manager(tmp_path, client=create_job_client())
     with pytest.raises(ToolError, match=JOB_MANAGER_UNAVAILABLE):
         rc.run_command_impl(
             "echo hi", str(root), 5, False, None, roots=settings.roots, backend=backend
@@ -230,9 +239,54 @@ def test_large_output_returns_the_true_tail(tmp_path):
     )
     payload = result.structured_content
     assert payload["state"] == "exited" and payload["exit_code"] == 0
+    assert payload["background_job"] is False
     assert payload["output"].rstrip().endswith("\n20000")
     assert payload["truncated"] is True
     assert "elided" in payload["output"]
+
+
+@_DARWIN
+def test_start_reply_state_is_not_final(tmp_path, monkeypatch):
+    """R-J2-F4: a start reply of 'unknown' waits for the persisted record."""
+    monkeypatch.setattr(cb, "EXIT_RECORD_GRACE_S", 30.0)  # robust under load
+    settings, root, backend = _manager(tmp_path)
+    payload = rc.run_command_impl(
+        "LATE exit", str(root), 5, False, None, roots=settings.roots, backend=backend
+    ).structured_content
+    assert payload["state"] == "exited" and payload["exit_code"] == 0
+    assert payload["output"] == "late\n"
+
+
+@_DARWIN
+def test_mcp_side_never_constructs_a_job_manager(tmp_path, monkeypatch):
+    """R-J2-F5: the one-writer guarantee lives only in serve_job_manager."""
+    import ast
+
+    from binnacle.application import compose_native_tools
+    from binnacle.features.commands.commands_server import create_commands_server
+    from binnacle.platform.darwin import job_manager_service as jm
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("MCP composition touched the job manager")
+
+    for name in ("__init__", "recover", "handle", "record_exit"):
+        monkeypatch.setattr(jm.DarwinJobManager, name, forbidden)
+    monkeypatch.setattr(jm, "serve_job_manager", forbidden)
+    settings, _ = _settings(tmp_path)
+    _, backend = compose_native_tools(settings=settings)
+    app = _app(settings, backend)
+    assert len(_tools(app)) == 8 and len(_tools(create_commands_server())) == 3
+    src = Path(__file__).parents[3] / "src/binnacle"
+    for path in (
+        src / "application.py",
+        src / "server.py",
+        *src.glob("features/**/*.py"),
+    ):
+        names = {
+            getattr(node, "id", None) or getattr(node, "attr", None)
+            for node in ast.walk(ast.parse(path.read_text()))
+        }
+        assert not names & {"DarwinJobManager", "serve_job_manager"}, path
 
 
 @_DARWIN

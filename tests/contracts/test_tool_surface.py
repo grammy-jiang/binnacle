@@ -68,8 +68,10 @@ SURFACE_SHA256 = {
 TOOL_COUNT = {"chatgpt": 6, "default": 8}
 INSTRUCTIONS_SHA256 = "55cafa03a706b86aaab8d53b45030a76177f9da70767ca09de608d20573d5339"
 # Darwin serves its own host-aware instructions (35cafac); pinned natively.
+# R4 J4 (CR0-1.2.0 point 4, JCR-4): Darwin composes the com.binnacle.jobs
+# manager; its map is the Linux tool map plus the service requirement.
 DARWIN_INSTRUCTIONS_SHA256 = (
-    "22cc54dc5d8f3e813c42d095250e06f0542439c448aa2c4e2a3d2be915041541"
+    "3bd0d77b1d47434fd4f9f666b3832b1b3f4064e73df3bbb47ac76b75fb8147a4"
 )
 
 
