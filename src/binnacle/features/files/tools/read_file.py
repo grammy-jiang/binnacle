@@ -6,6 +6,9 @@ interpolated into messages so text can never drift from code.
 """
 
 import mimetypes
+import os
+import sys
+from pathlib import Path
 from typing import Annotated
 
 from fastmcp import FastMCP
@@ -14,6 +17,7 @@ from pydantic import Field
 
 from binnacle.config import ReadFileSettings, RootsSettings, get_settings
 from binnacle.errors import CodedToolError
+from binnacle.features.files import fd_walk
 from binnacle.features.files.paths import FileToolAccess, nearby_hint, resolve_path
 from binnacle.features.files.textio import decode_text, human_size
 
@@ -56,6 +60,25 @@ OUTPUT_SCHEMA = {
 }
 
 
+def _read_checked(
+    resolved: Path, expected: tuple[int, int], roots: RootsSettings | None
+) -> bytes:
+    """Read the object the containment check saw, or refuse (SD-76, X3b).
+
+    Linux opens it through the descriptor walk, verifies the opened object
+    (fd_walk.open_verified) and reads only from that descriptor; the path
+    is never opened again. Darwin keeps its own READ_FLAGS walk (RX3a2-N4)
+    and never calls open_verified.
+    """
+    if sys.platform == "linux":
+        allowed = (get_settings().roots if roots is None else roots).canonical_allowed
+        fd = fd_walk.open_walked(resolved, allowed, expected)
+        with os.fdopen(fd, "rb") as opened:
+            return opened.read()
+    else:
+        return resolved.read_bytes()
+
+
 def read_file_impl(
     path: str,
     start_line: int,
@@ -81,7 +104,8 @@ def read_file_impl(
                 "path_is_directory",
                 f"Path is a directory, not a file: {resolved}. Use list_files to browse it.",
             )
-        size = resolved.stat().st_size
+        checked = resolved.stat()
+        size = checked.st_size
         if size > settings.max_file_bytes:
             raise CodedToolError(
                 "file_too_large",
@@ -96,7 +120,7 @@ def read_file_impl(
         )
 
     if file_access is None:
-        data = resolved.read_bytes()
+        data = _read_checked(resolved, (checked.st_dev, checked.st_ino), roots)
     decoded = decode_text(data, resolved)
     if decoded is None:
         mime = mimetypes.guess_type(resolved.name)[0] or "unknown type"

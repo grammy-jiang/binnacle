@@ -187,6 +187,28 @@ looks like image/png) — content not shown.`
    naming the path, never an internal error (property test, 2026-09-13).
 2. **Stat**: missing → error E1; directory → E2; > `READ_MAX_FILE_BYTES`
    → E3.
+   **Open and verify (Linux, r6 W2 X3b, SD-76)**: this is verify-after-open,
+   not confinement. `fd_walk.open_walked` opens the innermost root holding
+   the resolved path from `/` and traverses each directory below it with
+   `O_PATH|O_DIRECTORY|O_NOFOLLOW`, then opens the file name relative to its
+   parent descriptor with `O_RDONLY|O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC|O_NOCTTY`.
+   A component swapped for a symlink fails the walk, so nothing outside a
+   root is opened. `fd_walk.open_verified` then checks, in this order: the
+   kernel path (`/proc/self/fd/N`) is inside SOME configured root, else
+   `path_outside_root`; `(st_dev, st_ino)` equals the pair from the stat in
+   step 2, else `path_changed`; the object is a regular file, else
+   `not_a_regular_file` (a FIFO no longer blocks the call); `st_nlink > 0`,
+   else `path_changed` (a file deleted after the open is not served; a new
+   call reports E1). A symlink that the no-follow open refuses is
+   `path_outside_root` when its target is outside every root, else
+   `path_changed`; EACCES is `permission_denied`. The content is read only
+   from the verified descriptor; the path is never opened again. Every path
+   whose target lies in any configured root (cross-root links, `..` into an
+   outer root) reads as in r6. Darwin keeps its own `READ_FLAGS` walk and
+   never calls `open_verified`. `open_verified` without a parent descriptor
+   still opens by path and follows intermediate symlinks: an outside object
+   can be opened (a device open side effect, same uid only) before the
+   `path_outside_root` refusal; `read_file` does not use that form.
 3. **Sniff**: extension in the known-text allowlist → text; else read the
    first 8 KB — NUL byte present → `kind: "binary"` result (message names
    the size and a MIME guess; not an error).

@@ -196,54 +196,118 @@ def _opened_path(fd: int) -> str:
     return os.readlink(f"/proc/self/fd/{fd}")
 
 
+def _require_linux() -> None:
+    # /proc/self/fd is Linux-only; Darwin keeps its own READ_FLAGS walk
+    # (RX3a2-N4), so a call there is a programming error, never a refusal.
+    if sys.platform != "linux":
+        raise RuntimeError("open_verified is Linux-only (RX3a2-N4).")
+
+
 def open_verified(
     path: str | os.PathLike[str],
     root_paths: Sequence[Path],
     expected: tuple[int, int],
+    *,
+    parent_fd: int | None = None,
 ) -> int:
     """Open an already-resolved regular file and verify the opened object.
 
     For read_file (r6 W2 X3b, SD-76); this is no confinement resolver. The
-    final component is opened no-follow and non-blocking. The descriptor is
-    returned only when it is a regular file, its kernel path is inside SOME
-    configured root (any one, not only the innermost) and its (st_dev,
-    st_ino) equals ``expected`` from the caller's containment check.
-    Otherwise it is closed and a coded refusal is raised.
+    final component is opened no-follow and non-blocking: relative to
+    ``parent_fd`` when given (open_walked), else by path, which follows
+    intermediate symlinks and so can open an outside object before the
+    refusal. The descriptor is returned only when its kernel path is inside
+    SOME configured root (any one, not only the innermost), its (st_dev,
+    st_ino) equals ``expected`` from the caller's containment check, it is
+    a regular file and it still has a link (st_nlink > 0: a file deleted
+    after the open is path_changed). The checks run in that order
+    (RX3a2-N2), so an outside object is always path_outside_root. Otherwise
+    the descriptor is closed and a coded refusal is raised.
     """
+    _require_linux()
     shown = os.fspath(path)
     try:
-        fd = os.open(shown, READ_FLAGS)
+        if parent_fd is None:
+            fd = os.open(shown, READ_FLAGS)
+        else:
+            fd = os.open(os.path.basename(shown), READ_FLAGS, dir_fd=parent_fd)
     except OSError as exc:
-        raise _open_refusal(exc, shown) from exc
+        raise _open_refusal(exc, shown, root_paths) from exc
     try:
-        info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode):
-            raise CodedToolError(
-                "not_a_regular_file",
-                f"Not a regular file: {shown}. read_file reads regular files only.",
-            )
         real = Path(_opened_path(fd))
         if not any(real.is_relative_to(root) for root in root_paths):
-            roots = ", ".join(str(root) for root in root_paths)
-            raise CodedToolError(
-                "path_outside_root", f"Path outside allowed roots ({roots}): {shown}"
-            )
+            raise _outside(shown, root_paths)
+        info = os.fstat(fd)
         if (info.st_dev, info.st_ino) != expected:
+            raise _changed(shown)
+        if not stat.S_ISREG(info.st_mode):
+            raise _not_regular(shown)
+        if info.st_nlink == 0:
             raise _changed(shown)
     except BaseException as exc:
         os.close(fd)
         if isinstance(exc, OSError):
-            raise _open_refusal(exc, shown) from exc
+            raise _open_refusal(exc, shown, root_paths) from exc
         raise
     return fd
 
 
-def _open_refusal(exc: OSError, shown: str) -> CodedToolError:
+def open_walked(
+    path: Path, root_paths: Sequence[Path], expected: tuple[int, int]
+) -> int:
+    """open_verified relative to a descriptor-walked parent (X3b, RX3a2-N2).
+
+    ``path`` is canonical. The innermost root holding it is opened from '/'
+    and every directory below it is traversed no-follow (O_PATH), so a
+    component swapped for a symlink fails the walk and nothing outside a
+    root is opened. The /proc root check and the identity check stay as
+    defence in depth (a directory renamed out after it was opened).
+    """
+    _require_linux()
+    shown = str(path)
+    holders = [root for root in root_paths if path.is_relative_to(root)]
+    if not holders:
+        raise _outside(shown, root_paths)
+    top = max(holders, key=lambda root: len(root.parts))
+    parts = path.relative_to(top).parts
+    if not parts:  # A root itself is a directory.
+        raise _not_regular(shown)
+    try:
+        with open_root(top) as root_fd, directory_at(root_fd, parts[:-1]) as parent:
+            return open_verified(path, root_paths, expected, parent_fd=parent)
+    except OSError as exc:
+        raise _open_refusal(exc, shown, root_paths) from exc
+
+
+def _open_refusal(
+    exc: OSError, shown: str, root_paths: Sequence[Path]
+) -> CodedToolError:
     if isinstance(exc, PermissionError):
         return permission_denied(shown)
-    if exc.errno in (errno.ELOOP, errno.ENOENT, errno.ENOTDIR):
+    if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+        # A symlink the no-follow open refused. Name an outside target as
+        # such (RX3a2-N2); only lstat/readlink are used, nothing is opened.
+        real = Path(os.path.realpath(shown))
+        if not any(real.is_relative_to(root) for root in root_paths):
+            return _outside(shown, root_paths)
+        return _changed(shown)
+    if exc.errno == errno.ENOENT:
         return _changed(shown)
     return CodedToolError("file_io_failed", f"Cannot open {shown}: {exc.strerror}.")
+
+
+def _outside(shown: str, root_paths: Sequence[Path]) -> CodedToolError:
+    roots = ", ".join(str(root) for root in root_paths)
+    return CodedToolError(
+        "path_outside_root", f"Path outside allowed roots ({roots}): {shown}"
+    )
+
+
+def _not_regular(shown: str) -> CodedToolError:
+    return CodedToolError(
+        "not_a_regular_file",
+        f"Not a regular file: {shown}. read_file reads regular files only.",
+    )
 
 
 def _changed(shown: str) -> CodedToolError:
