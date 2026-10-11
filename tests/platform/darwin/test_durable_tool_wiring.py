@@ -258,6 +258,64 @@ def test_embedded_limited_text_does_not_advertise_refused_jobs(tmp_path):
     assert "Unavailable on macOS" in tools["stop_job"].description
 
 
+# -- R4 Xs (SD-50): all eight tools equal the Linux pins under both owners --
+
+_LINUX_PIN = (
+    Path(__file__).resolve().parents[3]
+    / "docs/os-independent-stage1-evidence/os0-raw-mcp-surface.json"
+)
+_FILE_TOOLS = ("read_file", "list_files", "search_text", "edit_file", "write_file")
+_COMMAND_TOOLS = ("run_command", "job_status", "stop_job")
+_TOOLS = _FILE_TOOLS + _COMMAND_TOOLS
+# The embedded foreground text is written in features/commands, outside lane
+# Xs; strict, so the fix that closes the gap must remove this mark.
+_EMBEDDED_COMMAND_GAP = pytest.mark.xfail(
+    strict=True,
+    reason="SD-50 residual: embedded foreground command text differs from Linux",
+)
+
+
+def _owner_app(tmp_path, owner):
+    """The production composition for one owner: Files/Search access included."""
+    from binnacle.application import compose_native_tools, create_application
+
+    settings, _ = _settings(tmp_path)
+    settings.jobs.owner = owner
+    file_access, backend = compose_native_tools(settings=settings)
+    return create_application(
+        settings=settings, token="t", backend=backend, file_access=file_access
+    )
+
+
+def _surface_cases():
+    for owner in ("manager", "embedded"):
+        for name in _TOOLS:
+            gap = owner == "embedded" and name in _COMMAND_TOOLS
+            marks = [_EMBEDDED_COMMAND_GAP] if gap else []
+            yield pytest.param(owner, name, marks=marks, id=f"{owner}-{name}")
+
+
+@_DARWIN
+@pytest.mark.parametrize(("owner", "name"), list(_surface_cases()))
+def test_sd50_description_and_input_schema_bytes_equal_linux_pin(tmp_path, owner, name):
+    """Raw description bytes (line breaks included) and the input schema."""
+    tools = _tools(_owner_app(tmp_path, owner))
+    assert tuple(tools) == _TOOLS
+    surface = json.loads(_LINUX_PIN.read_text())["profile_surfaces"]["default"]
+    pin = next(tool for tool in surface["tools"] if tool["name"] == name)
+    assert tools[name].description.encode() == pin["description"].encode()
+    # The pin stores schemas with sorted keys; compare that canonical form.
+    served = json.dumps(tools[name].input_schema, sort_keys=True)
+    assert served.encode() == json.dumps(pin["inputSchema"], sort_keys=True).encode()
+
+
+@_DARWIN
+def test_sd50_manager_owner_surface_is_within_the_token_budget(tmp_path):
+    from tests.contracts.test_surface_tokens import assert_within_budget, measure
+
+    assert_within_budget(measure(_owner_app(tmp_path, "manager")))
+
+
 @_DARWIN
 def test_large_output_returns_the_true_tail(tmp_path):
     """PARITY-INVENTORY high gap: seq 1 20000 must end at 20000 like Linux."""

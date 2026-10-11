@@ -11,6 +11,10 @@ from binnacle.features.files.paths import full_match
 from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 
+#: Aggregate input and rg output caps; also the per-file size limit that the
+#: result text discloses only when a file is skipped for size (SD-50).
+SEARCH_BYTE_BUDGET = 16 * 1024 * 1024
+
 
 def _rg_rejection(access, pattern: str, fixed_strings: bool) -> CodedToolError:
     """Linux rg_rejected sentence: the adapter drains stderr, so ask rg again
@@ -185,7 +189,7 @@ def search_opened(
                     span,
                     glob,
                     settings.timeout_s,
-                    16 * 1024 * 1024,  # Aggregate input and rg output caps.
+                    SEARCH_BYTE_BUDGET,
                     10000,
                 ),
             )
@@ -302,8 +306,10 @@ def search_opened(
                     summary += " Skipped files: " + ", ".join(skipped) + "."
                 if stats.get("skipped_oversize"):
                     summary += (
-                        f" {stats['skipped_oversize']} file(s) skipped: larger than the per-file limit"
-                        " (bounded by the remaining input budget)."
+                        f" {stats['skipped_oversize']} file(s) skipped: larger than"
+                        " the Darwin per-file size limit of 16 MiB"
+                        f" ({SEARCH_BYTE_BUDGET:,} bytes), further bounded by the"
+                        " remaining aggregate 16 MiB input budget."
                     )
                 for budget in ("input", "output"):
                     if stats.get(f"{budget}_budget_exhausted"):

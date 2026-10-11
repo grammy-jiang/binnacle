@@ -77,10 +77,10 @@ def test_native_wire_schema_preserves_v101_with_declared_description_exception(
         assert needle in declared["description"].lower()
         assert "sigterm" not in declared["description"].lower()
         declared["description"] = linux[name]["description"]
+    # SD-50: search_text is served with the Linux bytes; the size disclosure
+    # lives in the result text of a search that skips a file for size.
     search = next(tool for tool in actual if tool["name"] == "search_text")
-    assert "per-file size limit: 16 MiB (16,777,216 bytes)" in search["description"]
-    assert "remaining aggregate 16 MiB input budget" in search["description"]
-    search["description"] = linux["search_text"]["description"]
+    assert search["description"] == linux["search_text"]["description"]
     assert actual == baseline["tools"]
 
 
