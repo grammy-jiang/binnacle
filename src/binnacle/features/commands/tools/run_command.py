@@ -3,6 +3,8 @@
 Spec: docs/tools/run_command.md. Shared job machinery: jobs.py.
 """
 
+from collections.abc import Awaitable, Callable
+from functools import wraps
 from typing import Annotated
 
 from fastmcp import FastMCP
@@ -14,8 +16,15 @@ from binnacle.config import RootsSettings, RunCommandSettings, get_settings
 from binnacle.errors import CodedToolError
 from binnacle.features.commands import command_execution
 from binnacle.features.commands.command_backend import create_command_backend
-from binnacle.features.commands.command_contracts import CommandBackend, CommandFailure
+from binnacle.features.commands.command_contracts import (
+    CommandBackend,
+    CommandFailure,
+    require_command_available,
+)
+from binnacle.features.commands.restricted_backend import RestrictedCommandBackend
 from binnacle.features.files.paths import resolve_path
+from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
+from binnacle.platform.contracts.darwin_contracts import ForegroundRequest
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -49,6 +58,11 @@ def run_command_impl(
     settings: RunCommandSettings | None = None,
     backend: CommandBackend | None = None,
 ) -> ToolResult:
+    backend = create_command_backend() if backend is None else backend
+    try:
+        require_command_available(backend)
+    except CommandFailure as exc:
+        raise ToolError(str(exc)) from exc
     settings = get_settings().run_command if settings is None else settings
     resolved = resolve_path(workdir, roots=roots)
     if not resolved.is_dir():
@@ -57,7 +71,6 @@ def run_command_impl(
             f"workdir is not a directory: {resolved}. "
             f"Use a directory inside ~/Projects or /tmp.",
         )
-    backend = create_command_backend() if backend is None else backend
     try:
         reply = command_execution.run_command(
             command,
@@ -89,14 +102,6 @@ def register(
 
     backend = create_command_backend() if backend is None else backend
 
-    @mcp.tool(
-        annotations={
-            "readOnlyHint": False,
-            "destructiveHint": True,
-            "openWorldHint": True,
-        },
-        output_schema=OUTPUT_SCHEMA,
-    )
     def run_command(
         command: Annotated[str, Field(description="Shell command, run as bash -c.")],
         workdir: Annotated[
@@ -150,3 +155,84 @@ def register(
             settings=settings,
             backend=backend,
         )
+
+    registered: Callable[..., ToolResult | Awaitable[ToolResult]] = run_command
+    description = None
+    if isinstance(backend, RestrictedCommandBackend):
+        description = (
+            "Darwin foreground execution is UNAVAILABLE pending R1 + CR1 approval. "
+            "Background processes are terminated when the command finishes. "
+            "Processes that start a new session (setsid) are not tracked. "
+            "Durable background jobs and stop_job are unavailable; FULL_PARITY_NO_GO."
+        )
+
+        @wraps(run_command)
+        async def native_run_command(*args, **kwargs):
+            return await run_native_command_impl(
+                *args,
+                **kwargs,
+                roots=roots,
+                settings=settings,
+                backend=backend,
+            )
+
+        registered = native_run_command
+    mcp.tool(
+        registered,
+        name="run_command",
+        description=description,
+        annotations={
+            "readOnlyHint": False,
+            "destructiveHint": True,
+            "openWorldHint": True,
+        },
+        output_schema=OUTPUT_SCHEMA,
+    )
+
+
+async def run_native_command_impl(
+    command: str,
+    workdir: str = "~/Projects",
+    wait_seconds: int = 1,
+    background: bool = False,
+    stdin: str | None = None,
+    tail_lines: int | None = None,
+    *,
+    roots: RootsSettings,
+    settings: RunCommandSettings,
+    backend: RestrictedCommandBackend,
+) -> ToolResult:
+    """Prepared foreground mapping, inaccessible to the unreviewed default backend."""
+    try:
+        require_command_available(backend)
+        if background:
+            raise CommandFailure("darwin_background_jobs_unavailable")
+        if backend.foreground_execution is None:
+            raise CommandFailure(
+                "native_capability_unavailable: foreground provider missing"
+            )
+        # This branch is reachable only with a reviewed, explicitly injected
+        # backend. The production restricted backend refuses before path access.
+        resolved = resolve_path(workdir, roots=roots)
+        if not resolved.is_dir():
+            raise CommandFailure("workdir_not_directory")
+        request = ForegroundRequest(
+            command,
+            resolved,
+            stdin,
+            wait_seconds,
+            background,
+            settings.wait_max_s,
+            max(1, backend.max_output_chars * 4),
+        )
+        result = await command_execution.run_foreground_async(
+            backend.foreground_execution, request
+        )
+        if result.exit_code is None and result.signal is None:
+            raise CommandFailure("darwin_foreground_completion_unknown")
+    except (CommandFailure, NativeCapabilityError) as exc:
+        raise ToolError(str(exc)) from exc
+    reply = command_execution.foreground_reply(
+        result, max_output_chars=backend.max_output_chars, tail_lines=tail_lines
+    )
+    return ToolResult(content=reply.summary, structured_content=reply.payload)

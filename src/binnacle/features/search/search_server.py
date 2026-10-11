@@ -3,12 +3,14 @@
 from fastmcp import FastMCP
 
 from binnacle.config import RootsSettings, SearchTextSettings, get_settings
+from binnacle.features.files.paths import FileToolAccess
 from binnacle.features.search.tools import search_text
 
 
 def create_search_server(
     *,
     roots: RootsSettings | None = None,
+    file_access: FileToolAccess | None = None,
     search_settings: SearchTextSettings | None = None,
     rg_bin: str | None = None,
 ) -> FastMCP:
@@ -20,6 +22,24 @@ def create_search_server(
             defaults.search_text if search_settings is None else search_settings
         )
         rg_bin = defaults.rg_bin if rg_bin is None else rg_bin
+    if file_access is None:
+        from binnacle.platform.composition import native_file_capability
+
+        capability = native_file_capability()
+        if capability is not None:
+            file_access = FileToolAccess(
+                roots=roots,
+                files=None,
+                search=None,
+                generation="unavailable",
+                capability=capability,
+            )
     search = FastMCP("binnacle-search", on_duplicate="error")
-    search_text.register(search, roots=roots, settings=search_settings, rg_bin=rg_bin)
+    search_text.register(
+        search,
+        file_access=file_access,
+        roots=roots,
+        settings=search_settings,
+        rg_bin=rg_bin,
+    )
     return search

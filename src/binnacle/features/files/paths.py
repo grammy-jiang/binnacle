@@ -6,11 +6,25 @@ does not) and §7.11. Sanitization details: docs/tools/read_file.md §3.
 
 import fnmatch
 import re
+
+# These bindings contain ordinary injected contracts, never host selection.
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path, PurePath, PurePosixPath
 
 from binnacle.config import RootsSettings, get_settings
 from binnacle.errors import CodedToolError
+from binnacle.platform.contracts.capability_contracts import (
+    Capability,
+    CapabilityState,
+    NativeCapabilityError,
+)
+from binnacle.platform.contracts.file_access_contracts import (
+    FileAccess,
+    RootGrant,
+    SearchAccess,
+)
 
 
 def _canonical_roots(roots: RootsSettings) -> tuple[Path, ...]:
@@ -178,3 +192,120 @@ def nearby_hint(parent: Path, *, roots: RootsSettings | None = None) -> str:
     shown = ", ".join(names[:10])
     more = " …" if len(names) > 10 else ""
     return f" Files in {parent}: {shown}{more}. Use list_files for more."
+
+
+def select_root_grant(
+    raw: str, *, default_root: Path, grants: Mapping[Path, RootGrant]
+) -> tuple[RootGrant, str, Path]:
+    """Lexical mapping only: request paths never resolve or inspect the filesystem."""
+    cleaned = raw.strip().removeprefix("@")
+    if "\0" in cleaned or ".." in PurePath(cleaned).parts:
+        raise CodedToolError("path_outside_root", "Unsafe relative path.")
+    candidate = Path(cleaned).expanduser()
+    if not candidate.is_absolute():
+        candidate = default_root / candidate
+    for root in sorted(grants, key=lambda p: len(p.parts), reverse=True):
+        if candidate.is_relative_to(root):
+            return grants[root], candidate.relative_to(root).as_posix(), candidate
+    raise CodedToolError("path_outside_root", "Path outside opened roots.")
+
+
+class FileToolAccess:
+    """Application-owned grants; LIMITED injection is for reviewed scope only.
+
+    Production composition supplies UNAVAILABLE until exact-source review. There
+    is no environment/configuration flag to turn review into an accepted grant.
+    """
+
+    def __init__(
+        self,
+        *,
+        roots: RootsSettings,
+        files: FileAccess | None,
+        search: SearchAccess | None,
+        generation: str,
+        capability: Capability,
+    ) -> None:
+        self.files = files
+        self.search = search
+        self.capability = capability
+        self.default_root = roots.default_root.expanduser()
+        self.grants: dict[Path, RootGrant] = {}
+        self.closed = False
+        if capability.state != CapabilityState.LIMITED or files is None:
+            return
+        try:
+            for alias, canonical in zip(
+                roots.allowed, roots.canonical_allowed, strict=True
+            ):
+                grant = files.grant(canonical, generation=generation)
+                self.grants[alias.expanduser()] = grant
+                self.grants[canonical] = grant
+        except BaseException:
+            self.close()
+            raise
+
+    @property
+    def provider(self) -> FileAccess:
+        if self.files is None:
+            raise CodedToolError(
+                "native_capability_unavailable", "File provider missing."
+            )
+        return self.files
+
+    def select(self, raw: str) -> tuple[RootGrant, str, Path]:
+        if self.closed:
+            raise CodedToolError("native_access_closed", "Opened grants are closed.")
+        if self.files is None or self.capability.state != CapabilityState.LIMITED:
+            raise CodedToolError(
+                "native_capability_unavailable",
+                "native_capability_unavailable: Darwin Files/Search are UNAVAILABLE pending exact-source review. FULL_PARITY_NO_GO.",
+            )
+        return select_root_grant(
+            raw, default_root=self.default_root, grants=self.grants
+        )
+
+    @contextmanager
+    def operation(self, raw: str) -> Iterator[tuple[RootGrant, str, Path]]:
+        grant, relative, display = self.select(raw)
+        try:
+            yield grant, relative, display
+        except NativeCapabilityError as exc:
+            hint = ""
+            if (
+                exc.code in ("file_not_found", "path_not_found")
+                and self.files is not None
+            ):
+                try:
+                    names = self.files.nearby_hint(grant, relative, max_entries=10)
+                    if names:
+                        hint = " Nearby: " + ", ".join(names)
+                except NativeCapabilityError:
+                    pass
+            raise CodedToolError(exc.code, f"{exc.code}.{hint}") from exc
+
+    def read(self, raw: str, max_bytes: int) -> tuple[Path, int, bytes]:
+        with self.operation(raw) as (grant, relative, display):
+            opened = self.provider.open_read(grant, relative)
+            try:
+                size = opened.metadata().size_bytes
+                if size > max_bytes:
+                    raise CodedToolError(
+                        "file_too_large", "File exceeds read byte limit."
+                    )
+                data = opened.read(max_bytes + 1)
+                if len(data) > max_bytes:
+                    raise CodedToolError(
+                        "file_too_large", "File grew beyond read byte limit."
+                    )
+                return display, len(data), data
+            finally:
+                opened.close()
+
+    def close(self) -> None:
+        if not self.closed:
+            self.closed = True
+            for grant in self.grants.values():
+                grant.close()
+            if self.files is not None:
+                self.files.close()

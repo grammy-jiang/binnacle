@@ -11,7 +11,6 @@ import os
 from fastmcp import FastMCP
 
 from binnacle.config import get_settings
-from binnacle.features.commands import jobs
 from binnacle.features.commands.commands_server import create_commands_server
 from binnacle.features.commands.run_command_telemetry import (
     AUTO_BACKGROUND_SEMANTICS_VERSION,
@@ -134,6 +133,20 @@ def log_effective_config() -> None:
         ),
         auto_background_evidence_dir=s.run_command.auto_background_evidence_dir,
     )
+    _log_jobs_config(s)
+    _log_tool_config(
+        "edit_file", snippet_context_lines=s.edit_file.snippet_context_lines
+    )
+
+
+def _log_jobs_config(s) -> None:
+    from binnacle.platform.composition import host_os_family
+
+    if host_os_family() == "darwin":
+        _log_tool_config("jobs", capability="UNAVAILABLE", parity="FULL_PARITY_NO_GO")
+        return
+    from binnacle.features.commands import jobs
+
     _log_tool_config(
         "jobs",
         configured_owner=s.jobs.owner,
@@ -146,9 +159,6 @@ def log_effective_config() -> None:
         quiet_after_s=s.jobs.quiet_after_s,
         stop_sigterm_grace_s=jobs.STOP_SIGTERM_GRACE_S,
         stop_sigkill_grace_s=jobs.STOP_SIGKILL_GRACE_S,
-    )
-    _log_tool_config(
-        "edit_file", snippet_context_lines=s.edit_file.snippet_context_lines
     )
 
 
@@ -166,8 +176,37 @@ def create_server() -> FastMCP:
     """Maintain the Linux production factory contract and its token bootstrap."""
     from binnacle.application import create_application
     from binnacle.features.commands.command_backend import create_command_backend
+    from binnacle.features.files.paths import FileToolAccess
+    from binnacle.platform.composition import host_os_family
+    from binnacle.platform.contracts.capability_contracts import (
+        Capability,
+        CapabilityState,
+    )
 
+    file_access = None
+    if host_os_family() == "darwin":
+        from binnacle.platform.composition import (
+            create_file_access,
+            create_search_access,
+        )
+
+        files = create_file_access()
+        search = (
+            create_search_access(files=files, rg_bin=get_settings().rg_bin)
+            if files is not None
+            else None
+        )
+        file_access = FileToolAccess(
+            roots=get_settings().roots,
+            files=files,
+            search=search,
+            generation="unavailable",
+            capability=Capability(
+                CapabilityState.UNAVAILABLE, "review_pending", "darwin_public_tools"
+            ),
+        )
     return create_application(
+        file_access=file_access,
         settings=get_settings(),
         token=_load_token(),
         backend=create_command_backend(),

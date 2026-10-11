@@ -440,8 +440,10 @@ name = "Only explicit platform composition and Linux compatibility IO may import
 type = "protected"
 protected_modules = [
     "binnacle.platform.linux",
+    "binnacle.platform.darwin",
     "binnacle.observability.linux",
     "binnacle.deployment.linux",
+    "binnacle.deployment.darwin",
 ]
 allowed_importers = [
     "binnacle.platform.composition",

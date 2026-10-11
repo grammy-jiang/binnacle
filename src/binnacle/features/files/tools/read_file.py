@@ -14,7 +14,7 @@ from pydantic import Field
 
 from binnacle.config import ReadFileSettings, RootsSettings, get_settings
 from binnacle.errors import CodedToolError
-from binnacle.features.files.paths import nearby_hint, resolve_path
+from binnacle.features.files.paths import FileToolAccess, nearby_hint, resolve_path
 from binnacle.features.files.textio import decode_text, human_size
 
 LINE_CLIP_MARK = "… [line truncated]"
@@ -62,35 +62,41 @@ def read_file_impl(
     end_line: int | None,
     *,
     roots: RootsSettings | None = None,
+    file_access: FileToolAccess | None = None,
     settings: ReadFileSettings | None = None,
 ) -> ToolResult:
     settings = get_settings().read_file if settings is None else settings
-    resolved = resolve_path(path, roots=roots)
-    if not resolved.exists():
-        raise CodedToolError(
-            "file_not_found",
-            f"File not found: {resolved}.{nearby_hint(resolved.parent, roots=roots)}",
-        )
-    if resolved.is_dir():
-        raise CodedToolError(
-            "path_is_directory",
-            f"Path is a directory, not a file: {resolved}. Use list_files to browse it.",
-        )
-    size = resolved.stat().st_size
-    if size > settings.max_file_bytes:
-        raise CodedToolError(
-            "file_too_large",
-            f"File is {human_size(size)}; the limit is "
-            f"{settings.max_file_bytes // (1024 * 1024)} MB. "
-            f"Use run_command (tail, sed -n, grep) to sample it.",
-        )
+    if file_access is not None:
+        resolved, size, data = file_access.read(path, settings.max_file_bytes)
+    else:
+        resolved = resolve_path(path, roots=roots)
+        if not resolved.exists():
+            raise CodedToolError(
+                "file_not_found",
+                f"File not found: {resolved}.{nearby_hint(resolved.parent, roots=roots)}",
+            )
+        if resolved.is_dir():
+            raise CodedToolError(
+                "path_is_directory",
+                f"Path is a directory, not a file: {resolved}. Use list_files to browse it.",
+            )
+        size = resolved.stat().st_size
+        if size > settings.max_file_bytes:
+            raise CodedToolError(
+                "file_too_large",
+                f"File is {human_size(size)}; the limit is "
+                f"{settings.max_file_bytes // (1024 * 1024)} MB. "
+                f"Use run_command (tail, sed -n, grep) to sample it.",
+            )
     if end_line is not None and start_line > end_line:
         raise CodedToolError(
             "range_invalid",
             f"start_line ({start_line}) is greater than end_line ({end_line}).",
         )
 
-    decoded = decode_text(resolved.read_bytes(), resolved)
+    if file_access is None:
+        data = resolved.read_bytes()
+    decoded = decode_text(data, resolved)
     if decoded is None:
         mime = mimetypes.guess_type(resolved.name)[0] or "unknown type"
         summary = (
@@ -220,6 +226,7 @@ def register(
     mcp: FastMCP,
     *,
     roots: RootsSettings | None = None,
+    file_access: FileToolAccess | None = None,
     settings: ReadFileSettings | None = None,
 ) -> None:
     if roots is None or settings is None:
@@ -253,5 +260,10 @@ def register(
     ) -> ToolResult:
         """Read using the settings captured with the advertised description."""
         return read_file_impl(
-            path, start_line, end_line, roots=roots, settings=settings
+            path,
+            start_line,
+            end_line,
+            roots=roots,
+            file_access=file_access,
+            settings=settings,
         )

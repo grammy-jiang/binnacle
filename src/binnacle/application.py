@@ -7,6 +7,7 @@ in binnacle.server for backward-compatible CLI and ASGI exports.
 """
 
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from functools import partial
 
 from fastmcp import FastMCP
@@ -18,6 +19,7 @@ from binnacle.config import Settings
 from binnacle.features.commands.command_contracts import CommandBackend
 from binnacle.features.commands.commands_server import create_commands_server
 from binnacle.features.files.files_server import create_files_server
+from binnacle.features.files.paths import FileToolAccess
 from binnacle.features.search.search_server import create_search_server
 from binnacle.mcp.identity import ClientIdentity
 from binnacle.mcp.logging_middleware import (
@@ -34,6 +36,7 @@ def create_application(
     settings: Settings,
     token: str,
     backend: CommandBackend,
+    file_access: FileToolAccess | None = None,
     files_factory: Callable[..., FastMCP] = create_files_server,
     search_factory: Callable[..., FastMCP] = create_search_server,
     commands_factory: Callable[..., FastMCP] = create_commands_server,
@@ -43,8 +46,19 @@ def create_application(
     # Root authorization is fixed for this app generation. A mutable symlink
     # alias cannot silently grant new directories to an already running server.
     _ = settings.roots.canonical_allowed
+
+    @asynccontextmanager
+    async def lifespan(server):
+        try:
+            yield {}
+        finally:
+            if file_access is not None:
+                file_access.close()
+
+    native_options = {"file_access": file_access} if file_access is not None else {}
     root = FastMCP(
         "binnacle",
+        lifespan=lifespan,
         on_duplicate="error",
         # A tool map only. Workflow rules live in the ChatGPT Project's
         # instructions (the single client in use); tool contracts live in the
@@ -84,6 +98,7 @@ def create_application(
     root.add_transform(ClientToolVisibilityTransform())
     root.mount(
         files_factory(
+            **native_options,
             roots=settings.roots,
             read_settings=settings.read_file,
             list_settings=settings.list_files,
@@ -93,6 +108,7 @@ def create_application(
     )
     root.mount(
         search_factory(
+            **native_options,
             roots=settings.roots,
             search_settings=settings.search_text,
             rg_bin=settings.rg_bin,
