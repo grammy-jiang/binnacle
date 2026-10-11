@@ -6,6 +6,7 @@ or import durable jobs / Linux adapters. Normal production composition remains
 in binnacle.server for backward-compatible CLI and ASGI exports.
 """
 
+import platform
 from collections.abc import Callable, Mapping
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -52,6 +53,31 @@ from binnacle.platform.contracts.darwin_release_scope import (
     ReleaseDecision,
 )
 
+_LINUX_INSTRUCTIONS = (
+    "binnacle: a Raspberry Pi 5 development workstation. Paths live under "
+    "~/Projects and /tmp. list_files (browse or glob), search_text (regex "
+    "over contents), read_file, edit_file (exact-string replace), "
+    "write_file (whole file), run_command (shell; long commands become "
+    "jobs for job_status/stop_job). Pi hardware and health: run_command "
+    "(vcgencmd, pinctrl, i2cdetect, libcamera-still)."
+)
+_DARWIN_INSTRUCTIONS = (
+    "binnacle: a macOS workstation. Paths live under the configured roots. "
+    "list_files (browse or glob), search_text (regex over contents), "
+    "read_file, edit_file (exact-string replace), write_file (whole file), "
+    "run_command (foreground only: no background jobs; job_status shows "
+    "completed foreground runs held in memory). stop_job is unavailable on "
+    "macOS. There are no board or sensor hardware tools."
+)
+
+
+def _server_instructions() -> str:
+    # A tool map only. Workflow rules live in the ChatGPT Project's
+    # instructions; tool contracts live in the tool descriptions. First 512
+    # chars self-contained (OpenAI guidance).
+    darwin = platform.system() == "Darwin"
+    return _DARWIN_INSTRUCTIONS if darwin else _LINUX_INSTRUCTIONS
+
 
 def create_application(
     *,
@@ -94,14 +120,7 @@ def create_application(
         # A tool map only. Workflow rules live in the ChatGPT Project's
         # instructions (the single client in use); tool contracts live in the
         # tool descriptions. First 512 chars self-contained (OpenAI guidance).
-        instructions=(
-            "binnacle: a Raspberry Pi 5 development workstation. Paths live under "
-            "~/Projects and /tmp. list_files (browse or glob), search_text (regex "
-            "over contents), read_file, edit_file (exact-string replace), "
-            "write_file (whole file), run_command (shell; long commands become "
-            "jobs for job_status/stop_job). Pi hardware and health: run_command "
-            "(vcgencmd, pinctrl, i2cdetect, libcamera-still)."
-        ),
+        instructions=_server_instructions(),
         auth=StaticTokenVerifier(
             tokens={token: {"client_id": "binnacle-tunnel"}},
         ),

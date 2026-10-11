@@ -15,7 +15,7 @@ import math
 import os
 import stat
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from functools import cache
 from pathlib import PurePosixPath
@@ -319,6 +319,8 @@ class Listing:
         self.base = ""
         self.rules: IgnoreRules = []
         self.in_git = False
+        # Installed by the adapter, which holds the root descriptor.
+        self.resolve_link: Callable[[str], os.stat_result | None] = lambda _: None
 
     def exhausted(self) -> bool:
         if (
@@ -377,6 +379,12 @@ class Listing:
                     and decision is not False
                 ):
                     continue
+                if stat.S_ISLNK(info.st_mode):
+                    # Recursive (glob) listings omit symlinks. A one-level listing
+                    # reports an in-root target by its kind; others are omitted.
+                    target = None if recursive else self.resolve_link(name)
+                    self.add(path, "other", info, target)
+                    continue
                 kind: Literal["file", "directory", "other"] = (
                     "directory"
                     if is_dir
@@ -424,31 +432,46 @@ class Listing:
         path: str,
         kind: Literal["file", "directory", "other"],
         info: os.stat_result,
+        target: os.stat_result | None = None,
     ) -> None:
         if self.request.glob is not None and (
             kind != "file" or not glob_matches(path, self.request.glob)
         ):
             return
         # Retain at most the visit budget, then sort before applying result cap.
+        resolved: Literal["file", "directory"] | None = None
+        if target is not None:
+            resolved = "directory" if stat.S_ISDIR(target.st_mode) else "file"
+            info = target
         self.entries.append(
             FileEntry(
                 path,
                 kind,
-                info.st_size if kind == "file" else None,
+                info.st_size if "file" in (kind, resolved) else None,
                 info.st_mtime_ns,
+                resolved,
             )
         )
 
     def result(self, base: tuple[str, ...]) -> FileListing:
         if self.request.glob is None:
             self.entries.sort(
-                key=lambda e: (e.kind != "directory", e.relative_path.lower())
+                key=lambda e: (
+                    (e.target_kind or e.kind) != "directory",
+                    e.relative_path.lower(),
+                )
             )
         else:
             self.entries.sort(key=lambda e: (-(e.modified_ns or 0), e.relative_path))
         prefix = "/".join(base) + "/" if base else ""
         selected = [
-            FileEntry(prefix + e.relative_path, e.kind, e.size_bytes, e.modified_ns)
+            FileEntry(
+                prefix + e.relative_path,
+                e.kind,
+                e.size_bytes,
+                e.modified_ns,
+                e.target_kind,
+            )
             for e in self.entries[: self.request.max_entries]
         ]
         return FileListing(

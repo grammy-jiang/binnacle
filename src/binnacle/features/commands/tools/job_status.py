@@ -15,6 +15,7 @@ from binnacle.features.commands.command_backend import create_command_backend
 from binnacle.features.commands.command_contracts import (
     CommandBackend,
     CommandFailure,
+    RestrictedCommandBackend,
     require_command_available,
 )
 
@@ -111,7 +112,16 @@ def register(
 ) -> None:
     backend = create_command_backend() if backend is None else backend
 
+    description = (
+        "Show completed foreground run_command results kept in memory; they "
+        "are lost on restart. Nothing runs in the background, so there is "
+        "nothing to wait for."
+        if isinstance(backend, RestrictedCommandBackend)
+        else None
+    )
+
     @mcp.tool(
+        description=description,
         annotations={"readOnlyHint": True, "openWorldHint": False},
         output_schema=OUTPUT_SCHEMA,
     )

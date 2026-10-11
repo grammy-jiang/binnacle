@@ -9,7 +9,7 @@ from binnacle.config import (
     RootsSettings,
     get_settings,
 )
-from binnacle.features.files.paths import FileToolAccess
+from binnacle.features.files.paths import FileToolAccess, focused_file_access
 from binnacle.features.files.tools import edit_file, list_files, read_file, write_file
 
 
@@ -36,17 +36,7 @@ def create_files_server(
     if roots is None:
         raise ValueError("File roots missing after configuration capture")
     if file_access is None:
-        from binnacle.platform.composition import native_file_capability
-
-        capability = native_file_capability()
-        if capability is not None:
-            file_access = FileToolAccess(
-                roots=roots,
-                files=None,
-                search=None,
-                generation="unavailable",
-                capability=capability,
-            )
+        file_access = focused_file_access(roots)
     files = FastMCP("binnacle-files", on_duplicate="error")
     read_file.register(
         files, file_access=file_access, roots=roots, settings=read_settings

@@ -143,7 +143,14 @@ def _log_jobs_config(s) -> None:
     from binnacle.platform.composition import host_os_family
 
     if host_os_family() == "darwin":
-        _log_tool_config("jobs", capability="UNAVAILABLE", parity="FULL_PARITY_NO_GO")
+        from binnacle.platform.contracts.darwin_release_scope import (
+            DARWIN_RELEASE_SCOPE,
+        )
+
+        for tool in ("run_command", "job_status", "stop_job"):
+            _log_tool_config(
+                tool, capability=DARWIN_RELEASE_SCOPE[tool].capability.state.value
+            )
         return
     from binnacle.features.commands import jobs
 

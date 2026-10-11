@@ -80,3 +80,53 @@ assert not any(m.startswith("binnacle.platform.linux") for m in sys.modules)
             check=False,
         )
         assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("name", ["files", "search"])
+def test_focused_factories_without_file_access_refuse_with_files_error(
+    tmp_path, monkeypatch, name
+):
+    import asyncio
+
+    from fastmcp import Client
+    from fastmcp.exceptions import ToolError
+
+    from binnacle.config import Settings
+    from binnacle.features.files.files_server import create_files_server
+    from binnacle.features.search.search_server import create_search_server
+    from binnacle.platform import composition as c
+
+    monkeypatch.setattr(c.platform, "system", lambda: "Darwin")
+    settings = Settings()
+    if name == "files":
+        server = create_files_server(roots=settings.roots, rg_bin="rg")
+        tool, args = "read_file", {"path": str(tmp_path)}
+    else:
+        server = create_search_server(
+            roots=settings.roots, search_settings=settings.search_text, rg_bin="rg"
+        )
+        tool, args = "search_text", {"path": str(tmp_path), "pattern": "x"}
+
+    async def call():
+        async with Client(server) as client:
+            await client.call_tool(tool, args)
+
+    with pytest.raises(ToolError) as caught:
+        asyncio.run(call())
+    assert "run_command" not in str(caught.value)
+    with pytest.raises(RuntimeError, match="runtime gate"):
+        c.native_file_capability()
+
+
+def test_server_instructions_are_host_aware(monkeypatch):
+    from binnacle import application
+
+    monkeypatch.setattr(composition.platform, "system", lambda: "Darwin")
+    darwin = application._server_instructions()
+    assert "Raspberry Pi 5" not in darwin and "vcgencmd" not in darwin
+    assert "stop_job is unavailable" in darwin and "jobs for" not in darwin
+    monkeypatch.setattr(composition.platform, "system", lambda: "Linux")
+    assert application._server_instructions().startswith(
+        "binnacle: a Raspberry Pi 5 development workstation. Paths live under "
+        "~/Projects and /tmp."
+    )

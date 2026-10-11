@@ -254,7 +254,7 @@ class FileToolAccess:
         if capability.state != CapabilityState.LIMITED:
             raise CodedToolError(
                 "native_capability_unavailable",
-                f"{tool}: {capability.state.value}; {capability.reason_code}. FULL_PARITY_NO_GO.",
+                f"{tool} is unavailable on macOS.",
             )
 
     @property
@@ -271,7 +271,7 @@ class FileToolAccess:
         if self.files is None or self.capability.state != CapabilityState.LIMITED:
             raise CodedToolError(
                 "native_capability_unavailable",
-                "native_capability_unavailable: Darwin Files/Search are UNAVAILABLE pending exact-source review. FULL_PARITY_NO_GO.",
+                "native_capability_unavailable: Files and search are unavailable on macOS.",
             )
         return select_root_grant(
             raw, default_root=self.default_root, grants=self.grants
@@ -321,3 +321,30 @@ class FileToolAccess:
                 grant.close()
             if self.files is not None:
                 self.files.close()
+
+
+def focused_file_access(roots: RootsSettings) -> FileToolAccess | None:
+    """Provider-less access for a focused Files/Search child.
+
+    Only the file rows are consulted, so a missing provider surfaces as a
+    Files/Search native_capability_unavailable outcome, never a Commands error.
+    Linux returns None (legacy path); the Commands invariant stays in
+    composition.native_file_capability.
+    """
+    from binnacle.platform.composition import host_os_family
+    from binnacle.platform.contracts.darwin_release_scope import (
+        DARWIN_RELEASE_SCOPE,
+        FILE_TOOLS,
+    )
+
+    if host_os_family() == "linux":
+        return None
+    rows = [DARWIN_RELEASE_SCOPE[tool].capability for tool in FILE_TOOLS]
+    capability = max(rows, key=lambda cap: cap.state == CapabilityState.LIMITED)
+    return FileToolAccess(
+        roots=roots,
+        files=None,
+        search=None,
+        generation="unavailable",
+        capability=capability,
+    )

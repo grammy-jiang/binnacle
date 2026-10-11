@@ -40,16 +40,16 @@ async def check():
         from pathlib import Path
         original = json.loads(Path("docs/os-independent-stage1-evidence/os0-raw-mcp-surface.json").read_text())
         descriptions = {t["name"]: t["description"] for t in original["profile_surfaces"]["default"]["tools"]}
-        normalized = [t.model_copy(update={"description": descriptions[t.name]}) if t.name in ("run_command", "search_text") else t for t in listed]
+        normalized = [t.model_copy(update={"description": descriptions[t.name]}) if t.name in ("run_command", "search_text", "job_status", "stop_job") else t for t in listed]
         assert {t.name: digest(surface(t)) for t in normalized} == SURFACE_SHA256["default"]
         for name, arguments in calls.items():
             result = await client.call_tool(name, arguments, raise_on_error=False)
             if DARWIN_RELEASE_SCOPE[name].capability.state.value == "UNAVAILABLE":
-                assert result.is_error and "UNAVAILABLE" in str(result.content), (name, result)
+                assert result.is_error and "unavailable" in str(result.content).lower(), (name, result)
             elif name == "job_status":
                 assert not result.is_error, result
             else:
-                assert result.is_error and "UNAVAILABLE" not in str(result.content), (name, result)
+                assert result.is_error and "unavailable" not in str(result.content).lower(), (name, result)
 asyncio.run(check())
 """
     result = subprocess.run(

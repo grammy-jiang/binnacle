@@ -14,8 +14,10 @@ from pydantic import Field
 from binnacle.features.commands import command_execution
 from binnacle.features.commands.command_backend import create_command_backend
 from binnacle.features.commands.command_contracts import (
+    STOP_JOB_UNAVAILABLE,
     CommandBackend,
     CommandFailure,
+    RestrictedCommandBackend,
     require_command_available,
 )
 
@@ -33,6 +35,8 @@ OUTPUT_SCHEMA = {
 
 def stop_job_impl(job_id: str, *, backend: CommandBackend | None = None) -> ToolResult:
     backend = create_command_backend() if backend is None else backend
+    if isinstance(backend, RestrictedCommandBackend):
+        raise ToolError(STOP_JOB_UNAVAILABLE)
     try:
         require_command_available(backend)
         reply = command_execution.stop_job(job_id, backend=backend)
@@ -44,7 +48,15 @@ def stop_job_impl(job_id: str, *, backend: CommandBackend | None = None) -> Tool
 def register(mcp: FastMCP, *, backend: CommandBackend | None = None) -> None:
     backend = create_command_backend() if backend is None else backend
 
+    description = (
+        "Unavailable on macOS: background jobs do not exist there, so no job "
+        "can be stopped."
+        if isinstance(backend, RestrictedCommandBackend)
+        else None
+    )
+
     @mcp.tool(
+        description=description,
         annotations={
             "readOnlyHint": False,
             "destructiveHint": True,

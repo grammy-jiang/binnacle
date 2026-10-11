@@ -49,6 +49,8 @@ class FileEntry:
     kind: Literal["file", "directory", "other"]
     size_bytes: int | None
     modified_ns: int | None
+    # Set only for a symlink whose target resolves inside the opened root.
+    target_kind: Literal["file", "directory"] | None = None
 
 
 @dataclass(frozen=True)

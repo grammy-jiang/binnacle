@@ -11,11 +11,13 @@ from __future__ import annotations
 import hashlib
 import os
 import secrets
+import stat
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from threading import RLock
 
+from binnacle.platform.contracts.capability_contracts import UnsafePath
 from binnacle.platform.contracts.file_access_contracts import (
     FileListing,
     FileMetadata,
@@ -38,6 +40,61 @@ from binnacle.platform.darwin.file_traversal import (
     unsafe,
     validate_relative_path,
 )
+
+MAX_LINK_HOPS = 40
+
+
+def link_target_info(
+    root_fd: int, directory: tuple[str, ...], name: str
+) -> os.stat_result | None:
+    """Stat a symlink's target only if it resolves inside the opened root.
+
+    Every component is examined with no-follow descriptor calls starting at the
+    root descriptor. Absolute targets, ``..`` above the root, dangling links,
+    loops and non-file/non-directory targets yield None; the root is never
+    widened and no path string is followed.
+    """
+    stack = list(directory)
+    try:
+        with directory_at(root_fd, directory) as start:
+            pending = os.readlink(name, dir_fd=start).split("/")
+        if pending[0] == "":
+            return None  # Absolute target: the root path is not known here.
+        hops = 1
+        info: os.stat_result | None = None
+        while pending:
+            part = pending.pop(0)
+            if part in ("", "."):
+                info = None
+                continue
+            if part == "..":
+                if not stack:
+                    return None
+                stack.pop()
+                info = None
+                continue
+            with directory_at(root_fd, tuple(stack)) as parent:
+                info = os.stat(part, dir_fd=parent, follow_symlinks=False)
+                if stat.S_ISLNK(info.st_mode):
+                    hops += 1
+                    target = os.readlink(part, dir_fd=parent)
+                    if hops > MAX_LINK_HOPS or target.startswith("/"):
+                        return None
+                    pending[:0] = target.split("/")
+                    info = None
+                    continue
+            if pending:
+                if not stat.S_ISDIR(info.st_mode):
+                    return None
+                stack.append(part)
+        if info is None:
+            with directory_at(root_fd, tuple(stack)) as final:
+                info = os.fstat(final)
+        if stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode):
+            return info
+    except (OSError, UnsafePath):
+        return None
+    return None
 
 
 class _RootGrant:
@@ -235,6 +292,7 @@ class DarwinFileAccess:
             self._root(grant) as root,
             listing_directory(root, parts, listing) as directory,
         ):
+            listing.resolve_link = lambda name: link_target_info(root, parts, name)
             listing.walk(directory)
         return listing.result(parts)
 
