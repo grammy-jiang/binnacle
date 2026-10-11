@@ -63,17 +63,30 @@ def run_command_impl(
     except CommandFailure as exc:
         raise ToolError(str(exc)) from exc
     settings = get_settings().run_command if settings is None else settings
+    roots = get_settings().roots if roots is None else roots
     resolved = resolve_path(workdir, roots=roots)
+    # SD-50: echo the caller's form (/tmp stays /tmp; Linux keeps the resolved
+    # path). Checks used `resolved`; the Darwin manager records `shown` and
+    # spawns in its resolution, every other owner receives `resolved` itself.
+    from pathlib import Path
+
+    from binnacle.features.commands.command_backend import DarwinManagerCommandBackend
+    from binnacle.features.files.error_text import outside_display
+
+    cleaned = workdir.replace("\0", "").strip().removeprefix("@")  # as resolve_path
+    requested = roots.default_root / Path(cleaned).expanduser()
+    shown = outside_display(requested, resolved, roots.canonical_allowed)
     if not resolved.is_dir():
         raise CodedToolError(
             "workdir_not_directory",
-            f"workdir is not a directory: {resolved}. "
+            f"workdir is not a directory: {shown}. "
             f"Use a directory inside ~/Projects or /tmp.",
         )
+    manager = isinstance(backend, DarwinManagerCommandBackend)
     try:
         reply = command_execution.run_command(
             command,
-            resolved,
+            shown if manager else resolved,
             wait_seconds,
             background,
             stdin,

@@ -197,20 +197,23 @@ class DarwinJobManager(_ManagerStopping):
 
     def _start(self, request: dict[str, Any]) -> dict[str, Any]:
         command = request["command"]
-        workdir = Path(request["workdir"])
+        # SD-50: the record keeps the caller's spelling (/tmp stays /tmp); the
+        # job spawns in the resolved directory.
+        shown = Path(request["workdir"])
+        workdir = shown.resolve()
         stdin = request.get("stdin")
         wait_seconds = float(request.get("wait_seconds", 0.0))
         call_id = str(request.get("call_id") or "-")
         if not isinstance(command, str) or not isinstance(stdin, (str, type(None))):
             raise TypeError("command/stdin have invalid types")
         if not workdir.is_dir():
-            raise ValueError(f"workdir is not a directory: {workdir}")
+            raise ValueError(f"workdir is not a directory: {shown}")
         if not (math.isfinite(wait_seconds) and 0 <= wait_seconds <= self.wait_max_s):
             raise ValueError("wait_seconds outside manager bounds")
         if self.stopping.is_set():  # PRE-J1g-F6: never launch into close()
             return {"ok": False, "error": "could not start job: job manager stopping"}
         try:
-            job_id = self._launch(command, workdir, stdin, call_id)
+            job_id = self._launch(command, workdir, stdin, call_id, shown)
         except (OSError, NativeCapabilityError) as exc:
             return {"ok": False, "error": f"could not start job: {exc}"}
         try:
@@ -227,9 +230,12 @@ class DarwinJobManager(_ManagerStopping):
         return {"ok": True, "job_id": job_id, "state": self.state(job_id)}
 
     def _launch(
-        self, command: str, workdir: Path, stdin: str | None, call_id: str
+        self, command: str, workdir: Path, stdin: str | None, call_id: str, shown: Path
     ) -> str:
-        """Reserve meta, spawn, complete meta: one interprocess transaction."""
+        """Reserve meta, spawn, complete meta: one interprocess transaction.
+
+        The job spawns in ``workdir``; the record keeps the caller's ``shown``.
+        """
         with self._transaction():
             self._prune(reserve=1)
             job_id = uuid.uuid4().hex[:12]  # job_store.new_job_id
@@ -239,7 +245,7 @@ class DarwinJobManager(_ManagerStopping):
             if stdin is not None:
                 stdin_path.write_bytes(stdin.encode("utf-8"))
             meta: dict[str, Any] = dict.fromkeys(("pid", "pgid", "starttime"))
-            meta.update(command=command, workdir=str(workdir), started_at=time.time())
+            meta.update(command=command, workdir=str(shown), started_at=time.time())
             meta.update(call_id=call_id, owner="manager", schema_version=2)
             meta.update(owner_instance_id=self.owner_instance_id, boot_id=self.boot_id)
             meta["command_hash"] = hashlib.sha256(command.encode()).hexdigest()[:12]

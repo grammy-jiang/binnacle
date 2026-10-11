@@ -10,7 +10,6 @@ from fastmcp import Client, FastMCP
 
 from binnacle.config import RootsSettings, RunCommandSettings
 from binnacle.features.commands.command_backend import (
-    DESCENDANTS_UNVERIFIED,
     DarwinManagerCommandBackend,
     ManagerBindings,
 )
@@ -46,7 +45,7 @@ def manager_backend(tmp_path: Path) -> DarwinManagerCommandBackend:
     )
 
 
-def test_manager_backend_reply_discloses_unverified_descendants(tmp_path, monkeypatch):
+def test_manager_backend_routine_reply_equals_linux_text(tmp_path, monkeypatch):
     seen = {}
 
     def fake_run(command, resolved, *args, backend, settings):
@@ -67,7 +66,10 @@ def test_manager_backend_reply_discloses_unverified_descendants(tmp_path, monkey
     )
     assert seen["backend"] is backend and seen["resolved"] == tmp_path
     assert result.structured_content == {"job_id": "j1", "state": "exited"}
-    assert result.content[0].text == f"Exited 0. {DESCENDANTS_UNVERIFIED}"
+    # SD-50: routine run_command text equals Linux exactly; SD-52: the
+    # descendants_unverified disclosure lives in the Darwin manager instruction
+    # sentence (lane L1b), not in routine replies.
+    assert result.content[0].text == "Exited 0."
 
 
 @pytest.mark.parametrize(
