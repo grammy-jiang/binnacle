@@ -13,10 +13,14 @@ from mcp.types import ContentBlock, TextContent
 
 from binnacle.mcp.job_awareness_hint_identity import (
     NATIVE_TOOL_TYPES,
+    Execution,
+    ExecutionScope,
     Identity,
     canonical_schema,
+    claim,
     native_tool,
     producer_identity,
+    witnessed_tool,
 )
 from binnacle.mcp.job_awareness_hint_schema import Schema, equal
 from binnacle.mcp.job_awareness_hint_walk import (
@@ -30,6 +34,8 @@ from binnacle.mcp.job_awareness_hint_walk import (
 __all__ = [
     "META_KEY",
     "NATIVE_TOOL_TYPES",
+    "Execution",
+    "ExecutionScope",
     "HintAdapter",
     "HintBindings",
     "Identity",
@@ -42,6 +48,7 @@ __all__ = [
     "native_tool",
     "producer_identity",
     "walk",
+    "witnessed_tool",
 ]
 
 META_KEY = "binnacle/job-awareness/synthetic-v1"
@@ -127,15 +134,19 @@ class HintAdapter:
         self,
         original: ToolResult,
         *,
-        tool: object = None,
+        execution: object = None,
     ) -> ToolResult:
         """Suppress unknown producers before worker admission or awareness reads.
 
-        Provenance rule (CHATGPT-POST-01/02): ``tool`` must be the native Tool
-        object that FastMCP resolved for this call (injection, mounted
-        providers, transforms and version selection already applied), and it
-        must BE the bound registered tool object (``is``) with a type that is
-        exactly one of ``NATIVE_TOOL_TYPES`` (no subclasses). Its exact name,
+        Provenance rule (CHATGPT-POST-01/02, ADV-G4-01): there is no ``tool``
+        or name parameter, so a controller cannot pass a looked-up Tool. The
+        producer comes only from ``execution``, a single-use ``Execution``
+        receipt that an ``ExecutionScope`` around this call's dispatch issued
+        because the body of a ``witnessed_tool`` really ran. Any other value
+        (a Tool object, a name, a registry result, a reused receipt, None)
+        suppresses. The receipt's Tool must BE the bound registered tool
+        object (``is``) with a type that is exactly one of
+        ``NATIVE_TOOL_TYPES`` (no subclasses). Its exact name,
         exact version and canonical-JSON output schema must also still equal
         the bound identity, and the structured result must validate against
         that schema. A value-equal but different object, any injected,
@@ -144,8 +155,11 @@ class HintAdapter:
         returns unchanged with no worker admission, observation read or
         receipt query. Caller-supplied name or version strings and request
         selectors are never an identity. No schema or identity is inferred
-        from a result. Registrations and routing stay fixed for this adapter's
-        lifetime.
+        from a result. The (name, version, schema) triple is only a contract
+        identity (ADV-G4-02); the receipt's object identity is what tells two
+        equal tools apart. Precondition: no
+        middleware or interceptor below the scope replaces the result after
+        the witnessed body ran.
         """
         if (
             self.enabled is not True
@@ -155,6 +169,7 @@ class HintAdapter:
             or self.identity is None
         ):
             return original
+        tool = claim(execution)
         if tool is not self.bound_tool or not native_tool(tool):
             return original
         producer = producer_identity(tool)

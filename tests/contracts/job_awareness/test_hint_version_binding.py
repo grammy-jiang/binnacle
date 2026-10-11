@@ -11,12 +11,13 @@ import httpx2
 import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.client.transports import StreamableHttpTransport
-from fastmcp.tools.base import Tool, ToolResult
+from fastmcp.tools.base import ToolResult
 from mcp.types import TextContent
 
 from binnacle.features.commands.job_awareness.models import HintCarrier
+from binnacle.mcp.job_awareness_hint import witnessed_tool
 from tests.contracts.job_awareness.synthetic_app import SCHEMA, Lab, in_loop
-from tests.contracts.job_awareness.test_hint_version_support import VersionBoundCarrier
+from tests.contracts.job_awareness.test_hint_version_support import ExecutionCarrier
 
 BETA = {
     "type": "object",
@@ -123,7 +124,7 @@ async def test_q0_sec_02_other_version_suppresses_before_reads(
             return value
 
         tool = app.add_tool(
-            Tool.from_function(
+            witnessed_tool(
                 lambda: produce(bound_version),
                 name="synthetic",
                 version=bound_version,
@@ -133,7 +134,7 @@ async def test_q0_sec_02_other_version_suppresses_before_reads(
         add_other_version(
             app,
             bound_version,
-            Tool.from_function(
+            witnessed_tool(
                 lambda: produce(other_version),
                 name="synthetic",
                 version=other_version,
@@ -142,7 +143,7 @@ async def test_q0_sec_02_other_version_suppresses_before_reads(
         )
         bound = replace(adapter, tool=tool)
         seen = []
-        middleware = VersionBoundCarrier(app, bound, seen)
+        middleware = ExecutionCarrier(app, bound, seen)
         app.add_middleware(middleware)
         wire = await _wire(app, protocol, selector)
         assert produced == [other_version]  # nosec B101 - pytest assertion
@@ -181,7 +182,7 @@ async def test_control_bound_version_requested_explicitly_still_hints(
         value = _result({"ok": True})
         before = value.model_dump_json()
         tool = app.add_tool(
-            Tool.from_function(
+            witnessed_tool(
                 lambda: value,
                 name="synthetic",
                 version=bound_version,
@@ -191,7 +192,7 @@ async def test_control_bound_version_requested_explicitly_still_hints(
         add_other_version(
             app,
             bound_version,
-            Tool.from_function(
+            witnessed_tool(
                 lambda: _result({"ok": True, "n": 1}),
                 name="synthetic",
                 version=other_version,
@@ -200,7 +201,7 @@ async def test_control_bound_version_requested_explicitly_still_hints(
         )
         bound = replace(adapter, tool=tool)
         seen = []
-        middleware = VersionBoundCarrier(app, bound, seen)
+        middleware = ExecutionCarrier(app, bound, seen)
         app.add_middleware(middleware)
         wire = await _wire(app, protocol, selector)
         assert (b"Binnacle job reminder" in wire, lab.catalog_reads, lab.queries) == (

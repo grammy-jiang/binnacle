@@ -6,20 +6,34 @@ from pathlib import Path
 from fastmcp.tools.base import ToolResult
 
 import binnacle.mcp.job_awareness_hint as adapter
+from binnacle.mcp import job_awareness_hint_identity as identity
 from binnacle.mcp.job_awareness_hint import HintAdapter
 
 _BOUND = object()
 
 
-class SyntheticHintAdapter(HintAdapter):
-    """Direct calls model a resolved producer that is the bound Tool object.
+def executed(tool: object) -> identity.Execution:
+    """Test-only receipt naming ``tool`` without running it.
 
-    Server-composed tests call HintAdapter.adapt through the carrier with the
-    Tool FastMCP resolves; only direct calls without a producer use this shim.
+    Production receipts come only from ExecutionScope after a witnessed body
+    ran. Direct tests mint one with the private key so that the adapter's own
+    identity and exact-type checks still face arbitrary producer objects.
+    """
+    return identity.Execution(identity._MINT, tool)
+
+
+class SyntheticHintAdapter(HintAdapter):
+    """Direct calls model a receipt for the bound Tool object.
+
+    Server-composed tests call HintAdapter.adapt through ExecutionCarrier with
+    the receipt its ExecutionScope issues; only direct calls use this shim.
     """
 
-    async def adapt(self, original: ToolResult, *, tool: object = _BOUND) -> ToolResult:
-        return await super().adapt(original, tool=self.tool if tool is _BOUND else tool)
+    async def adapt(  # type: ignore[override]
+        self, original: ToolResult, *, tool: object = _BOUND
+    ) -> ToolResult:
+        producer = self.tool if tool is _BOUND else tool
+        return await super().adapt(original, execution=executed(producer))
 
 
 def assert_adapter_import_topology():
