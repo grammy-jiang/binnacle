@@ -19,9 +19,8 @@ import sys
 import time
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
-from dataclasses import dataclass
 from pathlib import Path
-from threading import Condition, RLock, Thread
+from threading import Condition, RLock, Thread, current_thread
 from typing import BinaryIO, Literal
 from uuid import uuid4
 
@@ -42,14 +41,16 @@ from binnacle.platform.darwin.process_authority import (
     _unavailable,
     _unknown,
     _validate_process_layout,
+    birth_token,
 )
-from binnacle.platform.darwin.process_backend import OwnedProcessHandle
+from binnacle.platform.darwin.process_backend import _OwnedExitTable, _OwnedJob
 
 # The Linux stop protocol constants (features/commands/jobs.py); a test pins them.
 STOP_SIGTERM_GRACE_S = 5.0
 STOP_SIGKILL_GRACE_S = 2.0
 _REAPER_POLL_S = 0.05  # bounds how late close() and straggler deadlines are seen
-_DEFAULT_SIGNALS = (signal.SIGPIPE, signal.SIGTERM, signal.SIGINT, signal.SIGCHLD)
+# Every catchable signal starts SIG_DFL (Linux restores PIPE/XFZ/XFSZ).
+_DEFAULT_SIGNALS = tuple(signal.valid_signals() - {signal.SIGKILL, signal.SIGSTOP})
 # posix_spawn has no cwd: a POSIX sh shim changes directory, disables core
 # dumps (design §5) and execs the formed argv, so the leader keeps its pid.
 _SPAWN_SHIM = 'ulimit -c 0 2>/dev/null; cd -- "$1" || exit 126; shift; exec "$@"'
@@ -57,26 +58,7 @@ _SPAWN_SHIM = 'ulimit -c 0 2>/dev/null; cd -- "$1" || exit 126; shift; exec "$@"
 TerminationReason = Literal["normal_exit", "signal", "stop_requested", "owner_restart"]
 
 
-def birth_token(birth: tuple[int, int]) -> int:
-    """Encode the kinfo_proc p_starttime (sec, usec) as the frozen ``int`` birth."""
-    return birth[0] * 1_000_000 + birth[1]
-
-
-@dataclass(slots=True)
-class _OwnedJob:
-    job_id: str
-    pid: int
-    birth: tuple[int, int]
-    exit_seen: bool = False
-    reaped: bool = False
-    lost: bool = False
-    reason_code: str = "darwin_job_owned"
-    stop_requested: bool = False
-    straggler_deadline: float | None = None
-    exit: OwnedJobExit | None = None
-
-
-class DarwinJobProcessOwner:
+class DarwinJobProcessOwner(_OwnedExitTable):
     """The sole owner, signaller and reaper of this incarnation's job leaders."""
 
     def __init__(
@@ -106,7 +88,9 @@ class DarwinJobProcessOwner:
         self._changed = Condition(self._lock)
         self._jobs: dict[str, _OwnedJob] = {}
         self._by_pid: dict[int, _OwnedJob] = {}
-        self._closing = False
+        self._released: dict[str, _OwnedJob] = {}
+        self._fault: str | None = None  # reaping failed: unreaped jobs UNKNOWN
+        self._closing = self._kill_phase = False
         self._closed = False
         self._reaper: Thread | None = None
         if sys.platform == "darwin":
@@ -147,7 +131,9 @@ class DarwinJobProcessOwner:
         with self._lock:
             if self._closing:
                 raise _unavailable("darwin_job_owner_closing")
-            if job_id in self._jobs:
+            if self._fault is not None:  # nothing would reap a new leader
+                raise _unknown(self._fault)
+            if self._lookup_locked(job_id) is not None:
                 # No duplicate writer: one leader per job id per incarnation.
                 raise ValueError("darwin_job_already_owned")
             if signal.getsignal(signal.SIGCHLD) != signal.SIG_DFL:
@@ -216,8 +202,7 @@ class DarwinJobProcessOwner:
                 fflags=select.KQ_NOTE_EXIT,
             )
             try:
-                # max_events=0: a failed change raises instead of consuming
-                # another job's pending NOTE_EXIT from the reaper.
+                # max_events=0: a failed change raises, never eats another NOTE_EXIT.
                 self._queue.control([change], 0, 0)
             except ProcessLookupError:
                 # Under the exclusive-reaper contract this is our unreaped
@@ -229,20 +214,27 @@ class DarwinJobProcessOwner:
     def _reaper_loop(self) -> None:
         while True:
             with self._lock:
-                if self._closed:
+                if self._closed or self._fault is not None:
                     return
             try:
                 self.reap_exits(_REAPER_POLL_S)
             except JobOwnerLost:
                 return
-            except OSError:
-                # The loop head observes close(); never spin on a failing queue.
-                time.sleep(_REAPER_POLL_S)
+            except Exception:  # noqa: BLE001 - OSError retries; others fault
+                time.sleep(_REAPER_POLL_S)  # the loop head observes close()/fault
+
+    def _record_fault(self) -> None:
+        # Unreaped jobs -> UNKNOWN, waiters wake; close() still stops the groups.
+        with self._lock:
+            if not self._closed and self._fault is None:
+                self._fault = "darwin_job_reaper_failed"
+                self._changed.notify_all()
 
     def _poll_exit_events(self, timeout: float | None) -> list[int]:
         if sys.platform == "darwin":
-            queue = self._queue
-            if queue is None:
+            with self._lock:
+                queue = self._queue
+            if queue is None or queue.closed:
                 return []
             return [
                 event.ident
@@ -256,6 +248,18 @@ class DarwinJobProcessOwner:
     def reap_exits(self, timeout: float | None) -> Sequence[OwnedJobExit]:
         """kqueue NOTE_EXIT loop body: the sole waitpid(WNOHANG) caller."""
         self._check_owner()
+        if self.reaper_running and current_thread() is not self._reaper:
+            raise _unavailable("darwin_job_reaper_running")  # one driver only
+        if self._fault is not None:
+            raise JobOwnerLost(self._fault)
+        try:
+            return self._reap_pass(timeout)
+        except Exception as exc:
+            if not isinstance(exc, (OSError, JobOwnerLost)):
+                self._record_fault()  # in either drive mode (RJ1D-F2)
+            raise
+
+    def _reap_pass(self, timeout: float | None) -> list[OwnedJobExit]:
         with self._lock:
             timeout = self._poll_timeout_locked(timeout)
         exited = self._poll_exit_events(timeout)
@@ -288,9 +292,7 @@ class DarwinJobProcessOwner:
         return timeout
 
     def _reap_locked(self, job: _OwnedJob) -> OwnedJobExit | None:
-        """Reap an exited leader, whose zombie reserves the pgid until then.
-
-        Group members are terminated first: a reap closes the signal fence."""
+        """Reap an exited leader; group members first (a reap closes the fence)."""
         if self._verified_record_locked(job) is None:
             return None
         try:
@@ -303,10 +305,8 @@ class DarwinJobProcessOwner:
                 with suppress(OSError):
                     os.killpg(job.pid, signal.SIGTERM)
                 job.straggler_deadline = now + self._graces[1][1]
-                if not self._closing:
-                    return None
-            if not self._closing and now < job.straggler_deadline:
-                return None
+            if now < job.straggler_deadline and not self._kill_phase:
+                return None  # Linux stop grace, also in close()'s TERM phase
             with suppress(OSError):
                 os.killpg(job.pid, signal.SIGKILL)
         try:
@@ -326,7 +326,7 @@ class DarwinJobProcessOwner:
             return None
         code = os.waitstatus_to_exitcode(status)
         reason: TerminationReason = "normal_exit"
-        if self._closing:
+        if job.close_signalled:  # running when the owner stop began (RJ1-F8)
             reason = "owner_restart"
         elif job.stop_requested:  # same order as Linux jobs._termination_reason
             reason = "stop_requested"
@@ -344,11 +344,7 @@ class DarwinJobProcessOwner:
         self._changed.notify_all()
 
     def _verified_record_locked(self, job: _OwnedJob) -> _ProcessRecord | None:
-        """The unreaped leader must still be our child with the same birth.
-
-        Absent while unreaped (ESRCH), reparented or reborn: another waiter
-        reaped it. Never adopt a successor holding the numeric pid.
-        """
+        """Our same-birth child, else lost: another waiter reaped it (never adopt)."""
         record = self._child_record(job.pid)
         if record is None or record.birth != job.birth:
             self._mark_lost_locked(job, "darwin_exclusive_reaper_required")
@@ -361,32 +357,21 @@ class DarwinJobProcessOwner:
         deadline = None if timeout is None else time.monotonic() + max(0.0, timeout)
         with self._lock:
             while True:
-                job = self._jobs.get(job_id)
+                job = self._lookup_locked(job_id)
                 if job is None:
                     raise UnverifiedJobProcess("darwin_job_not_owned")
                 if job.exit is not None:
                     return job.exit
                 if job.lost:
                     raise JobOwnerLost(job.reason_code)
+                if self._fault is not None:
+                    raise JobOwnerLost(self._fault)
                 if self._closed:
                     raise JobOwnerLost("darwin_job_owner_closed")
                 remaining = None if deadline is None else deadline - time.monotonic()
                 if remaining is not None and remaining <= 0:
                     return None
                 self._changed.wait(remaining)
-
-    def handle(self, job_id: str) -> OwnedProcessHandle:
-        """A ``ProcessHandle`` whose wait() is served by the reaper's condition."""
-        with self._lock:
-            job = self._jobs.get(job_id)
-            if job is None:
-                raise UnverifiedJobProcess("darwin_job_not_owned")
-            return OwnedProcessHandle(self, job_id, job.pid)
-
-    def exit_for(self, job_id: str) -> OwnedJobExit | None:
-        with self._lock:
-            job = self._jobs.get(job_id)
-            return None if job is None else job.exit
 
     def authority(self, job_id: str) -> OwnedJobObservation:
         def unknown(code: str, alive: bool | None = None) -> OwnedJobObservation:
@@ -397,13 +382,17 @@ class DarwinJobProcessOwner:
         except JobOwnerLost:
             return unknown("darwin_job_owner_lost")
         with self._lock:
-            job = self._jobs.get(job_id)
+            job = self._lookup_locked(job_id)
             if job is None:
                 # Never adopted: records of other incarnations stay UNKNOWN.
                 return unknown("darwin_job_not_owned")
             if job.reaped and not job.lost:
                 return unknown("darwin_job_reaped", alive=False)
-            if job.lost or self._verified_record_locked(job) is None:
+            if job.lost:
+                return unknown(job.reason_code)
+            if self._fault is not None:
+                return unknown(self._fault)
+            if self._verified_record_locked(job) is None:
                 return unknown(job.reason_code)
             if job.exit_seen:
                 return OwnedJobObservation(
@@ -419,7 +408,7 @@ class DarwinJobProcessOwner:
         if number is None:
             raise ValueError("intent must be terminate or kill")
         with self._lock:
-            job = self._jobs.get(job_id)
+            job = self._lookup_locked(job_id)
             if job is None:
                 raise UnverifiedJobProcess("darwin_job_not_owned")
             job.stop_requested = True
@@ -441,8 +430,10 @@ class DarwinJobProcessOwner:
         try:
             os.killpg(job.pid, number)
         except ProcessLookupError:
-            # Only the unreaped zombie leader is left: nothing to deliver.
-            if record.state != 5:  # kinfo_proc SZOMB
+            # Only the unreaped zombie leader is left: nothing to deliver. It
+            # may have exited after the read above (RJ1-F7): read it again.
+            record = self._child_record(job.pid) or record
+            if record.state != 5 or record.birth != job.birth:  # SZOMB
                 raise JobSignalDeliveryError("darwin_job_signal_partial") from None
         except OSError as exc:
             partial = exc.errno == errno.EPERM
@@ -451,7 +442,7 @@ class DarwinJobProcessOwner:
             ) from None
 
     def close(self) -> Sequence[OwnedJobExit]:
-        """Normal owner stop: terminate, grace, kill, reap; unreapable -> UNKNOWN."""
+        """TERM, grace, KILL, reap (unreapable -> UNKNOWN); every unreleased exit."""
         self._check_owner()
         with self._lock:
             if self._closed:
@@ -460,10 +451,16 @@ class DarwinJobProcessOwner:
             targets = [
                 job for job in self._jobs.values() if not job.reaped and not job.lost
             ]
+            for job in targets:
+                record = None if job.exit_seen else self._child_record(job.pid)
+                if record and record.birth == job.birth and record.state == 5:
+                    job.exit_seen = True  # exited; NOTE_EXIT not consumed (RJ1D-F4)
+                job.close_signalled = not job.exit_seen
         for number, grace_s in self._graces:
             with self._lock:
-                for job in targets:
-                    if not job.exit_seen and not job.reaped and not job.lost:
+                self._kill_phase = number == signal.SIGKILL
+                for job in targets:  # zombie leaders too: no survivor (RJ1D2-F1)
+                    if not job.reaped and not job.lost:
                         try:
                             self._signal_group_locked(job, number)
                         except (UnverifiedJobProcess, JobSignalDeliveryError):
@@ -475,7 +472,7 @@ class DarwinJobProcessOwner:
                     self._mark_lost_locked(job, "darwin_job_reap_timeout")
             self._closed = True
             self._changed.notify_all()
-            exits = tuple(job.exit for job in targets if job.exit is not None)
+            exits = tuple(j.exit for j in self._jobs.values() if j.exit is not None)
         if self._reaper is not None:
             self._reaper.join(timeout=1.0)
         if sys.platform == "darwin":
@@ -495,5 +492,8 @@ class DarwinJobProcessOwner:
                 if self.reaper_running:
                     self._changed.wait(min(remaining, _REAPER_POLL_S))
                     continue
-            # No reaper thread: close() drives the same sole reap path.
-            self.reap_exits(min(remaining, _REAPER_POLL_S))
+            # No reaper thread: close() drives the same sole reap pass.
+            try:
+                self._reap_pass(min(remaining, _REAPER_POLL_S))
+            except Exception:  # noqa: BLE001 - retried; unreaped -> reap_timeout
+                time.sleep(min(remaining, _REAPER_POLL_S))
