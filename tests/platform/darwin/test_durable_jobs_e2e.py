@@ -79,7 +79,6 @@ def ping(sock: Path, label: str = LABEL) -> dict[str, Any] | None:
 
 
 def tamper(sock: Path) -> bytes:
-    """Corrupt the A3 auth key in place; returns the original bytes to restore."""
     auth = sock.with_name("jobs.sock.auth")
     original = auth.read_bytes()
     auth.write_text(json.dumps({**json.loads(original), "key": "0" * 64}))
@@ -101,8 +100,6 @@ def until(predicate: Any, timeout: float = 10.0) -> bool:
 
 
 class Stack:
-    """One manager subprocess over a private runtime root and jobs dir."""
-
     def __init__(self, base: Path) -> None:
         self.root, self.jobs = base / "rt", base / "jobs"
         self.work = base / "work"
@@ -149,7 +146,6 @@ def stack() -> Iterator[Stack]:
 
 
 def ident(pid: int) -> str:
-    """(start time, command) of ``pid`` for the RULE-NO-PKILL spawn-time record."""
     argv = ["/bin/ps", "-o", "lstart=,command=", "-p", str(pid)]
     return subprocess.run(
         argv, capture_output=True, text=True, check=False
@@ -275,7 +271,6 @@ def test_stale_or_ambiguous_process_reference_stays_unowned() -> None:
 
 
 def _mcp_main(port: int, work: Path, jobs: Path, sock: Path, token: str) -> int:
-    """Child entry: manager composition with test-only AVAILABLE rows."""
     from dataclasses import replace
 
     from binnacle.application import compose_native_tools, create_application
@@ -283,10 +278,12 @@ def _mcp_main(port: int, work: Path, jobs: Path, sock: Path, token: str) -> int:
     from binnacle.platform.contracts import capability_contracts as cc
     from binnacle.platform.contracts import darwin_release_scope as drs
 
-    scope = dict(drs.release_scope_for_owner("manager"))
+    scope: dict[str, Any] | None = dict(drs.release_scope_for_owner("manager"))
     for tool in drs.COMMAND_TOOLS:
         row = cc.Capability(cc.CapabilityState.AVAILABLE, "test", tool)
-        scope[tool] = replace(scope[tool], capability=row)
+        scope[tool] = replace(scope[tool], capability=row)  # type: ignore[index]
+    if os.environ.get("BINNACLE_J5_PRODUCTION_ROWS") == "1":
+        scope = None  # switch: the committed production table, no override
     settings = Settings(roots=RootsSettings(default_root=work))
     settings.jobs.dir, settings.jobs.socket_path = jobs, sock
     settings.run_command.auto_background_patterns = {"r4-j5": ("^sleep ",)}
@@ -344,7 +341,8 @@ class McpStack:
                 return await client.call_tool(tool, args, raise_on_error=False)
 
         out = asyncio.run(once())
-        return {**(out.structured_content or {}), "isError": out.is_error}
+        text = " ".join(getattr(c, "text", "") for c in out.content)
+        return {**(out.structured_content or {}), "isError": out.is_error, "text": text}
 
 
 @pytest.fixture
@@ -359,18 +357,15 @@ def mcp(stack: Stack) -> Iterator[McpStack]:
 
 
 @NATIVE
-def test_mcp_wait_expiry_continues(mcp: McpStack) -> None:
+def test_mcp_wait_expiry_background_and_auto_background(mcp: McpStack) -> None:
     marker = mcp.stack.work / "marker"
-    command = f"sleep 2; touch {marker}"
-    reply = mcp.call("run_command", {"command": command, "wait_seconds": 1})
-    assert reply["state"] == "running" and reply["job_id"]
+    reply = mcp.call(
+        "run_command", {"command": f"sleep 2; touch {marker}", "wait_seconds": 1}
+    )
+    assert reply["state"] == "running" and reply["job_id"]  # wait expiry never kills
     assert until(marker.exists, 10)
     status = mcp.call("job_status", {"job_id": reply["job_id"], "wait_seconds": 5})
     assert (status["state"], status["exit_code"]) == ("exited", 0)
-
-
-@NATIVE
-def test_mcp_background_and_auto_background(mcp: McpStack) -> None:
     slow = mcp.call("run_command", {"command": "sleep 3", "background": True})
     assert slow["state"] == "running" and slow["background_job"] is True
     fast = mcp.call("run_command", {"command": "echo hi", "background": True})
@@ -405,23 +400,30 @@ def test_mcp_stop_job_term_then_kill(mcp: McpStack) -> None:
 
 
 @NATIVE
-def test_mcp_manager_kill_is_unknown(mcp: McpStack) -> None:
-    job = mcp.call("run_command", {"command": "sleep 60", "background": True})
-    pgid = track(mcp.stack, job["job_id"])
-    mcp.stack.end(signal.SIGKILL)
-    mcp.stack.start()
-    status = mcp.call("job_status", {"job_id": job["job_id"]})
-    assert status["state"] == "unknown" and status.get("exit_code") is None
-    assert mcp.call("stop_job", {"job_id": job["job_id"]})["isError"]
-    assert not group_gone(pgid)  # no adoption
-
-
-@NATIVE
-def test_mcp_peer_refusal_fails_closed(mcp: McpStack) -> None:
-    original = tamper(mcp.stack.sock)
+def test_mcp_unreachable_manager_fails_closed_then_unknown_never_adopted(
+    mcp: McpStack,
+) -> None:
+    original = tamper(mcp.stack.sock)  # peer refusal, then a dead manager
     refused = mcp.call("run_command", {"command": "touch x", "background": True})
     mcp.stack.sock.with_name("jobs.sock.auth").write_bytes(original)
     assert refused["isError"] and not (mcp.stack.work / "x").exists()
+    job = mcp.call("run_command", {"command": "sleep 30", "background": True})
+    pgid = track(mcp.stack, job["job_id"])
+    mcp.stack.end(signal.SIGKILL)
+    ident_args = {"job_id": job["job_id"]}
+    for tool, args in (
+        ("run_command", {"command": "touch x"}),
+        ("stop_job", ident_args),
+    ):
+        reply = mcp.call(tool, args)  # per-call error, never a fallback
+        assert reply["isError"] and pc.JOB_MANAGER_UNAVAILABLE in reply["text"], tool
+    status = mcp.call("job_status", {"job_id": job["job_id"]})  # read-only spool
+    assert status["state"] == "running" and not status["isError"]
+    mcp.stack.start()  # a new incarnation never adopts the orphaned leader
+    status = mcp.call("job_status", {"job_id": job["job_id"]})
+    assert status["state"] == "unknown" and status.get("exit_code") is None
+    assert mcp.call("stop_job", ident_args)["isError"] and not group_gone(pgid)
+    assert not (mcp.stack.work / "x").exists()
 
 
 def launchctl(*args: str) -> subprocess.CompletedProcess[str]:
@@ -437,7 +439,6 @@ def label_pid(target: str) -> int | None:
 
 
 def render_test_plist(base: Path, label: str, config: Path) -> Path:
-    """The jobs-daemon plist shape, as a user-domain test label (no UserName)."""
     assert label.startswith("com.binnacle.r4test.j5."), "never a production label"
     env = {"HOME": str(base), "PATH": "/usr/bin:/bin", "PYTHONPATH": str(REPO / "src")}
     env["BINNACLE_CONFIG_FILE"] = str(config)
