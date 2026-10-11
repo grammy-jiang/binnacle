@@ -74,6 +74,7 @@ platform/darwin/test_job_process_owner.py | A2: per-test Darwin posix_spawn/kque
 platform/darwin/test_ipc_generation.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID contract
 platform/darwin/test_job_manager_service.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID job-manager IPC (R4 J2, A3 successor)
 platform/darwin/test_job_manager_entry.py | A3: per-test Darwin com.binnacle.jobs entry point, J1 owner and job-manager IPC (R4 J2r, A3 successor)
+platform/darwin/test_job_manager_entry_owner.py | A3: per-test Darwin J1 owner behind the com.binnacle.jobs manager: J1r handoff and J1g repairs (r6 T1, split from test_job_manager_entry.py)
 platform/darwin/test_durable_jobs_e2e.py | A3: per-test Darwin kqueue/getpeereid job-manager E2E over the real J1 owner and J2 manager (R4 J5)
 platform/darwin/test_j1g_leader_fence.py | A2: per-test Darwin waitid(WNOWAIT)/KERN_PROC_PGRP leader-exit fence, stopping event and killpg guard (R4 J1g, SD-43)
 platform/darwin/test_j1g_e2e_survival.py | B0: per-test Darwin real com.binnacle.jobs background-member survival E2E (R4 J1g, SD-43 JCRP-F1)
@@ -124,6 +125,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_ipc_generation.py": 1,
     "tests/platform/darwin/test_job_manager_service.py": 1,
     "tests/platform/darwin/test_job_manager_entry.py": 1,
+    "tests/platform/darwin/test_job_manager_entry_owner.py": 1,
     "tests/platform/darwin/test_durable_jobs_e2e.py": 1,
     "tests/platform/darwin/test_j1g_leader_fence.py": 1,
     "tests/platform/darwin/test_j1g_e2e_survival.py": 1,
