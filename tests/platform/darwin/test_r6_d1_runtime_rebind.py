@@ -409,3 +409,27 @@ def test_failed_rebinds_release_leases_and_rate_limit_warnings(
     assert len(lost) < failures / 10  # bounded, not one per attempt
     suppressed = sum(int(r.message.rsplit("=", 1)[1]) for r in lost[1:])
     assert suppressed + len(lost) <= failures  # every attempt counted at most once
+
+
+# --- r6 W2 M1 step 3 (D3): SR6-N1, the documented post-rebind no-job rule ---
+
+
+def test_after_a_rebind_a_later_loss_without_jobs_keeps_rebinding(
+    monkeypatch, tmp_path
+):
+    """SR6-N1 (documented in serve_endpoint): only the FIRST binding may exit.
+
+    Once a fresh lease serves, a later loss with zero owned jobs rebinds too;
+    the manager never exits on an endpoint loss after its first rebind.
+    """
+    leases = scripted_serving(monkeypatch, failures=3)
+    owning = iter([True, False, False])  # jobs at the first loss, none after
+    monkeypatch.setattr(entry, "owns_jobs", lambda _: next(owning))
+    first, stop = Lease(), threading.Event()
+    entry.serve_endpoint(
+        FakeManager(tmp_path / "jobs"),
+        socket_path=tmp_path / "jobs.sock",
+        lease=first,
+        stop=stop,
+    )
+    assert leases == [first, "fresh-1", "fresh-2", "fresh-3"] and stop.is_set()
