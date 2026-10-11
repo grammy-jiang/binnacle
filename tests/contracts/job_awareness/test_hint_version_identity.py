@@ -15,6 +15,7 @@ from fastmcp.tools.base import Tool
 from binnacle.features.commands.job_awareness.models import HintCarrier
 from binnacle.mcp.job_awareness_hint import HintAdapter
 from tests.contracts.job_awareness.synthetic_app import SCHEMA, Lab, in_loop, original
+from tests.contracts.job_awareness.test_hint_schema_support import executed
 
 T = TypeVar("T")
 
@@ -53,7 +54,7 @@ async def test_other_version_returns_original_before_worker(
         value = original()
         before = value.model_dump_json()
         result = await HintAdapter.adapt(
-            adapter, value, tool=native_tool(producer_version)
+            adapter, value, execution=executed(value, native_tool(producer_version))
         )
         assert result is value  # nosec B101 - pytest assertion
         assert value.model_dump_json() == before  # nosec B101 - pytest assertion
@@ -71,7 +72,10 @@ async def test_missing_version_is_unknown_even_for_unversioned_binding(version):
         assert await HintAdapter.adapt(adapter, value) is value  # nosec B101 - pytest assertion
         producer = native_tool(version)
         object.__getattribute__(producer, "__dict__").pop("version")
-        assert await HintAdapter.adapt(adapter, value, tool=producer) is value  # nosec B101 - pytest assertion
+        assert (
+            await HintAdapter.adapt(adapter, value, execution=executed(value, producer))
+            is value
+        )  # nosec B101 - pytest assertion
         assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion
 
 
@@ -84,7 +88,10 @@ async def test_invalid_producer_version_fails_closed(version):
         )
         value = original()
         assert (  # nosec B101 - pytest assertion
-            await HintAdapter.adapt(adapter, value, tool=raw_tool(version)) is value
+            await HintAdapter.adapt(
+                adapter, value, execution=executed(value, raw_tool(version))
+            )
+            is value
         )
         assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion
 
@@ -110,7 +117,9 @@ async def test_hostile_version_cannot_run_comparison_callbacks():
         )
         value = original()
         assert (  # nosec B101 - pytest assertion
-            await HintAdapter.adapt(adapter, value, tool=raw_tool(Version("1")))
+            await HintAdapter.adapt(
+                adapter, value, execution=executed(value, raw_tool(Version("1")))
+            )
             is value
         )
         hostile = raw_tool(Version("1"))
@@ -127,6 +136,9 @@ async def test_matching_version_keeps_default_off(version):
         adapter = replace(lab.adapter(), tool=native_tool(version), workers=NoWorkers())
         value = original()
         assert (  # nosec B101 - pytest assertion
-            await HintAdapter.adapt(adapter, value, tool=native_tool(version)) is value
+            await HintAdapter.adapt(
+                adapter, value, execution=executed(value, native_tool(version))
+            )
+            is value
         )
         assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion
