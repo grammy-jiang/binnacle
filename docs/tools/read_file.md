@@ -197,14 +197,28 @@ looks like image/png) — content not shown.`
    kernel path (`/proc/self/fd/N`) is inside SOME configured root, else
    `path_outside_root`; `(st_dev, st_ino)` equals the pair from the stat in
    step 2, else `path_changed`; the object is a regular file, else
-   `not_a_regular_file` (a FIFO no longer blocks the call); `st_nlink > 0`,
+   `not_a_regular_file` (a FIFO no longer blocks the call; `read_file`
+   words a FIFO, socket or device as below); `st_nlink > 0`,
    else `path_changed` (a file deleted after the open is not served; a new
    call reports E1). A symlink that the no-follow open refuses is
    `path_outside_root` when its target is outside every root, else
-   `path_changed`; EACCES is `permission_denied`. A socket is
-   `file_io_failed`; a FIFO or a device is `not_a_regular_file`. The content
+   `path_changed`; EACCES is `permission_denied`. A FIFO, a socket and a
+   character or block device are `special_file_unsupported` with the text
+   `special_file_unsupported.`, byte for byte as on Darwin (X3b-a3), also
+   when the open itself fails (a socket is ENXIO, a disk device EACCES).
+   `read_file` words them: `fd_walk` still raises `not_a_regular_file`,
+   `file_io_failed` or `permission_denied`, and an lstat that shows the
+   checked `(st_dev, st_ino)` with a FIFO, socket or device type turns that
+   into `special_file_unsupported`; `path_outside_root` and `path_changed`
+   are never reworded. A mode-000 regular file stays `permission_denied`
+   on Linux: Darwin's `permission_denied_tcc_possible` carries a macOS TCC
+   hint that does not apply on Linux, so this code differs between the OSes
+   by design. The content
    is read only from the verified descriptor; the path is never opened
-   again. The read stops after `READ_MAX_FILE_BYTES` + 1 bytes, so a file
+   again. The raw descriptor is read with an `os.read` loop whose requests
+   add up to at most `READ_MAX_FILE_BYTES` + 1 bytes (no buffered file
+   object, so no read-ahead past the bound; RX3b2-F1). The read stops after
+   `READ_MAX_FILE_BYTES` + 1 bytes, so a file
    that grew past the limit after the stat is E3, with the same text as at
    the stat. Every path whose target lies in any configured root
    (cross-root links, `..` into an outer root) reads as in r6. Darwin keeps its own `READ_FLAGS` walk and

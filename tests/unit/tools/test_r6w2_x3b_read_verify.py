@@ -206,7 +206,8 @@ def test_a_fifo_swapped_in_is_refused_by_identity_first(tree, monkeypatch):
 def test_a_checked_fifo_is_not_a_regular_file(tree):
     fifo = tree["root"] / "fifo"
     os.mkfifo(fifo)
-    assert outcome(tree["roots"], fifo) == ("refused", "not_a_regular_file")
+    # X3b-a3: Darwin's code for a FIFO, socket or device.
+    assert outcome(tree["roots"], fifo) == ("refused", "special_file_unsupported")
 
 
 # Changes after the open, before the verification (X3b only).

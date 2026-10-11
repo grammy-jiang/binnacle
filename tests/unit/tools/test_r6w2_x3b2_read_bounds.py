@@ -246,31 +246,19 @@ def test_the_read_never_asks_for_more_than_the_limit_plus_one(tree, monkeypatch)
     target = tree["root"] / "grows.txt"
     target.write_bytes(b"a" * LIMIT)
     asked: list[int] = []
-    real = os.fdopen
+    real = os.read
 
-    class Recorded:
-        def __init__(self, fd: int, *args, **kwargs) -> None:
-            self._file = real(fd, *args, **kwargs)
+    def recorded(fd: int, size: int) -> bytes:
+        # X3b-a3 (RX3b2-F1): the raw fd is read with os.read, no buffer.
+        asked.append(size)
+        return real(fd, size)
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc: object) -> None:
-            self._file.close()
-
-        def fileno(self) -> int:
-            return self._file.fileno()
-
-        def read(self, size: int = -1) -> bytes:
-            asked.append(size)
-            return self._file.read(size)
-
-    monkeypatch.setattr(rf.os, "fdopen", Recorded)
+    monkeypatch.setattr(rf.os, "read", recorded)
     growing = grow_after_stat(target, 10 * LIMIT)
     assert refusal(tree["roots"], target, limited(growing)).telemetry_code == (
         "file_too_large"
     )
-    assert asked == [LIMIT + 1]
+    assert sum(asked) == LIMIT + 1
 
 
 def test_a_file_exactly_at_the_limit_still_reads(tree):

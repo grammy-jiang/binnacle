@@ -7,6 +7,7 @@ interpolated into messages so text can never drift from code.
 
 import mimetypes
 import os
+import stat
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -22,6 +23,11 @@ from binnacle.features.files.paths import FileToolAccess, nearby_hint, resolve_p
 from binnacle.features.files.textio import decode_text, human_size
 
 LINE_CLIP_MARK = "… [line truncated]"
+# A FIFO, socket or device: Darwin's file_traversal.regular_fd refuses these.
+SPECIAL_FILE_TYPES = (stat.S_IFIFO, stat.S_IFSOCK, stat.S_IFCHR, stat.S_IFBLK)
+# fd_walk's refusals for such an object: the type check after the open (a
+# FIFO or device), ENXIO (a socket) and EACCES (a disk device) at the open.
+SPECIAL_FILE_REFUSALS = ("not_a_regular_file", "file_io_failed", "permission_denied")
 
 
 def _description(settings: ReadFileSettings) -> str:
@@ -69,6 +75,45 @@ def _too_large(size: int, settings: ReadFileSettings) -> CodedToolError:
     )
 
 
+def special_file_unsupported() -> CodedToolError:
+    """Darwin's refusal for a FIFO, socket or device, byte for byte (X3b-a3).
+
+    Darwin raises unsafe("special_file_unsupported") in
+    platform/darwin/file_traversal.py and FileToolAccess.operation words it
+    as f"{code}."; the Linux path never imports the Darwin adapter, so the
+    text is copied here and a test pins the two equal.
+    """
+    code = "special_file_unsupported"
+    return CodedToolError(code, f"{code}.")
+
+
+def _is_special(resolved: Path, expected: tuple[int, int]) -> bool:
+    """The checked object is still there and is a FIFO, socket or device."""
+    try:
+        info = os.lstat(resolved)
+    except OSError:
+        return False
+    return (info.st_dev, info.st_ino) == expected and (
+        stat.S_IFMT(info.st_mode) in SPECIAL_FILE_TYPES
+    )
+
+
+def _read_at_most(fd: int, limit: int) -> bytes:
+    """Read up to limit bytes; the read(2) requests add up to at most limit.
+
+    No buffered file object, so no read-ahead past the bound (RX3b2-F1).
+    """
+    chunks: list[bytes] = []
+    left = limit
+    while left > 0:
+        chunk = os.read(fd, left)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        left -= len(chunk)
+    return b"".join(chunks)
+
+
 def _read_checked(
     resolved: Path,
     expected: tuple[int, int],
@@ -81,18 +126,31 @@ def _read_checked(
     (fd_walk.open_verified) and reads only from that descriptor; the path
     is never opened again. The read stops after max_file_bytes + 1 bytes, so
     a file that grew after the stat is file_too_large, never read unbounded
-    (RX3b-F6). Darwin keeps its own READ_FLAGS walk (RX3a2-N4) and never
-    calls open_verified.
+    (RX3b-F6); the raw descriptor is read with os.read, so read(2) is never
+    asked for more than that in total (RX3b2-F1). Darwin keeps its own READ_FLAGS walk (RX3a2-N4) and never
+    calls open_verified. A FIFO, socket or device that fd_walk refuses is
+    worded as on Darwin when an lstat shows the checked object (X3b-a3);
+    path_outside_root and path_changed are never reworded, and nothing is
+    opened again.
     """
     if sys.platform == "linux":
         allowed = (get_settings().roots if roots is None else roots).canonical_allowed
-        fd = fd_walk.open_walked(resolved, allowed, expected)
-        with os.fdopen(fd, "rb") as opened:
-            data = opened.read(settings.max_file_bytes + 1)
+        try:
+            fd = fd_walk.open_walked(resolved, allowed, expected)
+        except CodedToolError as exc:
+            if exc.telemetry_code in SPECIAL_FILE_REFUSALS and _is_special(
+                resolved, expected
+            ):
+                raise special_file_unsupported() from exc
+            raise
+        try:
+            data = _read_at_most(fd, settings.max_file_bytes + 1)
             if len(data) > settings.max_file_bytes:
-                grown = os.fstat(opened.fileno()).st_size
+                grown = os.fstat(fd).st_size
                 raise _too_large(max(grown, len(data)), settings)
             return data
+        finally:
+            os.close(fd)
     else:
         return resolved.read_bytes()
 
