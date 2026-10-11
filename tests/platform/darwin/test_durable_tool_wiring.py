@@ -6,8 +6,8 @@ client that writes the J2 spool contract (meta.json + out.log).
 """
 
 import asyncio
-import inspect
 import json
+import os
 import platform
 import subprocess
 import threading
@@ -41,9 +41,21 @@ class _SpoolClient:
     def __init__(self, jobs_dir: Path):
         self.jobs_dir = jobs_dir
         self.stops: list[str] = []
+        # LATE jobs: persist the exit record only after this event is set.
+        self.persist_late = threading.Event()
+        self.late_persisted = threading.Event()
 
     def _write(self, job_id, meta):
-        (self.jobs_dir / job_id / "meta.json").write_text(json.dumps(meta))
+        # Atomic like job_store.write_meta: a reader never sees a partial record.
+        target = self.jobs_dir / job_id / "meta.json"
+        partial = target.with_suffix(".tmp")
+        partial.write_text(json.dumps(meta))
+        os.replace(partial, target)
+
+    def _persist_when_released(self, job_id, final):
+        self.persist_late.wait()
+        self._write(job_id, final)
+        self.late_persisted.set()
 
     def start(self, socket_path, *, command, workdir, stdin, wait_seconds, call_id):
         job_id = f"{len(list(self.jobs_dir.iterdir())):012x}"
@@ -66,7 +78,9 @@ class _SpoolClient:
             self._write(job_id, meta)
             final = {**meta, "exit_code": 0, "signal": None, "ended_at": time.time()}
             final["termination_reason"] = "normal_exit"
-            threading.Timer(0.1, self._write, (job_id, final)).start()
+            threading.Thread(
+                target=self._persist_when_released, args=(job_id, final), daemon=True
+            ).start()
             return {"ok": True, "job_id": job_id, "state": "unknown"}
         if command.startswith("RUNNING"):
             (directory / "out.log").write_bytes(b"partial\n")
@@ -111,6 +125,8 @@ def _settings(tmp_path):
 
 
 def _manager(tmp_path, states=AVAILABLE, client=None):
+    from binnacle.application import manager_bindings
+
     settings, root = _settings(tmp_path)
     backend = cb.DarwinManagerCommandBackend(
         jobs_dir=settings.jobs.dir,
@@ -119,6 +135,7 @@ def _manager(tmp_path, states=AVAILABLE, client=None):
         warmup_s=settings.jobs.warmup_s,
         max_output_chars=settings.jobs.max_output_chars,
         client=client or _SpoolClient(settings.jobs.dir),
+        bindings=manager_bindings(),
     )
     return settings, root, backend
 
@@ -131,6 +148,12 @@ def _tools(app):
     return asyncio.run(listing())
 
 
+def _o200k():
+    from binnacle.observability.token_telemetry import _load_encoding
+
+    return _load_encoding("o200k_base")  # the test_surface_tokens tokenizer
+
+
 def _app(settings, backend):
     from binnacle.application import create_application
 
@@ -140,6 +163,7 @@ def _app(settings, backend):
 @_DARWIN
 def test_production_composes_manager_owner_and_fails_closed(tmp_path):
     from binnacle.application import (
+        DARWIN_JOBS_DISCLOSURE,
         DARWIN_MANAGER_REQUIREMENT,
         _server_instructions,
         compose_native_tools,
@@ -152,9 +176,13 @@ def test_production_composes_manager_owner_and_fails_closed(tmp_path):
     assert type(backend.client).__name__ == "DarwinJobClient"
     # The committed rows stay UNAVAILABLE until J-CR; no embedded fallback.
     assert set(backend.release_states.values()) == {"UNAVAILABLE"}
-    assert "com.binnacle.jobs" in _server_instructions("manager")
-    assert DARWIN_MANAGER_REQUIREMENT in _server_instructions("manager")
+    instructions = _server_instructions("manager")
+    assert "com.binnacle.jobs" in instructions and len(instructions) <= 512
+    assert DARWIN_MANAGER_REQUIREMENT in instructions
     assert "fail closed" in DARWIN_MANAGER_REQUIREMENT
+    # STEER-04 2(a): one short D-1 sentence of at most 35 tokens (measured: 19).
+    assert instructions.endswith(DARWIN_JOBS_DISCLOSURE)
+    assert len(_o200k().encode(DARWIN_JOBS_DISCLOSURE)) <= 35
     app = _app(settings, backend)
     assert "com.binnacle.jobs" in app.instructions
     with pytest.raises(ToolError, match="no embedded fallback"):
@@ -191,13 +219,9 @@ def test_unreachable_manager_is_the_linux_per_call_error(tmp_path):
 
 
 @_DARWIN
-def test_manager_descriptions_are_linux_text_plus_disclosures(tmp_path):
-    from binnacle.platform.contracts.darwin_release_scope import MANAGER_DISCLOSURES
-
+def test_manager_descriptions_are_byte_identical_to_linux(tmp_path):
+    """STEER-04 (amended JCR-4): no description-level disclosure on Darwin."""
     settings, _, backend = _manager(tmp_path)
-    assert cb.DARWIN_COMMAND_DISCLOSURE == (
-        "macOS differences: " + "; ".join(MANAGER_DISCLOSURES) + "."
-    )
     darwin = _tools(_app(settings, backend))
 
     class _LinuxShape:  # the Linux tool path: a non-restricted backend
@@ -205,10 +229,7 @@ def test_manager_descriptions_are_linux_text_plus_disclosures(tmp_path):
 
     linux = _tools(_app(settings, _LinuxShape()))
     for name in ("run_command", "job_status", "stop_job"):
-        expected = inspect.cleandoc(linux[name].description)
-        assert darwin[name].description == (
-            expected + "\n\n" + cb.DARWIN_COMMAND_DISCLOSURE
-        )
+        assert darwin[name].description.encode() == linux[name].description.encode()
         assert darwin[name].input_schema == linux[name].input_schema
         assert darwin[name].output_schema == linux[name].output_schema
 
@@ -243,16 +264,37 @@ def test_large_output_returns_the_true_tail(tmp_path):
     assert payload["output"].rstrip().endswith("\n20000")
     assert payload["truncated"] is True
     assert "elided" in payload["output"]
+    # STEER-04 2(b): the result text keeps the descendants disclosure.
+    assert str(result.content).count("descendants_unverified=true") == 1
+    assert "descendants_unverified" not in payload
 
 
 @_DARWIN
 def test_start_reply_state_is_not_final(tmp_path, monkeypatch):
-    """R-J2-F4: a start reply of 'unknown' waits for the persisted record."""
-    monkeypatch.setattr(cb, "EXIT_RECORD_GRACE_S", 30.0)  # robust under load
+    """R-J2-F4: a start reply of 'unknown' waits for the persisted record.
+
+    Events order the steps: the exit record is persisted only after the
+    backend has read the not-yet-final record, so no wall-clock race decides
+    the result. The grace is only an upper bound for a broken backend.
+    """
+    monkeypatch.setattr(cb, "EXIT_RECORD_GRACE_S", 60.0)
     settings, root, backend = _manager(tmp_path)
+    client, read_state = backend.client, backend.job_state
+    reads_before_record: list[str] = []
+
+    def job_state(job_id):
+        state = read_state(job_id)
+        if not client.late_persisted.is_set():
+            reads_before_record.append(state["state"])
+            client.persist_late.set()  # handshake: release the manager's write
+        return state
+
+    monkeypatch.setattr(backend, "job_state", job_state)
     payload = rc.run_command_impl(
         "LATE exit", str(root), 5, False, None, roots=settings.roots, backend=backend
     ).structured_content
+    assert reads_before_record[0] == "running"  # the reply state was not final
+    assert client.late_persisted.is_set()
     assert payload["state"] == "exited" and payload["exit_code"] == 0
     assert payload["output"] == "late\n"
 
@@ -304,14 +346,38 @@ def test_owner_lost_job_renders_unknown_and_refuses_stop(tmp_path):
     job_id = started.structured_content["job_id"]
     assert started.structured_content["state"] == "running"
     backend.client.lose_owner(job_id)
-    status = js.job_status_impl(job_id, 10, backend=backend).structured_content
+    result = js.job_status_impl(job_id, 10, backend=backend)
+    status = result.structured_content
     assert status["state"] == "unknown"  # D-1: never exited
     assert status["exit_code"] is None
+    # STEER-04 2(b): the result text states the owner loss where it occurs.
+    assert "owner lost; process not tracked" in str(result.content)
+    assert status["note"] == cb.DARWIN_OWNER_LOST_NOTE
     state = backend.job_state(job_id)
     assert state["note"] == cb.DARWIN_OWNER_LOST_NOTE
     with pytest.raises(ToolError, match=OWNER_LOST_STOP_REFUSED):
         sj.stop_job_impl(job_id, backend=backend)
     assert backend.client.stops == []
+
+
+@_DARWIN
+def test_d2_sampled_resources_are_marked_in_job_status(tmp_path):
+    """STEER-04 2(b): D-2 appears where resource values occur, as sampled."""
+    settings, root, backend = _manager(tmp_path)
+    job_id = rc.run_command_impl(
+        "true", str(root), 5, False, None, roots=settings.roots, backend=backend
+    ).structured_content["job_id"]
+    plain = js.job_status_impl(job_id, 10, backend=backend)
+    assert "resource_usage" not in plain.structured_content
+    assert "sampled" not in str(plain.content)
+    meta_path = settings.jobs.dir / job_id / "meta.json"
+    meta = json.loads(meta_path.read_text())
+    meta["resource_usage"] = {"cpu_s": 0.01, "max_rss_bytes": 1024}
+    backend.client._write(job_id, meta)
+    result = js.job_status_impl(job_id, 10, backend=backend)
+    usage = result.structured_content["resource_usage"]
+    assert usage == {"cpu_s": 0.01, "max_rss_bytes": 1024, "accounting": "sampled"}
+    assert "Resource usage is sampled." in str(result.content)
 
 
 @_DARWIN

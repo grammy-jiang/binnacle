@@ -29,15 +29,14 @@ LINUX_ONLY = pytest.mark.skipif(
     ),
 )
 
-# R4 J4 (JCR-4): Darwin serves the Linux job_status text plus the disclosure.
+# R4 J4 (STEER-04): Darwin serves the Linux job_status text byte for byte.
 DARWIN_JOB_STATUS_SHA256 = (
-    "f54b3244f0288c97714fb0d441f7b041e51cf1df45c72fe1b691fb2456f2e5a0"
+    "c85835995e1aa52bbc459b0cae1dc8d054e7c47dac1b179a639ab1e84f4945de"
 )
 LINUX_SURFACE = (
     Path(__file__).resolve().parents[2]
     / "docs/os-independent-stage1-evidence/os0-raw-mcp-surface.json"
 )
-DARWIN_COMMAND_TOOLS = ("run_command", "job_status", "stop_job")
 
 PROJECT_RULES = (
     Path(__file__).resolve().parents[2]
@@ -80,11 +79,12 @@ def test_search_text_keeps_grep_equivalence():
 
 
 def linux_equal_part(name: str, text: str) -> str:
-    """Darwin text minus its declared disclosure (JCR-4); Linux text unchanged."""
+    """Darwin text minus its declared disclosure; Linux text unchanged.
+
+    STEER-04 (amended JCR-4): command tools carry no disclosure suffix.
+    """
     if sys.platform == "linux":
         return text
-    from binnacle.features.commands.command_backend import DARWIN_COMMAND_DISCLOSURE
-
     linux = {
         tool["name"]: " ".join(tool["description"].split())
         for tool in json.loads(LINUX_SURFACE.read_text())["profile_surfaces"][
@@ -93,9 +93,7 @@ def linux_equal_part(name: str, text: str) -> str:
     }[name]
     assert text.startswith(linux), name  # the rest equals the Linux text
     suffix = text[len(linux) :].strip()
-    if name in DARWIN_COMMAND_TOOLS:
-        assert suffix == " ".join(DARWIN_COMMAND_DISCLOSURE.split()), name
-    elif name == "search_text":  # J6's declared Darwin size-limit difference
+    if name == "search_text":  # J6's declared Darwin size-limit difference
         assert suffix.startswith("Darwin per-file size limit: 16 MiB"), suffix
     else:
         assert suffix == "", name
@@ -104,7 +102,7 @@ def linux_equal_part(name: str, text: str) -> str:
 
 def test_job_status_keeps_the_only_needed_clause_and_wait_contract():
     full = descriptions()["job_status"]
-    if sys.platform != "linux":  # Linux text plus the disclosure; exact pin
+    if sys.platform != "linux":  # the Linux text exactly; exact pin
         digest = hashlib.sha256(full.encode()).hexdigest()
         assert digest == DARWIN_JOB_STATUS_SHA256
     d = linux_equal_part("job_status", full).lower()

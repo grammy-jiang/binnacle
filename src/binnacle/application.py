@@ -22,6 +22,7 @@ from starlette.responses import JSONResponse
 from binnacle.config import Settings
 from binnacle.features.commands.command_backend import (
     DarwinManagerCommandBackend,
+    ManagerBindings,
     configure_native_command_backend,
     configure_native_release_states,
 )
@@ -59,16 +60,32 @@ from binnacle.platform.contracts.darwin_release_scope import (
     release_scope_for_owner,
     resolve_darwin_job_owner,
 )
-from binnacle.platform.contracts.process_contracts import (
-    JOB_MANAGER_UNAVAILABLE,
-    JobOwnerKind,
-)
+from binnacle.platform.contracts.process_contracts import JobOwnerKind
 
 _COMMAND_TOOLS = ("run_command", "job_status", "stop_job")
 
 configure_native_release_states(
     {tool: DARWIN_RELEASE_SCOPE[tool].capability.state.value for tool in _COMMAND_TOOLS}
 )
+
+
+def manager_bindings() -> ManagerBindings:
+    """Inject the spool store and call context the Commands boundary forbids."""
+    from binnacle.features.commands import job_store
+    from binnacle.features.commands.job_stop import raise_if_partial_signal
+    from binnacle.mcp.callctx import current_call
+    from binnacle.platform.contracts.process_contracts import (
+        JOB_MANAGER_UNAVAILABLE,
+        OWNER_LOST_STOP_REFUSED,
+    )
+
+    return ManagerBindings(
+        store=job_store,
+        call_id=current_call.get,
+        check_partial=raise_if_partial_signal,
+        owner_lost_refusal=OWNER_LOST_STOP_REFUSED,
+        unavailable=JOB_MANAGER_UNAVAILABLE,
+    )
 
 
 def _manager_command_backend(
@@ -85,6 +102,7 @@ def _manager_command_backend(
         warmup_s=settings.jobs.warmup_s,
         max_output_chars=settings.jobs.max_output_chars,
         client=create_job_client(),
+        bindings=manager_bindings(),
     )
 
 
@@ -123,17 +141,21 @@ _DARWIN_INSTRUCTIONS = (
 )
 JOBS_SERVICE_LABEL = "com.binnacle.jobs"
 DARWIN_MANAGER_REQUIREMENT = (
-    f"Command tools need the {JOBS_SERVICE_LABEL} service; without it they fail "
-    f"closed with '{JOB_MANAGER_UNAVAILABLE}' (no embedded fallback)."
+    f"Command tools fail closed without the {JOBS_SERVICE_LABEL} service."
 )
-# JCR-4: the Linux tool map, the macOS host line, and CR0 point 4's service note.
+# JCR-4 as amended (STEER-04): the one disclosure sentence (D-1); command
+# descriptions equal Linux and the rest is disclosed in result text.
+DARWIN_JOBS_DISCLOSURE = (
+    "Jobs survive MCP restarts; if that service is lost, its running jobs show "
+    "as unknown."
+)
+# The Linux tool map, the macOS host line, and CR0 point 4's service note.
 _DARWIN_MANAGER_INSTRUCTIONS = (
     "binnacle: a macOS workstation. Paths live under the configured roots. "
     "list_files (browse or glob), search_text (regex over contents), read_file, "
     "edit_file (exact-string replace), write_file (whole file), run_command "
     "(shell; long commands become jobs for job_status/stop_job). "
-    + DARWIN_MANAGER_REQUIREMENT
-    + " There are no board or sensor hardware tools."
+    f"{DARWIN_MANAGER_REQUIREMENT} {DARWIN_JOBS_DISCLOSURE}"
 )
 
 

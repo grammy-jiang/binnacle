@@ -14,7 +14,6 @@ from binnacle.features.commands import command_status
 from binnacle.features.commands.command_backend import (
     DarwinManagerCommandBackend,
     create_command_backend,
-    darwin_manager_description,
 )
 from binnacle.features.commands.command_contracts import (
     CommandBackend,
@@ -105,6 +104,9 @@ def job_status_impl(
         )
     except CommandFailure as exc:
         raise ToolError(str(exc)) from exc.__cause__
+    if isinstance(backend, DarwinManagerCommandBackend) and job_id is not None:
+        # JCR-4 as amended (STEER-04): disclose D-1/D-2 where they occur.
+        reply = backend.disclose_status(job_id, reply)
     return ToolResult(content=reply.summary, structured_content=reply.payload)
 
 
@@ -127,6 +129,11 @@ def register(
         else None
     )
 
+    @mcp.tool(
+        description=description,
+        annotations={"readOnlyHint": True, "openWorldHint": False},
+        output_schema=OUTPUT_SCHEMA,
+    )
     def job_status(
         job_id: Annotated[
             str | None,
@@ -172,12 +179,3 @@ def register(
             preview_chars=preview_chars,
             wait_max=wait_max,
         )
-
-    if isinstance(backend, DarwinManagerCommandBackend):
-        description = darwin_manager_description(job_status.__doc__)
-    mcp.tool(
-        job_status,
-        description=description,
-        annotations={"readOnlyHint": True, "openWorldHint": False},
-        output_schema=OUTPUT_SCHEMA,
-    )

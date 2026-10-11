@@ -4,6 +4,7 @@ Spec: docs/tools/run_command.md. Shared job machinery: jobs.py.
 """
 
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from functools import wraps
 from typing import Annotated
 
@@ -16,9 +17,9 @@ from binnacle.config import RootsSettings, RunCommandSettings, get_settings
 from binnacle.errors import CodedToolError
 from binnacle.features.commands import command_execution
 from binnacle.features.commands.command_backend import (
+    DESCENDANTS_UNVERIFIED,
     DarwinManagerCommandBackend,
     create_command_backend,
-    darwin_manager_description,
 )
 from binnacle.features.commands.command_contracts import (
     CommandBackend,
@@ -87,6 +88,9 @@ def run_command_impl(
         )
     except CommandFailure as exc:
         raise ToolError(str(exc)) from exc.__cause__
+    if isinstance(backend, DarwinManagerCommandBackend):
+        # Session leaders that leave the job's group are not tracked on macOS.
+        reply = replace(reply, summary=f"{reply.summary} {DESCENDANTS_UNVERIFIED}")
     return ToolResult(content=reply.summary, structured_content=reply.payload)
 
 
@@ -175,8 +179,6 @@ def register(
 
     registered: Callable[..., ToolResult | Awaitable[ToolResult]] = run_command
     description = None
-    if isinstance(backend, DarwinManagerCommandBackend):
-        description = darwin_manager_description(run_command.__doc__)
     if isinstance(backend, RestrictedCommandBackend):
         description = (
             (

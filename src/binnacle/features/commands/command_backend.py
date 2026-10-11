@@ -3,12 +3,15 @@
 import platform
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
+from typing import Any
 
 from binnacle.features.commands.command_contracts import (
     CommandBackend,
     CommandFailure,
+    CommandReply,
     RestrictedCommandBackend,
 )
 
@@ -81,14 +84,11 @@ class DurableCommandBackend:
         return jobs.RUN_MAX_OUTPUT_CHARS
 
 
-# JCR-4: the manager-owned Darwin command descriptions are the Linux text plus
-# exactly these disclosed differences.
-DARWIN_COMMAND_DISCLOSURE = (
-    "macOS differences: "
-    "D-1: jobs of a lost manager are UNKNOWN; never adopted, never exited; "
-    "D-2: CPU/RSS accounting is sampled; membership_closed=false; "
-    "descendants_unverified=true: new sessions/process groups are not tracked."
-)
+# JCR-4 as amended (STEER-04): descriptions equal Linux byte for byte; the
+# disclosed differences appear in the result text where they occur. The
+# release table keeps the machine-readable disclosures.
+DESCENDANTS_UNVERIFIED = "descendants_unverified=true."
+RESOURCES_SAMPLED = "sampled"
 DARWIN_OWNER_LOST_NOTE = "owner lost; process not tracked"
 DARWIN_MANAGER_REVIEW_PENDING = (
     "native_capability_unavailable: Darwin manager-owned commands await their "
@@ -99,11 +99,19 @@ _COMMAND_TOOLS = ("run_command", "job_status", "stop_job")
 EXIT_RECORD_GRACE_S = 2.0
 
 
-def darwin_manager_description(docstring: str | None) -> str:
-    """The Linux tool docstring, unchanged, followed by the disclosure text."""
-    from inspect import cleandoc
+@dataclass(frozen=True)
+class ManagerBindings:
+    """Spool, call-context and refusal seams injected by the composition root.
 
-    return cleandoc(docstring or "") + "\n\n" + DARWIN_COMMAND_DISCLOSURE
+    The frozen Commands boundary keeps this module's imports narrow, so the
+    manager backend receives them instead of importing them (STEER-05).
+    """
+
+    store: Any  # job_store-shaped: read_meta, read_log, read_log_range, list_job_ids
+    call_id: Callable[[], str]
+    check_partial: Callable[[dict], None]
+    owner_lost_refusal: str
+    unavailable: str
 
 
 class DarwinManagerCommandBackend:
@@ -127,6 +135,7 @@ class DarwinManagerCommandBackend:
         warmup_s: float,
         max_output_chars: int,
         client,
+        bindings: ManagerBindings,
     ) -> None:
         self.jobs_dir = Path(jobs_dir)
         # A resolver runs per call, so startup never depends on the runtime dir.
@@ -136,6 +145,7 @@ class DarwinManagerCommandBackend:
         self.max_output_chars = max_output_chars
         # composition.create_job_client(): features never import platform.darwin.
         self.client = client
+        self.bindings = bindings
 
     @property
     def socket_path(self) -> Path:
@@ -144,12 +154,8 @@ class DarwinManagerCommandBackend:
         try:
             return self._socket_path()
         except (OSError, RuntimeError) as exc:
-            from binnacle.platform.contracts.process_contracts import (
-                JOB_MANAGER_UNAVAILABLE,
-            )
-
             code = getattr(exc, "code", type(exc).__name__)
-            raise CommandFailure(f"{JOB_MANAGER_UNAVAILABLE}: {code}") from exc
+            raise CommandFailure(f"{self.bindings.unavailable}: {code}") from exc
 
     def require_available(self) -> None:
         # Committed rows, never reachability, decide availability (JCR-2).
@@ -159,15 +165,13 @@ class DarwinManagerCommandBackend:
     def start_and_wait(
         self, command: str, workdir: Path, stdin: str | None, wait_seconds: float
     ) -> str:
-        from binnacle.mcp.callctx import current_call
-
         response = self.client.start(
             self.socket_path,
             command=command,
             workdir=workdir,
             stdin=stdin,
             wait_seconds=wait_seconds,
-            call_id=current_call.get(),
+            call_id=self.bindings.call_id(),
         )
         job_id = str(response["job_id"])
         if response.get("state") != "running":
@@ -177,27 +181,19 @@ class DarwinManagerCommandBackend:
         return job_id
 
     def _meta(self, job_id: str) -> dict | None:
-        from binnacle.features.commands import job_store
-
-        return job_store.read_meta(self.jobs_dir, job_id)
+        return self.bindings.store.read_meta(self.jobs_dir, job_id)
 
     def stop_job(self, job_id: str) -> dict | None:
-        from binnacle.features.commands.job_stop import raise_if_partial_signal
-        from binnacle.mcp.callctx import current_call
-        from binnacle.platform.contracts.process_contracts import (
-            OWNER_LOST_STOP_REFUSED,
-        )
-
         meta = self._meta(job_id)
         if meta is None:
             return None
         if meta.get("authority") == "UNKNOWN":
-            raise CommandFailure(OWNER_LOST_STOP_REFUSED)
-        raise_if_partial_signal(meta)
+            raise CommandFailure(self.bindings.owner_lost_refusal)
+        self.bindings.check_partial(meta)
         state = self.job_state(job_id)
         if state is None or state["state"] != "running":
             return state
-        self.client.stop(self.socket_path, job_id, call_id=current_call.get())
+        self.client.stop(self.socket_path, job_id, call_id=self.bindings.call_id())
         return self.job_state(job_id)
 
     def job_state(self, job_id: str) -> dict | None:
@@ -249,9 +245,7 @@ class DarwinManagerCommandBackend:
         return result
 
     def list_jobs(self) -> list[dict]:
-        from binnacle.features.commands import job_store
-
-        ids = job_store.list_job_ids(self.jobs_dir)
+        ids = self.bindings.store.list_job_ids(self.jobs_dir)
         states = [s for jid in ids if (s := self.job_state(jid)) is not None]
         states.sort(key=lambda s: s["started_at"], reverse=True)
         return states
@@ -267,20 +261,30 @@ class DarwinManagerCommandBackend:
             time.sleep(0.05)
 
     def read_log(self, job_id: str) -> bytes:
-        from binnacle.features.commands import job_store
-
-        return job_store.read_log(self.jobs_dir, job_id)
+        return self.bindings.store.read_log(self.jobs_dir, job_id)
 
     def read_log_range(
         self, job_id: str, start: int, max_bytes: int
     ) -> tuple[bytes, int]:
-        from binnacle.features.commands import job_store
-
-        return job_store.read_log_range(self.jobs_dir, job_id, start, max_bytes)
+        store = self.bindings.store
+        return store.read_log_range(self.jobs_dir, job_id, start, max_bytes)
 
     def job_processes(self, job_id: str, max_cmd_chars: int = 200) -> list[dict]:
         # No process authority in the MCP server; never inspect a pid from disk.
         return []
+
+    def disclose_status(self, job_id: str, reply: CommandReply) -> CommandReply:
+        """Add D-1 (owner lost) and D-2 (sampled resources) where they occur."""
+        state = self.job_state(job_id)
+        if state is None:
+            return reply
+        summary, payload = reply.summary, dict(reply.payload)
+        if note := state.get("note"):
+            summary, payload["note"] = f"{summary} {note}.", note
+        if isinstance(resources := state.get("resource_usage"), dict):
+            payload["resource_usage"] = {**resources, "accounting": RESOURCES_SAMPLED}
+            summary = f"{summary} Resource usage is {RESOURCES_SAMPLED}."
+        return CommandReply(summary, payload)
 
 
 _native_release_states: dict[str, str] | None = None
