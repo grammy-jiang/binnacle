@@ -117,12 +117,19 @@ def test_job_status_timing_receives_call_start_across_thread_hop(caplog, monkeyp
 def test_job_lines_carry_the_call_id_and_the_outcome(caplog, tmp_path):
     with caplog.at_level("INFO"):
         _run(("run_command", {"command": "printf hi", "workdir": str(tmp_path)}))
-    call = _fields(_messages(caplog, "tool_call")[0])
-    result = _fields(_messages(caplog, "tool_result")[0])
-    starts = _messages(caplog, "job_start")
-    exits = _messages(caplog, "job_exit")
+
+    def lines(event, key, value):
+        # Per-test isolation: an earlier test's job thread (e.g. a stopped
+        # background job) may still log into this capture; keep only ours.
+        fields = map(_fields, _messages(caplog, event))
+        return [f for f in fields if f.get(key) == value]
+
+    (result,) = lines("tool_result", "tool", "run_command")
+    (call,) = lines("tool_call", "call", result["call"])
+    starts = lines("job_start", "job_id", result["job_id"])
+    exits = lines("job_exit", "job_id", result["job_id"])
     assert len(starts) == 1 and len(exits) == 1
-    start, exit_ = _fields(starts[0]), _fields(exits[0])
+    start, exit_ = starts[0], exits[0]
     # the ContextVar crossed fastmcp's thread hop for the sync tool
     assert start["call"] == call["call"]
     assert start["job_id"] == exit_["job_id"] == result["job_id"]
