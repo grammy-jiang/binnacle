@@ -3,11 +3,12 @@
 One writer per service directory (an advisory ``flock``) owns a manifest of
 stream epochs. Each start, rotation or crash recovery issues a new random
 epoch with its own 0600 file whose header names the epoch; files are never
-truncated or reused. Records are redacted and sanitized *before* they reach
-disk. Readers address bytes by generation, epoch, device/inode and offset,
-bound every read by bytes and lines, and report crash or pruning
-discontinuities as a gap; ``read_window`` raises ``ServiceLogError`` instead
-of returning text whose completeness it cannot establish. Missing records never
+truncated or reused. Records are sanitized and fail-closed redacted *before*
+they reach disk; ``write_event`` is the allowlisted structured path. Readers
+address bytes by generation, epoch, device/inode and offset, bound every read
+by bytes and lines, and report crash, pruning and a newest epoch whose writer
+is gone as a gap; ``read_window`` raises ``ServiceLogError`` instead of
+returning text whose completeness it cannot establish. Missing records never
 prove that an event did not happen. Same-UID privacy only: a malicious process
 of the same account can still read or replace these files.
 """
@@ -32,7 +33,6 @@ from binnacle.platform.contracts.capability_contracts import (
     NativeCapabilityError,
 )
 from binnacle.platform.contracts.metric_log_contracts import LogBatch, LogCursor
-from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from binnacle.platform.darwin.log_cursor import (
     CLEAN_ENDS,
     HEADER_LEN,
@@ -46,15 +46,18 @@ from binnacle.platform.darwin.log_cursor import (
     check_budget,
     check_private_directory,
     check_private_file,
+    crashed_at,
     epoch_header,
     expired,
     finite_number,
     load_manifest,
-    lstat_or_none,
+    mark_crashed,
     open_epoch,
     save_manifest,
     service_directory,
+    service_error,
     validate_cursor,
+    window_records,
     writer_active,
 )
 
@@ -64,27 +67,72 @@ WINDOW_MAX_BYTES = 8 << 20
 WINDOW_MAX_LINES = 100_000
 MAX_RECORD_BYTES = 16 << 10
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+# Fail-closed redaction. Records are sanitized to one physical line first, so a
+# "rest of the record" match can never stop at an embedded newline. Each rule
+# over-redacts rather than guess the arity or quoting of an unknown format;
+# B0 should still route only allowlisted telemetry (``write_event``) here.
+_SENSITIVE = r"(?:pass|pwd|secret|token|key|auth|cred|cookie|session|sid|signature|stdin|private|otp|bearer)"
+# Names start only at a word boundary, are tested for a sensitive part by a
+# lookahead confined to that word and then taken atomically (lookahead plus
+# backreference, as Python 3.10 has no possessive quantifier), so each rule
+# scans a word once and stays linear in the record length.
+_WORD = r"(?=(?P<word>[\w-]+))(?P=word)"
 _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(-----END [A-Z ]*PRIVATE KEY-----|$)", re.DOTALL), REDACTED),
-    (re.compile(r"(?i)\b(authorization|proxy-authorization)(\s*[:=]\s*)\S+(\s+[A-Za-z0-9._~+/=-]+)?"), rf"\1\2{REDACTED}"),
-    (re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+"), f"Bearer {REDACTED}"),
-    (re.compile(r"(?i)\b([A-Za-z0-9_]*(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential)s?)(\"?\s*[:=]\s*)(\"[^\"]*\"|'[^']*'|\S+)"), rf"\1\2{REDACTED}"),
-    (re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@"), rf"\1{REDACTED}@"),
-    (re.compile(r"\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}"), REDACTED),
-    (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"), REDACTED),
-    (re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}"), REDACTED),
-    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), REDACTED),
+    # PEM blocks of any kind, to the END marker or the end of the record.
+    (re.compile(r"-----BEGIN[^-]*-----.*?(?:-----END[^-]*-----|$)"), REDACTED),
+    # Vendor token shapes: OpenAI/Stripe, GitHub, GitLab, Slack, AWS, Google, JWT.
+    (re.compile(r"\b(?:sk|pk|rk)[-_][A-Za-z0-9_-]{16,}"), REDACTED),
+    (re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,})"), REDACTED),
+    (re.compile(r"\bxox[abeprs]-[A-Za-z0-9-]{10,}"), REDACTED),
+    (re.compile(r"\b(?:AKIA|ASIA|AIDA|AROA)[0-9A-Z]{16}\b"), REDACTED),
+    (re.compile(r"\bAIza[0-9A-Za-z_-]{30,}"), REDACTED),
+    (re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*"), REDACTED),
+    # Credential-bearing headers lose the rest of the record.
+    (re.compile(rf"(?i)(?<![\w-])((?:proxy-)?authorization|(?:set-)?cookie|x-(?=[\w-]*?{_SENSITIVE}){_WORD})(?P<sep>\s*:\s*).*"), rf"\1\g<sep>{REDACTED}"),
+    # Any URL userinfo, with or without a password.
+    (re.compile(r"(?i)(?<![a-z0-9+.-])([a-z][a-z0-9+.-]{0,31}://)[^/\s@]+@"), rf"\1{REDACTED}@"),
+    (re.compile(r"(?i)\b(bearer|basic|digest|negotiate)\s+[A-Za-z0-9._~+/=-]+"), rf"\1 {REDACTED}"),
+    # Argv credential flags (--password X, -pX, -u user pass, -H header, repr
+    # lists): an unknown CLI's arity is unknowable, so the rest is redacted.
+    (re.compile(rf"(?i)(?<![\w-])(--?(?=[a-z0-9])(?=[\w-]*?(?:{_SENSITIVE}|user|login|header)){_WORD})(\S*\s*\S.*)"), rf"\1{REDACTED}"),
+    (re.compile(r"(?<![\w-])(-[pPuH])(\s*\S.*)"), rf"\1{REDACTED}"),
+    # key=value / key: value / "key": "value" (env, query, JSON, repr).
+    (re.compile(rf"""(?i)(?<![\w.-])(["']?(?=[\w.-]*?{_SENSITIVE})(?=(?P<key>[\w.-]+))(?P=key)["']?)(?P<sep>\s*[:=]\s*)(?!\[redacted\])("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s,;&}}\]]+)"""), rf"\1\g<sep>{REDACTED}"),
+    # Prose such as "auth failed for secret X" or "token X".
+    (re.compile(r"(?i)\b(pass(?:word|wd|phrase)|secret|token|credentials?|api[ _-]?key)(\s+)(?!\[redacted\])\S+"), rf"\1\2{REDACTED}"),
 )  # fmt: skip
+_CANDIDATE = re.compile(r"[A-Za-z0-9_+/=~-]{20,}")
+
+
+def _entropy(token: str) -> float:
+    counts = [token.count(char) for char in set(token)]
+    return -sum(n / len(token) * math.log2(n / len(token)) for n in counts)
+
+
+def _high_entropy(match: re.Match[str]) -> str:
+    """Long random-looking tokens are redacted whatever their label."""
+
+    token = match.group()
+    mixed = any(c.isdigit() for c in token) and any(c.isalpha() for c in token)
+    bits = _entropy(token)
+    if (mixed and bits >= 3.0) or (len(token) >= 32 and bits >= 3.5):
+        return REDACTED
+    return token
 
 
 def redact_log_text(text: str, values: Iterable[str] = ()) -> str:
-    """Remove known credentials and registered literal secrets from one record."""
+    """Sanitize to one line, then fail-closed redact credentials and literals.
 
-    for value in sorted({v for v in values if v}, key=len, reverse=True):
-        text = text.replace(value, REDACTED)
+    Registered literals match case-insensitively in raw and sanitized form.
+    """
+
+    literals = {v for value in values if value for v in (value, _sanitize(value))}
+    text = _sanitize(text)
+    for value in sorted(literals, key=len, reverse=True):
+        text = re.sub(re.escape(value), REDACTED, text, flags=re.IGNORECASE)
     for pattern, replacement in _PATTERNS:
         text = pattern.sub(replacement, text)
-    return text
+    return _CANDIDATE.sub(_high_entropy, text)
 
 
 def _sanitize(text: str) -> str:
@@ -94,8 +142,19 @@ def _sanitize(text: str) -> str:
     return _CONTROL.sub(lambda m: f"\\x{ord(m.group()):02x}", text)
 
 
-def _service_error(reason: str) -> ServiceLogError:
-    return ServiceLogError(f"private service log unavailable: {reason}")
+_SAFE_SCALAR = re.compile(r"[A-Za-z0-9_.:/-]{0,64}")
+
+
+def _event_value(value: object) -> str:
+    """Render one allowlisted scalar; anything else is never persisted."""
+
+    if value is None or isinstance(value, bool):
+        return {None: "null", True: "true", False: "false"}[value]
+    if isinstance(value, int) or (isinstance(value, float) and math.isfinite(value)):
+        return repr(value)
+    if isinstance(value, str) and _SAFE_SCALAR.fullmatch(value):
+        return value
+    return REDACTED
 
 
 class PrivateServiceLogWriter:
@@ -116,7 +175,7 @@ class PrivateServiceLogWriter:
         clock: Callable[[], float] = time.time,
     ) -> None:
         if not IDENTIFIER.fullmatch(generation) or not IDENTIFIER.fullmatch(service):
-            raise _service_error("identifier_invalid")
+            raise service_error("identifier_invalid")
         if max_epoch_bytes <= HEADER_LEN + MAX_RECORD_BYTES or retain_epochs < 1:
             raise ValueError("log writer budget too small")
         self._root, self._generation, self._service = root, generation, service
@@ -132,9 +191,7 @@ class PrivateServiceLogWriter:
 
     @property
     def epoch(self) -> str | None:
-        if self._fd is None:
-            return None
-        return self._manifest.entries[-1].epoch
+        return None if self._fd is None else self._manifest.entries[-1].epoch
 
     def _mkdir_private(self, path: Path) -> None:
         with contextlib.suppress(FileExistsError):
@@ -153,7 +210,7 @@ class PrivateServiceLogWriter:
                 except BlockingIOError:
                     time.sleep(0.01)
             else:
-                raise _service_error("writer_already_active")
+                raise service_error("writer_already_active")
         except BaseException:
             os.close(fd)
             raise
@@ -161,40 +218,18 @@ class PrivateServiceLogWriter:
 
     def start(self) -> None:
         if self._lock_fd is not None:
-            raise _service_error("writer_already_started")
+            raise service_error("writer_already_started")
         self._mkdir_private(self._root)
         self._mkdir_private(self._dir)
         self._lock()
         try:
             loaded = load_manifest(self._dir, self._service)
             self._manifest = loaded or Manifest(self._service, (), None)
-            self._mark_crashed()
+            self._manifest = mark_crashed(self._dir, self._manifest)
             self._open_new_epoch()
         except BaseException:
             self._release()
             raise
-
-    def _mark_crashed(self) -> None:
-        """Earlier writers that never closed cleanly end in a crash gap."""
-
-        entries = []
-        for entry in self._manifest.entries:
-            if entry.end == "open":
-                info = lstat_or_none(self._dir / entry.file_name)
-                if info is not None and (info.st_dev, info.st_ino) == (
-                    entry.device,
-                    entry.inode,
-                ):
-                    entry = replace(
-                        entry,
-                        end="crashed",
-                        final_size=info.st_size,
-                        last_at=info.st_mtime,
-                    )
-                else:  # missing or replaced: its records are lost coverage
-                    entry = replace(entry, end="crashed", pruned=True)
-            entries.append(entry)
-        self._manifest = replace(self._manifest, entries=tuple(entries))
 
     def _open_new_epoch(self) -> None:
         epoch = secrets.token_hex(16)
@@ -240,7 +275,7 @@ class PrivateServiceLogWriter:
 
     def _active_fd(self) -> int:
         if self._fd is None:
-            raise _service_error("writer_not_active")
+            raise service_error("writer_not_active")
         return self._fd
 
     def _finish_epoch(self, end: str) -> None:
@@ -248,25 +283,28 @@ class PrivateServiceLogWriter:
         os.fsync(fd)
         os.close(fd)
         self._fd = None
-        current = replace(
-            self._manifest.entries[-1],
-            end=end,
-            final_size=self._size,
-            last_at=self._last_at,
-        )
-        self._manifest = replace(
-            self._manifest, entries=(*self._manifest.entries[:-1], current)
-        )
+        entries = self._manifest.entries
+        current = replace(entries[-1], end=end, final_size=self._size, last_at=self._last_at)  # fmt: skip
+        self._manifest = replace(self._manifest, entries=(*entries[:-1], current))
 
     def rotate(self) -> None:
         self._finish_epoch("rotated")
         self._open_new_epoch()
 
+    def write_event(self, event: str, **fields: object) -> None:
+        """Structured telemetry: identifier names, allowlisted scalars only."""
+
+        names = (event, *fields)
+        if not all(isinstance(n, str) and IDENTIFIER.fullmatch(n) for n in names):
+            raise ValueError("log event and field names must be identifiers")
+        parts = [f"{name}={_event_value(value)}" for name, value in fields.items()]
+        self.write(" ".join((event, *parts)))
+
     def write(self, message: str) -> None:
-        """Redact, sanitize and append one bounded record."""
+        """Sanitize, redact and append one bounded record."""
 
         self._active_fd()
-        text = _sanitize(redact_log_text(str(message), self._secrets))
+        text = redact_log_text(str(message), self._secrets)
         now = self._clock()
         record = f"{now:.6f} {text}".encode()
         if len(record) >= MAX_RECORD_BYTES:
@@ -311,7 +349,7 @@ class PrivateServiceLogSource:
 
     def __init__(self, *, root: Path, generation: str) -> None:
         if not isinstance(generation, str) or not IDENTIFIER.fullmatch(generation):
-            raise _service_error("identifier_invalid")
+            raise service_error("identifier_invalid")
         self._root = root
         self._generation = generation
 
@@ -362,13 +400,9 @@ class PrivateServiceLogSource:
             with open_epoch(service_dir, entry) as (fd, size):
                 if cursor is not None and entry.epoch == cursor.stream_epoch:
                     validate_cursor(
-                        cursor,
-                        generation=self._generation,
-                        epoch=entry.epoch,
-                        device=entry.device,
-                        inode=entry.inode,
-                        size=size,
-                    )
+                        cursor, generation=self._generation, epoch=entry.epoch,
+                        device=entry.device, inode=entry.inode, size=size,
+                    )  # fmt: skip
                 if offset < HEADER_LEN:
                     raise expired("offset_inside_header")
                 finished = entry.end != "open" or not active
@@ -379,11 +413,17 @@ class PrivateServiceLogSource:
                 data, truncated = bounded_read(
                     fd, offset, size, max_bytes, max_lines, whole=finished
                 )
-            state, reason = (
-                (CapabilityState.UNKNOWN, "log_gap_coverage_unknown")
-                if gap
-                else (CapabilityState.LIMITED, "bounded_private_log_read")
-            )
+            # The stream's newest epoch ended without a clean seal (its writer
+            # crashed or exited without close): at EOF nothing proves that no
+            # later events were lost, so an empty batch is never "no news".
+            lost = entry.end == "crashed" or (entry.end == "open" and not active)
+            if last and lost and offset + len(data) == size:
+                gap, reason = True, "log_writer_not_active_coverage_unknown"
+            elif gap:
+                reason = "log_gap_coverage_unknown"
+            else:
+                reason = "bounded_private_log_read"
+            state = CapabilityState.UNKNOWN if gap else CapabilityState.LIMITED
             next_cursor = LogCursor(
                 self._generation, entry.epoch, entry.device, entry.inode,
                 offset + len(data),
@@ -400,85 +440,53 @@ class PrivateServiceLogSource:
         """Bounded semantic epoch window; raise unless coverage is established."""
 
         if isinstance(services, str) or not services:
-            raise _service_error("services_required")
+            raise service_error("services_required")
         if not finite_number(since_epoch) or not finite_number(
             until_epoch, nullable=True
         ):
-            raise _service_error("window_invalid")
-        low = int(since_epoch)
-        high = math.inf if until_epoch is None else int(until_epoch) + 1
+            raise service_error("window_invalid")
+        # Exact float bounds, both inclusive: records carry microsecond stamps.
+        low = float(since_epoch)
+        high = math.inf if until_epoch is None else float(until_epoch)
         budget = [WINDOW_MAX_BYTES, WINDOW_MAX_LINES]
         records: list[tuple[float, bytes]] = []
         try:
             for service in services:
                 records += self._window(service, since_epoch, low, high, budget)
         except NativeCapabilityError as exc:
-            raise _service_error(exc.capability.reason_code) from None
+            raise service_error(exc.capability.reason_code) from None
         except OSError:
-            raise _service_error("io_error") from None
+            raise service_error("io_error") from None
         records.sort(key=lambda item: item[0])
         return "".join(text.decode("utf-8", "replace") + "\n" for _, text in records)
 
     def _window(
-        self, service: str, since: float, low: int, high: float, budget: list[int]
+        self, service: str, since: float, low: float, high: float, budget: list[int]
     ) -> list[tuple[float, bytes]]:
         service_dir, manifest, own = self._own(service)
         lost = manifest.coverage_lost_before
         if since < own[0].started_at or (lost is not None and since <= lost):
-            raise _service_error("window_precedes_coverage")
+            raise service_error("window_precedes_coverage")
         active = writer_active(service_dir)
         found: list[tuple[float, bytes]] = []
         for index, entry in enumerate(own):
             following = own[index + 1].started_at if index + 1 < len(own) else math.inf
             crashed = entry.end == "crashed" or (entry.end == "open" and not active)
             # Records stop at a crash; the outage until the next epoch is uncovered.
-            if crashed and _crashed_at(service_dir, entry) < high and following >= low:
-                raise _service_error("window_overlaps_crash_gap")
-            if entry.end == "open":
-                span_end = following
-            else:
-                span_end = entry.last_at if entry.last_at is not None else 0.0
-            if not (entry.started_at < high and max(span_end, entry.started_at) >= low):
+            # That epoch's file exists before its start is stamped, so the open
+            # interval (crashed_at, following) is exactly what is lost.
+            if crashed and crashed_at(service_dir, entry) < high and following > low:
+                raise service_error("window_overlaps_crash_gap")
+            sealed_at = entry.last_at if entry.last_at is not None else 0.0
+            span_end = following if entry.end == "open" else sealed_at
+            if entry.started_at > high or max(span_end, entry.started_at) < low:
                 continue
             if entry.pruned:
-                raise _service_error("window_overlaps_pruned_epoch")
+                raise service_error("window_overlaps_pruned_epoch")
             with open_epoch(service_dir, entry) as (fd, size):
                 if size - HEADER_LEN > budget[0]:
-                    raise _service_error("window_exceeds_read_budget")
+                    raise service_error("window_exceeds_read_budget")
                 budget[0] -= size - HEADER_LEN
                 data = os.pread(fd, size - HEADER_LEN, HEADER_LEN)
-            found += _window_records(data, low, high, budget, whole=entry.end != "open")
+            found += window_records(data, low, high, budget, whole=entry.end != "open")
         return found
-
-
-def _crashed_at(service_dir: Path, entry: EpochEntry) -> float:
-    """Last write of a crashed epoch; its start when that is unobservable."""
-
-    if entry.end == "crashed" and entry.last_at is not None:
-        return entry.last_at
-    info = lstat_or_none(service_dir / entry.file_name)
-    return entry.started_at if info is None else info.st_mtime
-
-
-def _window_records(
-    data: bytes, low: int, high: float, budget: list[int], *, whole: bool
-) -> list[tuple[float, bytes]]:
-    lines = data.split(b"\n")
-    tail = lines.pop()
-    if tail and whole:
-        lines.append(tail)
-    budget[1] -= len(lines)
-    if budget[1] < 0:
-        raise _service_error("window_exceeds_read_budget")
-    found = []
-    for line in lines:
-        stamp, sep, text = line.partition(b" ")
-        try:
-            at = float(stamp)
-        except ValueError:
-            raise _service_error("record_malformed") from None
-        if not sep or not math.isfinite(at):
-            raise _service_error("record_malformed")
-        if low <= at < high:
-            found.append((at, text))
-    return found

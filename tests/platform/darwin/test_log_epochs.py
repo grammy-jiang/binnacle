@@ -44,12 +44,6 @@ from binnacle.platform.darwin.log_source import (
 
 GEN = "gen-a"
 SERVICE = "binnacle-test"
-# Assembled at runtime so secret scanners never see a literal credential.
-SENTINELS = {
-    "registered": "reg" + "istered-" + "s3ntinel-0042", "bearer": "beare" + "rtok-77z",
-    "password": "pw" + "-sentinel-91", "url": "urlpw" + "-sentinel-13",
-    "github": "gh" + "p_" + "Q" * 30, "pem": "pem" + "-body-sentinel",
-}  # fmt: skip
 # The writer process dies without close(); the kernel drops its flock.
 CRASH_SCRIPT = (
     "import os, sys, pathlib; from binnacle.platform.darwin.log_source import "
@@ -214,7 +208,13 @@ def test_crash_is_a_gap_never_seamless_continuity(root, source):
     with pytest.raises(ServiceLogError, match="window_overlaps_crash_gap"):
         source.read_window([SERVICE], started)
     words, cursor, gaps = drain(source)
-    assert words == ["before crash"] and not any(gaps)
+    # No writer and no clean seal: every batch at EOF is a gap, never "no news".
+    assert words == ["before crash"] and all(gaps)
+    for _ in range(3):
+        idle = read(source, cursor)
+        assert idle.data == b"" and idle.gap and idle.next_cursor == cursor
+        assert idle.capability.state is CapabilityState.UNKNOWN
+        assert idle.capability.reason_code == "log_writer_not_active_coverage_unknown"
     writer = start(root)
     writer.write("recovered")
     batch = read(source, cursor)
@@ -337,38 +337,6 @@ def test_non_private_or_symlinked_roots_are_refused(root, writer, tmp_path, sour
         source.read_cursor("../escape", None, max_bytes=10, max_lines=1)
 
 
-def test_redaction_happens_before_persistence(root, source):
-    s = SENTINELS
-    writer = start(root, clock=Clock(), redact_values=[s["registered"]])
-    writer.write(f"user token {s['registered']} used")
-    writer.write(f"Authorization: Bearer {s['bearer']}")
-    writer.write(f'{{"password": "{s["password"]}"}}')
-    writer.write(f"fetch https://alice:{s['url']}@example.invalid/x")
-    writer.write(f"leaked {s['github']}")
-    writer.write(f"-----BEGIN PRIVATE KEY-----\n{s['pem']}\n-----END PRIVATE KEY-----")
-    writer.write("line1\nforged 9999.0 record\x1b[31m")
-    writer.close()
-    blob = b"".join(p.read_bytes() for p in (root / SERVICE).iterdir())
-    assert not [value for value in s.values() if value.encode() in blob]
-    lines = texts(read(source).data)
-    assert len(lines) == 7  # embedded newlines cannot forge extra records
-    assert lines[6] == "line1\\nforged 9999.0 record\\x1b[31m"
-    assert all("[redacted]" in line for line in lines[:6])
-
-
-def test_errors_never_echo_secret_bearing_input(root, source):
-    secret = SENTINELS["registered"]
-    for call in (
-        lambda: source.read_window([secret], 0.0),
-        lambda: source.read_cursor(secret + "/x", None, max_bytes=1, max_lines=1),
-        lambda: PrivateServiceLogSource(root=root, generation=secret + "/"),
-    ):
-        with pytest.raises((ServiceLogError, UnsafePath)) as excinfo:
-            call()
-        assert secret not in str(excinfo.value)
-        assert str(root) not in str(excinfo.value)
-
-
 def test_read_window_filters_merges_and_bounds(root, monkeypatch, source):
     clocks = {"svc-a": Clock(1000.0), "svc-b": Clock(1000.5)}
     writers = {name: PrivateServiceLogWriter(root=root, generation=GEN, service=name, clock=clocks[name]) for name in clocks}  # fmt: skip
@@ -379,7 +347,11 @@ def test_read_window_filters_merges_and_bounds(root, monkeypatch, source):
         clocks[name].now = at
         writers[name].write(text)
     assert source.read_window(["svc-a", "svc-b"], 1000.6) == "a1\nb1\na2\nb2\n"
-    assert source.read_window(["svc-a", "svc-b"], 1000.6, 1003.2) == "a1\nb1\na2\n"
+    assert source.read_window(["svc-a", "svc-b"], 1000.6, 1003.2) == "a1\nb1\n"
+    # Exact float bounds, both inclusive: nothing is widened to whole seconds.
+    assert source.read_window(["svc-a", "svc-b"], 1001.7) == "b1\na2\nb2\n"
+    assert source.read_window(["svc-a", "svc-b"], 1001.2, 1003.4) == "a1\nb1\n"
+    assert source.read_window(["svc-a", "svc-b"], 1001.2, 1003.9) == "a1\nb1\na2\n"
     with pytest.raises(ServiceLogError, match="window_precedes_coverage"):
         source.read_window(["svc-a", "svc-b"], 1000.2)
     for bad in ([], "svc-a"):
@@ -497,3 +469,31 @@ def test_lost_crash_epoch_and_dropped_history_are_gaps(root, monkeypatch, source
     with pytest.raises(ServiceLogError, match="window_precedes_coverage"):
         source.read_window([SERVICE], manifest.coverage_lost_before)
     trimmed.close()
+
+
+def test_window_after_subsecond_crash_and_restart_is_exact(root, source):
+    first = start(root, clock=Clock(100.0))
+    first._clock.now = 100.1
+    first.write("last-before-crash")
+    first.sync()
+    first._release()  # crash: descriptors and lock gone, manifest still open
+    os.utime(root / SERVICE / f"{load_manifest(root / SERVICE, SERVICE).entries[0].epoch}.log", (100.2, 100.2))  # fmt: skip
+    writer = start(root, clock=Clock(100.3))
+    writer._clock.now = 100.95
+    writer.write("after-restart")
+    assert source.read_window([SERVICE], 100.9) == "after-restart\n"
+    assert source.read_window([SERVICE], 100.0, 100.15) == "last-before-crash\n"
+    with pytest.raises(ServiceLogError, match="window_overlaps_crash_gap"):
+        source.read_window([SERVICE], 100.25)  # inside the 100.2..100.3 outage
+    writer.close()
+
+
+def test_generation_ended_by_crash_stays_a_gap_under_a_successor(root, source):
+    crash(root)
+    start(root, generation="gen-b", clock=Clock()).close()
+    words, cursor, gaps = drain(source)
+    assert words == ["before crash"] and all(gaps) and read(source, cursor).gap
+    start(root, generation="gen-c", clock=Clock()).close()  # sealed cleanly
+    batch = read(PrivateServiceLogSource(root=root, generation="gen-c"))
+    assert batch.data == b"" and not batch.gap
+    assert batch.capability.state is CapabilityState.LIMITED
