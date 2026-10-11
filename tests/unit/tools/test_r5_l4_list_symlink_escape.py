@@ -88,11 +88,11 @@ def test_in_root_links_are_listed_unchanged(tree):
     (root / "dlink").symlink_to("d", target_is_directory=True)
     (root / "abs_flink").symlink_to(root / "hello.txt")
     (root / "cross_root").symlink_to(other / "o.txt")
+    # SD-60 (R-L4-F2, L4b): absolute link text is omitted as on Darwin
+    # (file_access.py link_target_info), even when it resolves in a root.
     assert typed(tree) == {
         "d": ("dir", None),
         "dlink": ("dir", None),
-        "abs_flink": ("file", 6),
-        "cross_root": ("file", 7),
         "flink": ("file", 6),
         "hello.txt": ("file", 6),
     }
@@ -137,9 +137,15 @@ def test_default_roots_also_omit_an_escaping_link(tmp_path):
     assert [Path(e["path"]).name for e in payload["entries"]] == ["keep.txt"]
 
 
-def test_unknown_link_state_falls_back_to_file_entry(monkeypatch, tmp_path):
-    def unreadable(self):
-        raise PermissionError("lstat denied")
+def test_unknown_entry_state_is_omitted_as_on_darwin(monkeypatch, tmp_path):
+    # SD-60 (R-L4-F4, L4b): an entry whose lstat fails is omitted, as the
+    # Darwin walk omits EACCES/EPERM/ENOENT entries (file_traversal.py walk).
+    real_lstat = lf.os.lstat
 
-    monkeypatch.setattr(Path, "is_symlink", unreadable)
-    assert lf._link_escapes(tmp_path, (tmp_path,)) is False
+    def unreadable(path, *args, **kwargs):
+        if Path(path).name == "denied":
+            raise PermissionError("lstat denied")
+        return real_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(lf.os, "lstat", unreadable)
+    assert lf._list_entry(tmp_path / "denied", (tmp_path,)) is None
