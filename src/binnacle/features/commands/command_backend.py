@@ -76,6 +76,17 @@ class DurableCommandBackend:
 
 def create_command_backend() -> CommandBackend:
     """Capture engine settings at default selection, before accepting requests."""
+    from binnacle.platform.composition import host_os_family
+
+    if host_os_family() == "darwin":
+        from binnacle.features.commands.restricted_backend import (
+            RestrictedCommandBackend,
+        )
+        from binnacle.platform.composition import create_foreground_execution
+
+        return RestrictedCommandBackend(
+            foreground_execution=create_foreground_execution()
+        )
     import_module("binnacle.features.commands.jobs")
     import_module("binnacle.features.commands.job_owner")
     return DurableCommandBackend()

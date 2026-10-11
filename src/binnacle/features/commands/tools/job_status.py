@@ -12,7 +12,11 @@ from pydantic import Field
 from binnacle.config import get_settings
 from binnacle.features.commands import command_status
 from binnacle.features.commands.command_backend import create_command_backend
-from binnacle.features.commands.command_contracts import CommandBackend, CommandFailure
+from binnacle.features.commands.command_contracts import (
+    CommandBackend,
+    CommandFailure,
+    require_command_available,
+)
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -78,6 +82,7 @@ def job_status_impl(
         wait_max = get_settings().run_command.wait_max_s
     backend = create_command_backend() if backend is None else backend
     try:
+        require_command_available(backend)
         reply = command_status.job_status(
             job_id,
             tail_lines,

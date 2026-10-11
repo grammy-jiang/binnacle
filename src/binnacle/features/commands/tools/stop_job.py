@@ -13,7 +13,11 @@ from pydantic import Field
 
 from binnacle.features.commands import command_execution
 from binnacle.features.commands.command_backend import create_command_backend
-from binnacle.features.commands.command_contracts import CommandBackend, CommandFailure
+from binnacle.features.commands.command_contracts import (
+    CommandBackend,
+    CommandFailure,
+    require_command_available,
+)
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -30,6 +34,7 @@ OUTPUT_SCHEMA = {
 def stop_job_impl(job_id: str, *, backend: CommandBackend | None = None) -> ToolResult:
     backend = create_command_backend() if backend is None else backend
     try:
+        require_command_available(backend)
         reply = command_execution.stop_job(job_id, backend=backend)
     except CommandFailure as exc:
         raise ToolError(str(exc)) from exc.__cause__

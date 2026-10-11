@@ -46,3 +46,10 @@ class CommandBackend(Protocol):
 
     @property
     def max_output_chars(self) -> int: ...
+
+
+def require_command_available(backend: CommandBackend) -> None:
+    """Optional refusal gate before paths, telemetry or any operation is touched."""
+    check = getattr(backend, "require_available", None)
+    if check is not None:
+        check()
