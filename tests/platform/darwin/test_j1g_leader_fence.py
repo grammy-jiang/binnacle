@@ -132,8 +132,8 @@ def test_leader_exit_keeps_background_member_and_fence(owned, spool, recorded):
     listing = owner.processes("job-bg")
     by_pid = {item["pid"]: item for item in listing}
     assert by_pid[member.pid]["cmd"] == "sleep 30"
-    assert by_pid[member.pid]["ppid"] == member.parent
-    assert by_pid[member.pid]["state"] in {"R", "S"}
+    assert list(by_pid[member.pid]) == ["pid", "state", "etime_s", "cmd"]  # no ppid
+    assert by_pid[member.pid]["state"] in {"?", "S"}  # SRUN is R or S (SD-59)
     assert by_pid[started.pid]["state"] == "Z"
     # A persisted exit is acked; the fenced job stays in the scans.
     owner.release("job-bg")
@@ -473,11 +473,12 @@ def test_processes_uses_comm_only_when_procargs_is_denied(owned, spool, recorded
     assert _await(lambda: owner.processes("job-p", 5)[0]["cmd"] == "sleep")
     with mock.patch.object(entry, "command_line", return_value=None):
         (item,) = owner.processes("job-p")
-    assert item["state"] in {"R", "S"}  # Darwin p_stat: SRUN or SSLEEP
-    assert {**item, "state": "-"} == {
+    assert item["state"] in {"?", "S"}  # Darwin p_stat: SRUN (R or S) or SSLEEP
+    assert item["etime_s"] >= 0
+    assert {**item, "state": "-", "etime_s": 0} == {
         "pid": started.pid,
-        "ppid": os.getpid(),
         "state": "-",
+        "etime_s": 0,
         "cmd": "sleep",  # kinfo_proc comm, never an invented argv
     }
     assert owner.processes("job-unknown") == []

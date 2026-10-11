@@ -99,7 +99,10 @@ COMMAND_TOOLS = ("run_command", "job_status", "stop_job")
 FULL_WITH_DISCLOSURE = "full_with_disclosure"
 MANAGER_DISCLOSURES: tuple[str, ...] = (
     "D-1: jobs of a lost manager are UNKNOWN; never adopted, never exited",
-    "D-2: CPU/RSS accounting is sampled; membership_closed=false",
+    (
+        "D-2: process state may be '?' and CPU may be absent (or sampled) on Darwin;"
+        " membership_closed=false"
+    ),
     "descendants_unverified=true: new sessions/process groups are not tracked",
 )
 _REQUIRED_DISCLOSURES = ("D-1:", "descendants_unverified=true")
