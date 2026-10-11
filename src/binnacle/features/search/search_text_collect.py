@@ -234,7 +234,8 @@ def search_opened(
                     summary += " Skipped files: " + ", ".join(skipped) + "."
                 if stats.get("skipped_oversize"):
                     summary += (
-                        " Files exceeding the remaining input budget were skipped."
+                        f" {stats['skipped_oversize']} file(s) skipped: larger than the per-file limit"
+                        " (bounded by the remaining input budget)."
                     )
                 for budget in ("input", "output"):
                     if stats.get(f"{budget}_budget_exhausted"):

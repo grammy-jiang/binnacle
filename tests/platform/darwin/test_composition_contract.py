@@ -314,6 +314,8 @@ def test_native_mcp_foreground_uses_worker_and_cancels_owned_event(tmp_path):
             )
             assert result.structured_content["output"] == "ok"
             assert result.structured_content["state"] == "exited"
+            assert "descendants_unverified=true" in str(result.content)
+            assert "descendants_unverified" not in result.structured_content
             task = asyncio.create_task(
                 client.call_tool(
                     "run_command", {"command": "cancel", "workdir": str(tmp_path)}

@@ -42,6 +42,7 @@ def test_native_wire_schema_preserves_v101_with_declared_description_exception(
     assert "processes that start a new session (setsid) are not tracked" in description
     assert "new sessions/process groups are not tracked or terminated" in description
     assert "unavailable pending r1 + cr1" in description
+    assert "descendants_unverified=true" in description
     original = next(tool for tool in baseline["tools"] if tool["name"] == "run_command")
     native["description"] = original["description"]
     assert actual == baseline["tools"]
