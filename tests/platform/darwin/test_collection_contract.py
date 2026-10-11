@@ -171,3 +171,151 @@ def test_t0_owned_modules_exist_with_discoverable_names():
     ):
         assert (ROOT / rel).is_file(), rel
         assert (ROOT / rel).name.startswith("test_")
+
+
+NARROW = (
+    "import pytest, sys\n"
+    "@pytest.mark.skipif(sys.platform != 'darwin', reason='x')\n"
+    "def test_a(): ...\n"
+    "def test_b(): ...\n"
+)
+SEL = _selection_module()
+
+
+# -- collection-time drops in conftest.py (R2D-T0-01) -----------------------
+
+CONFTEST_DROPS = {
+    "collect-ignore-glob-on-darwin": (
+        "import sys\n"
+        "if sys.platform == 'darwin':\n"
+        "    collect_ignore_glob = ['test_*.py']\n"
+    ),
+    "collect-ignore-list": "collect_ignore = ['test_linux_only.py']\n",
+    "collect-ignore-augmented": "collect_ignore = []\ncollect_ignore += ['x.py']\n",
+    "collect-ignore-append": (
+        "import sys\n"
+        "collect_ignore = []\n"
+        "if sys.platform == 'darwin':\n"
+        "    collect_ignore.append('test_linux_only.py')\n"
+    ),
+    "collect-ignore-in-else-branch": (
+        "import sys\n"
+        "if sys.platform == 'linux':\n"
+        "    pass\n"
+        "else:\n"
+        "    collect_ignore_glob = ['*.py']\n"
+    ),
+    "hook-assignment": (
+        "import sys\n"
+        "pytest_ignore_collect = lambda collection_path: sys.platform == 'darwin'\n"
+    ),
+    "hook-imported": "from helpers import pytest_ignore_collect\n",
+    "hook-function": (
+        "import sys\n"
+        "def pytest_ignore_collect(collection_path):\n"
+        "    return sys.platform == 'darwin'\n"
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(CONFTEST_DROPS))
+def test_scanner_reports_conftest_collection_drops_as_whole_module(name):
+    sites = SEL.scan_skips(CONFTEST_DROPS[name], conftest=True)
+    assert sites and all(s.scope == "module" for s in sites), sites
+    # Without the conftest flag a normal test module is not affected.
+    assert not SEL.scan_skips(CONFTEST_DROPS[name])
+
+
+@pytest.mark.parametrize("name", sorted(CONFTEST_DROPS))
+def test_policy_rejects_conftest_collection_drops_in_the_darwin_package(name):
+    rel = "tests/platform/darwin/conftest.py"
+    problems = SEL.check_skip_policy(
+        {rel: CONFTEST_DROPS[name]}, {rel: "A2: listed anyway"}
+    )
+    assert any("whole-module skip is forbidden" in p for p in problems), problems
+
+
+def test_policy_rejects_unconditional_collect_ignore_anywhere_and_platform_ones():
+    plain = "collect_ignore = ['x.py']\n"
+    assert SEL.check_skip_policy({"tests/unit/conftest.py": plain}, {})
+    gated = CONFTEST_DROPS["collect-ignore-glob-on-darwin"]
+    assert SEL.check_skip_policy({"tests/unit/conftest.py": gated}, {})
+    benign = "def pytest_configure(config): ...\nx = 1\n"
+    assert not SEL.check_skip_policy({"tests/unit/conftest.py": benign}, {})
+
+
+# -- per-row platform-site counts (R2D-T0-02) ---------------------------------
+
+TWO_SKIPS = NARROW + (
+    "@pytest.mark.skipif(sys.platform == 'darwin', reason='extra')\ndef test_x(): ...\n"
+)
+
+
+def test_policy_pins_the_platform_site_count_per_row():
+    rel = "tests/platform/darwin/test_search_parity.py"
+    table = {rel: "A4: narrow"}
+    assert SEL.check_skip_policy({rel: NARROW}, table, counts={rel: 1}) == []
+    problems = SEL.check_skip_policy({rel: TWO_SKIPS}, table, counts={rel: 1})
+    assert len(problems) == 1 and "row pins 1" in problems[0], problems
+    problems = SEL.check_skip_policy({rel: NARROW}, table, counts={rel: 2})
+    assert len(problems) == 1 and "row pins 2" in problems[0], problems
+    problems = SEL.check_skip_policy({rel: NARROW}, table, counts={})
+    assert len(problems) == 1 and "row pins None" in problems[0], problems
+
+
+def test_policy_pin_counts_non_darwin_baseline_rows_too():
+    rel = "tests/system/test_uplink_network.py"
+    table = {rel: "baseline: Linux only"}
+    assert SEL.check_skip_policy({rel: NARROW}, table, counts={rel: 1}) == []
+    assert SEL.check_skip_policy({rel: TWO_SKIPS}, table, counts={rel: 1})
+
+
+def test_policy_pin_counts_suspect_flags_as_platform_sites():
+    rel = "tests/platform/darwin/test_a.py"
+    source = (
+        NARROW
+        + "from os.path import supports_unicode_filenames as ON_MAC\n@pytest.mark.skipif(ON_MAC)\ndef test_y(): ...\n"
+    )
+    problems = SEL.check_skip_policy({rel: source}, {rel: "A2: y"}, counts={rel: 1})
+    assert len(problems) == 1 and "2 platform skip sites" in problems[0], problems
+
+
+# -- module-level importorskip allow-list (R2D-T0-01) -------------------------
+
+
+def test_policy_allows_only_the_named_module_level_importorskip():
+    source = "import pytest\ntomllib = pytest.importorskip('tomllib')\n"
+    rel = "tests/contracts/test_dependency_pin.py"
+    assert ("tests/contracts/test_dependency_pin.py", "tomllib") in (
+        SEL.ALLOWED_MODULE_IMPORTORSKIPS
+    )
+    assert SEL.check_skip_policy({rel: source}, {}) == []
+    other = source.replace("tomllib", "fcntl")
+    assert SEL.check_skip_policy({rel: other}, {})
+    assert SEL.check_skip_policy({"tests/unit/test_new.py": source}, {})
+    darwin = "tests/platform/darwin/test_dependency_pin.py"
+    assert SEL.check_skip_policy({darwin: source}, {})
+    local = "import pytest\ndef test_a():\n    pytest.importorskip('fcntl')\n"
+    assert SEL.check_skip_policy({"tests/unit/test_new.py": local}, {}) == []
+
+
+def test_uplink_linux_only_skip_marks_individual_cases_not_the_module():
+    path = ROOT / "tests/system/test_uplink_network.py"
+    tree = ast.parse(path.read_text())
+    module_marks = [
+        n
+        for n in tree.body
+        if isinstance(n, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "pytestmark" for t in n.targets)
+    ]
+    assert module_marks == []
+    functions = [n for n in tree.body if isinstance(n, ast.FunctionDef)]
+    narrow = [
+        f
+        for f in functions
+        if any(
+            isinstance(d, ast.Name) and d.id == "linux_integration"
+            for d in f.decorator_list
+        )
+    ]
+    assert 0 < len(narrow) < len(functions)
