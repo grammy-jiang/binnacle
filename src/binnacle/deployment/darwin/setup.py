@@ -24,7 +24,7 @@ import stat
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from binnacle.deployment.darwin.plist import (
     DEFAULT_ROLE,
@@ -119,7 +119,9 @@ _JOBS_SCOPE = (
 _PLAN_ONLY = Capability("LIMITED", "jobs_daemon_plan_only", _JOBS_SCOPE)
 JOBS_LOG_NAMES = (f"{JOBS_DAEMON_LABEL}.out.log", f"{JOBS_DAEMON_LABEL}.err.log")
 JOBS_LOG_SUBDIR = Path("Library/Logs/binnacle")
-JOBS_NEWSYSLOG_PATH = Path("/etc/newsyslog.d") / f"{JOBS_DAEMON_LABEL}.conf"
+# SD-31: jobs log rotation extends the deployed MCP entry; no new conf file.
+MCP_NEWSYSLOG_PATH = Path("/etc/newsyslog.d/com.binnacle.mcp.conf")
+_MCP_ENV_KEYS = frozenset({"HOME", "BINNACLE_CONFIG_FILE", "PATH"})
 JOBS_INSTALL_OWNER = (0, 0)
 JOBS_INSTALL_MODE = 0o644
 
@@ -143,12 +145,16 @@ def mcp_daemon_identity(data: bytes) -> McpDaemonIdentity:
     Pure: the caller decides where the bytes come from. A daemon without an
     explicit non-root ``UserName``/``GroupName`` or without an absolute
     ``PATH`` is refused, never defaulted (launchd's bare /usr/bin:/bin would
-    hide uv, rg and brew tools from jobs).
+    hide uv, rg and brew tools from jobs). Any other MCP environment key is
+    refused too: it could move the runtime root or socket away from what the
+    jobs daemon resolves.
     """
     value = _load_dict(data)
     env = value.get("EnvironmentVariables")
     if value.get("Label") != MCP_DAEMON_LABEL or not isinstance(env, dict):
         raise ValueError("mcp_identity_invalid")
+    if not env.keys() <= _MCP_ENV_KEYS:
+        raise ValueError("mcp_identity_env_unexpected")
     home, config = env.get("HOME"), env.get("BINNACLE_CONFIG_FILE")
     if not isinstance(home, str) or not isinstance(config, str):
         raise ValueError("mcp_identity_invalid")  # noqa: TRY004 - one error type
@@ -233,21 +239,54 @@ def check_log_dir(log_dir: Path, uid: int, lstat: PathStat = os.lstat) -> None:
             raise ValueError("jobs_daemon_log_file_invalid")
 
 
-def jobs_newsyslog_conf(spec: JobsDaemonSpec) -> str:
-    """``/etc/newsyslog.d/com.binnacle.jobs.conf`` lines for the J7 install.
+def _jobs_logs(spec: JobsDaemonSpec) -> tuple[str, str]:
+    logs = (str(spec.stdout_path), str(spec.stderr_path))
+    if any(char.isspace() for log in logs for char in log):
+        raise ValueError("jobs_daemon_log_dir_invalid")
+    return logs
 
-    Size-based (10 MiB, 5 kept), mode 600, owned by the run-as account. Flag
-    ``N``: launchd, not a pid file, owns the descriptors, so nothing is
-    signalled; launchd reopens the new file on every spawn, which bounds the
-    crash-loop (disk-fill) case.
+
+def jobs_newsyslog_lines(spec: JobsDaemonSpec) -> str:
+    """The exact jobs lines to APPEND to ``com.binnacle.mcp.conf`` (SD-31).
+
+    Same policy as the deployed MCP entry (mode 600, 7 kept, 10 MiB, ``NJ``):
+    ``N`` because launchd, not a pid file, owns the descriptors and reopens
+    the path on every spawn, which bounds the crash-loop (disk-fill) case.
+    Only needed when ``newsyslog_covers_jobs_logs`` is false.
     """
     owner = f"{spec.user_name}:{spec.group_name}"
-    lines = ["# logfilename\t[owner:group]\tmode\tcount\tsize(KiB)\twhen\tflags"]
-    for path in (spec.stdout_path, spec.stderr_path):
-        if any(char.isspace() for char in str(path)):
-            raise ValueError("jobs_daemon_log_dir_invalid")
-        lines.append(f"{path}\t{owner}\t600\t5\t10240\t*\tN")
-    return "\n".join(lines) + "\n"
+    return "".join(
+        f"{log}\t{owner}\t600\t7\t10240\t*\tNJ\n" for log in _jobs_logs(spec)
+    )
+
+
+def _covers(fields: list[str], log: str, owner: str) -> bool:
+    if len(fields) < 6 or fields[1] != owner or fields[2] != "600":
+        return False
+    if not fields[4].isdigit() or int(fields[4]) <= 0:
+        return False  # rotation must be size-bounded
+    if fields[0] == log:
+        return True
+    flags = fields[6] if len(fields) > 6 else ""
+    return "G" in flags.upper() and PurePosixPath(log).match(fields[0])
+
+
+def newsyslog_covers_jobs_logs(conf_text: str, spec: JobsDaemonSpec) -> bool:
+    """True if ``conf_text`` already rotates both planned jobs logs.
+
+    An entry covers a log when it names it exactly, or as a ``G`` glob, with
+    owner ``<run-as user>:<group>``, mode 600 and a positive size bound.
+    """
+    owner = f"{spec.user_name}:{spec.group_name}"
+    entries = [
+        line.split()
+        for line in conf_text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    return all(
+        any(_covers(fields, log, owner) for fields in entries)
+        for log in _jobs_logs(spec)
+    )
 
 
 @dataclass(frozen=True)
@@ -255,8 +294,10 @@ class JobsDaemonPlan:
     """A rendered production plan; this lane never installs or loads it.
 
     J7 installs ``plist_bytes`` at ``target_path`` as ``install_owner``
-    (root:wheel) with ``install_mode`` 0644, and ``newsyslog_conf`` at
-    ``newsyslog_path``; ``verify_installed_jobs_daemon`` checks the result.
+    (root:wheel) with ``install_mode`` 0644; ``verify_installed_jobs_daemon``
+    checks the result. Log rotation never gets its own conf file: if
+    ``newsyslog_covers_jobs_logs`` is false for the deployed
+    ``MCP_NEWSYSLOG_PATH`` text, ``newsyslog_lines`` are appended to it.
     """
 
     spec: JobsDaemonSpec
@@ -266,8 +307,7 @@ class JobsDaemonPlan:
     plist_sha256: str
     target_path: Path
     capability: Capability
-    newsyslog_conf: str
-    newsyslog_path: Path = JOBS_NEWSYSLOG_PATH
+    newsyslog_lines: str
     install_owner: tuple[int, int] = JOBS_INSTALL_OWNER
     install_mode: int = JOBS_INSTALL_MODE
 
@@ -288,6 +328,12 @@ def plan_jobs_daemon(
     refused: the manager never runs as root. ``log_dir`` defaults to
     ``<MCP HOME>/Library/Logs/binnacle`` and must already be the run-as
     user's private directory (planning reads only; it creates nothing).
+
+    ``number_of_processes`` is the seam for the process limit: ``None`` reads
+    ``kern.maxprocperuid``, which is refused off Darwin. Refusal order (the
+    first failing check names the code): MCP identity, ``log_dir`` path,
+    process limit, rendered plist (python, paths, limits), account lookup,
+    root ids, then the ``lstat`` log checks.
     """
     try:
         identity = mcp_daemon_identity(mcp_plist)
@@ -312,7 +358,7 @@ def plan_jobs_daemon(
         data = render_jobs_daemon_plist(spec)
         if validate_jobs_daemon_plist_bytes(data) != spec:
             raise ValueError("plist_scope_refused")
-        newsyslog = jobs_newsyslog_conf(spec)
+        newsyslog = jobs_newsyslog_lines(spec)
         uid, gid = lookup(spec.user_name, spec.group_name)
         if uid == 0 or gid == 0:
             raise ValueError("jobs_daemon_root_refused")

@@ -19,13 +19,16 @@ import pytest
 
 from binnacle.deployment.darwin.plist import (
     JOBS_DAEMON_PLIST_PATH,
+    search_path,
     validate_jobs_daemon_plist_bytes,
 )
 from binnacle.deployment.darwin.provisioner import sha256_hex
 from binnacle.deployment.darwin.setup import (
+    MCP_NEWSYSLOG_PATH,
     JobsDaemonPlan,
     JobsDaemonRefused,
     lookup_account,
+    newsyslog_covers_jobs_logs,
     per_user_process_limit,
     plan_jobs_daemon,
     verify_installed_jobs_daemon,
@@ -112,6 +115,7 @@ def test_plan_refuses_an_mcp_daemon_without_an_absolute_path(logs: Path) -> None
                 _mcp_plist(PATH=path),
                 python=PYTHON,
                 log_dir=logs,
+                number_of_processes=2666,
                 lookup=lambda user, group: (UID, 20),
             )
         assert info.value.code == "mcp_identity_path_invalid"
@@ -134,9 +138,12 @@ def test_plan_refusals_are_controlled(logs: Path) -> None:
         ({"log_dir": logs / ".." / "logs"}, "path_not_absolute"),
         ({"number_of_processes": 0}, "jobs_daemon_process_limit_invalid"),
     ):
+        # The limit is injected so every host checks the input under test;
+        # the unavailable-limit refusal has its own test.
         args: dict[str, object] = {
             "python": PYTHON,
             "log_dir": logs,
+            "number_of_processes": 2666,
             "lookup": lambda user, group: (UID, 20),
             **kwargs,
         }
@@ -168,6 +175,15 @@ def test_process_limit_failure_refuses_never_guesses(
     with pytest.raises(JobsDaemonRefused) as info:
         _plan(logs, number_of_processes=None)
     assert info.value.code == "jobs_daemon_process_limit_unavailable"
+    # Documented order: the limit is read before the plist (python) is checked.
+    with pytest.raises(JobsDaemonRefused) as order:
+        plan_jobs_daemon(
+            _mcp_plist(),
+            python=Path("/repo/.venv/bin/binnacle-jobs"),
+            log_dir=logs,
+            lookup=lambda user, group: (UID, 20),
+        )
+    assert order.value.code == "jobs_daemon_process_limit_unavailable"
 
 
 def test_log_dir_must_be_the_run_as_users_private_directory(
@@ -219,15 +235,85 @@ def test_default_log_dir_is_the_mcp_users_library_logs(logs: Path) -> None:
     assert plan.spec.stderr_path == seen[0] / "com.binnacle.jobs.err.log"
 
 
-def test_plan_carries_newsyslog_rotation_for_the_jobs_logs(logs: Path) -> None:
+@pytest.mark.parametrize(
+    "key", ["BINNACLE_RUNTIME_DIR", "TMPDIR", "BINNACLE_JOBS_SOCKET", "TOKEN"]
+)
+def test_plan_refuses_unexpected_mcp_environment_keys(logs: Path, key: str) -> None:
+    """R-J3d-N2: an extra MCP env key could move the runtime root or socket."""
+    with pytest.raises(JobsDaemonRefused) as info:
+        plan_jobs_daemon(
+            _mcp_plist(**{key: "/tmp/x"}),
+            python=PYTHON,
+            log_dir=logs,
+            number_of_processes=2666,
+            lookup=lambda user, group: (UID, 20),
+        )
+    assert info.value.code == "mcp_identity_env_unexpected"
+
+
+@pytest.mark.parametrize(
+    "path,valid",
+    [
+        ("/usr/bin:/bin", True),
+        ("/", True),
+        ("/usr/./bin", False),
+        ("/usr//bin", False),
+        ("/usr/bin/", False),
+        ("//usr/bin", False),
+        ("/usr/../bin", False),
+        ("usr/bin", False),
+        ("~/.local/bin", False),
+        ("/usr/bin::/bin", False),
+        ("/usr/bin\x00", False),
+    ],
+)
+def test_search_path_validates_raw_entries(path: str, valid: bool) -> None:
+    """R-J3d-N3: the raw string, not a pathlib-collapsed copy, is checked."""
+    if valid:
+        assert search_path(path) == path
+    else:
+        with pytest.raises(ValueError, match="jobs_daemon_path_invalid"):
+            search_path(path)
+
+
+def test_jobs_newsyslog_lines_extend_the_mcp_conf(logs: Path) -> None:
+    """R-J3d-N1 (SD-31): no jobs conf file; lines append to com.binnacle.mcp.conf."""
     plan = _plan(logs)
-    assert plan.newsyslog_path == Path("/etc/newsyslog.d/com.binnacle.jobs.conf")
-    lines = plan.newsyslog_conf.splitlines()
-    assert lines[0].startswith("#")
-    assert lines[1:] == [
-        f"{logs}/com.binnacle.jobs.{name}.log\tbinnacle:staff\t600\t5\t10240\t*\tN"
+    assert MCP_NEWSYSLOG_PATH == Path("/etc/newsyslog.d/com.binnacle.mcp.conf")
+    assert not hasattr(plan, "newsyslog_path")
+    assert plan.newsyslog_lines == "".join(
+        f"{logs}/com.binnacle.jobs.{name}.log\tbinnacle:staff\t600\t7\t10240\t*\tNJ\n"
         for name in ("out", "err")
-    ]
+    )
+    assert newsyslog_covers_jobs_logs(plan.newsyslog_lines, plan.spec)
+    assert not newsyslog_covers_jobs_logs("", plan.spec)
+
+
+DEPLOYED_STYLE = (
+    "# binnacle MCP daemon (com.binnacle.mcp) launchd stdout/stderr logs.\n"
+    "# logfilename  [owner:group]  mode count size  when flags\n"
+    "{logs}/*.log   binnacle:staff 600  7     10240 *    GNJ\n"
+)
+
+
+@pytest.mark.parametrize(
+    "conf,covered",
+    [
+        (DEPLOYED_STYLE, True),
+        ("{logs}/*.log binnacle:staff 600 7 10240 * NJ", False),
+        ("{logs}/*.log binnacle:staff 644 7 10240 * GNJ", False),
+        ("{logs}/*.log root:wheel 600 7 10240 * GNJ", False),
+        ("{logs}/*.log 600 7 10240 * GNJ", False),
+        ("{logs}/*.log binnacle:staff 600 7 * $D0 GNJ", False),
+        ("{logs}/*/*.log binnacle:staff 600 7 10240 * GNJ", False),
+        ("# {logs}/*.log binnacle:staff 600 7 10240 * GNJ", False),
+        ("{logs}/com.binnacle.jobs.out.log binnacle:staff 600 7 10240 * NJ", False),
+    ],
+)
+def test_newsyslog_coverage_check(logs: Path, conf: str, covered: bool) -> None:
+    """A deployed-style ``G`` glob counts; wrong owner/mode/no size bound do not."""
+    plan = _plan(logs)
+    assert newsyslog_covers_jobs_logs(conf.format(logs=logs), plan.spec) is covered
 
 
 def _stat(mode: int, uid: int = 0, gid: int = 0, nlink: int = 1) -> os.stat_result:

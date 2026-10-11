@@ -219,11 +219,21 @@ def _normal_absolute(path: Path) -> bool:
     return path.is_absolute() and os.path.normpath(text) == text and "\x00" not in text
 
 
+def _normal_entry(entry: str) -> bool:
+    # The raw string: pathlib would already collapse "/./", "//" and "/".
+    return (
+        entry.startswith("/")
+        and not entry.startswith("//")
+        and os.path.normpath(entry) == entry
+        and "\x00" not in entry
+    )
+
+
 def search_path(value: object) -> str:
     """A ``PATH`` of absolute, normalised, non-empty entries; never defaulted."""
     if not isinstance(value, str) or not value or len(value) > 4096:
         raise ValueError("jobs_daemon_path_invalid")
-    if not all(_normal_absolute(Path(entry)) for entry in value.split(":")):
+    if not all(_normal_entry(entry) for entry in value.split(":")):
         raise ValueError("jobs_daemon_path_invalid")
     return value
 
