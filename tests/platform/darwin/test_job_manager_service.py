@@ -452,11 +452,16 @@ def test_killed_manager_jobs_become_unknown_and_endpoint_reclaimed(runtime, tmp_
     root, jobs = runtime / "rt", runtime / "jobs"
     argv = [sys.executable, __file__, str(root), str(jobs)]
     child = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    pgid = None
+    from tests.platform.darwin import _signal_safety as safety
+
+    pgid = birth = None
     try:
         assert wait_published(root / "jobs.sock", timeout=20)["pid"] == child.pid
         job = run(root / "jobs.sock", "sleep 30", tmp_path, wait=0.1)
         pgid = meta_of(jobs, job["job_id"])["pgid"]
+        leader = safety.observe(pgid)  # the reference owner's meta birth is a stub
+        assert leader and leader.group == pgid and leader.parent == child.pid
+        birth = leader.birth
         child.kill()
         child.communicate(timeout=5)
         assert (root / "jobs.sock").exists()  # journalled stale endpoint remains
@@ -473,8 +478,9 @@ def test_killed_manager_jobs_become_unknown_and_endpoint_reclaimed(runtime, tmp_
         if child.poll() is None:
             child.kill()
             child.communicate(timeout=5)
-        if pgid is not None and not group_gone(pgid):
-            os.killpg(pgid, signal.SIGKILL)  # teardown of the test's own grandchild
+        if pgid is not None and birth is not None and not group_gone(pgid):
+            # Leader was reparented to launchd; pgid may be recycled: verify first.
+            safety.kill_verified(pgid, birth, group=True, parent=1)
 
 
 def _main():
