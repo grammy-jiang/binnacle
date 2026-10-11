@@ -70,7 +70,7 @@
     "LINUX": 62
   },
   "coverage_complete": true,
-  "implementation_commit": "52ca59553c27be3ecdece2252f169dfcc777225b",
+  "implementation_commit": "8c0b17d6bea8abef686d44659089322ae4e751d1",
   "production_module_count": 196,
   "rows": [
     {
@@ -4823,6 +4823,7 @@
         "fnmatch",
         "functools",
         "functools.lru_cache",
+        "logging",
         "pathlib",
         "pathlib.Path",
         "pathlib.PurePath",
@@ -4839,7 +4840,7 @@
       "owner": "BOUNDARY",
       "path": "src/binnacle/features/files/paths.py",
       "rationale": "Explicit composition or compatibility seam; implementation-specific actions are delegated",
-      "sha256": "86501a41c820a13a656ac6ada3ec930fd3bdf8ea4754957880ee374bae520897",
+      "sha256": "2080c7dc34d6ba7539bf03937fee9e3c4c7e6e90e17a19a18277e360d86652f6",
       "stage": "OS5",
       "was_in_baseline": true
     },
@@ -4936,7 +4937,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/features/files/tools/list_files.py",
       "rationale": "FastMCP-native integration; MCP framework remains solely responsible for Providers and Middleware",
-      "sha256": "4735f5992416142a736f9742462b9792750aac9e4bfad60120542184529651a8",
+      "sha256": "f89d15a639b93cff3df91072e9b9694b09254d0863afcdb097449c5a9a88e34a",
       "stage": "OS6",
       "was_in_baseline": true
     },
@@ -5123,7 +5124,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/features/search/search_text_collect.py",
       "rationale": "Portable ripgrep and application search policy; external executable is not Linux-specific",
-      "sha256": "fe1720c804050156effc2cb4eb61a700164a283179020b0cc458cc01cd0752b4",
+      "sha256": "ea8354d89228f03ea11ae16af01583818f3e71a7f8b0c2c2da821daeca89be4f",
       "stage": "OS6",
       "was_in_baseline": true
     },
