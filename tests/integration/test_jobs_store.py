@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -10,6 +11,12 @@ from fastmcp.exceptions import ToolError
 
 from binnacle.features.commands import jobs as jobstore
 from tests.integration.job_test_support import run, status, stop
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
+
 
 pytestmark = pytest.mark.usefixtures("_short_job_warmup")
 
@@ -50,6 +57,7 @@ def test_keep_newest_config_requires_at_least_one_slot():
     assert JobsSettings(keep_newest=1).keep_newest == 1
 
 
+@LINUX_ONLY
 def test_start_job_lock_releases_after_popen_failure(fresh_store, monkeypatch):
     real_popen = jobstore._PROCESS_BACKEND.launch
     failed = False
@@ -71,6 +79,7 @@ def test_start_job_lock_releases_after_popen_failure(fresh_store, monkeypatch):
     assert jobstore.job_state(job_id)["state"] == "exited"
 
 
+@LINUX_ONLY
 def test_start_job_reserves_one_slot_at_cap(fresh_store, monkeypatch, caplog):
     monkeypatch.setattr(jobstore, "KEEP_NEWEST", 3)
     for i in range(3):
@@ -91,6 +100,7 @@ def test_start_job_reserves_one_slot_at_cap(fresh_store, monkeypatch, caplog):
     assert "effective_keep=2" in prune
 
 
+@LINUX_ONLY
 def test_concurrent_starts_do_not_share_reserved_slot(fresh_store, monkeypatch):
     import threading
 
@@ -123,6 +133,7 @@ def test_concurrent_starts_do_not_share_reserved_slot(fresh_store, monkeypatch):
     assert all((jobstore.JOBS_DIR / p["job_id"]).exists() for p in results)
 
 
+@LINUX_ONLY
 def test_start_job_spares_old_running_job_outside_base_window(fresh_store, monkeypatch):
     monkeypatch.setattr(jobstore, "KEEP_NEWEST", 3)
     old = run("sleep 30", background=True)
@@ -141,6 +152,7 @@ def test_start_job_spares_old_running_job_outside_base_window(fresh_store, monke
     stop(old["job_id"])
 
 
+@LINUX_ONLY
 def test_prune_spares_running_job(fresh_store):
     p = run("sleep 5", background=True)
     job_id = p["job_id"]
@@ -248,6 +260,7 @@ def test_remove_job_dir_tolerates_vanished_dir(fresh_store):
     # traceback of 2026-09-02 10:25).
 
 
+@LINUX_ONLY
 def test_reaper_tolerates_pruned_dir(caplog, fresh_store):
     with caplog.at_level("WARNING", logger="binnacle.jobs"):
         # Long enough that the job is still running after the test-only

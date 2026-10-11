@@ -1,7 +1,9 @@
 """Root construction owns domain policy; durable jobs remain process-owned."""
 
 import asyncio
+import sys
 
+import pytest
 from fastmcp import Client
 from mcp.types import Implementation
 
@@ -15,11 +17,17 @@ from binnacle.features.search.tools import search_text
 from binnacle.mcp import logging_middleware
 from binnacle.mcp.identity import ClientIdentity
 
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux composition reads settings once per root; Darwin counterpart tests/contracts/test_server_composition.py::test_two_roots_and_clients_keep_visibility_isolated",
+)
+
 
 def fail_global():
     raise AssertionError("root must supply all migrated settings explicitly")
 
 
+@LINUX_ONLY
 def test_two_roots_capture_one_snapshot_each_without_hidden_reads(
     tmp_path, monkeypatch
 ):

@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import sys
 import threading
 
 import pytest
@@ -15,6 +16,14 @@ from binnacle.features.files.tools import read_file
 from binnacle.features.search.tools import search_text
 from binnacle.mcp import callctx
 from tests.integration.http_test_support import http_tool_call, with_session
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Darwin Commands run_command is scope-gated; Darwin counterpart tests/platform/darwin/test_foreground_commands.py",
+)
+
+
+pytestmark = pytest.mark.usefixtures("tmp_path_is_allowed_root")
 
 
 def context_snapshot():
@@ -54,7 +63,14 @@ class ChildCalls(Middleware):
     [
         ("files", read_file, "read_file_impl", "read_file", "path"),
         ("search", search_text, "search_text_impl", "search_text", "pattern"),
-        ("commands", run_command, "run_command_impl", "run_command", "command"),
+        pytest.param(
+            "commands",
+            run_command,
+            "run_command_impl",
+            "run_command",
+            "command",
+            marks=LINUX_ONLY,
+        ),
     ],
 )
 def test_concurrent_http_context_logging_and_errors_across_child(

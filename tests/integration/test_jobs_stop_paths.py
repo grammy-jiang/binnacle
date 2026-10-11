@@ -15,12 +15,19 @@ import json
 import logging
 import os
 import signal
+import sys
 from types import SimpleNamespace
 
 import pytest
 
 from binnacle.features.commands import jobs as jobstore
 from binnacle.platform.linux import job_process
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
+
 
 #: A pid no live process should have; nothing here signals it for real.
 FAKE_PID = 4_190_001
@@ -189,6 +196,7 @@ def test_stop_escalates_to_sigkill_and_tolerates_a_group_that_died_meanwhile(
     assert any("event=job_stop_escalate" in r.getMessage() for r in caplog.records)
 
 
+@LINUX_ONLY
 def test_a_stray_descendant_that_exited_first_is_skipped(monkeypatch):
     """signal_job: the setsid()'d child collected before the signal may be
     gone by the time its turn comes; that is not an error."""

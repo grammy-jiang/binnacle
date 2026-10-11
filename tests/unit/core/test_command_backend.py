@@ -12,6 +12,11 @@ from binnacle.features.commands.command_backend import DurableCommandBackend
 from binnacle.features.commands.command_contracts import CommandReply
 from binnacle.features.commands.job_store import JobGone
 
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
+
 
 @pytest.mark.parametrize(
     "module,name,args,value",
@@ -87,6 +92,7 @@ assert not {"binnacle.config", "binnacle.features.commands.jobs", "binnacle.feat
     subprocess.run([sys.executable, "-c", code], check=True, timeout=15)
 
 
+@LINUX_ONLY
 def test_default_selection_captures_engine_settings_before_first_operation():
     code = """
 from binnacle import config

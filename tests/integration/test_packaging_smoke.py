@@ -6,6 +6,13 @@ import os
 import subprocess
 import sys
 
+import pytest
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="imports the Linux job engine, which needs the Linux jobs socket (no Darwin counterpart: UNAVAILABLE on Darwin by release scope)",
+)
+
 
 def clean_env(config_file) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items() if not k.startswith("BINNACLE_")}
@@ -73,6 +80,7 @@ def test_watchdog_cli_help_is_executable_without_host_mutation(tmp_path):
         assert command in proc.stdout
 
 
+@LINUX_ONLY
 def test_core_server_imports_when_watchdog_companion_is_blocked(tmp_path):
     token = tmp_path / "token"
     token.write_text("Bearer integration-token\n")

@@ -1,6 +1,9 @@
 """Implementation gate for tools/search_text.py (docs/tools/search_text.md §4)."""
 
 import json
+import shutil
+import tempfile
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -355,9 +358,24 @@ def test_adaptive_enabled_does_not_change_small_payload(tmp_path, monkeypatch):
     assert json.dumps(after, sort_keys=True) == json.dumps(before, sort_keys=True)
 
 
+@pytest.fixture()
+def short_root():
+    """A short directory: the byte budget below counts every path character.
+
+    macOS ``tmp_path`` lives under ``/private/var/folders/...``; ``/tmp`` keeps
+    the same shape as the Linux fixture path so the pinned entry counts hold.
+    """
+    root = Path(tempfile.mkdtemp(prefix="adp-", dir="/tmp"))
+    try:
+        yield root
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_adaptive_discovery_replaces_only_budget_bound_content_result(
-    tmp_path, monkeypatch, caplog
+    short_root, monkeypatch, caplog
 ):
+    tmp_path = short_root
     settings = get_settings().search_text.model_copy(deep=True)
     for file_index in range(40):
         lines = [

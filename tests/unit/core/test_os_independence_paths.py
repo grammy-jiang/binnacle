@@ -1,5 +1,6 @@
 """OS5 canonical alias regressions; escapes remain denied."""
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,11 @@ import pytest
 from binnacle.config import RootsSettings
 from binnacle.errors import CodedToolError
 from binnacle.features.files.paths import nearby_hint, resolve_path
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="case-sensitive file names; default APFS volumes are case-insensitive (no Darwin counterpart: UNAVAILABLE on Darwin by release scope)",
+)
 
 
 def test_allowed_root_alias_resolves_relative_and_absolute_paths(tmp_path: Path):
@@ -116,6 +122,7 @@ def test_path_root_resolution_error_retains_original_error_code(
     assert exc.value.telemetry_code == "path_resolve_failed"
 
 
+@LINUX_ONLY
 def test_case_sensitive_file_names_are_not_silently_conflated(tmp_path: Path):
     root = tmp_path / "case"
     root.mkdir()

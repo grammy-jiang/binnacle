@@ -1,8 +1,16 @@
+import sys
 from pathlib import Path
+
+import pytest
 
 from binnacle.platform import deployment_platform
 from binnacle.platform.contracts.runtime_path_contracts import RuntimePaths
 from binnacle.platform.linux.runtime_paths_linux import resolve_runtime_paths
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux runtime paths and service logs; Darwin counterpart tests/platform/darwin/test_composition_contract.py",
+)
 
 
 def test_linux_runtime_paths_prefer_xdg_runtime_dir():
@@ -32,6 +40,7 @@ def test_linux_runtime_paths_do_not_mutate_supplied_environment():
     assert env == before
 
 
+@LINUX_ONLY
 def test_default_platform_factory_selects_linux_runtime_paths(monkeypatch):
     expected = RuntimePaths(
         Path("/tmp/runtime/binnacle"), Path("/tmp/runtime/binnacle/jobs.sock")
@@ -44,6 +53,7 @@ def test_default_platform_factory_selects_linux_runtime_paths(monkeypatch):
     assert deployment_platform.create_runtime_paths() == expected
 
 
+@LINUX_ONLY
 def test_default_platform_factories_construct_linux_adapters(tmp_path):
     from binnacle.platform.deployment_platform import (
         create_linux_provisioner,

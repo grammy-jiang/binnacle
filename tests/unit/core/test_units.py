@@ -3,11 +3,18 @@ resolution, the two doctor checks every owner shares, and the server unit."""
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from binnacle.deployment import server_unit, units
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="/proc cmdline (no Darwin counterpart: procfs is UNAVAILABLE on Darwin)",
+)
+
 
 SPEC = units.UnitSpec(
     "x.service",
@@ -186,6 +193,7 @@ def test_exec_start_argv_parses_systemctl_show_output():
     assert units.exec_start_argv("{ path=/x ; ignore_errors=no }") == []
 
 
+@LINUX_ONLY
 @pytest.mark.no_xdist
 def test_proc_cmdline_reads_this_process():
     argv = units.proc_cmdline(os.getpid())

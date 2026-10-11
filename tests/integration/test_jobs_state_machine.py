@@ -1,14 +1,23 @@
 """Model-based integration testing for the durable job lifecycle."""
 
+import sys
 import tempfile
 from pathlib import Path
 
+import pytest
 from fastmcp.exceptions import ToolError
 from hypothesis import settings
 from hypothesis.stateful import RuleBasedStateMachine, invariant, precondition, rule
 
 from binnacle.features.commands import jobs as jobstore
 from tests.integration.job_test_support import run, status, stop
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
+
+pytestmark = LINUX_ONLY
 
 
 class JobLifecycleMachine(RuleBasedStateMachine):

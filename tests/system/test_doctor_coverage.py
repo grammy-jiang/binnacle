@@ -1,9 +1,16 @@
 """Coverage of doctor aggregation and low-level failure branches."""
 
+import sys
+
 import pytest
 
 from binnacle.diagnostics import doctor
 from binnacle.features.commands import jobs as jobstore
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: Linux systemd/journald service operations; Darwin uses tests/platform/darwin/test_ipc_launchd.py",
+)
 
 
 def test_linger_enabled_handles_yes_no_and_command_failure(monkeypatch):
@@ -52,6 +59,7 @@ def test_check_config_reports_defaults_missing_root_and_load_failure(
     assert "bad config" in failed.detail
 
 
+@LINUX_ONLY
 def test_boot_check_reports_runner_exception():
     def broken(*args, **kwargs):
         raise OSError("loginctl unavailable")
@@ -78,6 +86,7 @@ def test_job_state_safe_hides_store_read_errors(monkeypatch):
     assert doctor._job_state_safe("gone") is None
 
 
+@LINUX_ONLY
 @pytest.mark.parametrize("probe", [False, True])
 def test_run_all_composes_every_active_core_check(tmp_path, monkeypatch, probe):
     from types import SimpleNamespace

@@ -1,6 +1,7 @@
 """Files adapter snapshots isolate policy without changing MCP path literals."""
 
 import asyncio
+import sys
 
 import pytest
 from fastmcp import Client
@@ -14,11 +15,20 @@ from binnacle.config import (
 from binnacle.features.files import files_server, paths
 from binnacle.features.files.tools import edit_file, list_files, read_file, write_file
 
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason=(
+        "Files child over the Linux pathname Core; Darwin routes through A4 descriptors. "
+        "Darwin counterpart: tests/platform/darwin/test_files_roots.py::test_escaping_paths_rejected"
+    ),
+)
+
 
 def fail_global():
     raise AssertionError("fully supplied Files inputs must not load settings")
 
 
+@LINUX_ONLY
 def test_read_write_factories_copy_roots_limits_and_description(tmp_path, monkeypatch):
     roots, settings, servers = [], [], []
     for index, cap in enumerate((1, 3)):
@@ -70,6 +80,7 @@ def test_read_write_factories_copy_roots_limits_and_description(tmp_path, monkey
     asyncio.run(go())
 
 
+@LINUX_ONLY
 def test_read_missing_custom_root_never_hints_global_siblings(tmp_path, monkeypatch):
     (tmp_path / "private-sibling").write_text("secret")
     root = files_server.create_files_server(
@@ -122,6 +133,7 @@ def explicit_files(roots, **overrides):
     return files_server.create_files_server(**inputs)
 
 
+@LINUX_ONLY
 def test_fully_supplied_files_never_load_settings_and_preserve_path_metadata(
     tmp_path, monkeypatch
 ):
@@ -151,6 +163,7 @@ def test_fully_supplied_files_never_load_settings_and_preserve_path_metadata(
     asyncio.run(go())
 
 
+@LINUX_ONLY
 def test_list_and_edit_snapshots_control_schema_cap_and_snippet(tmp_path, monkeypatch):
     roots = RootsSettings(default_root=tmp_path, extra_roots=())
     for i in range(4):
@@ -211,6 +224,7 @@ def test_list_and_edit_snapshots_control_schema_cap_and_snippet(tmp_path, monkey
     asyncio.run(go())
 
 
+@LINUX_ONLY
 @pytest.mark.parametrize(
     ("tool", "arguments"),
     [
@@ -239,6 +253,7 @@ def test_remaining_files_error_hints_use_captured_roots(
     asyncio.run(go())
 
 
+@LINUX_ONLY
 def test_list_binary_and_timeout_are_captured(tmp_path, monkeypatch):
     import subprocess
 

@@ -1,5 +1,9 @@
 """Shared opt-in fixtures for integration tests."""
 
+import shutil
+import tempfile
+from pathlib import Path
+
 import pytest
 
 from binnacle.features.commands import jobs as jobstore
@@ -26,3 +30,24 @@ def run_policy(monkeypatch):
         monkeypatch.setattr(server, "mcp", server.create_server())
 
     return configure
+
+
+@pytest.fixture
+def tmp_path_is_allowed_root(tmp_path, monkeypatch):
+    """Opt in: native temp roots (macOS /private/var/folders) sit outside the
+    default roots, so grant this test's own temp directory explicitly."""
+    from binnacle.config import get_settings
+
+    roots = get_settings().roots
+    monkeypatch.setattr(roots, "extra_roots", (*roots.extra_roots, tmp_path.resolve()))
+
+
+@pytest.fixture
+def default_root_tmp_path():
+    """Opt in: a temp directory under the default /tmp root, for tests whose
+    server is built at import and so cannot be granted a per-test root."""
+    path = Path(tempfile.mkdtemp(prefix="binnacle-it-", dir="/tmp")).resolve()
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)

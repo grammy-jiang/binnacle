@@ -2,12 +2,21 @@
 
 import io
 import subprocess
+import sys
 import tarfile
 from pathlib import Path
 
 import pytest
 
 from tests.integration.job_reload_support import reload_scenario
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
+
+pytestmark = LINUX_ONLY
+
 
 BASELINE_SHA = "02f4bab9bc7562668ffc41d622c4274449933768"
 

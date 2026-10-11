@@ -8,6 +8,7 @@ urllib path is exercised.
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,12 @@ from binnacle.features.commands import jobs as jobstore
 from binnacle.platform.contracts.service_lifecycle_contracts import ManagedServiceStatus
 from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from tests.service_fakes import FakeServiceInspector
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: Linux systemd/journald service operations; Darwin uses tests/platform/darwin/test_ipc_launchd.py; /proc service inspection",
+)
+
 
 BEARER = "Bearer secret-token\n"
 
@@ -262,6 +269,7 @@ def test_jobs_spool_absent_is_ok(tmp_path):
     assert c.status == "ok"
 
 
+@LINUX_ONLY
 def test_jobs_counts_running_and_orphaned(tmp_path, monkeypatch):
     store = tmp_path / "jobs"
     monkeypatch.setattr(jobstore, "JOBS_DIR", store)
@@ -404,6 +412,7 @@ def test_render_json():
 # -- the failure-case review (2026-09-13) ------------------------------------
 
 
+@LINUX_ONLY
 def test_boot_check_wants_lingering():
     seen = []
 
@@ -430,6 +439,7 @@ def test_boot_check_wants_lingering():
     assert c.status == "fail" and c.hint == "loginctl enable-linger pi"
 
 
+@LINUX_ONLY
 @pytest.mark.no_xdist
 def test_service_inspector_reads_own_process_environment(monkeypatch):
     """Keep one real procfs environment check in the ordinary-process lane."""

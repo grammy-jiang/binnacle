@@ -12,6 +12,8 @@ from fastmcp.server.middleware import Middleware
 
 from binnacle import server
 
+pytestmark = pytest.mark.usefixtures("tmp_path_is_allowed_root")
+
 PROFILES = [
     (None, "auto", 8),
     ("openai-mcp(ChatGPT)", "auto", 6),

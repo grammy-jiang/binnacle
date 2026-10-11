@@ -1,5 +1,6 @@
 """Small failure and entry-point edges of the durable job manager."""
 
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,6 +9,11 @@ import pytest
 from binnacle.features.commands import job_manager
 from binnacle.features.commands.job_client import PROTOCOL_VERSION
 
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux boot_id and systemd notify; no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
+
 
 def _runtime(tmp_path: Path) -> job_manager.JobManager:
     return job_manager.JobManager(
@@ -15,6 +21,7 @@ def _runtime(tmp_path: Path) -> job_manager.JobManager:
     )
 
 
+@LINUX_ONLY
 def test_boot_id_falls_back_cleanly(monkeypatch):
     monkeypatch.setattr(
         job_manager.Path,
@@ -24,6 +31,7 @@ def test_boot_id_falls_back_cleanly(monkeypatch):
     assert job_manager._boot_id() == "unknown"
 
 
+@LINUX_ONLY
 def test_notify_failure_is_contained(monkeypatch, caplog):
     class BrokenNotifier:
         def __enter__(self):

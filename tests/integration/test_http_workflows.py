@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import sys
 import threading
 
 import pytest
@@ -16,7 +17,18 @@ from tests.integration.http_test_support import (
     with_session,
 )
 
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
+
+
 pytestmark = pytest.mark.usefixtures("_short_job_warmup")
+
+
+@pytest.fixture
+def tmp_path(default_root_tmp_path):
+    return default_root_tmp_path
 
 
 def test_authenticated_http_file_workflow_round_trip(tmp_path):
@@ -80,6 +92,7 @@ def test_authenticated_http_file_workflow_round_trip(tmp_path):
     assert path.read_text() == "alpha\ngamma\n"
 
 
+@LINUX_ONLY
 def test_authenticated_http_background_job_status_and_stop(tmp_path):
     job_id = None
 
@@ -157,7 +170,12 @@ def test_http_tool_errors_are_results_not_transport_failures():
             {"path": "/etc/passwd"},
         )
         assert outside["result"]["isError"] is True
-        assert "outside allowed roots" in outside["result"]["content"][0]["text"]
+        expected = (
+            "outside opened roots"
+            if sys.platform == "darwin"
+            else "outside allowed roots"
+        )
+        assert expected in outside["result"]["content"][0]["text"]
 
         invalid = await http_tool_call(
             c,
@@ -298,6 +316,7 @@ def test_http_concurrent_requests_keep_distinct_base_turns(monkeypatch, tmp_path
     assert current_turn.get() is None
 
 
+@LINUX_ONLY
 def test_http_job_status_receives_base_turn_and_client(monkeypatch, tmp_path, caplog):
     """The turn correlation (X-Request-Id -> turn) reaches job_status's timing
     line; it predates the removed blocking-wall guard and usage review needs it."""

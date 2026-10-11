@@ -1,9 +1,16 @@
 """Neutral diagnostics stay usable without another application's aggregate."""
 
 import ast
+import sys
 from pathlib import Path
 
 import pytest
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: Linux systemd/journald service operations; Darwin uses tests/platform/darwin/test_ipc_launchd.py",
+)
+
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "binnacle"
 
@@ -41,6 +48,7 @@ def test_neutral_rendering_keeps_public_exit_and_json_contract():
     assert doctor_render.render_json(checks) == doctor.render_json(checks)
 
 
+@LINUX_ONLY
 @pytest.mark.parametrize("flag", ["--probe", "--no-probe"])
 def test_core_probe_flags_remain_accepted_without_uplink(flag, monkeypatch, capsys):
     from binnacle import cli

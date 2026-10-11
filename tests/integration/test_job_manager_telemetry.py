@@ -1,6 +1,7 @@
 """Telemetry-specific checks for the durable job manager."""
 
 import json
+import sys
 import threading
 import time
 from pathlib import Path
@@ -9,6 +10,11 @@ import pytest
 
 from binnacle.features.commands import job_client, jobs
 from binnacle.features.commands.job_manager import JobManager
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
 
 
 @pytest.fixture()
@@ -59,6 +65,7 @@ def _unfinished(store: Path, name: str, *, boot: str, owner: str) -> None:
     )
 
 
+@LINUX_ONLY
 def test_manager_lifecycle_logs_are_directly_correlatable(manager, caplog):
     _, socket_path, _ = manager
     with caplog.at_level("INFO"):
@@ -100,6 +107,7 @@ def test_manager_lifecycle_logs_are_directly_correlatable(manager, caplog):
     assert "launch_ms=" in timing and "impl_ms=" in timing and "state=exited" in timing
 
 
+@LINUX_ONLY
 def test_stop_and_disconnect_logs_keep_operation_correlation(manager, caplog):
     _, socket_path, _ = manager
     started = job_client.start(
