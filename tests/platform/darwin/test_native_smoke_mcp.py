@@ -33,7 +33,7 @@ FULL_PARITY = "FULL_PARITY_NO_GO"
 TOOLS = "read_file list_files search_text edit_file write_file run_command job_status stop_job"
 REGISTERED_TOOLS = tuple(TOOLS.split())
 LIMITED_TOOLS = tuple(t for t in REGISTERED_TOOLS if t != "stop_job")
-PER_FILE_LIMIT = 16 * 1024 * 1024
+LINUX_FX_BIG_BYTES = 21_000_000  # Pi CASES.json fx.big huge.txt (> 16 MiB budget)
 STOP_JOB_TEXT = (
     "stop_job is unavailable on macOS. "
     "run_command is available in foreground mode only (no background jobs)."
@@ -339,7 +339,7 @@ def test_list_files_and_search_text_on_fixture(endpoint: Endpoint) -> None:
     (root / "docs").mkdir()
     (root / "docs" / "note.md").write_text("hello docs\n")
     (root / "docs" / "a.py").write_text("print('hello')\n")
-    (root / "big.txt").write_bytes(b"hello" + b"A" * (PER_FILE_LIMIT + 1024))
+    (root / "big.txt").write_bytes(b"a" * LINUX_FX_BIG_BYTES)
     hello = {"pattern": "hello", "path": r}
     out = _calls(
         endpoint,
@@ -364,9 +364,9 @@ def test_list_files_and_search_text_on_fixture(endpoint: Endpoint) -> None:
     assert rel("list_glob_md", "path") == {"docs/note.md"}
     assert rel("search_glob_py", "file") == {"docs/a.py"}
     assert rel("search_all", "file") == {"hello.txt", "docs/note.md", "docs/a.py"}
-    assert out["search_all"]["data"]["truncated"] is True
-    assert "larger than the per-file limit" in out["search_all"]["text"]
-    assert "truncated=true" in out["search_all"]["text"]
+    assert out["search_all"]["data"]["truncated"] is False  # Linux st.basic, fx.big
+    assert "note" not in out["search_all"]["data"]
+    assert out["search_all"]["text"] == f"Found 3 matches for 'hello' under {r}."
     for label, o in out.items():
         if label.startswith("deny_"):
             assert o["error"] and "secret" not in o["text"], (label, o)

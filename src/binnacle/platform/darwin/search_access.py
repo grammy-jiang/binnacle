@@ -3,8 +3,12 @@
 Ignore discovery is confined to the grant: .gitignore/.ignore/.rgignore above
 it and global policies are never read. Search treats NUL-containing files as
 text (rg --text, as on Linux); binary_files_skipped stays in the summary stats
-at 0. Files skipped for concurrent change are counted in those stats without
-setting ``truncated``; an oversize/budget skip still does (reviewed r3 behavior).
+at 0. Every file is searched whole, as Linux rg does: its bytes stream from the
+opened descriptor into rg stdin in bounded chunks, never read into memory at
+once, so there is no per-file size or input-byte limit. ``truncated`` is set
+only when the rg output budget is hit or the file list is capped. Files skipped
+for concurrent change or a mid-stream read failure (``skipped_io_error``, an
+explicit I/O limit) are counted in the summary stats without setting it.
 Files use deterministic path order (rg --sort path); default rg order is unspecified. Listing includes
 binary files, matching rg --files. The helper owns one direct rg child, closes
 pipes and reaps on every exit. This is not general process-tree control.
@@ -20,10 +24,11 @@ import selectors
 import shutil
 import subprocess
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import closing
 
 from binnacle.platform.contracts.capability_contracts import (
+    AuthorityUnknown,
     BudgetExceeded,
     PermissionDenied,
     UnsafePath,
@@ -31,6 +36,7 @@ from binnacle.platform.contracts.capability_contracts import (
 from binnacle.platform.contracts.file_access_contracts import (
     FileAccess,
     ListRequest,
+    OpenedFile,
     RootGrant,
     SearchBatch,
     SearchRequest,
@@ -57,19 +63,44 @@ def _command(rg_bin: str, request: SearchRequest) -> list[str]:
     return [*argv, "--regexp", request.pattern, "--", "-"]
 
 
+CHUNK = 65536
+Source = Callable[[], bytes]
+
+
+class _SourceReadFailed(Exception):
+    """A read on the opened descriptor failed mid-stream (not an rg failure)."""
+
+
+def _no_input() -> bytes:
+    return b""
+
+
+def _descriptor_source(opened: OpenedFile) -> Source:
+    """Read the already-opened descriptor CHUNK bytes at a time until EOF."""
+
+    def chunk() -> bytes:
+        try:
+            return opened.read(CHUNK)
+        except (PermissionDenied, AuthorityUnknown, UnsafePath) as exc:
+            raise _SourceReadFailed(exc.code) from None
+
+    return chunk
+
+
 @native_errors()
 def _pump(
-    child: subprocess.Popen[bytes], data: bytes, deadline: float, max_output: int
+    child: subprocess.Popen[bytes], source: Source, deadline: float, max_output: int
 ) -> tuple[bytes, bool]:
-    """Concurrent bounded input/output; no communicate() allocation escape."""
+    """Concurrent bounded input/output; at most one CHUNK of input is held."""
     if child.stdin is None or child.stdout is None or child.stderr is None:
         raise unavailable("rg_pipes_unavailable")
     output = bytearray()
+    pending = source()
     offset = 0
     with selectors.DefaultSelector() as selector:
         for stream in (child.stdin, child.stdout, child.stderr):
             os.set_blocking(stream.fileno(), False)
-        if data:
+        if pending:
             selector.register(child.stdin, selectors.EVENT_WRITE)
         else:
             child.stdin.close()
@@ -83,10 +114,14 @@ def _pump(
                 pipe = key.fileobj
                 if pipe is child.stdin:
                     try:
-                        offset += os.write(key.fd, data[offset : offset + 65536])
+                        offset += os.write(key.fd, pending[offset:])
                     except BrokenPipeError:
-                        offset = len(data)
-                    if offset == len(data):
+                        # rg stopped reading; the rest of the file is moot.
+                        pending, offset = b"", 0
+                    else:
+                        if offset == len(pending):
+                            pending, offset = source(), 0
+                    if not pending:
                         selector.unregister(pipe)
                         child.stdin.close()
                 else:
@@ -104,7 +139,7 @@ def _pump(
 
 @native_errors()
 def _run_rg(
-    argv: list[str], data: bytes, deadline: float, max_output: int
+    argv: list[str], source: Source, deadline: float, max_output: int
 ) -> tuple[bytes, bool]:
     try:
         child = subprocess.Popen(
@@ -117,7 +152,7 @@ def _run_rg(
     except OSError:
         raise unavailable("rg_unavailable") from None
     try:
-        output, truncated = _pump(child, data, deadline, max_output)
+        output, truncated = _pump(child, source, deadline, max_output)
         if truncated:
             return output, True
         try:
@@ -280,22 +315,22 @@ class DarwinSearchAccess:
         events: list[Mapping[str, object]] = []
         files_searched = unreadable_files_skipped = 0
         binary_files_skipped = 0  # NUL files are searched as text
-        skipped_oversize = skipped_changed = 0
-        input_budget_exhausted = output_budget_exhausted = 0
-        input_left = output_left = request.max_bytes
+        skipped_changed = skipped_io_error = 0
+        output_budget_exhausted = 0
+        output_left = request.max_bytes
         for path in paths:
             if time.monotonic() >= deadline:
                 raise BudgetExceeded("rg_timeout", capability("rg_timeout"))
-            if input_left <= 0 or output_left <= 0:
-                input_budget_exhausted = int(input_left <= 0)
-                output_budget_exhausted = int(output_left <= 0)
+            if output_left <= 0:
+                output_budget_exhausted = 1
                 truncated = True
                 break
             try:
                 with closing(self._files.open_read(grant, path)) as opened:
-                    data = opened.read(min(input_left + 1, 65536))
-                    if b"\0" not in data and len(data) <= input_left:
-                        data += opened.read(input_left + 1 - len(data))
+                    # The whole file streams through this descriptor (CR2).
+                    output, capped = _run_rg(
+                        argv, _descriptor_source(opened), deadline, output_left
+                    )
             except PermissionDenied:
                 if path == request.relative_path:
                     raise
@@ -312,13 +347,13 @@ class DarwinSearchAccess:
                     raise
                 skipped_changed += 1
                 continue
-            if len(data) > input_left:
-                # Never search a cut line and report a false regex/end anchor hit.
-                truncated = True
-                skipped_oversize += 1
+            except _SourceReadFailed as exc:
+                # A true I/O limit: rg saw a partial stream, so drop its output.
+                if path == request.relative_path:
+                    code = str(exc)
+                    raise AuthorityUnknown(code, capability(code)) from None
+                skipped_io_error += 1
                 continue
-            input_left -= len(data)
-            output, capped = _run_rg(argv, data, deadline, output_left)
             output_left -= len(output)
             events.extend(_events(output, path, capped))
             files_searched += 1
@@ -328,16 +363,15 @@ class DarwinSearchAccess:
                 break
         # Binary-only, unreadable-only and empty trees still validate rg/pattern.
         if files_searched == 0:
-            _run_rg(argv, b"", deadline, max(1, output_left))
+            _run_rg(argv, _no_input, deadline, max(1, output_left))
         events = _aggregate(
             events,
             time.monotonic_ns() - started,
             {
                 "files_searched": files_searched,
-                "input_budget_exhausted": input_budget_exhausted,
                 "output_budget_exhausted": output_budget_exhausted,
-                "skipped_oversize": skipped_oversize,
                 "skipped_changed": skipped_changed,
+                "skipped_io_error": skipped_io_error,
                 "binary_files_skipped": binary_files_skipped,
                 "unreadable_files_skipped": unreadable_files_skipped,
             },

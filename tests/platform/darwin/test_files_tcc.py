@@ -278,16 +278,20 @@ def test_search_budget_continues_or_preserves_matches_and_explains_truncation(
         )
         payload = result.structured_content
         text = result.content[0].text
-        assert payload["truncated"] and "truncated=true" in text
         assert payload["entries"][0]["file"] == str(root / "00-first.txt")
-        if mode in ("oversize", "remaining"):
+        if mode in ("oversize", "remaining", "exhausted"):
+            # Linux rg searches every byte (Pi CASES.json st.basic with the 21 MB
+            # fx.big file: truncated=false, no skip note): no input limit.
+            assert payload["truncated"] is False and "truncated=true" not in text
             assert payload["count"] == 2
-            assert "skipped_oversize=" in text and "remaining input budget" in text
+            assert [e["file"] for e in payload["entries"]] == [
+                str(root / "00-first.txt"),
+                str(root / "hello.txt"),
+            ]
+            assert text == f"Found 2 matches for 'hello' under {root}."
         else:
+            assert payload["truncated"] and "truncated=true" in text
             assert payload["count"] == 1
-            assert (
-                f"Aggregate {'input' if mode == 'exhausted' else 'output'} budget exhausted"
-                in text
-            )
+            assert "Aggregate output budget exhausted" in text
     finally:
         access.close()
