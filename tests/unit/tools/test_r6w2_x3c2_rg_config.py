@@ -12,6 +12,7 @@ is pinned.
 import os
 import shutil
 import subprocess
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -98,6 +99,13 @@ def use_config(tree: dict, monkeypatch, name: str) -> None:
     monkeypatch.setenv(CONFIG_ENV, str(config))
 
 
+def unordered(result: dict) -> tuple[dict, Counter]:
+    """The result without entry order: (other fields, entry multiset)."""
+    rest = {k: v for k, v in result.items() if k != "entries"}
+    entries = Counter(tuple(sorted(e.items())) for e in result["entries"])
+    return rest, entries
+
+
 def test_the_config_widens_a_plain_rg_run(tree, monkeypatch):
     """Precondition: the hostile config does change a config-reading rg."""
     use_config(tree, monkeypatch, "all")
@@ -119,10 +127,21 @@ def test_search_text_ignores_the_config(tree, monkeypatch, name, execution, name
     before = search(tree, execution, names_only=names_only)
     use_config(tree, monkeypatch, name)
     after = search(tree, execution, names_only=names_only)
-    assert after == before
+    # rg walks with parallel workers, so the entry order differs between
+    # runs; compare the entries as a multiset and every other field exactly.
+    assert unordered(after) == unordered(before)
     assert "needle ignored" not in repr(after)
     assert "needle hidden" not in repr(after)
     assert "needle outside" not in repr(after)
+    root = tree["root"]
+    files = {Path(e["file"]) for e in after["entries"]}
+    # --follow: nothing reached through a symlink, inside or outside the root.
+    assert root / "link" / "o.txt" not in files
+    assert root / "alias" / "b.txt" not in files
+    # --hidden / --no-ignore: the hidden and the gitignored file stay out.
+    assert root / "ignored.txt" not in files
+    assert root / ".hidden.txt" not in files
+    assert files == {root / "a.txt", root / "d" / "b.txt"}
 
 
 @pytest.mark.parametrize("name", sorted(CONFIGS))
