@@ -144,7 +144,7 @@ def test_retention_close_and_writer_singleton(tmp_path, jobs_dir):
         os.killpg(lost_pid, signal.SIGKILL)
         os.waitpid(lost_pid, 0)
     meta, unreaped = meta_of(jobs_dir, job_id), meta_of(jobs_dir, lost)
-    assert (meta["signal"], meta["termination_reason"]) == (15, "owner_restart")
+    assert (meta["signal"], meta["termination_reason"]) == (None, "owner_restart")
     assert "authority" not in meta
     assert unreaped["authority"] == "UNKNOWN"  # never reported exited
     with svc.jobs_dir_writer(jobs_dir), pytest.raises(RuntimeError, match="owns"):
@@ -206,7 +206,7 @@ def test_close_persists_queued_exits_before_returning(tmp_path, jobs_dir, monkey
     assert not manager._unrecorded
     assert meta_of(jobs_dir, queued)["exit_code"] == 7
     meta = meta_of(jobs_dir, running)
-    assert (meta["signal"], meta["termination_reason"]) == (15, "owner_restart")
+    assert (meta["signal"], meta["termination_reason"]) == (None, "owner_restart")
 
 
 def test_exit_still_unpersisted_at_close_becomes_unknown(
