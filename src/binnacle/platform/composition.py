@@ -12,6 +12,7 @@ from pathlib import Path
 from threading import Event
 from typing import TYPE_CHECKING, Literal
 
+from binnacle.platform.contracts.capability_contracts import CapabilityState
 from binnacle.platform.contracts.darwin_contracts import (
     ForegroundExecution,
     ForegroundRequest,
@@ -257,6 +258,10 @@ def validate_native_command_states(
     states: Mapping[str, str], *, execution: ForegroundExecution | None = None
 ) -> None:
     """Reject contradictory scopes, including explicit candidate test mappings."""
+    if states.get("stop_job", "UNAVAILABLE") != "UNAVAILABLE":
+        raise RuntimeError("Darwin stop_job must remain UNAVAILABLE (gate: never)")
+    if host_os_family() != "darwin":
+        return
     from binnacle.platform.darwin.process_backend import DarwinProcessBackend
 
     if isinstance(execution, _ObservedForegroundExecution):
@@ -273,13 +278,8 @@ def native_file_capability(*, release_scope=DARWIN_RELEASE_SCOPE, execution=None
     )
     if host_os_family() == "linux":
         return None
-    from binnacle.platform.contracts.capability_contracts import CapabilityState
-
     capabilities = [release_scope[tool].capability for tool in FILE_TOOLS]
-    return next(
-        (cap for cap in capabilities if cap.state == CapabilityState.LIMITED),
-        capabilities[0],
-    )
+    return max(capabilities, key=lambda cap: cap.state == CapabilityState.LIMITED)
 
 
 def create_native_provisioner(*, root: Path, lease: ServiceLease):

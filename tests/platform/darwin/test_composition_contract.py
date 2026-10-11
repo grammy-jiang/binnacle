@@ -475,7 +475,7 @@ def test_invalid_native_scope_raises_at_every_composition_boundary(
     reason = "stop_job" if tool == "stop_job" else "runtime gate"
     with pytest.raises(RuntimeError, match=reason):
         compose_native_tools(settings=Settings(), release_scope=scope)
-    for host in ("Darwin", "Linux"):
+    for host in ("Darwin", "Linux") if tool == "stop_job" else ("Darwin",):
         monkeypatch.setattr(c.platform, "system", lambda host=host: host)
         with pytest.raises(RuntimeError, match=reason):
             c.native_file_capability(release_scope=scope)

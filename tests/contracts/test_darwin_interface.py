@@ -135,3 +135,27 @@ def test_composed_source_has_no_foreign_wildcard_reaper_or_sigchld_watcher():
             assert not name.endswith(
                 ("MultiLoopChildWatcher", "FastChildWatcher", "SafeChildWatcher")
             )
+
+
+def test_linux_file_lookup_skips_only_darwin_runtime_requirement(monkeypatch):
+    from dataclasses import replace
+
+    from binnacle.platform import composition
+    from binnacle.platform.contracts.darwin_release_scope import DARWIN_RELEASE_SCOPE
+    from binnacle.platform.darwin.process_backend import DarwinProcessBackend
+
+    monkeypatch.setattr(composition.platform, "system", lambda: "Linux")
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Linux lookup entered Darwin runtime validation")
+
+    monkeypatch.setattr(DarwinProcessBackend, "validate_release_states", forbidden)
+    scope = dict(DARWIN_RELEASE_SCOPE)
+    scope["run_command"] = replace(
+        scope["run_command"],
+        capability=Capability(CapabilityState.LIMITED, "test", "run_command"),
+    )
+    assert composition.native_file_capability() is None
+    assert (
+        composition.native_file_capability(release_scope=scope, execution=None) is None
+    )
