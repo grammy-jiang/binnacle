@@ -7,7 +7,6 @@ Runtime data is ephemeral and must never contain durable job history.
 
 from __future__ import annotations
 
-import ctypes
 import fcntl
 import hashlib
 import json
@@ -30,6 +29,12 @@ from binnacle.platform.contracts.capability_contracts import (
 )
 from binnacle.platform.contracts.native_service_contracts import ServiceLease
 from binnacle.platform.contracts.runtime_path_contracts import RuntimePaths
+from binnacle.platform.darwin.generation_publish import (  # R-M1a2-S1 split
+    _publish_entry as _publish_entry,  # noqa: PLC0414 - re-export
+)
+from binnacle.platform.darwin.generation_publish import (
+    _write_credentials as _write_credentials,  # noqa: PLC0414 - re-export
+)
 
 _ROOTS: dict[ServiceLease, Path] = {}
 _LOCKS: set[int] = set()
@@ -57,9 +62,12 @@ def denied(code: str) -> UnsafePath:
 
 
 def check_socket_path(path: Path) -> None:
-    if (size := len(os.fsencode(path))) >= 104 or not path.is_absolute():
-        why = f"too_long: {size} bytes > 103" if size >= 104 else "not_absolute"
-        detail = f"darwin_socket_path_{why}: {path}"  # sun_path: 104 bytes on Darwin, NUL included
+    size = len(os.fsencode(path))  # sun_path: 104 bytes on Darwin, NUL included
+    if size >= 104:
+        detail = f"darwin_socket_path_too_long: {size} bytes > 103: {path}"
+        raise denied("runtime_socket_path_invalid") from ValueError(detail)
+    if not path.is_absolute():
+        detail = f"darwin_socket_path_not_absolute: {path}"
         raise denied("runtime_socket_path_invalid") from ValueError(detail)
 
 
@@ -259,41 +267,6 @@ def _lock_root(fd: int, *, create: bool = True) -> int:
     except (OSError, NativeCapabilityError) as exc:
         os.close(lock)
         raise _refuse("ipc_duplicate_starter") from exc
-
-
-def _write_credentials(
-    fd: int, name: str, credentials: dict[str, Any], owned: dict[str, tuple[int, int]]
-) -> None:
-    key_fd = os.open(
-        name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd
-    )
-    try:
-        info = os.fstat(key_fd)
-        owned[name] = (info.st_dev, info.st_ino)
-        with os.fdopen(key_fd, "wb", closefd=False) as stream:
-            stream.write(json.dumps(credentials).encode())
-            stream.flush()
-            os.fsync(key_fd)
-    finally:
-        os.close(key_fd)
-
-
-def _publish_entry(fd: int, source: str, target: str) -> None:
-    """Darwin RENAME_EXCL publishes an inode without overwriting any entry."""
-    libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
-    rename = libc.renameatx_np
-    rename.argtypes = [
-        ctypes.c_int,
-        ctypes.c_char_p,
-        ctypes.c_int,
-        ctypes.c_char_p,
-        ctypes.c_uint,
-    ]
-    rename.restype = ctypes.c_int
-    if rename(fd, os.fsencode(source), fd, os.fsencode(target), 0x4) != 0:
-        error = ctypes.get_errno()
-        raise OSError(error, os.strerror(error))
-    os.fsync(fd)
 
 
 def _record_endpoint(
