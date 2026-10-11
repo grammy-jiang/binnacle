@@ -48,7 +48,15 @@ def stop_job_impl(job_id: str, *, backend: CommandBackend | None = None) -> Tool
 def register(mcp: FastMCP, *, backend: CommandBackend | None = None) -> None:
     backend = create_command_backend() if backend is None else backend
 
+    description = (
+        "Unavailable on macOS: background jobs do not exist there, so no job "
+        "can be stopped."
+        if isinstance(backend, RestrictedCommandBackend)
+        else None
+    )
+
     @mcp.tool(
+        description=description,
         annotations={
             "readOnlyHint": False,
             "destructiveHint": True,
