@@ -259,7 +259,7 @@ def validate_native_command_states(
 ) -> None:
     """Reject contradictory scopes, including explicit candidate test mappings."""
     if states.get("stop_job", "UNAVAILABLE") != "UNAVAILABLE":
-        raise RuntimeError("Darwin stop_job must remain UNAVAILABLE (gate: never)")
+        raise RuntimeError("Darwin stop_job must remain UNAVAILABLE")
     if host_os_family() != "darwin":
         return
     from binnacle.platform.darwin.process_backend import DarwinProcessBackend

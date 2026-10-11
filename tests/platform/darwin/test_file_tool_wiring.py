@@ -295,7 +295,7 @@ def test_candidate_release_scope_is_per_tool_and_committed_scope_is_unchanged(
                 ("stop_job", {"job_id": "foreign"}),
             ):
                 result = await client.call_tool(name, args, raise_on_error=False)
-                assert result.is_error and "UNAVAILABLE" in str(result.content)
+                assert result.is_error and "unavailable" in str(result.content).lower()
 
     asyncio.run(exercise())
     assert (tmp_path / "file").read_text() == "hello"

@@ -51,7 +51,7 @@ def test_native_wire_schema_preserves_v101_with_declared_description_exception(
     )
     assert "processes that start a new session (setsid) are not tracked" in description
     assert "new sessions/process groups are not tracked or terminated" in description
-    assert "unavailable pending r1 + cr1" in description
+    assert "foreground execution is unavailable on macos" in description
     assert "descendants_unverified=true" in description
     original = next(tool for tool in baseline["tools"] if tool["name"] == "run_command")
     native["description"] = original["description"]
@@ -238,7 +238,7 @@ async def check():
             enabled = DARWIN_RELEASE_SCOPE[name].capability.state.value == "LIMITED"
             assert result.is_error != enabled, (name, result)
             if not enabled:
-                assert "UNAVAILABLE" in str(result.content), (name, result)
+                assert "unavailable" in str(result.content).lower(), (name, result)
             elif name == "read_file":
                 assert result.structured_content["content"] == "after"
             elif name == "run_command":

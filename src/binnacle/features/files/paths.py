@@ -254,7 +254,7 @@ class FileToolAccess:
         if capability.state != CapabilityState.LIMITED:
             raise CodedToolError(
                 "native_capability_unavailable",
-                f"{tool}: {capability.state.value}; {capability.reason_code}. FULL_PARITY_NO_GO.",
+                f"{tool} is unavailable on macOS.",
             )
 
     @property
@@ -271,7 +271,7 @@ class FileToolAccess:
         if self.files is None or self.capability.state != CapabilityState.LIMITED:
             raise CodedToolError(
                 "native_capability_unavailable",
-                "native_capability_unavailable: Darwin Files/Search are UNAVAILABLE pending exact-source review. FULL_PARITY_NO_GO.",
+                "native_capability_unavailable: Files and search are unavailable on macOS.",
             )
         return select_root_grant(
             raw, default_root=self.default_root, grants=self.grants

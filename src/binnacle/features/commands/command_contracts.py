@@ -88,10 +88,14 @@ class ForegroundExecution(Protocol):
 
 def refuse_commands() -> NoReturn:
     raise CommandFailure(
-        "native_capability_unavailable: Darwin Commands are UNAVAILABLE; "
-        "foreground execution requires R1/CR1 approval; stop_job remains "
-        "unavailable. FULL_PARITY_NO_GO."
+        "native_capability_unavailable: Commands are unavailable on macOS."
     )
+
+
+STOP_JOB_UNAVAILABLE = (
+    "stop_job is unavailable on macOS. "
+    "run_command is available in foreground mode only (no background jobs)."
+)
 
 
 class RestrictedCommandBackend:
@@ -124,7 +128,7 @@ class RestrictedCommandBackend:
         refuse_commands()
 
     def stop_job(self, job_id: str) -> dict | None:
-        refuse_commands()
+        raise CommandFailure(STOP_JOB_UNAVAILABLE)
 
     def job_state(self, job_id: str) -> dict | None:
         refuse_commands()
