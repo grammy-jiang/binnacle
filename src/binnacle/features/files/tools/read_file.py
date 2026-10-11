@@ -60,21 +60,39 @@ OUTPUT_SCHEMA = {
 }
 
 
+def _too_large(size: int, settings: ReadFileSettings) -> CodedToolError:
+    return CodedToolError(
+        "file_too_large",
+        f"File is {human_size(size)}; the limit is "
+        f"{settings.max_file_bytes // (1024 * 1024)} MB. "
+        f"Use run_command (tail, sed -n, grep) to sample it.",
+    )
+
+
 def _read_checked(
-    resolved: Path, expected: tuple[int, int], roots: RootsSettings | None
+    resolved: Path,
+    expected: tuple[int, int],
+    roots: RootsSettings | None,
+    settings: ReadFileSettings,
 ) -> bytes:
     """Read the object the containment check saw, or refuse (SD-76, X3b).
 
     Linux opens it through the descriptor walk, verifies the opened object
     (fd_walk.open_verified) and reads only from that descriptor; the path
-    is never opened again. Darwin keeps its own READ_FLAGS walk (RX3a2-N4)
-    and never calls open_verified.
+    is never opened again. The read stops after max_file_bytes + 1 bytes, so
+    a file that grew after the stat is file_too_large, never read unbounded
+    (RX3b-F6). Darwin keeps its own READ_FLAGS walk (RX3a2-N4) and never
+    calls open_verified.
     """
     if sys.platform == "linux":
         allowed = (get_settings().roots if roots is None else roots).canonical_allowed
         fd = fd_walk.open_walked(resolved, allowed, expected)
         with os.fdopen(fd, "rb") as opened:
-            return opened.read()
+            data = opened.read(settings.max_file_bytes + 1)
+            if len(data) > settings.max_file_bytes:
+                grown = os.fstat(opened.fileno()).st_size
+                raise _too_large(max(grown, len(data)), settings)
+            return data
     else:
         return resolved.read_bytes()
 
@@ -107,12 +125,7 @@ def read_file_impl(
         checked = resolved.stat()
         size = checked.st_size
         if size > settings.max_file_bytes:
-            raise CodedToolError(
-                "file_too_large",
-                f"File is {human_size(size)}; the limit is "
-                f"{settings.max_file_bytes // (1024 * 1024)} MB. "
-                f"Use run_command (tail, sed -n, grep) to sample it.",
-            )
+            raise _too_large(size, settings)
     if end_line is not None and start_line > end_line:
         raise CodedToolError(
             "range_invalid",
@@ -120,7 +133,9 @@ def read_file_impl(
         )
 
     if file_access is None:
-        data = _read_checked(resolved, (checked.st_dev, checked.st_ino), roots)
+        data = _read_checked(
+            resolved, (checked.st_dev, checked.st_ino), roots, settings
+        )
     decoded = decode_text(data, resolved)
     if decoded is None:
         mime = mimetypes.guess_type(resolved.name)[0] or "unknown type"

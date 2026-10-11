@@ -201,10 +201,13 @@ looks like image/png) — content not shown.`
    else `path_changed` (a file deleted after the open is not served; a new
    call reports E1). A symlink that the no-follow open refuses is
    `path_outside_root` when its target is outside every root, else
-   `path_changed`; EACCES is `permission_denied`. The content is read only
-   from the verified descriptor; the path is never opened again. Every path
-   whose target lies in any configured root (cross-root links, `..` into an
-   outer root) reads as in r6. Darwin keeps its own `READ_FLAGS` walk and
+   `path_changed`; EACCES is `permission_denied`. A socket is
+   `file_io_failed`; a FIFO or a device is `not_a_regular_file`. The content
+   is read only from the verified descriptor; the path is never opened
+   again. The read stops after `READ_MAX_FILE_BYTES` + 1 bytes, so a file
+   that grew past the limit after the stat is E3, with the same text as at
+   the stat. Every path whose target lies in any configured root
+   (cross-root links, `..` into an outer root) reads as in r6. Darwin keeps its own `READ_FLAGS` walk and
    never calls `open_verified`. `open_verified` without a parent descriptor
    still opens by path and follows intermediate symlinks: an outside object
    can be opened (a device open side effect, same uid only) before the
