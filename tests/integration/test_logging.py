@@ -78,6 +78,9 @@ def test_tool_call_start_context_is_reset_after_call(caplog):
 
 def test_explicit_background_false_overrides_auto_policy(monkeypatch, run_policy):
     info = mcp.types.Implementation(name="openai-mcp-test", version="1")
+    # This exercises the embedded engine. Darwin auto composes the manager
+    # (JCR-2), which no test runs; Linux fixed its owner at import.
+    monkeypatch.setattr(server.get_settings().jobs, "owner", "embedded")
     run_policy(
         RunCommandSettings(auto_background_patterns={"openai-mcp": (r"\bsleep\b",)}),
     )
@@ -304,7 +307,7 @@ def test_prune_line(caplog, tmp_path, monkeypatch):
     assert "effective_keep=50" in line
 
 
-def test_effective_config_line(caplog):
+def test_effective_config_line(caplog, monkeypatch):
     with caplog.at_level("INFO", logger="binnacle.server"):
         server.log_effective_config()
     lines = [r.getMessage() for r in caplog.records if "event=config" in r.getMessage()]
@@ -325,23 +328,38 @@ def test_effective_config_line(caplog):
         r.getMessage() for r in caplog.records if "event=tool_config" in r.getMessage()
     ]
     if sys.platform != "linux":
-        # Darwin: Commands tools are LIMITED/UNAVAILABLE (no durable jobs engine).
-        parsed = [_fields(line) for line in tool_lines]
-        assert [(f["tool"], f.get("capability")) for f in parsed] == [
-            ("read_file", None),
-            ("list_files", None),
-            ("search_text", None),
-            ("run_command", None),
-            ("run_command", "LIMITED"),
-            ("job_status", "LIMITED"),
-            ("stop_job", "UNAVAILABLE"),
-            ("edit_file", None),
-        ]
-        by_tool = {f["tool"]: f for f in parsed}
-        assert by_tool["read_file"]["max_chars"] == "24000"
-        assert by_tool["search_text"]["result_max_bytes"] == "65536"
-        assert by_tool["search_text"]["exact_execution"] == "streaming"
-        assert parsed[3]["wait_max_s"] == "50"
+        # Darwin (JCR-2): auto and manager compose the manager owner and log
+        # its AVAILABLE rows; only an explicit embedded owner logs the
+        # LIMITED/UNAVAILABLE foreground rows. Pin each configured owner.
+        expected = {
+            "auto": ("manager", "AVAILABLE", "AVAILABLE", "AVAILABLE"),
+            "manager": ("manager", "AVAILABLE", "AVAILABLE", "AVAILABLE"),
+            "embedded": ("embedded", "LIMITED", "LIMITED", "UNAVAILABLE"),
+        }
+        for owner, (effective, run, status, stop) in expected.items():
+            monkeypatch.setattr(server.get_settings().jobs, "owner", owner)
+            caplog.clear()
+            with caplog.at_level("INFO", logger="binnacle.server"):
+                server.log_effective_config()
+            parsed = [_fields(line) for line in _messages(caplog, "tool_config")]
+            assert [(f["tool"], f.get("capability")) for f in parsed] == [
+                ("read_file", None),
+                ("list_files", None),
+                ("search_text", None),
+                ("run_command", None),
+                ("run_command", run),
+                ("job_status", status),
+                ("stop_job", stop),
+                ("edit_file", None),
+            ], owner
+            by_tool = {f["tool"]: f for f in parsed}
+            assert by_tool["read_file"]["max_chars"] == "24000"
+            assert by_tool["search_text"]["result_max_bytes"] == "65536"
+            assert by_tool["search_text"]["exact_execution"] == "streaming"
+            assert parsed[3]["wait_max_s"] == "50"
+            (owner_line,) = _messages(caplog, "jobs_owner")
+            assert _fields(owner_line)["configured_owner"] == owner
+            assert _fields(owner_line)["effective_owner"] == effective
         return
     assert len(tool_lines) == 6
     by_tool = {_fields(line)["tool"]: _fields(line) for line in tool_lines}

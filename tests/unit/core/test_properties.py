@@ -28,17 +28,26 @@ from binnacle.features.files import paths, textio
 
 @settings(max_examples=400, deadline=None)
 @given(st.text(min_size=0, max_size=200))
+@example("/tmp")  # macOS: /tmp is a symlink to /private/tmp (2026-10-11)
+@example("/TMP")  # case-insensitive APFS reaches the same symlink
+@example("/Tmp/../etc")  # a case variant cannot walk out of the root
 def test_resolve_path_is_inside_a_root_or_raises_tool_error(raw: str):
     """The guard's whole contract: for *any* string the model sends, the
     result is under an allowed root or the call fails as a ToolError. Any
-    other exception would surface to the client as an internal error."""
+    other exception would surface to the client as an internal error.
+
+    Containment is physical: the result's real location must sit under a
+    configured root's real location. A configured root may itself be an
+    alias (macOS /tmp -> /private/tmp), so comparing against the configured
+    spelling would reject a correct in-root result."""
     try:
         resolved = paths.resolve_path(raw)
     except ToolError:
         return
     assert resolved.is_absolute()
     assert any(
-        resolved.is_relative_to(root) for root in get_settings().roots.allowed
+        resolved.resolve().is_relative_to(root.expanduser().resolve())
+        for root in get_settings().roots.allowed
     ), resolved
 
 
