@@ -12,7 +12,11 @@ from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
 from binnacle.features.commands import command_execution
-from binnacle.features.commands.command_backend import create_command_backend
+from binnacle.features.commands.command_backend import (
+    DarwinManagerCommandBackend,
+    create_command_backend,
+    darwin_manager_description,
+)
 from binnacle.features.commands.command_contracts import (
     STOP_JOB_UNAVAILABLE,
     CommandBackend,
@@ -55,7 +59,19 @@ def register(mcp: FastMCP, *, backend: CommandBackend | None = None) -> None:
         else None
     )
 
-    @mcp.tool(
+    def stop_job(
+        job_id: Annotated[str, Field(description="Job to stop.")],
+    ) -> ToolResult:
+        """Stop a job (SIGTERM, then SIGKILL after 5 s) and its whole
+        process group. An already-finished job returns its final state
+        without error.
+        """
+        return stop_job_impl(job_id, backend=backend)
+
+    if isinstance(backend, DarwinManagerCommandBackend):
+        description = darwin_manager_description(stop_job.__doc__)
+    mcp.tool(
+        stop_job,
         description=description,
         annotations={
             "readOnlyHint": False,
@@ -65,11 +81,3 @@ def register(mcp: FastMCP, *, backend: CommandBackend | None = None) -> None:
         },
         output_schema=OUTPUT_SCHEMA,
     )
-    def stop_job(
-        job_id: Annotated[str, Field(description="Job to stop.")],
-    ) -> ToolResult:
-        """Stop a job (SIGTERM, then SIGKILL after 5 s) and its whole
-        process group. An already-finished job returns its final state
-        without error.
-        """
-        return stop_job_impl(job_id, backend=backend)

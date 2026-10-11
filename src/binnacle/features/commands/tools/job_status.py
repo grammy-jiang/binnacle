@@ -11,7 +11,11 @@ from pydantic import Field
 
 from binnacle.config import get_settings
 from binnacle.features.commands import command_status
-from binnacle.features.commands.command_backend import create_command_backend
+from binnacle.features.commands.command_backend import (
+    DarwinManagerCommandBackend,
+    create_command_backend,
+    darwin_manager_description,
+)
 from binnacle.features.commands.command_contracts import (
     CommandBackend,
     CommandFailure,
@@ -120,11 +124,6 @@ def register(
         else None
     )
 
-    @mcp.tool(
-        description=description,
-        annotations={"readOnlyHint": True, "openWorldHint": False},
-        output_schema=OUTPUT_SCHEMA,
-    )
     def job_status(
         job_id: Annotated[
             str | None,
@@ -170,3 +169,12 @@ def register(
             preview_chars=preview_chars,
             wait_max=wait_max,
         )
+
+    if isinstance(backend, DarwinManagerCommandBackend):
+        description = darwin_manager_description(job_status.__doc__)
+    mcp.tool(
+        job_status,
+        description=description,
+        annotations={"readOnlyHint": True, "openWorldHint": False},
+        output_schema=OUTPUT_SCHEMA,
+    )

@@ -21,6 +21,7 @@ from starlette.responses import JSONResponse
 
 from binnacle.config import Settings
 from binnacle.features.commands.command_backend import (
+    DarwinManagerCommandBackend,
     configure_native_release_states,
 )
 from binnacle.features.commands.command_contracts import (
@@ -54,6 +55,12 @@ from binnacle.platform.contracts.darwin_release_scope import (
     DARWIN_RELEASE_SCOPE,
     FILE_TOOLS,
     ReleaseDecision,
+    release_scope_for_owner,
+    resolve_darwin_job_owner,
+)
+from binnacle.platform.contracts.process_contracts import (
+    JOB_MANAGER_UNAVAILABLE,
+    JobOwnerKind,
 )
 
 configure_native_release_states(
@@ -79,14 +86,29 @@ _DARWIN_INSTRUCTIONS = (
     "completed foreground runs held in memory). stop_job is unavailable on "
     "macOS. There are no board or sensor hardware tools."
 )
+JOBS_SERVICE_LABEL = "com.binnacle.jobs"
+DARWIN_MANAGER_REQUIREMENT = (
+    f"Command tools need the {JOBS_SERVICE_LABEL} service; without it they fail "
+    f"closed with '{JOB_MANAGER_UNAVAILABLE}' (no embedded fallback)."
+)
+# JCR-4: the Linux tool map, the macOS host line, and CR0 point 4's service note.
+_DARWIN_MANAGER_INSTRUCTIONS = (
+    "binnacle: a macOS workstation. Paths live under the configured roots. "
+    "list_files (browse or glob), search_text (regex over contents), read_file, "
+    "edit_file (exact-string replace), write_file (whole file), run_command "
+    "(shell; long commands become jobs for job_status/stop_job). "
+    + DARWIN_MANAGER_REQUIREMENT
+    + " There are no board or sensor hardware tools."
+)
 
 
-def _server_instructions() -> str:
+def _server_instructions(owner: JobOwnerKind | None = None) -> str:
     # A tool map only. Workflow rules live in the ChatGPT Project's
     # instructions; tool contracts live in the tool descriptions. First 512
     # chars self-contained (OpenAI guidance).
-    darwin = platform.system() == "Darwin"
-    return _DARWIN_INSTRUCTIONS if darwin else _LINUX_INSTRUCTIONS
+    if platform.system() != "Darwin":
+        return _LINUX_INSTRUCTIONS
+    return _DARWIN_MANAGER_INSTRUCTIONS if owner == "manager" else _DARWIN_INSTRUCTIONS
 
 
 def create_application(
@@ -108,7 +130,12 @@ def create_application(
             execution=backend.native_execution
             if isinstance(backend, _ForegroundCommandBackend)
             else None,
+            owner="embedded",
         )
+    if isinstance(backend, DarwinManagerCommandBackend):
+        from binnacle.platform.composition import validate_native_command_states
+
+        validate_native_command_states(backend.release_states, owner="manager")
     settings = settings.model_copy(deep=True)
     # Root authorization is fixed for this app generation. A mutable symlink
     # alias cannot silently grant new directories to an already running server.
@@ -134,7 +161,9 @@ def create_application(
         # A tool map only. Workflow rules live in the ChatGPT Project's
         # instructions (the single client in use); tool contracts live in the
         # tool descriptions. First 512 chars self-contained (OpenAI guidance).
-        instructions=_server_instructions(),
+        instructions=_server_instructions(
+            "manager" if isinstance(backend, DarwinManagerCommandBackend) else None
+        ),
         auth=StaticTokenVerifier(
             tokens={token: {"client_id": "binnacle-tunnel"}},
         ),
@@ -200,9 +229,15 @@ def create_application(
 def compose_native_tools(
     *,
     settings: Settings,
-    release_scope: Mapping[str, ReleaseDecision] = DARWIN_RELEASE_SCOPE,
+    release_scope: Mapping[str, ReleaseDecision] | None = None,
+    owner: JobOwnerKind | None = None,
 ):
-    """Compose reviewed mechanisms; release_scope replacement is for TESTS only."""
+    """Compose reviewed mechanisms; release_scope replacement is for TESTS only.
+
+    Production resolves the owner from jobs.owner (Darwin auto = manager,
+    JCR-2) and reads that owner's committed rows. A test scope without an
+    explicit owner keeps the embedded owner it was written for.
+    """
     from uuid import uuid4
 
     from binnacle.features.files.paths import FileToolAccess
@@ -210,22 +245,36 @@ def compose_native_tools(
         UnsupportedHostOS,
         create_file_access,
         create_foreground_execution,
+        create_runtime_paths,
         create_search_access,
         native_file_capability,
     )
 
     settings = settings.model_copy(deep=True)
-    release_scope = dict(release_scope)
-    execution = create_foreground_execution(
-        command_states={
-            tool: row.capability.state.value for tool, row in release_scope.items()
-        },
-        foreground_limit_s=settings.run_command.wait_max_s,
-        wait_max_s=settings.run_command.wait_max_s,
+    if owner is None:
+        owner = (
+            resolve_darwin_job_owner(settings.jobs.owner)
+            if release_scope is None
+            else "embedded"
+        )
+    release_scope = dict(
+        release_scope_for_owner(owner) if release_scope is None else release_scope
+    )
+    execution = (
+        create_foreground_execution(
+            command_states={
+                tool: row.capability.state.value for tool, row in release_scope.items()
+            },
+            foreground_limit_s=settings.run_command.wait_max_s,
+            wait_max_s=settings.run_command.wait_max_s,
+            owner=owner,
+        )
+        if owner == "embedded"
+        else None  # the manager owns every command process; no A2 runner here
     )
     # Validate Commands before opening any Files resources, even for test scopes.
     capability = native_file_capability(
-        release_scope=release_scope, execution=execution
+        release_scope=release_scope, execution=execution, owner=owner
     )
 
     def open_providers():
@@ -243,6 +292,19 @@ def compose_native_tools(
         capability=capability,
         capabilities={tool: release_scope[tool].capability for tool in FILE_TOOLS},
     )
+    command_states = {
+        tool: release_scope[tool].capability.state.value
+        for tool in ("run_command", "job_status", "stop_job")
+    }
+    if owner == "manager":
+        socket_path = settings.jobs.socket_path or create_runtime_paths().jobs_socket
+        return access, DarwinManagerCommandBackend(
+            jobs_dir=settings.jobs.dir,
+            socket_path=socket_path,
+            release_states=command_states,
+            warmup_s=settings.jobs.warmup_s,
+            max_output_chars=settings.jobs.max_output_chars,
+        )
     backend = _ForegroundCommandBackend(
         execution=execution,
         keep_newest=settings.jobs.keep_newest,
@@ -272,7 +334,7 @@ class _ForegroundCommandBackend(RestrictedCommandBackend):
         from binnacle.platform.composition import validate_native_command_states
 
         validate_native_command_states(
-            self.release_states, execution=self.native_execution
+            self.release_states, execution=self.native_execution, owner="embedded"
         )
         super().require_available()
 
