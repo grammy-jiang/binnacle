@@ -32,6 +32,7 @@ from binnacle.mcp.job_awareness_hint_walk import (
 )
 
 __all__ = [
+    "MAX_RENDERED",
     "META_KEY",
     "NATIVE_TOOL_TYPES",
     "Execution",
@@ -39,6 +40,7 @@ __all__ = [
     "HintBindings",
     "Identity",
     "Meter",
+    "RoutedOutcome",
     "Schema",
     "Unsupported",
     "Workers",
@@ -52,6 +54,8 @@ __all__ = [
 ]
 
 META_KEY = "binnacle/job-awareness/synthetic-v1"
+#: Mirrors hint_policy/hint_render MAX_HINT_JOBS; the adapter may not import them.
+MAX_RENDERED = 2
 T = TypeVar("T")
 
 
@@ -77,6 +81,11 @@ class HintBindings:
     authorized: Enum
     meta: Enum
     text: Enum
+    # CA-2, read only by ``adapt_routed``; None makes every routed call
+    # suppress. ``route_type`` is the core's frozen request-local SessionRoute
+    # and ``candidate_type`` the exact type of the values ``select`` returns.
+    route_type: type | None = None
+    candidate_type: type | None = None
 
     def __post_init__(self) -> None:
         funcs = self.check, self.observe, self.select, self.render
@@ -85,11 +94,25 @@ class HintBindings:
         if (
             not all(callable(f) for f in funcs)
             or not all(isinstance(t, type) for t in types)
+            or not all(
+                t is None or isinstance(t, type)
+                for t in (self.route_type, self.candidate_type)
+            )
             or not all(isinstance(e, Enum) for e in enums)
             or type(self.meta) is not type(self.text)
             or self.meta is self.text
         ):
             raise ValueError("invalid hint bindings")
+
+
+@dataclass(frozen=True)
+class RoutedOutcome:
+    """``rendered`` is the exact JobRef tuple whose candidates reached the
+    renderer for the hint inside ``result``; it is ``()`` exactly when
+    ``result`` is the unchanged original object."""
+
+    result: ToolResult
+    rendered: tuple[object, ...]
 
 
 @dataclass
@@ -164,6 +187,15 @@ class HintAdapter:
         middleware or interceptor inside ``witnessed_call`` rewrites the
         result object after the witnessed body completed.
         """
+        if not self._admitted(original, execution):
+            return original
+        return await self.workers.run(
+            lambda stop: self._adapt(original, stop), original
+        )
+
+    def _admitted(self, original: ToolResult, execution: object) -> bool:
+        """The shared gate of ``adapt`` and ``adapt_routed``; it consumes the
+        receipt only after the cheap configuration checks passed."""
         if (
             self.enabled is not True
             or self.exclusive is not True
@@ -171,24 +203,111 @@ class HintAdapter:
             or self.schema is None
             or self.identity is None
         ):
-            return original
+            return False
         tool = claim(execution, original)
         if tool is not self.bound_tool or not native_tool(tool):
-            return original
+            return False
         producer = producer_identity(tool)
-        if producer is None or producer != self.identity:
-            return original
-        return await self.workers.run(
-            lambda stop: self._adapt(original, stop), original
+        return producer is not None and producer == self.identity
+
+    async def adapt_routed(
+        self,
+        original: ToolResult,
+        *,
+        execution: object = None,
+        route: object = None,
+    ) -> RoutedOutcome:
+        """CA-2: ``adapt`` for one request-local SessionRoute (design §2.6).
+
+        ``route`` must be exactly ``bindings.route_type``: the frozen route
+        that the lab emission sequence builds after its reserve transaction.
+        Its ``grant`` and ``jobs`` (1 to ``MAX_RENDERED`` exact ``job_type``
+        values) are read once from the backing map and never stored;
+        ``HintAdapter.grant`` and ``jobs`` are not used on this path. No
+        request field can construct a route. The producer, receipt, schema,
+        size and carrier rules are those of ``adapt``. The
+        outcome names the exact jobs whose candidates the renderer received
+        for the inserted hint (at most ``MAX_RENDERED``, each one in
+        ``route.jobs``, in candidate order). Any doubt returns
+        ``RoutedOutcome(original, ())``: the caller then resets or aborts
+        every reserved job and never marks one emitted. ``adapt`` is
+        unchanged and does not consult routes.
+        """
+        unchanged = RoutedOutcome(original, ())
+        binding = self.bindings
+        if (
+            binding.route_type is None
+            or binding.candidate_type is None
+            or type(route) is not binding.route_type
+        ):
+            return unchanged
+        try:  # the backing map of the exact type; no descriptor or hook runs
+            data = object.__getattribute__(route, "__dict__")
+        except AttributeError:  # a slotted route type has no backing map
+            return unchanged
+        if type(data) is not dict or "grant" not in data or "jobs" not in data:
+            return unchanged
+        grant, jobs = data["grant"], data["jobs"]
+        if (
+            type(jobs) is not tuple
+            or not 1 <= len(jobs) <= MAX_RENDERED
+            or not all(type(job) is binding.job_type for job in jobs)
+        ):
+            return unchanged
+        if not self._admitted(original, execution):
+            return unchanged
+        busy: tuple[ToolResult, tuple[object, ...]] = (original, ())
+        result, rendered = await self.workers.run(
+            lambda stop: self._render(original, stop, grant, jobs, routed=True), busy
         )
+        if result is original or not rendered:
+            return unchanged
+        return RoutedOutcome(result, rendered)
 
     def _adapt(self, original: ToolResult, stop: Event) -> ToolResult:
+        return self._render(original, stop, self.grant, self.jobs, routed=False)[0]
+
+    def _rendered(
+        self, candidates: object, jobs: tuple[object, ...]
+    ) -> tuple[object, ...] | None:
+        """Jobs of the exact candidate tuple handed to the renderer, or None.
+
+        Exact types run before any field access: a candidate must be exactly
+        ``candidate_type`` and carry a ``job`` of exactly ``job_type`` that is
+        one of the route jobs, with no repeats. ``rendered`` is therefore a
+        subset of the reserved jobs by construction.
+        """
+        binding = self.bindings
+        if type(candidates) is not tuple or not 1 <= len(candidates) <= MAX_RENDERED:
+            return None
+        rendered: list[object] = []
+        for candidate in candidates:
+            if type(candidate) is not binding.candidate_type:
+                return None
+            data = object.__getattribute__(candidate, "__dict__")
+            if type(data) is not dict or "job" not in data:
+                return None
+            job = data["job"]
+            if type(job) is not binding.job_type or job in rendered or job not in jobs:
+                return None
+            rendered.append(job)
+        return tuple(rendered)
+
+    def _render(
+        self,
+        original: ToolResult,
+        stop: Event,
+        grant: object,
+        jobs: object,
+        *,
+        routed: bool,
+    ) -> tuple[ToolResult, tuple[object, ...]]:
         binding = self.bindings
         meter = Meter(stop)
         self.last_meter = meter
         try:
             if type(self.server_info) is not dict:
-                return original
+                return original, ()
             stamp = {"io.modelcontextprotocol/serverInfo": self.server_info}
             walk({"_meta": stamp}, meter)
             overhead = meter.bytes  # Reserve the entire framework metadata wrapper.
@@ -197,32 +316,38 @@ class HintAdapter:
             meter.initial = False
             body = walk(original, meter, copy=True, byte_limit=262144 - overhead)
             if not self.schema.valid(body["structuredContent"], meter):
-                return original
+                return original, ()
             if (
-                type(self.jobs) is not tuple
-                or not 1 <= len(self.jobs) <= 8
-                or not isinstance(self.grant, binding.grant_type)
-                or not all(type(job) is binding.job_type for job in self.jobs)
+                type(jobs) is not tuple
+                or not 1 <= len(jobs) <= 8
+                or not isinstance(grant, binding.grant_type)
+                or not all(type(job) is binding.job_type for job in jobs)
                 or not any(self.carrier is c for c in (binding.meta, binding.text))
             ):
-                return original
+                return original, ()
             observations = []
             scope = frozenset({binding.observe_scope})
-            for job in self.jobs:
+            for job in jobs:
                 meter.charge()
-                if binding.check(self.grant, job, scope) is not binding.authorized:
-                    return original
-                observed = binding.observe(self.grant, job)
+                if binding.check(grant, job, scope) is not binding.authorized:
+                    return original, ()
+                observed = binding.observe(grant, job)
                 if type(observed) is not binding.success_type:
-                    return original
+                    return original, ()
                 record = observed.value
                 if record.job != job:
-                    return original
+                    return original, ()
                 observations.append(record)
-            candidates = binding.select(self.grant, tuple(observations))
+            candidates = binding.select(grant, tuple(observations))
+            rendered: tuple[object, ...] = ()
+            if routed:
+                found = self._rendered(candidates, jobs)
+                if found is None:
+                    return original, ()
+                rendered = found
             hint = binding.render(candidates, self.carrier)
             if type(hint) is not binding.hint_type:
-                return original
+                return original, ()
             data = object.__getattribute__(hint, "__dict__")
             if (
                 not _fields(data, ("carrier", "text", "utf8_bytes"))
@@ -231,32 +356,33 @@ class HintAdapter:
                 or type(data["utf8_bytes"]) is not int
                 or not 1 <= data["utf8_bytes"] <= 512
             ):
-                return original
+                return original, ()
             text = data["text"]
             _string(text, meter, 263168, raw_limit=512)
             if len(text.encode("utf-8")) != data["utf8_bytes"]:
-                return original
+                return original, ()
             meter.charge(4096)  # fixed renderer and bounded carrier construction
             if self.carrier is binding.meta:
                 meta = body["_meta"]
                 if meta is None:
                     meta = body["_meta"] = {}
                 if META_KEY in meta:
-                    return original
+                    return original, ()
                 meta[META_KEY] = text
             else:
                 new = {"type": "text", "text": text, "annotations": None, "_meta": None}
                 body["content"].append(new)
             walk(body, meter, byte_limit=263168 - overhead)
             if meter.bytes - original_bytes > 1024:
-                return original
+                return original, ()
             meter.charge(meter.bytes + meter.nodes + 32 * len(body["content"]))
             blocks: list[ContentBlock] = []
             blocks.extend(TextContent.model_construct(**c) for c in body["content"])
-            return ToolResult.model_construct(
+            result = ToolResult.model_construct(
                 content=blocks,
                 structured_content=body["structuredContent"],
                 meta=body["_meta"],
             )
+            return result, rendered
         except Exception:  # noqa: BLE001 - all awareness failures preserve the original
-            return original
+            return original, ()

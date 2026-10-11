@@ -103,6 +103,11 @@ def manifest_groups() -> dict[str, set[str]]:
             "mcp/job_awareness_hint_walk.py",
             "mcp/job_awareness_hint_identity.py",
         },
+        # E2 lab-only MCP session extraction (default off); mirrors
+        # job-awareness-lab-session-not-in-production.
+        "job_awareness_lab": {
+            "mcp/job_awareness_session.py",
+        },
         "platform_contracts": {
             "platform/__init__.py",
             "platform/contracts/__init__.py",

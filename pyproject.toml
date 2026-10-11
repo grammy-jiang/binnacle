@@ -491,3 +491,10 @@ forbidden_modules = [
     "binnacle.companions",
     "binnacle.deployment",
 ]
+
+[[tool.importlinter.contracts]]
+id = "job-awareness-lab-session-not-in-production"
+name = "Production assembly never imports the E2 lab session extraction"
+type = "forbidden"
+source_modules = ["binnacle.server", "binnacle.application"]
+forbidden_modules = ["binnacle.mcp.job_awareness_session"]
