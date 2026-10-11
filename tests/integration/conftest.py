@@ -6,12 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.integration._jobs_socket_fixture import ensure_test_jobs_socket
-
-# Must run before anything composes settings (test modules import the jobs
-# module at collection); a no-op on Linux and when the env var is set.
-ensure_test_jobs_socket()
-
 from binnacle.features.commands import jobs as jobstore
 
 
