@@ -46,7 +46,8 @@ class ReferenceOwner:
         dups += [(os.POSIX_SPAWN_DUP2, output.fileno(), n) for n in (1, 2)]
         args = ["/bin/sh", "-c", shim, "sh", str(workdir), *argv]
         sigdef = (signal.SIGPIPE, signal.SIGTERM, signal.SIGINT, signal.SIGCHLD)
-        kw = {"file_actions": dups, "setsid": True, "setsigdef": sigdef}
+        # pgid == pid; posix_spawn setsid is NotImplemented on Linux CPython
+        kw = {"file_actions": dups, "setpgroup": 0, "setsigdef": sigdef}
         pid = os.posix_spawn(args[0], args, dict(env), **kw)
         with self.cond:
             self.live[job_id] = pid
@@ -385,8 +386,7 @@ def test_rpc_v1_over_authenticated_ipc_end_to_end(runtime, tmp_path):
         assert group_gone(pgid)
         with pytest.raises(Err, match="no job with id"):
             client().stop(sock, "0" * 12)
-    assert not errors and not sock.exists()
-    assert not sock.with_name("jobs.sock.auth").exists()
+    assert not (errors or sock.exists() or sock.with_name("jobs.sock.auth").exists())
     with pytest.raises(NativeCapabilityError, match="ipc_endpoint_unpublished"):
         discover_service_lease(root=sock.parent, label=LABEL)
 
