@@ -118,6 +118,7 @@ class DarwinJobManager(_ManagerStopping):
     """RPC v1 dispatcher and durable-record writer for one owner incarnation."""
 
     owner: ReleasingJobOwner
+    held_jobs_dir: str | None = None  # M1-2: realpath, set once under the writer lock
 
     def __init__(
         self,
@@ -135,8 +136,7 @@ class DarwinJobManager(_ManagerStopping):
         self.grace, self.provenance = grace, runtime_provenance()
         self._lock = threading.RLock()
         self._unrecorded: dict[str, OwnedJobExit] = {}  # reaped, not yet durable
-        # Set on SIGTERM (serve_job_manager shares its stop event): every
-        # waiting handler returns at once (JCRP-F2).
+        # SIGTERM sets it (serve_job_manager shares stop): handlers return (JCRP-F2).
         self.stopping = threading.Event()
         # D2: the entry's stop-marker probe: a typed refusal, or None to start.
         self.stop_pending: Callable[[], dict[str, Any] | None] = lambda: None
@@ -191,7 +191,8 @@ class DarwinJobManager(_ManagerStopping):
             reply["pid"] = os.getpid()
             reply["package_version"] = self.provenance.package_version
             reply["running_jobs"], reply["unknown_jobs"] = self.job_counts()
-            return {**reply, "revision": self.provenance.revision}
+            held = {"jobs_dir": self.held_jobs_dir} if self.held_jobs_dir else {}
+            return {**reply, **held, "revision": self.provenance.revision}
         if op == "start":
             return self._start(request)
         if op == "stop":

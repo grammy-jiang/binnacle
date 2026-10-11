@@ -94,6 +94,7 @@ def serve_job_manager(
         socket_path, manager.owner_instance_id
     )
     with jobs_dir_writer(manager.jobs_dir):
+        manager.held_jobs_dir = os.path.realpath(manager.jobs_dir)  # M1-2, STEER-01
         recovered = manager.recover()
         log.info("event=job_manager_start pid=%d recovered=%d", os.getpid(), recovered)
         halt, died = threading.Event(), threading.Event()
@@ -368,8 +369,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except Exception:
         log.exception("event=job_manager_owner_unavailable")
         return EX_FAILED
-    reaper = owner.reaper_running
-    log.info("event=job_manager_compose owner_reaper_thread=%s", reaper)
+    log.info("event=job_manager_compose owner_reaper_thread=%s", owner.reaper_running)
     stop = threading.Event()
     for number in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(number, lambda *_: stop.set())
