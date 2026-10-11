@@ -72,6 +72,10 @@ def serve_job_manager(
 
     if signal.getsignal(signal.SIGCHLD) != signal.SIG_DFL:
         raise RuntimeError("darwin_exclusive_reaper_required")
+    # JCRP-F2: SIGTERM (or a reaper death) sets ``stop``; sharing it as the
+    # manager's stopping event releases every waiting handler at once, so the
+    # serving drain never delays close() past launchd's ExitTimeOut.
+    manager.stopping = stop
     with jobs_dir_writer(manager.jobs_dir):
         recovered = manager.recover()
         log.info("event=job_manager_start pid=%d recovered=%d", os.getpid(), recovered)
@@ -264,3 +268,74 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     log.warning("event=job_manager_stopped reason=unrequested")
     return EX_FAILED
+
+
+_STATE_LETTERS = {1: "I", 2: "R", 3: "S", 4: "T", 5: "Z"}  # SIDL..SZOMB
+
+
+def _sysctl(mib: Sequence[int], limit: int) -> bytes:
+    """Public sysctl(3) read (KERN_PROC_PGRP / KERN_PROCARGS2); never libproc."""
+    query = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True).sysctl
+    query.argtypes = [ctypes.POINTER(ctypes.c_int), ctypes.c_uint, ctypes.c_void_p]
+    query.argtypes += [
+        ctypes.POINTER(ctypes.c_size_t),
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    names, size = (ctypes.c_int * len(mib))(*mib), ctypes.c_size_t()
+    if query(names, len(mib), None, ctypes.byref(size), None, 0) != 0:
+        raise OSError(ctypes.get_errno(), "sysctl size failed")
+    if size.value > limit:
+        raise OSError("sysctl size over limit")
+    buffer = ctypes.create_string_buffer(size.value + 648 * 4)
+    size.value = len(buffer)
+    if query(names, len(mib), buffer, ctypes.byref(size), None, 0) != 0:
+        raise OSError(ctypes.get_errno(), "sysctl read failed")
+    return buffer.raw[: min(size.value, len(buffer))]
+
+
+def command_line(pid: int, max_cmd_chars: int) -> str | None:
+    """argv from KERN_PROCARGS2 (int argc, exec path, NULs, argv); None if denied."""
+    try:
+        data = _sysctl((1, 49, pid), 1 << 20)
+    except OSError:
+        return None
+    argc = int.from_bytes(data[:4], sys.byteorder) if len(data) >= 4 else 0
+    end = data.find(b"\0", 4)
+    fields = [f for f in data[end:].split(b"\0") if f] if end >= 0 else []
+    if argc <= 0 or len(fields) < argc:
+        return None
+    return " ".join(f.decode(errors="replace") for f in fields[:argc])[:max_cmd_chars]
+
+
+def group_listing(pgid: int, max_cmd_chars: int) -> list[dict]:
+    """JCRP-F6 (Linux job_processes shape): pid, ppid, state and cmd.
+
+    ``cmd`` is the KERN_PROCARGS2 argv bounded by ``max_cmd_chars``, else the
+    kinfo_proc comm when PROCARGS2 is denied, else omitted: never invented. The
+    owner calls this only for its verified group; it grants no signal right.
+    """
+    from binnacle.platform.darwin.process_authority import _decode_process_records
+
+    try:
+        raw = _sysctl((1, 14, 2, pgid), 648 * 65536)
+    except OSError:
+        return []
+    listing: list[dict] = []
+    for offset in range(0, len(raw) - len(raw) % 648, 648):
+        entry = raw[offset : offset + 648]
+        try:
+            (member,) = _decode_process_records(entry)
+        except OSError:
+            continue
+        if member.group != pgid:
+            continue
+        cmd = command_line(member.pid, max_cmd_chars)
+        if cmd is None:  # p_comm (MAXCOMLEN + 1) at kinfo_proc offset 243
+            cmd = entry[243:260].split(b"\0", 1)[0].decode(errors="replace") or None
+        state = _STATE_LETTERS.get(member.state, "?")
+        listing.append({"pid": member.pid, "ppid": member.parent, "state": state})
+        if cmd is not None:  # unknown: omitted (job_status schema), never invented
+            listing[-1]["cmd"] = cmd[:max_cmd_chars]
+    return sorted(listing, key=lambda item: int(item["pid"]))

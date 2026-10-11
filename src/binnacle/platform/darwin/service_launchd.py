@@ -237,13 +237,17 @@ class LaunchdUserServices:
         }
         env = value.get("EnvironmentVariables", {})
         argv = value.get("ProgramArguments")
+        role = env.get("BINNACLE_SERVICE_ROLE") if isinstance(env, dict) else None
+        runtime_dirs = (str(self.root), *([None] if role == "manager" else []))
         if (
             not value.keys() <= allowed
             or value.get("Label") != self.lease.label
             or not isinstance(env, dict)
             or env.get("BINNACLE_SERVICE_ROLE") not in ("frontend", "probe", "manager")
             or self.lease.label.rsplit(".", 1)[-1] != env.get("BINNACLE_SERVICE_ROLE")
-            or env.get("BINNACLE_RUNTIME_DIR") != str(self.root)
+            # The manager entry refuses BINNACLE_RUNTIME_DIR (RJ2D-F4, SD-43 N5):
+            # the manager role may omit it; otherwise it names this root.
+            or env.get("BINNACLE_RUNTIME_DIR") not in runtime_dirs
             or not isinstance(argv, list)
             or not argv
             or not all(isinstance(arg, str) for arg in argv)
