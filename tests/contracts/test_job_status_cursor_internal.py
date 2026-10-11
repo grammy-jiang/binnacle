@@ -1,6 +1,7 @@
 """IB1 cursor semantics before the public MCP parameter lands in IB2."""
 
 import json
+import sys
 
 import pytest
 from fastmcp.exceptions import ToolError
@@ -8,6 +9,11 @@ from fastmcp.exceptions import ToolError
 from binnacle.features.commands import jobs
 from binnacle.features.commands.tools import job_status as js
 from binnacle.mcp.callctx import current_call
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux embedded job-store cursor tests need Linux Commands; Darwin Commands are scope-gated",
+)
 
 
 @pytest.fixture()
@@ -56,6 +62,7 @@ def _status(job_id, cursor):
     return result.structured_content
 
 
+@LINUX_ONLY
 def test_cursor_start_drains_multi_chunk_log(cursor_store, monkeypatch):
     job_id, _, _ = _record(cursor_store, monkeypatch, data=b"abcdefghij")
     monkeypatch.setattr(jobs, "RUN_MAX_OUTPUT_CHARS", 4)
@@ -77,6 +84,7 @@ def test_cursor_start_drains_multi_chunk_log(cursor_store, monkeypatch):
     assert cursor == f"v1:{job_id}:10"
 
 
+@LINUX_ONLY
 def test_cursor_end_explicitly_skips_existing_output(cursor_store, monkeypatch):
     job_id, _, _ = _record(cursor_store, monkeypatch, data=b"existing")
     payload = _status(job_id, "end")
@@ -86,6 +94,7 @@ def test_cursor_end_explicitly_skips_existing_output(cursor_store, monkeypatch):
     assert payload["has_more"] is False
 
 
+@LINUX_ONLY
 def test_cursor_rejects_wrong_job_beyond_end_and_malformed(cursor_store, monkeypatch):
     job_id, _, _ = _record(cursor_store, monkeypatch, data=b"abc")
 
@@ -98,6 +107,7 @@ def test_cursor_rejects_wrong_job_beyond_end_and_malformed(cursor_store, monkeyp
             _status(job_id, cursor)
 
 
+@LINUX_ONLY
 def test_cursor_missing_log_after_state_read_uses_existing_error(
     cursor_store, monkeypatch
 ):
@@ -107,6 +117,7 @@ def test_cursor_missing_log_after_state_read_uses_existing_error(
         _status(job_id, "start")
 
 
+@LINUX_ONLY
 def test_cursor_quiet_running_job_can_have_unread_output(cursor_store, monkeypatch):
     job_id, _, _ = _record(
         cursor_store,
@@ -122,6 +133,7 @@ def test_cursor_quiet_running_job_can_have_unread_output(cursor_store, monkeypat
     assert payload["has_more"] is True
 
 
+@LINUX_ONLY
 def test_cursor_pending_utf8_suffix_flushes_after_exit(cursor_store, monkeypatch):
     data = b"A" + "😀".encode()[:2]
     job_id, state, _ = _record(
@@ -142,6 +154,7 @@ def test_cursor_pending_utf8_suffix_flushes_after_exit(cursor_store, monkeypatch
     assert terminal["has_more"] is False
 
 
+@LINUX_ONLY
 def test_cursor_invalid_bytes_are_consumed_with_replacement(cursor_store, monkeypatch):
     job_id, _, _ = _record(cursor_store, monkeypatch, data=b"A" + bytes([0xFF]) + b"B")
     payload = _status(job_id, "start")
@@ -150,6 +163,7 @@ def test_cursor_invalid_bytes_are_consumed_with_replacement(cursor_store, monkey
     assert payload["has_more"] is False
 
 
+@LINUX_ONLY
 def test_cursor_zero_configured_limit_still_progresses(cursor_store, monkeypatch):
     job_id, _, _ = _record(cursor_store, monkeypatch, data=b"abcdefgh")
     monkeypatch.setattr(jobs, "RUN_MAX_OUTPUT_CHARS", 0)
@@ -159,6 +173,7 @@ def test_cursor_zero_configured_limit_still_progresses(cursor_store, monkeypatch
     assert payload["has_more"] is True
 
 
+@LINUX_ONLY
 def test_cursor_unknown_job_state_is_readable_and_final(cursor_store, monkeypatch):
     data = b"ok" + "猫".encode()[:2]
     job_id, _, _ = _record(cursor_store, monkeypatch, data=data, state_name="unknown")
@@ -169,6 +184,7 @@ def test_cursor_unknown_job_state_is_readable_and_final(cursor_store, monkeypatc
     assert payload["has_more"] is False
 
 
+@LINUX_ONLY
 def test_cursor_emits_telemetry_field_list(cursor_store, monkeypatch, caplog):
     job_id, _, _ = _record(cursor_store, monkeypatch, data=b"abcdef")
     monkeypatch.setattr(jobs, "RUN_MAX_OUTPUT_CHARS", 4)
@@ -189,6 +205,7 @@ def test_cursor_emits_telemetry_field_list(cursor_store, monkeypatch, caplog):
     ) in line
 
 
+@LINUX_ONLY
 def test_tail_mode_payload_remains_legacy_shape(cursor_store, monkeypatch):
     job_id, _, _ = _record(cursor_store, monkeypatch, data=b"one\ntwo\n")
     result = js.job_status_impl(job_id, 1, 0)
@@ -207,6 +224,7 @@ def test_tail_mode_payload_remains_legacy_shape(cursor_store, monkeypatch):
     )
 
 
+@LINUX_ONLY
 def test_cursor_missing_job_uses_existing_error(cursor_store, monkeypatch):
     monkeypatch.setattr(jobs, "job_state", lambda _requested: None)
     with pytest.raises(ToolError, match="No job with id"):

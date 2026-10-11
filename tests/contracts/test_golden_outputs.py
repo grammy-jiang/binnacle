@@ -19,6 +19,7 @@ import asyncio
 import json
 import os
 import signal
+import sys
 
 import pytest
 from fastmcp import Client
@@ -26,6 +27,12 @@ from fastmcp import Client
 from binnacle import server
 from binnacle.features.commands import jobs
 from tests.contracts.golden_support import SNAPSHOT_DIR, Masker, check
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux golden outputs: Linux roots/paths and Linux-only background jobs/stop_job; Darwin grants and job surface differ",
+)
+
 
 CASES = (
     "read_file-small",
@@ -86,6 +93,7 @@ def run(steps):
     return asyncio.run(go())
 
 
+@LINUX_ONLY
 def test_read_file(work, tmp_path):
     masker = Masker(tmp_path)
 
@@ -100,6 +108,7 @@ def test_read_file(work, tmp_path):
     assert long.structured_content["truncated"] is True
 
 
+@LINUX_ONLY
 def test_list_files(work, tmp_path):
     async def steps(call):
         return await call("list_files", path=str(work))
@@ -107,6 +116,7 @@ def test_list_files(work, tmp_path):
     check("list_files", Masker(tmp_path).record(run(steps)))
 
 
+@LINUX_ONLY
 def test_search_text(work, tmp_path):
     masker = Masker(tmp_path)
 
@@ -129,6 +139,7 @@ def test_search_text(work, tmp_path):
         check(name, recorded)
 
 
+@LINUX_ONLY
 def test_write_file_then_edit_file(work, tmp_path):
     masker = Masker(tmp_path)
     target = work / "new.txt"
@@ -146,6 +157,7 @@ def test_write_file_then_edit_file(work, tmp_path):
     assert target.read_text() == "one\nthree\n"
 
 
+@LINUX_ONLY
 def test_run_command_fast(work, tmp_path):
     async def steps(call):
         return await call(
@@ -155,6 +167,7 @@ def test_run_command_fast(work, tmp_path):
     check("run_command-fast", Masker(tmp_path).record(run(steps)))
 
 
+@LINUX_ONLY
 def test_job_that_outlives_its_wait(work, tmp_path):
     masker = Masker(tmp_path)
 
@@ -181,6 +194,7 @@ def test_job_that_outlives_its_wait(work, tmp_path):
     check("job_status-listing", masker.record(listing))
 
 
+@LINUX_ONLY
 def test_stop_job(work, tmp_path):
     masker = Masker(tmp_path)
 

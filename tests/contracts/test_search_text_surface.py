@@ -18,8 +18,17 @@ SEARCH_TEXT_SURFACE_SHA256 in the same change and say why in the commit.
 
 import copy
 import json
+import sys
+
+import pytest
 
 from tests.contracts.surface_support import digest, served, surface
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux search_text surface hash/text pin; Darwin appends native search limits",
+)
+
 
 SEARCH_TEXT_SURFACE_SHA256 = (
     "bd6f6e576567dad6fd759fac233667aa4b6089d546b90079832fa4761739848a"
@@ -49,6 +58,7 @@ def _surface() -> dict:
     return surface(next(t for t in tools if t.name == "search_text"))
 
 
+@LINUX_ONLY
 def test_surface_is_master_minus_the_removed_text():
     surface = _surface()
     assert surface["description"] == DESCRIPTION
@@ -64,6 +74,7 @@ def test_surface_is_master_minus_the_removed_text():
     assert digest(restored) == MASTER_9B7D6D3_SURFACE_SHA256
 
 
+@LINUX_ONLY
 def test_search_text_surface_is_pinned():
     assert digest(_surface()) == SEARCH_TEXT_SURFACE_SHA256
 

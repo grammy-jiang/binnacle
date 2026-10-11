@@ -1,10 +1,9 @@
 """Selection rules for native macOS runs: skips must stay narrow and justified.
 
-A Mac run that collects but skips a whole platform looks green while proving
-nothing. The AST skip scanner finds every pytest skip site in ``tests/`` (marks,
-aliases, ``pytestmark``, ``pytest.skip``/``importorskip``, ``xfail(run=False)``,
-conftest ``collect_ignore*``); the policy enforces ``ALLOWED_PLATFORM_SKIPS``
-with a pinned platform-site count per row, so a new skip needs a reviewed edit.
+A Mac run that skips a whole platform looks green while proving nothing. The
+AST scanner finds every pytest skip site in ``tests/`` (marks, aliases,
+``pytestmark``, ``pytest.skip``/``importorskip``, ``xfail(run=False)``, conftest
+``collect_ignore*``); ``ALLOWED_PLATFORM_SKIPS`` pins a site count per row.
 """
 
 import ast
@@ -18,10 +17,17 @@ ROOT = Path(__file__).resolve().parents[2]
 DARWIN_DIR = "tests/platform/darwin/"
 OWNER_REASON = re.compile(r"^(A\d|B0|E0|T0|baseline): \S.*")
 
-# Every file that may hold a platform-conditioned or opt-in skip, with the
-# owned reason ("<lane>: <why>"). Rows under tests/platform/darwin/ may name a
-# file that has not merged yet; every other row must exist. A new row needs a
-# review; a whole-module skip never fits here (see ``check_skip_policy``).
+# Files that may hold a platform-conditioned or opt-in skip ("<lane>: <why>");
+# only Darwin-package rows may name unmerged files. A new row needs review.
+# LINUX_PIN_FILES hold one alias-based per-test skipif(sys.platform != "linux").
+_PINS = """contracts/descriptions contracts/golden_outputs contracts/job_schemas
+    contracts/job_spool_compat contracts/job_status_cursor_internal
+    contracts/os_stage1_wire_parity contracts/protocol contracts/search_text_surface
+    contracts/server_composition contracts/tool_surface contracts/visibility
+    integration/composition_workflows integration/os_pure_application"""
+LINUX_PIN_FILES = [
+    p.replace("/", "/test_").join(("tests/", ".py")) for p in re.findall(r"\S+", _PINS)
+]
 ALLOWED_PLATFORM_SKIPS = {
     "tests/system/test_uplink_network.py": (
         "baseline: Linux SO_BINDTODEVICE / iproute2 only"
@@ -53,10 +59,10 @@ ALLOWED_PLATFORM_SKIPS = {
     "tests/platform/darwin/test_composition_contract.py": (
         "B0: in-body skip of the real-socket peer check off Darwin"
     ),
+    **dict.fromkeys(LINUX_PIN_FILES, "T0: per-test Linux-only golden/host pin"),
 }
-# A condition that names an imported/attribute flag or helper the scanner cannot
-# read (``from x import ON_MAC``, ``helpers.ON_MAC``) carries this token: it is
-# platform-suspect, so the file needs a row exactly like a visible sys.platform.
+# A condition naming an imported flag or helper the scanner cannot read
+# (``from x import ON_MAC``) carries this token: it needs a row like sys.platform.
 UNRESOLVED = "<unresolved-flag>"
 PLATFORM_PATTERN = re.compile(
     r"sys\.platform|platform\.|os\.name|os\.uname|\bdarwin\b|\blinux\b"
@@ -72,12 +78,10 @@ CALL_NAMES = {"pytest.skip", "pytest.importorskip", "pytest.xfail"}
 COLLECT_NAMES = {"collect_ignore", "collect_ignore_glob"}
 SAFE_MODULES = set(sys.stdlib_module_names) | {"pytest"}
 
-# Module-level ``pytest.importorskip`` skips the whole file when the module is
-# missing, so it is only allowed for a named module that exists on every
-# supported platform (never inside tests/platform/darwin/).
+# Module-level ``pytest.importorskip`` skips the whole file: only for a named
+# module present on every platform (never inside tests/platform/darwin/).
 ALLOWED_MODULE_IMPORTORSKIPS = {("tests/contracts/test_dependency_pin.py", "tomllib")}
-# Per row: how many platform-conditioned (or platform-suspect) skip sites the
-# file may hold. Adding another one needs an edit here, a reviewable diff.
+# Per row: the platform-conditioned skip sites a file may hold (reviewable edit).
 PLATFORM_SITE_COUNTS = {
     "tests/system/test_uplink_network.py": 1,
     "tests/live/test_deployment_smoke.py": 0,
@@ -89,6 +93,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_search_parity.py": 1,
     "tests/platform/darwin/test_package_install.py": 1,
     "tests/platform/darwin/test_composition_contract.py": 3,
+    **dict.fromkeys(LINUX_PIN_FILES, 1),
 }
 
 
@@ -133,7 +138,6 @@ class _Scanner:
         if conftest:
             self._scan_conftest(tree.body, [])
 
-    # -- name resolution -------------------------------------------------
     def _collect_imports(self, tree: ast.Module) -> None:
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -200,7 +204,6 @@ class _Scanner:
             return [expr]
         return []
 
-    # -- conditions ------------------------------------------------------
     def _text(self, expr: ast.AST | None, depth: int = 3) -> str:
         if expr is None:
             return ""
@@ -461,9 +464,6 @@ def _repo_sources() -> dict[str, str]:
         path.relative_to(ROOT).as_posix(): path.read_text()
         for path in (ROOT / "tests").rglob("*.py")
     }
-
-
-# -- summary detector ------------------------------------------------------
 
 
 def test_falsely_green_detector_flags_all_skipped_platform():

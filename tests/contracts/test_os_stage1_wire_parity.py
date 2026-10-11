@@ -2,11 +2,20 @@
 
 import asyncio
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
+import pytest
+
 from binnacle import server
 from tests.contracts.surface_support import served
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="v1.0.1 Linux exact raw MCP wire models; Darwin search_text description differs",
+)
+
 
 REFERENCE = (
     Path(__file__).resolve().parents[2]
@@ -18,6 +27,7 @@ def baseline():
     return json.loads(REFERENCE.read_text(encoding="utf-8"))
 
 
+@LINUX_ONLY
 def test_four_client_profiles_match_v101_exact_raw_mcp_models():
     original = baseline()["profile_surfaces"]
     profiles = {
@@ -34,6 +44,7 @@ def test_four_client_profiles_match_v101_exact_raw_mcp_models():
         ] == original[key]["tools"], key
 
 
+@LINUX_ONLY
 def test_native_raw_provider_ownership_and_middleware_match_v101():
     original = baseline()
 

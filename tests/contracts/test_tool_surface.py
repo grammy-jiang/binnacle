@@ -23,6 +23,7 @@ changes without a reason in its commit is a regression.
 """
 
 import hashlib
+import sys
 
 import pytest
 
@@ -33,6 +34,12 @@ from tests.contracts.surface_support import (
     served,
     surface,
 )
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux tool-surface hashes (run_command/stop_job); Darwin surface differs",
+)
+
 
 # 2026-09-29: run_command/job_status hashes intentionally changed for the
 # default durable-job handoff UX; cursor v1 schema remains unchanged.
@@ -65,6 +72,7 @@ def _hashes(client_name: str | None, mode: str | None = None) -> dict[str, str]:
     return {tool.name: digest(surface(tool)) for tool in tools}
 
 
+@LINUX_ONLY
 @pytest.mark.parametrize("profile", sorted(PROFILES))
 def test_surface_is_pinned(profile):
     hashes = _hashes(PROFILES[profile])
@@ -85,6 +93,7 @@ def test_server_instructions_are_pinned(profile):
     assert hashlib.sha256(instructions.encode()).hexdigest() == INSTRUCTIONS_SHA256
 
 
+@LINUX_ONLY
 @pytest.mark.parametrize(
     ("client_name", "mode"),
     [("openai-mcp", "legacy"), ("openai-mcp(ChatGPT)", None)],

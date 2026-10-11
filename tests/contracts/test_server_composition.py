@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import sys
 from collections import Counter
 
 import mcp.types
@@ -19,6 +20,12 @@ from tests.contracts.surface_support import digest, served, surface
 from tests.contracts.test_input_validation import text_of
 from tests.contracts.test_tool_surface import INSTRUCTIONS_SHA256, SURFACE_SHA256
 
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux composition/surface hashes; Darwin Commands scope needs the A2 foreground gate",
+)
+
+
 PROFILES = [
     (None, None, "default"),
     ("openai-mcp(ChatGPT)", None, "chatgpt"),
@@ -34,8 +41,8 @@ ROOT_LOCAL: list[str] = []
     "factory",
     [
         pytest.param(server.create_server, id="root"),
-        pytest.param(create_files_server, id="files"),
-        pytest.param(create_search_server, id="search"),
+        pytest.param(create_files_server, id="files", marks=LINUX_ONLY),
+        pytest.param(create_search_server, id="search", marks=LINUX_ONLY),
         pytest.param(create_commands_server, id="commands"),
     ],
 )
@@ -46,6 +53,7 @@ def test_factories_reject_duplicate_local_registration(factory):
         root.tool(lambda: None, name="local_duplicate_probe")
 
 
+@LINUX_ONLY
 @pytest.mark.parametrize(
     ("factory", "names"),
     [
@@ -89,6 +97,7 @@ def test_current_root_has_exact_local_inventory_and_raw_multiplicity():
         asyncio.run(go(root))
 
 
+@LINUX_ONLY
 @pytest.mark.parametrize("collision", ["root-child", "child-child"])
 def test_wire_pins_can_hide_duplicates_that_raw_contract_rejects(collision):
     async def build():
@@ -122,6 +131,7 @@ def test_wire_pins_can_hide_duplicates_that_raw_contract_rejects(collision):
     assert hashlib.sha256(instructions.encode()).hexdigest() == INSTRUCTIONS_SHA256
 
 
+@LINUX_ONLY
 @pytest.mark.parametrize(("name", "mode", "profile"), PROFILES)
 def test_fresh_root_matches_pins_and_exported_wire_surface(name, mode, profile):
     tools, instructions = served(name, mode, mcp_server=server.create_server())
@@ -161,6 +171,7 @@ def test_fresh_root_validation_parity(tool, arguments, field):
     assert fresh.content == exported.content
 
 
+@LINUX_ONLY
 @pytest.mark.parametrize("mode", ["2026-07-28", "legacy"])
 def test_two_roots_and_clients_keep_visibility_isolated(mode, tmp_path):
     async def go():

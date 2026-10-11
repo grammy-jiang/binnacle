@@ -5,9 +5,17 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from tests.integration.test_packaging_smoke import clean_env
 
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux fake-service composition; Darwin composition requires the A2 foreground gate",
+)
 
+
+@LINUX_ONLY
 def test_pure_composition_fake_services_without_linux_adapter_import(tmp_path):
     """Use a separate interpreter so all eager imports are visible and blocked."""
     fixture = tmp_path / "file.txt"

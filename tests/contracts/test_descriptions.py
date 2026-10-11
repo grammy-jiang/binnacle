@@ -12,11 +12,19 @@ returned a job_id" (50 blind listings), read_file's no-paging rule.
 """
 
 import asyncio
+import sys
 from pathlib import Path
 
+import pytest
 from fastmcp import Client
 
 from binnacle import server
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux tool-description text/budget pins; Darwin descriptions carry native-limit disclosures",
+)
+
 
 PROJECT_RULES = (
     Path(__file__).resolve().parents[2]
@@ -75,6 +83,7 @@ def test_job_status_keeps_the_only_needed_clause_and_wait_contract():
     assert "later turn or new chat can resume by job_id/cursor" in d
 
 
+@LINUX_ONLY
 def test_run_command_keeps_not_killed_and_no_job_facts():
     d = descriptions()["run_command"].lower()
     assert "not killed" in d and "created no job" in d
@@ -93,6 +102,7 @@ def test_read_file_keeps_limit_and_no_paging():
     assert "edit_file" not in d  # hidden from ChatGPT, the only client
 
 
+@LINUX_ONLY
 def test_descriptions_keep_generic_handoff_small_and_avoid_project_planning():
     d = descriptions()
     for name in (

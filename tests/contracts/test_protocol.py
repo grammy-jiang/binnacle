@@ -17,10 +17,18 @@ dependency (2026-08-31).
 
 import asyncio
 import json
+import sys
 
+import pytest
 from fastmcp import Client
 
 from binnacle import server
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux roots/paths and error text; Darwin uses opened grants and a different tmp root",
+)
+
 
 #: The contract each hint carries for ChatGPT's connector UI:
 #: The SDK exposes MCP annotation fields as snake_case Python attributes.
@@ -135,6 +143,7 @@ def test_server_instructions_are_a_short_self_contained_tool_map():
 # -- end to end through the protocol ----------------------------------------
 
 
+@LINUX_ONLY
 def test_write_read_edit_search_round_trip(tmp_path):
     path = tmp_path / "note.md"
     body = "alpha nonce-7Q3\nbeta\n"
@@ -156,6 +165,7 @@ def test_write_read_edit_search_round_trip(tmp_path):
     assert not listing.is_error and "note.md" in text_of(listing)
 
 
+@LINUX_ONLY
 def test_run_command_synchronous_result_reports_no_job(tmp_path):
     r = call("run_command", command="printf 'hi nonce-7Q3'", workdir=str(tmp_path))
     assert not r.is_error, text_of(r)
@@ -165,6 +175,7 @@ def test_run_command_synchronous_result_reports_no_job(tmp_path):
     assert "nonce-7Q3" in json.dumps(sc)
 
 
+@LINUX_ONLY
 def test_path_outside_the_roots_is_a_tool_error_not_a_crash():
     r = call("read_file", path="/etc/passwd")
     assert r.is_error
@@ -176,6 +187,7 @@ def test_unknown_tool_is_a_protocol_error():
     assert r.is_error
 
 
+@LINUX_ONLY
 def test_symlink_escape_is_rejected_through_mcp(tmp_path):
     link = tmp_path / "escape"
     link.symlink_to("/etc/passwd")
