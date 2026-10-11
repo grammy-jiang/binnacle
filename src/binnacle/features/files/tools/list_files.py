@@ -28,6 +28,7 @@ from binnacle.features.files.paths import (
     nearby_hint,
     resolve_path,
 )
+from binnacle.features.search.rg_env import NO_CONFIG, rg_env
 from binnacle.platform.contracts.file_access_contracts import ListRequest
 
 OUTPUT_SCHEMA = {
@@ -232,7 +233,7 @@ def _glob_mode(
     # Python: rg's --glob "always overrides any other ignore logic", so a
     # positive --glob would whitelist gitignored files (found by the gate).
     pattern = glob if "/" in glob else f"**/{glob}"
-    cmd = [rg_bin, "--files", "--sortr", "modified"]
+    cmd = [rg_bin, NO_CONFIG, "--files", "--sortr", "modified"]
     if include_hidden:
         cmd += ["--hidden", "--glob", "!**/.git/**"]
     try:
@@ -243,6 +244,7 @@ def _glob_mode(
             text=True,
             timeout=timeout_s,
             check=False,
+            env=rg_env(),
         )
     except FileNotFoundError as exc:
         raise CodedToolError(
