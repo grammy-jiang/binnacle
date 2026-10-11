@@ -10,6 +10,7 @@ import pytest
 from binnacle.features.commands import command_backend as cb
 from binnacle.features.commands.command_backend import (
     DARWIN_MANAGER_REVIEW_PENDING,
+    DARWIN_MANAGER_UNAVAILABLE_NOTE,
     DARWIN_OWNER_LOST_NOTE,
     RESOURCES_SAMPLED,
     DarwinManagerCommandBackend,
@@ -47,16 +48,26 @@ class FakeStore:
 
 
 class FakeClient:
-    def __init__(self, backend_dir, start_reply=None):
+    def __init__(self, backend_dir, start_reply=None, *, reachable=True):
         self.calls = []
+        self.pings = 0
         self.start_reply = start_reply or {"job_id": "j1", "state": "running"}
         self.backend_dir = backend_dir
+        self.reachable = reachable
+
+    def ping(self, socket_path):
+        self.pings += 1
+        if not self.reachable:
+            raise OSError("connection refused")
+        return {"ok": True}
 
     def start(self, socket_path, **kwargs):
         self.calls.append(("start", socket_path, kwargs))
         return self.start_reply
 
     def stop(self, socket_path, job_id, *, call_id):
+        if not self.reachable:
+            raise OSError("connection refused")
         self.calls.append(("stop", socket_path, job_id, call_id))
         write_meta(self.backend_dir, job_id, exit_code=None, signal=15)
 
@@ -181,6 +192,33 @@ def test_job_state_running_without_log(tmp_path):
     assert "note" not in state
 
 
+def test_job_state_unreachable_manager_is_unverified(tmp_path):
+    # SD-41: only the manager can verify a non-terminal record.
+    write_meta(tmp_path, "j1")
+    backend, _ = make_backend(tmp_path, client=FakeClient(tmp_path, reachable=False))
+    state = backend.job_state("j1")
+    assert state["state"] == "unknown"
+    assert state["note"] == DARWIN_MANAGER_UNAVAILABLE_NOTE
+
+
+def test_job_state_unreachable_manager_keeps_terminal_record(tmp_path):
+    write_meta(tmp_path, "j1", exit_code=2)
+    client = FakeClient(tmp_path, reachable=False)
+    backend, _ = make_backend(tmp_path, client=client)
+    state = backend.job_state("j1")
+    assert state["state"] == "exited" and "note" not in state
+    assert client.pings == 0
+
+
+def test_stop_job_unreachable_manager_fails_the_stop(tmp_path):
+    write_meta(tmp_path, "live")
+    client = FakeClient(tmp_path, reachable=False)
+    backend, _ = make_backend(tmp_path, client=client)
+    with pytest.raises(OSError, match="connection refused"):
+        backend.stop_job("live")
+    assert client.calls == []
+
+
 def test_job_state_exited_with_log(tmp_path):
     write_meta(tmp_path, "j1", exit_code=0, ended_at=1002.5, pgid=11)
     (tmp_path / "j1" / "out.log").write_bytes(b"hello")
@@ -240,6 +278,21 @@ def test_list_jobs_sorted_newest_first_and_skips_reserved(tmp_path):
     assert [s["job_id"] for s in backend.list_jobs()] == ["new", "old"]
 
 
+def test_list_jobs_pings_at_most_once(tmp_path):
+    write_meta(tmp_path, "a", started_at=10.0)
+    write_meta(tmp_path, "b", started_at=20.0)
+    write_meta(tmp_path, "c", started_at=30.0, exit_code=0)
+    client = FakeClient(tmp_path, reachable=False)
+    backend, _ = make_backend(tmp_path, client=client)
+    states = backend.list_jobs()
+    assert [(s["job_id"], s["state"]) for s in states] == [
+        ("c", "exited"),
+        ("b", "unknown"),
+        ("a", "unknown"),
+    ]
+    assert client.pings == 1
+
+
 def test_await_exit_returns_terminal_absent_or_on_deadline(tmp_path, monkeypatch):
     backend, _ = make_backend(tmp_path)
     assert backend.await_exit("missing", 1.0) is None
@@ -269,6 +322,43 @@ def test_logs_and_processes_use_store_only(tmp_path):
     assert backend.job_processes("j1", 10) == []
 
 
+class ProcessesClient(FakeClient):
+    def __init__(self, backend_dir, reply=None, exc=None):
+        super().__init__(backend_dir)
+        self.reply, self.exc = reply, exc
+
+    def processes(self, socket_path, job_id, *, max_cmd_chars):
+        self.calls.append(("processes", socket_path, job_id, max_cmd_chars))
+        if self.exc is not None:
+            raise self.exc
+        return self.reply
+
+
+def test_job_processes_from_manager_group(tmp_path):
+    # JCRP-F6: the manager lists its own verified group; the MCP never reads pids.
+    listing = [{"pid": 4242, "ppid": 1, "state": "S", "cmd": "sleep 30"}]
+    client = ProcessesClient(tmp_path, reply={"processes": listing})
+    backend, _ = make_backend(tmp_path, client=client)
+    assert backend.job_processes("j1", 50) == listing
+    assert client.calls == [("processes", tmp_path / "s.sock", "j1", 50)]
+
+
+@pytest.mark.parametrize(
+    "reply,exc",
+    [
+        ({"processes": "not a list"}, None),
+        ({}, None),
+        (None, OSError("refused")),
+        (None, RuntimeError("bad reply")),
+        (None, CommandFailure("job manager unavailable")),
+    ],
+)
+def test_job_processes_unavailable_is_empty(tmp_path, reply, exc):
+    client = ProcessesClient(tmp_path, reply=reply, exc=exc)
+    backend, _ = make_backend(tmp_path, client=client)
+    assert backend.job_processes("j1") == []
+
+
 def test_disclose_status(tmp_path):
     backend, _ = make_backend(tmp_path)
     reply = CommandReply("Job j1.", {"job_id": "j1"})
@@ -285,10 +375,42 @@ def test_disclose_status(tmp_path):
         "cpu_s": 1.0,
         "accounting": RESOURCES_SAMPLED,
     }
+    assert lost.payload["state"] == "unknown"
+    # RJ4-F1: the owner-lost text replaces the Linux summary.
     assert lost.summary == (
-        f"Job j1. {DARWIN_OWNER_LOST_NOTE}. Resource usage is {RESOURCES_SAMPLED}."
+        f"Job lost state unknown: {DARWIN_OWNER_LOST_NOTE}. "
+        f"Resource usage is {RESOURCES_SAMPLED}."
     )
     assert reply.payload == {"job_id": "j1"}
+
+
+def test_disclose_status_unknown_payload_is_unverified(tmp_path):
+    # SD-41: an "unknown" payload without a spool note is rendered unverified.
+    write_meta(tmp_path, "j1", exit_code=0)
+    backend, _ = make_backend(tmp_path)
+    reply = CommandReply("Job j1 is gone.", {"job_id": "j1", "state": "unknown"})
+    disclosed = backend.disclose_status("j1", reply)
+    assert (
+        disclosed.summary == f"Job j1 state unknown: {DARWIN_MANAGER_UNAVAILABLE_NOTE}."
+    )
+    assert disclosed.payload == {
+        "job_id": "j1",
+        "state": "unknown",
+        "note": DARWIN_MANAGER_UNAVAILABLE_NOTE,
+    }
+
+
+def test_disclose_status_unreachable_manager(tmp_path):
+    write_meta(tmp_path, "j1")
+    client = FakeClient(tmp_path, reachable=False)
+    backend, _ = make_backend(tmp_path, client=client)
+    reply = CommandReply("Job j1 running.", {"job_id": "j1", "state": "running"})
+    disclosed = backend.disclose_status("j1", reply)
+    assert disclosed.payload["state"] == "unknown"
+    assert disclosed.payload["note"] == DARWIN_MANAGER_UNAVAILABLE_NOTE
+    assert (
+        disclosed.summary == f"Job j1 state unknown: {DARWIN_MANAGER_UNAVAILABLE_NOTE}."
+    )
 
 
 def test_backend_attributes(tmp_path):
