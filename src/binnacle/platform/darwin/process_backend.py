@@ -16,12 +16,13 @@ import fcntl
 import math
 import os
 import selectors
+import subprocess  # TimeoutExpired only; no process is created or waited here
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
-from typing import BinaryIO, Literal
+from typing import BinaryIO, Literal, Protocol
 from uuid import uuid4
 
 from binnacle.platform.contracts.darwin_contracts import (
@@ -31,8 +32,10 @@ from binnacle.platform.contracts.darwin_contracts import (
     OwnedWitness,
 )
 from binnacle.platform.contracts.process_contracts import (
+    JobOwnerLost,
     JobProcessIdentity,
     JobSignalLease,
+    OwnedJobExit,
     ProcessHandle,
     UnverifiedJobProcess,
 )
@@ -146,6 +149,49 @@ class DarwinProcessBackend:
     def boot_id(self) -> str:
         # No private sysctl/libproc substitute and no fabricated boot identity.
         raise _unknown("darwin_boot_identity_unavailable")
+
+
+class _OwnedExitSource(Protocol):
+    def wait(self, job_id: str, timeout: float | None) -> OwnedJobExit | None: ...
+
+    def exit_for(self, job_id: str) -> OwnedJobExit | None: ...
+
+
+class OwnedProcessHandle:
+    """ProcessHandle over a manager-owned job (R4 J1).
+
+    wait() blocks only on the owner's reaper condition. It never calls waitpid
+    and never starts a waiter thread, and it keeps subprocess.TimeoutExpired.
+    """
+
+    def __init__(self, owner: _OwnedExitSource, job_id: str, pid: int) -> None:
+        self._owner = owner
+        self._job_id = job_id
+        self._pid = pid
+
+    @property
+    def pid(self) -> int:
+        return self._pid
+
+    @property
+    def returncode(self) -> int | None:
+        return _returncode(self._owner.exit_for(self._job_id))
+
+    def wait(self, timeout: float | None = None) -> int:
+        code = _returncode(self._owner.wait(self._job_id, timeout))
+        if code is None:
+            if self._owner.exit_for(self._job_id) is None:
+                raise subprocess.TimeoutExpired(
+                    ["binnacle-job", self._job_id], timeout or 0.0
+                )
+            raise JobOwnerLost("darwin_job_reap_unverified")
+        return code
+
+
+def _returncode(result: OwnedJobExit | None) -> int | None:
+    if result is None:
+        return None
+    return -result.signal if result.signal is not None else result.exit_code
 
 
 class _CommandPipes:
