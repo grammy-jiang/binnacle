@@ -19,7 +19,7 @@ from binnacle.platform.contracts.capability_contracts import (
     NativeCapabilityError,
 )
 from binnacle.platform.contracts.darwin_contracts import ForegroundRequest
-from binnacle.platform.darwin import process_backend
+from binnacle.platform.darwin import process_authority, process_backend
 from binnacle.platform.darwin.process_backend import (
     DarwinProcessBackend,
     _ForegroundRunner,
@@ -142,8 +142,7 @@ def test_failed_pipe_setup_closes_partial_fds_before_controlled_error(
             os.fstat(fd)
 
 
-@native
-def test_native_spawn_failure_closes_pipes_and_sanitizes_error(tmp_path, monkeypatch):
+def test_spawn_failure_closes_pipes_and_sanitizes_error(tmp_path, monkeypatch):
     pipe = os.pipe
     opened = []
 
@@ -157,6 +156,8 @@ def test_native_spawn_failure_closes_pipes_and_sanitizes_error(tmp_path, monkeyp
 
     monkeypatch.setattr(os, "pipe", tracked_pipe)
     monkeypatch.setattr(os, "posix_spawn", fail_spawn)
+    monkeypatch.setattr(process_backend, "_is_darwin", lambda: True)
+    monkeypatch.setattr(process_authority, "_is_darwin", lambda: True)
     with pytest.raises(AuthorityUnknown) as error:
         _ForegroundRunner(3, 3).run_foreground(request(tmp_path), cancel=Event())
     assert error.value.code == "darwin_foreground_io_failed"
