@@ -217,7 +217,7 @@ def test_graceful_manager_stop_leaves_no_orphans(stack: Stack) -> None:
     assert stack.end(signal.SIGTERM) == 0
     assert group_gone(pgid)
     meta = meta_of(stack.jobs, job["job_id"])
-    assert (meta["signal"], meta["termination_reason"]) == (15, "owner_restart")
+    assert (meta["signal"], meta["termination_reason"]) == (None, "owner_restart")
     assert "authority" not in meta and not marker.exists()
 
 

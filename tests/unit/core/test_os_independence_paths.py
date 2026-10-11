@@ -173,15 +173,24 @@ def test_caller_form_follows_only_in_root_links_and_never_misnames(tmp_path: Pat
     alias, real, roots = _aliased_layout(tmp_path)
     canonical = roots.canonical_allowed
 
+    def real_path(request: Path) -> Path:
+        # Path.resolve() raises RuntimeError on a symlink loop before 3.13;
+        # caught as caller_form catches it, the loop's own real location.
+        try:
+            return request.resolve()
+        except (RuntimeError, OSError, ValueError):
+            return request.parent.resolve() / request.name
+
     def shown(request: Path) -> Path:
-        return caller_form(request, request.resolve(), canonical)
+        return caller_form(request, real_path(request), canonical)
 
     assert shown(alias / "root/escape/secret") == alias / "outside/secret"
     assert shown(alias / "outside/../outside/secret") == alias / "outside/secret"
     (real / "root" / "rel").symlink_to("../root/escape", target_is_directory=True)
     assert shown(alias / "root/rel/secret") == alias / "outside/secret"
     (real / "root" / "loop").symlink_to("loop")
-    assert shown(alias / "root/loop") == (alias / "root/loop").resolve()
+    loop = alias / "root/loop"
+    assert shown(loop) == real_path(loop) == real / "root/loop"  # falls back
     # A spelling that names another location falls back to the real path.
     resolved = (real / "outside" / "secret").resolve()
     assert caller_form(alias / "root/x", resolved, canonical) == resolved
