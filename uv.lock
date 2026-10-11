@@ -215,6 +215,7 @@ dev = [
     { name = "lizard" },
     { name = "mutmut" },
     { name = "mypy" },
+    { name = "pathspec" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -247,6 +248,7 @@ security = [
 test = [
     { name = "httpx2" },
     { name = "hypothesis" },
+    { name = "pathspec" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-randomly" },
@@ -280,6 +282,7 @@ dev = [
     { name = "lizard", specifier = ">=1.24.0" },
     { name = "mutmut", specifier = ">=3.7.0" },
     { name = "mypy", specifier = ">=2.3.1" },
+    { name = "pathspec", specifier = ">=1.1,<2" },
     { name = "pre-commit", specifier = ">=4.0.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
@@ -310,6 +313,7 @@ security = [{ name = "pip-audit", specifier = ">=2.10.1" }]
 test = [
     { name = "httpx2", specifier = ">=2.12.0" },
     { name = "hypothesis", specifier = ">=6.167.1" },
+    { name = "pathspec", specifier = ">=1.1,<2" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "pytest-randomly", specifier = ">=4.1.0" },
