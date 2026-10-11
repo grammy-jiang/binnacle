@@ -153,7 +153,10 @@ async def test_q0_sec_02_other_version_suppresses_before_reads(
             0,
             0,
         )  # nosec B101 - pytest assertion
-        assert seen[0] is middleware.adapted[0] is value  # nosec B101 - pytest assertion
+        # witnessed_call returns a per-call copy when it issues a receipt (here
+        # for the other version's Tool); the adapter returns that input unchanged.
+        assert seen[0] is middleware.adapted[0]  # nosec B101 - pytest assertion
+        assert seen[0] == value  # nosec B101 - pytest assertion
         assert value.model_dump_json() == before  # nosec B101 - pytest assertion
         assert bound.last_meter is None  # nosec B101 - pytest assertion
         assert lab.payload.reads == 0  # nosec B101 - pytest assertion
@@ -209,7 +212,7 @@ async def test_control_bound_version_requested_explicitly_still_hints(
             1,
             1,
         )  # nosec B101 - pytest assertion
-        assert seen[0] is value  # nosec B101 - pytest assertion
-        assert middleware.adapted[0] is not value  # nosec B101 - pytest assertion
+        assert seen[0] == value  # nosec B101 - per-call copy of the body result
+        assert middleware.adapted[0] is not seen[0]  # nosec B101 - pytest assertion
         assert value.model_dump_json() == before  # nosec B101 - pytest assertion
         assert lab.payload.reads == 0  # nosec B101 - pytest assertion

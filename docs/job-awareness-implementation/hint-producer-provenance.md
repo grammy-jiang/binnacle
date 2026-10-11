@@ -21,7 +21,11 @@ CHATGPT-ADV-G4-01-R1, R2 and R3 (independent review of `60bd87c`).
   - The dispatch itself returned. If it raised or was cancelled, the
     exception propagates and no receipt exists.
 - The receipt names the Tool object whose body completed and the exact
-  `ToolResult` object that the dispatch returned.
+  `ToolResult` object that `witnessed_call` returned. That object is a
+  per-call shallow copy of the dispatch result, so a body or a caching
+  middleware that returns one `ToolResult` object for several calls cannot
+  make the receipt of one call match the result of another call. A result
+  that is not an exact `ToolResult` gets no receipt.
 - `adapt()` validates the receipt first and consumes it only after it passes.
   The receipt must be issued, not yet consumed, and bound to the same
   `original` object (identity, not equality). Any failure returns `original`

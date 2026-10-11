@@ -70,7 +70,7 @@
     "LINUX": 62
   },
   "coverage_complete": true,
-  "implementation_commit": "60bd87cab6498695d32c4fc96e44e296b2e8d41e",
+  "implementation_commit": "f1b682e43e244162740be96fa248d3e4436e4d0d",
   "production_module_count": 196,
   "rows": [
     {
@@ -5486,6 +5486,7 @@
         "fastmcp.tools",
         "fastmcp.tools.base",
         "fastmcp.tools.base.Tool",
+        "fastmcp.tools.base.ToolResult",
         "fastmcp.tools.function_tool",
         "fastmcp.tools.function_tool.FunctionTool",
         "fastmcp.tools.tool_transform",
@@ -5496,6 +5497,7 @@
         "typing",
         "typing.Any",
         "typing.TypeVar",
+        "typing.cast",
         "weakref"
       ],
       "lexical_host_tokens": [],
@@ -5504,7 +5506,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/mcp/job_awareness_hint_identity.py",
       "rationale": "FastMCP-native integration; MCP framework remains solely responsible for Providers and Middleware",
-      "sha256": "ff6d9b140d23cccb466ed11f410e40189302c4178ebb415abfb0fbc2f37d2c9e",
+      "sha256": "f3dc95b362373be308d045b53a0f2e031da4210e67662aca583a2a5b50132fb6",
       "stage": "OS6",
       "was_in_baseline": false
     },

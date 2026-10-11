@@ -199,3 +199,72 @@ async def test_late_task_completion_is_not_witnessed():
         for value in (receipts[0][0], late_result):
             assert await adapter.adapt(value, execution=receipts[0][1]) is value  # nosec B101 - pytest assertion
         _no_reads(lab, adapter)
+
+
+class CacheSecond(Middleware):
+    """An inner caching middleware: later calls reuse the first result object."""
+
+    def __init__(self):
+        self.cached = None
+
+    async def on_call_tool(self, context, call_next):
+        if self.cached is None:
+            self.cached = await call_next(context)
+        return self.cached
+
+
+@pytest.mark.parametrize("cache", ["body", "inner_middleware"])
+@in_loop
+async def test_reused_result_object_cannot_carry_another_calls_receipt(cache):
+    """CHATGPT-ADV-G4-01-R3-CACHED-RESULT: one ToolResult object, two calls."""
+    with Lab() as lab:
+        ran: list[str] = []
+        cached = _fake()
+
+        def body() -> ToolResult:
+            ran.append("bound")
+            return cached
+
+        bound = witnessed_tool(body, name="synthetic", output_schema=SCHEMA)
+        receipts: list[tuple[ToolResult, object]] = []
+        inner = (
+            (Keep(receipts), CacheSecond()) if cache != "body" else (Keep(receipts),)
+        )
+        app, _, adapter = _app(lab, bound, *inner, carrier=False)
+        app.add_tool(bound)
+        await app.call_tool("synthetic", {})
+        await app.call_tool("synthetic", {})
+        (a, receipt_a), (b, receipt_b) = receipts
+        assert ran == (["bound"] if cache != "body" else ["bound", "bound"])  # nosec B101 - pytest assertion
+        assert a is not b and a == b == cached  # nosec B101 - per-call copies
+        assert (receipt_b is None) is (cache != "body")  # nosec B101 - B ran no body
+        for value, receipt in ((b, receipt_a), (cached, receipt_a), (a, receipt_b)):
+            assert await adapter.adapt(value, execution=receipt) is value  # nosec B101 - pytest assertion
+        _no_reads(lab, adapter)
+        assert _hinted(await adapter.adapt(a, execution=receipt_a))  # nosec B101 - own call
+        if receipt_b is not None:
+            assert _hinted(await adapter.adapt(b, execution=receipt_b))  # nosec B101 - own call
+
+
+@in_loop
+async def test_receipt_copy_preserves_the_result_exactly():
+    with Lab() as lab:
+        returned = ToolResult(
+            content=[TextContent(type="text", text="Synthetic result")],
+            structured_content={"ok": True},
+            meta={"existing": "kept"},
+        )
+        bound = witnessed_tool(lambda: returned, name="synthetic", output_schema=SCHEMA)
+        receipts: list[tuple[ToolResult, object]] = []
+        app, _, _ = _app(lab, bound, Keep(receipts), carrier=False)
+        app.add_tool(bound)
+        result = await app.call_tool("synthetic", {})
+        copy, receipt = receipts[0]
+        assert result is copy and copy is not returned  # nosec B101 - pytest assertion
+        assert type(copy) is ToolResult and copy == returned  # nosec B101 - pytest assertion
+        assert copy.content == returned.content  # nosec B101 - pytest assertion
+        assert copy.structured_content == returned.structured_content  # nosec B101 - pytest assertion
+        assert copy.meta == returned.meta == {"existing": "kept"}  # nosec B101 - pytest assertion
+        assert copy.model_dump_json() == returned.model_dump_json()  # nosec B101 - pytest assertion
+        assert identity.claim(receipt, returned) is None  # nosec B101 - the copy is bound
+        assert identity.claim(receipt, copy) is bound  # nosec B101 - pytest assertion
