@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 
@@ -171,7 +172,7 @@ class StoreTests(StoreFixture, unittest.TestCase):
 
     def test_busy_and_explicit_retry(self):
         proof = self.proof()
-        with sqlite3.connect(self.path, isolation_level=None) as db:
+        with closing(sqlite3.connect(self.path, isolation_level=None)) as db, db:
             db.execute("BEGIN IMMEDIATE")
             result = self.confirm((proof,))
             self.assertEqual(result.error.code, ErrorCode.BUSY)
@@ -212,7 +213,7 @@ os._exit(18)
 """
         for phase, expected in [("before", 0), ("after", 1)]:
             child = subprocess.run(
-                [sys.executable, "-c", script, str(self.path), phase],
+                [sys.executable, "-B", "-c", script, str(self.path), phase],
                 capture_output=True,
                 check=False,
                 timeout=5,
@@ -363,7 +364,7 @@ print(result)
 """
         children = [
             subprocess.Popen(
-                [sys.executable, "-c", script, str(self.path)],
+                [sys.executable, "-B", "-c", script, str(self.path)],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -387,7 +388,10 @@ print(result)
 
     def test_busy_commit_rolls_back_consumption(self):
         proof = self.proof()
-        with sqlite3.connect(self.path, isolation_level=None) as reader:
+        with (
+            closing(sqlite3.connect(self.path, isolation_level=None)) as reader,
+            reader,
+        ):
             reader.execute("BEGIN")
             reader.execute("SELECT * FROM clock").fetchone()
             self.assertEqual(self.confirm((proof,)).error.code, ErrorCode.BUSY)

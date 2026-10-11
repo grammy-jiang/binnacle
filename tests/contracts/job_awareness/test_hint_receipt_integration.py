@@ -113,7 +113,7 @@ async def test_real_synthetic_ledger():
             assert META_KEY not in (await client.call_tool("synthetic")).meta  # nosec B101 - pytest assertion
             # A second genuine consumer never inherits the first receipt.
             other = lab.adapter(enabled=True, grant=foreign)
-            assert "unconfirmed" in (await other.adapt(original())).meta[META_KEY]  # nosec B101 - pytest assertion
+            assert "unconfirmed" in (await other.adapt_bound(original())).meta[META_KEY]  # nosec B101 - pytest assertion
         assert lab.memory.stats().pins == 0  # nosec B101 - pytest assertion
         assert lab.memory.stats().inflight_bytes == 0  # nosec B101 - pytest assertion
         assert lab.memory.stats().cache_bytes == len(lab.data)  # nosec B101 - pytest assertion
@@ -148,7 +148,7 @@ async def test_denied_foreign_expired_revoked_and_epoch():
             else:
                 lab.wall = lab.snapshot.retained_until_ms
             value = original()
-            assert await adapter.adapt(value) is value  # nosec B101 - pytest assertion
+            assert await adapter.adapt_bound(value) is value  # nosec B101 - pytest assertion
             assert lab.queries == 0  # nosec B101 - pytest assertion
             if reason != "retention":
                 assert lab.catalog_reads == 0  # nosec B101 - pytest assertion
@@ -160,7 +160,7 @@ async def test_revocation_between_observation_and_query():
         adapter = lab.adapter(enabled=True)
         lab.before_query = lambda: ok(lab.authority.revoke(lab.handle))
         value = original()
-        assert await adapter.adapt(value) is value  # nosec B101 - pytest assertion
+        assert await adapter.adapt_bound(value) is value  # nosec B101 - pytest assertion
         assert lab.queries == 1  # nosec B101 - pytest assertion
         assert lab.payload.reads == 0  # nosec B101 - pytest assertion
 
@@ -195,7 +195,7 @@ async def test_shared_two_work_admission():
             assert await workers.run(lambda stop: pytest.fail("queued"), BUSY) == BUSY  # nosec B101 - pytest assertion
             value = original()
             adapter = lab.adapter(enabled=True)
-            assert await adapter.adapt(value) is value  # nosec B101 - pytest assertion
+            assert await adapter.adapt_bound(value) is value  # nosec B101 - pytest assertion
             assert adapter.last_meter is None  # nosec B101 - pytest assertion
             first.cancel()
             with pytest.raises(asyncio.CancelledError):
@@ -276,7 +276,7 @@ async def test_event_loop_progress_during_blocking_work():
             assert release.wait(5)  # nosec B101 - pytest assertion
 
         lab.before_query = blocked
-        task = asyncio.create_task(adapter.adapt(original()))
+        task = asyncio.create_task(adapter.adapt_bound(original()))
         await asyncio.wait_for(entered.wait(), 3)
         started = perf_counter()
         sentinel = asyncio.Event()
@@ -367,7 +367,7 @@ async def test_original_job_status_schema_on_separate_native_app():
             adapter = lab.adapter(enabled=True, schema=schema)
             value.structured_content = {field: [{}] * 10000}
             old_reads = lab.catalog_reads, lab.queries
-            assert await adapter.adapt(value) is value  # nosec B101 - pytest assertion
+            assert await adapter.adapt_bound(value) is value  # nosec B101 - pytest assertion
             assert (lab.catalog_reads, lab.queries) == old_reads  # nosec B101 - pytest assertion
 
 
@@ -401,7 +401,7 @@ async def test_exhaustion_during_copy_schema_and_carrier():
                 ),
             }[phase]
             with patch.object(target, name, replacement):
-                assert await adapter.adapt(value) is value  # nosec B101 - pytest assertion
+                assert await adapter.adapt_bound(value) is value  # nosec B101 - pytest assertion
             assert adapter.last_meter.total == 4194304  # nosec B101 - pytest assertion
             assert lab.queries == (1 if phase == "carrier" else 0)  # nosec B101 - pytest assertion
 
@@ -435,7 +435,7 @@ async def test_raw_native_wire_limits_both_protocols(protocol, payload, size, tm
         )
         (tmp_path / "original.json").write_bytes(raw_original)
         adapter = lab.adapter(enabled=True, schema={"type": "object"})
-        adapted = await adapter.adapt(value)
+        adapted = await adapter.adapt_bound(value)
         result, _, raw_final = await native_wire(adapter, value, protocol)
         (tmp_path / "final.json").write_bytes(raw_final)
         print(

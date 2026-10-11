@@ -80,7 +80,7 @@ class Keep(Middleware):
 def _app(lab, bound, *inner, carrier=True):
     app = FastMCP("ADV-G4-01 synthetic only", version="synthetic")
     adapter = lab.adapter(enabled=True)
-    adapter.server_info = app._mcp_server.server_info_stamp
+    adapter.bind_server(app)
     bound_adapter = HintAdapter(
         bindings=adapter.bindings,
         grant=adapter.grant,

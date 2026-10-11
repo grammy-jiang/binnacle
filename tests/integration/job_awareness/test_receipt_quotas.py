@@ -5,7 +5,7 @@ import hashlib
 import sqlite3
 import unittest
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import replace
 from threading import Event
 from unittest.mock import patch
@@ -178,7 +178,7 @@ class QuotaTests(LabFixture, unittest.TestCase):
             self.assertEqual(sizes, [])
             self.assertEqual(self.path.read_bytes(), before)
             self.assertEqual(self.counts(), (16, 0, 0))
-            with sqlite3.connect(self.path) as db:
+            with closing(sqlite3.connect(self.path)) as db, db:
                 self.assertEqual(
                     db.execute("SELECT sum(consumed) FROM proofs").fetchone()[0], 0
                 )
@@ -249,7 +249,7 @@ class QuotaTests(LabFixture, unittest.TestCase):
         self.denied(
             self.authority.issue_grant(self.person, (self.job,) * 101, frozenset(Scope))
         )
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(db.execute("SELECT count(*) FROM grants").fetchone()[0], 2)
 
     def test_global_proof_and_page_caps_rollback(self):
@@ -289,7 +289,10 @@ class QuotaTests(LabFixture, unittest.TestCase):
         """QUOTA-02: real busy BEGIN and unknown schema deny without output loss."""
         service = self.service()
         page = self.ok(service.issue(self.handle, self.snapshot, 0))
-        with sqlite3.connect(self.path, isolation_level=None) as blocker:
+        with (
+            closing(sqlite3.connect(self.path, isolation_level=None)) as blocker,
+            blocker,
+        ):
             blocker.execute("BEGIN IMMEDIATE")
             self.assertEqual(
                 service.acknowledge(self.handle, self.snapshot, (page.proof,)),
@@ -297,7 +300,7 @@ class QuotaTests(LabFixture, unittest.TestCase):
             )
             blocker.rollback()
         self.assertEqual(self.counts(), (1, 0, 0))
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("PRAGMA user_version=99")
         self.denied(service.acknowledge(self.handle, self.snapshot, (page.proof,)))
         self.assertEqual(self.catalog.data, self.data)
@@ -333,7 +336,7 @@ class QuotaTests(LabFixture, unittest.TestCase):
         before = self.path.read_bytes()
         self.ok(service.query(self.handle, self.snapshot))
         self.assertEqual(self.path.read_bytes(), before)
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(db.execute("PRAGMA page_size").fetchone()[0], 4096)
             self.assertEqual(db.execute("PRAGMA journal_mode").fetchone()[0], "delete")
         self.assertLessEqual(

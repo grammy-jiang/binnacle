@@ -114,7 +114,7 @@ async def test_q0_sec_02_other_version_suppresses_before_reads(
     with Lab() as lab:
         app = FastMCP("Q0 g2 synthetic only", version="synthetic")
         adapter = lab.adapter(enabled=True, carrier=carrier)
-        adapter.server_info = app._mcp_server.server_info_stamp
+        adapter.bind_server(app)
         value = _result(payload)
         before = value.model_dump_json()
         produced = []
@@ -181,7 +181,7 @@ async def test_control_bound_version_requested_explicitly_still_hints(
     with Lab() as lab:
         app = FastMCP("Q0 g2 synthetic only", version="synthetic")
         adapter = lab.adapter(enabled=True, carrier=carrier)
-        adapter.server_info = app._mcp_server.server_info_stamp
+        adapter.bind_server(app)
         value = _result({"ok": True})
         before = value.model_dump_json()
         tool = app.add_tool(

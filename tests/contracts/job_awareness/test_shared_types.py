@@ -2,6 +2,7 @@
 
 import ast
 import inspect
+import sys
 from pathlib import Path
 
 import pytest
@@ -303,6 +304,12 @@ def _check_portable_imports(tree: ast.AST, filename: str) -> None:
                 ] in from_imports or (  # test contract assertion. # nosec B101
                     not optional and node.module.startswith(LOCAL_PACKAGE)
                 )
+                if not node.module.startswith(LOCAL_PACKAGE):
+                    # A1: an allowed stdlib root must not re-export a module.
+                    assert not any(  # test contract assertion. # nosec B101
+                        alias.name.split(".")[0] in sys.stdlib_module_names
+                        for alias in node.names
+                    )
 
 
 def test_shared_ports_are_synchronous_and_read_only():
@@ -382,6 +389,28 @@ def test_portable_imports_reject_local_platform_and_store(source: str):
 def test_portable_imports_reject_stdlib_module_reexport(source: str):
     with pytest.raises(AssertionError):
         _check_portable_imports(ast.parse(source), "observation.py")
+
+
+@pytest.mark.parametrize("filename", ["models.py", "observation.py"])
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from typing import sys",
+        "from typing import sys as system",
+        "from dataclasses import sys",
+        "from dataclasses import inspect",
+        "from enum import sys",
+        "from hashlib import os",
+        "from collections.abc import sys",
+        "from types import sys",
+    ],
+)
+def test_portable_imports_reject_allowed_root_module_reexport(
+    source: str, filename: str
+):
+    # A1: the root name passes the allow-list; the imported module name must not.
+    with pytest.raises(AssertionError):
+        _check_portable_imports(ast.parse(source), filename)
 
 
 def test_portable_imports_reject_unknown_filename_and_relative_import():

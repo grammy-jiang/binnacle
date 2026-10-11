@@ -99,12 +99,12 @@ class HintAdapter:
     jobs: tuple[object, ...]
     tool: Tool
     workers: Workers
-    tool_name: str = field(init=False)
-    tool_version: str | None = field(init=False)
     schema: Any = field(init=False)
     identity: Identity | None = field(init=False)
     bound_tool: Tool = field(init=False, repr=False, compare=False)
-    server_info: Any = None  # controller snapshot of the pinned native server stamp
+    # Snapshot of the serverInfo stamp that the dispatching server adds to every
+    # result. Bind it with ``bind_server``; never hand-write it (OBS-01).
+    server_info: Any = None
     enabled: bool = False
     carrier: Enum | None = None
     exclusive: bool = False
@@ -121,14 +121,24 @@ class HintAdapter:
         ):
             raise ValueError("explicit native tool binding required")
         self.bound_tool = self.tool  # provenance snapshot of the registration
-        self.tool_name = self.tool.name
-        self.tool_version = self.tool.version
         self.carrier = self.bindings.meta if self.carrier is None else self.carrier
         try:
             self.schema = Schema(self.tool.output_schema)
         except (ValueError, TypeError, RecursionError):
             self.schema = None
         self.identity = None if self.schema is None else producer_identity(self.tool)
+
+    def bind_server(self, server: object) -> None:
+        """Bind the serverInfo stamp from the server that dispatches the tool.
+
+        OBS-01: the byte reserve in ``_adapt`` trusts this stamp. A stale or
+        smaller stamp lets a result that is too large on the wire receive a
+        hint. A production composition must call this with the same server that
+        registers the bound tool, after the server name and version are final.
+        A server without a dict stamp binds None, which suppresses every hint.
+        """
+        stamp = getattr(getattr(server, "_mcp_server", None), "server_info_stamp", None)
+        self.server_info = stamp if type(stamp) is dict else None
 
     async def adapt(
         self,
@@ -175,7 +185,7 @@ class HintAdapter:
         tool = claim(execution, original)
         if tool is not self.bound_tool or not native_tool(tool):
             return original
-        producer = producer_identity(tool)
+        producer = producer_identity(tool, self.identity)
         if producer is None or producer != self.identity:
             return original
         return await self.workers.run(
