@@ -83,6 +83,7 @@ integration/test_run_command_policy_telemetry.py | T0: Linux auto-background dur
 integration/test_run_command_error_telemetry.py | T0: Linux run_command default backend via composed server; Darwin counterpart tests/platform/darwin/test_native_smoke_mcp.py::test_run_command_sd18
 integration/test_search_settings.py | T0: Search child over Linux pathname Core (CR0-06); Darwin counterpart tests/platform/darwin/test_search_parity.py::test_native_local_ignore_and_glob_parity
 contracts/test_darwin_interface.py | B0: Darwin root-grant lifecycle tests need native descriptors (R2D-T0A6-01 fix ecf6aea)
+platform/darwin/test_missing_roots.py | B0: Darwin missing-root lifespan tests need native descriptors (SD-24 fix 8132d8d)
 """
 ALLOWED_PLATFORM_SKIPS = {
     **{
@@ -111,6 +112,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_package_install.py": 1,
     "tests/platform/darwin/test_composition_contract.py": 3,
     "tests/contracts/test_darwin_interface.py": 1,
+    "tests/platform/darwin/test_missing_roots.py": 1,
     "tests/unit/tools/test_command_characterization.py": 1,
     "tests/unit/tools/test_stop_job_edges.py": 1,
     "tests/integration/test_files_settings.py": 1,
