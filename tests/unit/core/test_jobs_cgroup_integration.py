@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
 from binnacle.features.commands import jobs
 from binnacle.platform.contracts.resource_contracts import NoResourceAccounting
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux cgroup accounting; no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -17,6 +23,7 @@ def fake_accounting(monkeypatch):
     monkeypatch.setattr(jobs, "_RESOURCE_ACCOUNTING", Accounting())
 
 
+@LINUX_ONLY
 def test_manager_start_records_cgroup_and_job_identity(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path / "jobs")
     seen: list[tuple[list[str], str | None]] = []
@@ -45,6 +52,7 @@ def test_manager_start_records_cgroup_and_job_identity(tmp_path, monkeypatch):
     assert out == f"{job_id}:/demo/job-{job_id}"
 
 
+@LINUX_ONLY
 def test_record_exit_persists_cgroup_counters(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path / "jobs")
     monkeypatch.setattr(
@@ -83,6 +91,7 @@ def test_record_exit_persists_cgroup_counters(tmp_path, monkeypatch):
     assert cleaned == [f"/demo/job-{job_id}"]
 
 
+@LINUX_ONLY
 def test_record_exit_defers_history_when_descendant_keeps_cgroup_populated(
     tmp_path, monkeypatch
 ):

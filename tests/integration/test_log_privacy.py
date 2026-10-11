@@ -2,12 +2,19 @@
 
 import asyncio
 import logging
+import sys
 
+import pytest
 from fastmcp import Client
 
 from binnacle.features.commands import jobs
 from binnacle.observability.log_safety import path_digest
 from binnacle.server import mcp
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04); also run_command",
+)
 
 
 def invoke(tool: str, arguments: dict):
@@ -18,6 +25,7 @@ def invoke(tool: str, arguments: dict):
     return asyncio.run(go())
 
 
+@LINUX_ONLY
 def test_journal_does_not_include_user_supplied_secrets(caplog, monkeypatch, tmp_path):
     """Both root request logs and durable-job logs must redact free-form input."""
     secret = "SYNTHETIC_PRIVATE_VALUE_20261009"
@@ -87,6 +95,7 @@ def test_per_request_smoke_proof_correlates_actual_middleware_without_payload_le
     assert all("smoke=" not in row for row in calls if "smoke=" + proof not in row)
 
 
+@LINUX_ONLY
 def test_http_transport_smoke_proof_is_visible_to_native_middleware(
     caplog, monkeypatch, tmp_path
 ):

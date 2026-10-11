@@ -1,5 +1,6 @@
 """Integration tests for run_command, job_status, and stop_job."""
 
+import sys
 import time
 
 import pytest
@@ -11,7 +12,13 @@ from binnacle.features.commands.tools import run_command as rc
 from binnacle.mcp.callctx import current_call
 from tests.integration.job_test_support import run, status, stop
 
-pytestmark = pytest.mark.usefixtures("_short_job_warmup")
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
+
+
+pytestmark = [LINUX_ONLY, pytest.mark.usefixtures("_short_job_warmup")]
 
 
 @pytest.fixture(autouse=True, scope="module")

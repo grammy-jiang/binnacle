@@ -1,6 +1,7 @@
 """Commands adapter policy is isolated; the job backend remains process-owned."""
 
 import asyncio
+import sys
 
 import pytest
 from fastmcp import Client
@@ -10,6 +11,11 @@ from binnacle.config import RootsSettings, RunCommandSettings
 from binnacle.features.commands import command_status, commands_server, job_owner, jobs
 from binnacle.features.commands.tools import job_status, run_command
 from binnacle.features.files import paths
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Darwin Commands foreground provider is scope-gated; Darwin counterpart tests/platform/darwin/test_foreground_commands.py",
+)
 
 
 def fail_global():
@@ -30,6 +36,7 @@ def backend(monkeypatch):
     return calls
 
 
+@LINUX_ONLY
 def test_run_policy_roots_wait_schema_and_caller_mutation(
     tmp_path, monkeypatch, backend
 ):
@@ -139,6 +146,7 @@ def test_status_looks_up_implementation_after_construction(tmp_path, monkeypatch
     ]
 
 
+@LINUX_ONLY
 def test_explicit_run_policy_keeps_process_warmup_and_owner(
     tmp_path, monkeypatch, backend
 ):
@@ -166,6 +174,7 @@ def test_explicit_run_policy_keeps_process_warmup_and_owner(
     assert backend[-1][-1] == 3
 
 
+@LINUX_ONLY
 def test_status_factories_own_presentation_and_share_run_wait_cap(
     tmp_path, monkeypatch
 ):

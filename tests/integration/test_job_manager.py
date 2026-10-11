@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import sys
 import threading
 import time
 from importlib.metadata import version
@@ -16,6 +17,13 @@ from fastmcp.exceptions import ToolError
 from binnacle.features.commands import job_client, jobs
 from binnacle.features.commands.job_manager import JobManager
 from tests.integration.job_test_support import run, status, stop
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
+
+pytestmark = LINUX_ONLY
 
 
 @pytest.fixture()

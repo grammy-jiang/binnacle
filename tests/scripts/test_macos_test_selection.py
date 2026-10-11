@@ -13,40 +13,20 @@ from collections.abc import Collection, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from tests.scripts.macos_skip_table import (
+    ALLOWED_PLATFORM_SKIPS,
+    LINUX_ONLY_MODULES,
+    LINUX_PIN_FILES,
+    PLATFORM_SITE_COUNTS,
+    T0A9_PIN_FILES,
+)
+
+__all__ = ["LINUX_PIN_FILES", "T0A9_PIN_FILES"]  # re-exported for the contract
+
 ROOT = Path(__file__).resolve().parents[2]
 DARWIN_DIR = "tests/platform/darwin/"
 OWNER_REASON = re.compile(r"^(A\d|B0|E0|T0|baseline): \S.*")
 
-# Files that may hold a platform-conditioned or opt-in skip ("<lane>: <why>");
-# only Darwin-package rows may name unmerged files. A new row needs review.
-# LINUX_PIN_FILES hold one alias-based per-test skipif(sys.platform != "linux").
-_PINS = """contracts/descriptions contracts/golden_outputs contracts/job_schemas
-    contracts/job_spool_compat contracts/job_status_cursor_internal
-    contracts/os_stage1_wire_parity contracts/search_text_surface
-    contracts/server_composition contracts/tool_surface
-    integration/composition_workflows integration/os_pure_application"""
-LINUX_PIN_FILES = [
-    p.replace("/", "/test_").join(("tests/", ".py")) for p in re.findall(r"\S+", _PINS)
-]
-_ROWS = """
-system/test_uplink_network.py | baseline: Linux SO_BINDTODEVICE / iproute2 only
-live/test_deployment_smoke.py | baseline: opt-in live host (BINNACLE_LIVE=1)
-scripts/test_macos_collection_native.py | T0: Darwin host probe (sw_vers); the rest of the module runs everywhere
-platform/darwin/test_foreground_commands.py | A2: per-test Darwin posix_spawn owned-child mechanism
-platform/darwin/test_process_native.py | A2: per-test Darwin kqueue/posix_spawn child and witness probes
-platform/darwin/test_ipc_generation.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID contract
-platform/darwin/test_ipc_launchd.py | A3: per-test opt-in real launchd bootstrap (BINNACLE_A3_LAUNCHD=1)
-platform/darwin/test_search_parity.py | A4: in-body skip when APFS rejects a non-UTF-8 filename
-platform/darwin/test_package_install.py | A6: per-test Apple-silicon (arm64) native package install
-platform/darwin/test_composition_contract.py | B0: in-body skip of the real-socket peer check off Darwin
-contracts/test_darwin_interface.py | B0: Darwin root-grant lifecycle tests need native descriptors (R2D-T0A6-01 fix ecf6aea)
-"""
-ALLOWED_PLATFORM_SKIPS = {
-    **{
-        f"tests/{k}": v for k, v in (r.split(" | ") for r in _ROWS.strip().splitlines())
-    },
-    **dict.fromkeys(LINUX_PIN_FILES, "T0: per-test Linux-only golden/host pin"),
-}
 # A condition naming an imported flag or helper the scanner cannot read
 # (``from x import ON_MAC``) carries this token: it needs a row like sys.platform.
 UNRESOLVED = "<unresolved-flag>"
@@ -67,21 +47,6 @@ SAFE_MODULES = set(sys.stdlib_module_names) | {"pytest"}
 # Module-level ``pytest.importorskip`` skips the whole file: only for a named
 # module present on every platform (never inside tests/platform/darwin/).
 ALLOWED_MODULE_IMPORTORSKIPS = {("tests/contracts/test_dependency_pin.py", "tomllib")}
-# Per row: the platform-conditioned skip sites a file may hold (reviewable edit).
-PLATFORM_SITE_COUNTS = {
-    "tests/system/test_uplink_network.py": 1,
-    "tests/live/test_deployment_smoke.py": 0,
-    "tests/scripts/test_macos_collection_native.py": 1,
-    "tests/platform/darwin/test_foreground_commands.py": 1,
-    "tests/platform/darwin/test_process_native.py": 1,
-    "tests/platform/darwin/test_ipc_generation.py": 1,
-    "tests/platform/darwin/test_ipc_launchd.py": 3,
-    "tests/platform/darwin/test_search_parity.py": 1,
-    "tests/platform/darwin/test_package_install.py": 1,
-    "tests/platform/darwin/test_composition_contract.py": 3,
-    "tests/contracts/test_darwin_interface.py": 1,
-    **dict.fromkeys(LINUX_PIN_FILES, 1),
-}
 
 
 @dataclass(frozen=True)
@@ -410,11 +375,21 @@ def check_skip_policy(
         for site in sites:
             where = f"{rel}:{site.line}"
             allowed_import = (rel, site.target) in importorskips
-            if site.scope == "module" and (
-                site.platform
-                or rel.startswith(DARWIN_DIR)
-                or (site.target and not allowed_import)
-                or (not site.condition and not allowed_import)
+            module_ok = (
+                site.scope == "module"
+                and site.platform
+                and rel in LINUX_ONLY_MODULES
+                and not rel.startswith(DARWIN_DIR)
+            )
+            if (
+                site.scope == "module"
+                and not module_ok
+                and (
+                    site.platform
+                    or rel.startswith(DARWIN_DIR)
+                    or (site.target and not allowed_import)
+                    or (not site.condition and not allowed_import)
+                )
             ):
                 problems.append(f"{where}: whole-module skip is forbidden")
             elif site.platform and rel not in table:

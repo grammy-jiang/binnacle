@@ -13,6 +13,12 @@ import pytest
 
 from binnacle.platform.linux import job_process
 
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux /proc process start-time identity; Darwin counterpart tests/platform/darwin/test_process_authority.py",
+)
+
+
 if TYPE_CHECKING:
     from binnacle.platform.contracts.process_contracts import (
         ProcessBackend,
@@ -87,6 +93,7 @@ def _assert_wait_timeout(handle: ProcessHandle) -> None:
     assert handle.returncode is None
 
 
+@LINUX_ONLY
 @pytest.mark.parametrize("intent, expected", [("terminate", -15), ("kill", -9)])
 def test_timeout_keeps_child_alive_after_parent_closes_files(
     tmp_path, backend, intent, expected

@@ -1,6 +1,16 @@
 """Explicit platform construction and job-engine activation contracts."""
 
+import sys
 
+import pytest
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux adapter activation and job accounting; Darwin counterpart tests/platform/darwin/test_composition_contract.py",
+)
+
+
+@LINUX_ONLY
 def test_constructors_are_lazy_and_return_current_adapters(monkeypatch):
     from binnacle.platform import job_platform
     from binnacle.platform.linux import job_cgroup, job_process
@@ -105,6 +115,7 @@ def test_manager_boot_identity_uses_default_process_seam(monkeypatch):
     assert job_manager._boot_id() == "opaque-boot"
 
 
+@LINUX_ONLY
 def test_accounting_capture_survives_binding_change_before_finalizer(
     tmp_path, monkeypatch
 ):
@@ -184,6 +195,7 @@ def test_manager_prepares_selected_accounting_before_recovery(tmp_path, monkeypa
     assert events == ["accounting", ("owner", "boot")]
 
 
+@LINUX_ONLY
 def test_manager_owned_command_runs_without_accounting(tmp_path, monkeypatch):
     from binnacle.features.commands import jobs
     from binnacle.platform.contracts.resource_contracts import NoResourceAccounting

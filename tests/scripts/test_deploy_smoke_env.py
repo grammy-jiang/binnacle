@@ -12,6 +12,11 @@ import pytest
 from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from scripts import deploy_smoke
 
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: Linux systemd/journald service operations; Darwin uses tests/platform/darwin/test_ipc_launchd.py",
+)
+
 
 def test_run_command_returns_code_and_output() -> None:
     rc, out = deploy_smoke.run_command([sys.executable, "-c", "print('hi')"], 30)
@@ -82,6 +87,7 @@ def test_mcp_client_reads_the_bearer_token_file(
     assert client is not None
 
 
+@LINUX_ONLY
 def test_default_env_points_at_the_production_checkout(tmp_path: Path) -> None:
     env = deploy_smoke.default_env(tmp_path)
     assert env.checkout == tmp_path and env.tmp_root == Path("/tmp")

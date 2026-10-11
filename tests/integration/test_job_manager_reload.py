@@ -9,7 +9,13 @@ import pytest
 
 from tests.integration.job_reload_support import MANAGER, reload_scenario, source_env
 
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
 
+
+@LINUX_ONLY
 def test_separate_workers_share_manager_cursor_and_idempotent_stop(tmp_path):
     source = Path(__file__).resolve().parents[2] / "src"
     reload_scenario(tmp_path, source, source)

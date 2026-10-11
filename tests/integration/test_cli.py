@@ -7,11 +7,19 @@ and token rotation without changing the development Raspberry Pi.
 """
 
 import subprocess
+import sys
+
+import pytest
 
 from binnacle import cli
 from binnacle.diagnostics import doctor
 from binnacle.platform.contracts.service_lifecycle_contracts import ServiceAction
 from tests.service_fakes import FakeServiceController
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux systemd unit files and uvloop serve stack; Darwin serves with asyncio and has no systemd (no Darwin counterpart: UNAVAILABLE on Darwin by release scope)",
+)
 
 
 def test_write_token_format_and_mode(tmp_path):
@@ -132,14 +140,13 @@ def test_rotate_tunnel_failure_is_nonzero_after_server_success(
 # -- tunnel readiness wait (token rotate) -----------------------------------
 
 
-import pytest
-
 # -- command glue and safe control paths ------------------------------------
 
 
 # -- baseline command coverage -----------------------------------------------
 
 
+@LINUX_ONLY
 def test_serve_uses_explicit_uvicorn_performance_stack(monkeypatch):
     import sys
     from types import SimpleNamespace
@@ -164,6 +171,7 @@ def test_serve_uses_explicit_uvicorn_performance_stack(monkeypatch):
     ]
 
 
+@LINUX_ONLY
 def test_doctor_passes_deployment_and_exit_code(tmp_path, monkeypatch, capsys):
     from types import SimpleNamespace
 
@@ -258,6 +266,7 @@ def test_stats_log_failure_remains_command_failure(monkeypatch):
         cli.stats()
 
 
+@LINUX_ONLY
 def test_systemctl_wrapper_and_unit_state(monkeypatch):
     seen = []
 

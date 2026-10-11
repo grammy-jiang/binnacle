@@ -1,11 +1,19 @@
 """Lifecycle telemetry that is orthogonal to the core job contract tests."""
 
+import sys
+
 import pytest
 
 from binnacle.features.commands import jobs as jobstore
 from tests.integration.job_test_support import run, stop
 
-pytestmark = pytest.mark.usefixtures("_short_job_warmup")
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
+
+
+pytestmark = [LINUX_ONLY, pytest.mark.usefixtures("_short_job_warmup")]
 
 
 def test_stop_escalation_is_visible_in_telemetry(monkeypatch, caplog):

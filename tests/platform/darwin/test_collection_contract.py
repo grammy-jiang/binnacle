@@ -346,7 +346,46 @@ for _file, _uses in (
 ):
     _rel = f"tests/integration/test_{_file}.py"
     LINUX_PIN_USE_COUNTS[_rel] = LINUX_PIN_NODE_COUNTS[_rel] = _uses
-LINUX_PIN_TOTAL_NODES = 40
+_T0A9_PIN_TABLE = """
+tests/integration/test_cli.py 3 3
+tests/integration/test_commands_settings.py 3 3
+tests/integration/test_http_workflows.py 2 2
+tests/integration/test_job_manager.py 1 22
+tests/integration/test_job_manager_reload.py 1 1
+tests/integration/test_job_manager_telemetry.py 2 2
+tests/integration/test_job_telemetry.py 1 1
+tests/integration/test_jobs.py 1 25
+tests/integration/test_jobs_lifecycle.py 1 36
+tests/integration/test_jobs_lifecycle_stops.py 1 1
+tests/integration/test_jobs_state_machine.py 1 1
+tests/integration/test_jobs_stop_paths.py 1 1
+tests/integration/test_jobs_store.py 6 6
+tests/integration/test_log_privacy.py 2 2
+tests/integration/test_logging.py 1 1
+tests/integration/test_logging_jobs.py 1 4
+tests/integration/test_mounted_call_context.py 1 1
+tests/integration/test_os_job_rpc_cross_version.py 1 2
+tests/integration/test_packaging_smoke.py 1 1
+tests/integration/test_root_settings.py 1 1
+tests/scripts/test_deploy_smoke_env.py 1 1
+tests/system/test_diagnostic_boundaries.py 1 2
+tests/system/test_doctor.py 3 3
+tests/system/test_doctor_coverage.py 2 3
+tests/unit/core/test_command_backend.py 1 1
+tests/unit/core/test_job_manager_edges.py 2 2
+tests/unit/core/test_jobs_cgroup_integration.py 3 3
+tests/unit/core/test_os_independence_paths.py 1 1
+tests/unit/core/test_os_job_partial_persistence.py 2 2
+tests/unit/core/test_platform_activation.py 3 3
+tests/unit/core/test_process_contract.py 1 2
+tests/unit/core/test_runtime_paths.py 2 2
+tests/unit/core/test_units.py 1 1
+"""
+for _row in _T0A9_PIN_TABLE.strip().splitlines():
+    _path, _n_uses, _n_nodes = _row.split()
+    LINUX_PIN_USE_COUNTS[_path] = int(_n_uses)
+    LINUX_PIN_NODE_COUNTS[_path] = int(_n_nodes)
+LINUX_PIN_TOTAL_NODES = 182
 
 
 def _repo_sources() -> dict[str, str]:
@@ -358,7 +397,7 @@ def _repo_sources() -> dict[str, str]:
 
 def test_linux_alias_use_counts_are_pinned_per_file():
     sel = _selection_module()
-    assert set(LINUX_PIN_USE_COUNTS) == set(sel.LINUX_PIN_FILES)
+    assert set(LINUX_PIN_USE_COUNTS) == {*sel.LINUX_PIN_FILES, *sel.T0A9_PIN_FILES}
     assert sum(LINUX_PIN_NODE_COUNTS.values()) == LINUX_PIN_TOTAL_NODES
     problems = sel.check_skip_policy(
         _repo_sources(),
@@ -394,3 +433,17 @@ def test_collected_linux_pin_nodes_match_the_pinned_counts():
         if "::" in line:
             found[line.split("::", 1)[0]] = found.get(line.split("::", 1)[0], 0) + 1
     assert found == LINUX_PIN_NODE_COUNTS, out[-2000:]
+
+
+def test_module_level_linux_only_is_limited_to_the_pinned_job_engine_modules():
+    """Negative: a module-level LINUX_ONLY elsewhere is a whole-platform skip."""
+    sel = _selection_module()
+    rel = "tests/unit/core/test_units.py"
+    sources = _repo_sources()
+    sources[rel] += "\npytestmark = LINUX_ONLY\n"
+    problems = sel.check_skip_policy(sources, counts=sel.PLATFORM_SITE_COUNTS)
+    assert any("whole-module skip is forbidden" in p for p in problems), problems
+    assert all(
+        sel.scan_skips(sources[m]) and sel.whole_module_skips(sources[m])
+        for m in sel.LINUX_ONLY_MODULES
+    )

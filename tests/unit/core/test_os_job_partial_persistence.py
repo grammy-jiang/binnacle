@@ -5,6 +5,7 @@ descendant alive. Persist that partial delivery before an idempotent stop can
 mistake the reaper's "exited" metadata for complete group termination.
 """
 
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -13,6 +14,12 @@ from binnacle.features.commands import job_owner, job_stop, job_store, jobs
 from binnacle.features.commands.job_manager import JobManager
 from binnacle.platform.contracts.process_contracts import JobSignalDeliveryError
 from binnacle.platform.contracts.resource_contracts import NoResourceAccounting
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
+
 
 JOB_ID = "abcdef123456"
 
@@ -80,6 +87,7 @@ def test_partial_failure_persists_across_exit_reaper_and_idempotent_retry(
         jobs.stop_job_embedded(JOB_ID)
 
 
+@LINUX_ONLY
 def test_direct_manager_rpc_rejects_persisted_partial_before_marking(
     spool, monkeypatch
 ):
@@ -251,6 +259,7 @@ def test_native_partial_callback_write_recovers_on_outer_retry(spool, monkeypatc
         job_owner.stop_job(JOB_ID)
 
 
+@LINUX_ONLY
 def test_manager_rpc_reports_callback_storage_outage_as_partial_stop(
     spool, monkeypatch
 ):
