@@ -1,4 +1,25 @@
-# Revision 1.1.0 resolution map
+# Revision 1.2.0 (R4 J0): Darwin durable-job owner
+
+Revision `binnacle-darwin-r4-interface-1.2.0`, source base
+`9f958798bf9cbe289ad4cc8daa0714bbb8d0a305`. This is a proposal: the Supervisor
+must review the exact signed commit before J1, J2 or J4 consume it (JCR-1). It
+does not enable any tool. CI or review status from earlier SHAs does not carry
+over to this commit.
+
+| Amendment | Resolution |
+| --- | --- |
+| JCR-1 | No new `CapabilityState`. A full-with-disclosure row is `AVAILABLE` plus `decision_target="full_with_disclosure"` plus non-empty `ReleaseDecision.disclosures` (D-1, D-2, `descendants_unverified=true`). `validate_release_rows` refuses anything else. |
+| JCR-1 table | Owner-keyed rows: `DARWIN_EMBEDDED_RELEASE_SCOPE` is the unchanged LIMITED table; `DARWIN_MANAGER_RELEASE_SCOPE` keeps file rows and commits the three command rows as `UNAVAILABLE` (`review_pending`, gate `J-CR`). |
+| JCR-2 | `resolve_darwin_job_owner`: `auto` and `manager` give the manager; `embedded` only when configured. Rows follow the composed owner, never reachability. An unreachable manager is a per-call `job manager unavailable` error. The manager never serves LIMITED rows or composes an embedded execution. |
+| `composition.py:261` | The unconditional stop_job assertion became `validate_owner_command_states`: embedded keeps stop_job `UNAVAILABLE` on every host; manager allows only `UNAVAILABLE`/`AVAILABLE`, and job tools need `run_command` `AVAILABLE`. |
+| DarwinJobOwner | Frozen protocol in `process_contracts.py`: `spawn`, `wait`, `reap_exits` (kqueue NOTE_EXIT, sole reaper), `signal_owned_group`, `authority` (`OWNED`/`UNKNOWN`), `close`. |
+| R4-REQ-J1J2-no-orphans | `close` is the normal owner stop: owned groups get terminate, the Linux grace, then kill; leaders are reaped and recorded with `owner_restart`. An unreapable group stays UNKNOWN. |
+
+The machine-readable change list is `api-contract.json#/revision_1_2_0`. Linux
+engine paths and every 1.1.0 declaration are unchanged; all additions are new
+names or defaulted keyword parameters.
+
+## Revision 1.1.0 resolution map (history)
 
 All entries are author-proposed design resolutions, pending exact signed-commit
 Supervisor review. No native implementation or acceptance is claimed.
@@ -54,3 +75,5 @@ SHA-256 `2977f84264465de10ad32915b4cccd07971db2af6ebdf584ad54d4bf965271a6`.
 
 Repository evidence is pinned to `c2234f16bdfb1a17500b99101d3184b797ebb673`.
 All historical evidence remains bounded and cannot enable this revision.
+
+- 1.2.0 clarification (RJ1D-F3, Supervisor ACK 21:1x): close(): leaders still running when close() begins get termination_reason=owner_restart; exits observed earlier keep their Linux reason; close() returns every exit not yet released.

@@ -12,7 +12,12 @@ from pathlib import Path
 from threading import Event
 from typing import TYPE_CHECKING, Literal
 
-from binnacle.platform.contracts.capability_contracts import CapabilityState
+from binnacle.platform.contracts import darwin_release_scope as rows
+from binnacle.platform.contracts.capability_contracts import (
+    Capability,
+    CapabilityState,
+    CapabilityUnavailable,
+)
 from binnacle.platform.contracts.darwin_contracts import (
     ForegroundExecution,
     ForegroundRequest,
@@ -20,17 +25,13 @@ from binnacle.platform.contracts.darwin_contracts import (
     OwnedWitness,
     OwnerGeneration,
 )
-from binnacle.platform.contracts.darwin_release_scope import (
-    DARWIN_RELEASE_SCOPE,
-    FILE_TOOLS,
-)
 from binnacle.platform.contracts.file_access_contracts import FileAccess, SearchAccess
 from binnacle.platform.contracts.native_service_contracts import (
     AuthenticatedChannel,
     NativeRequestHandler,
     ServiceLease,
 )
-from binnacle.platform.contracts.process_contracts import ProcessBackend
+from binnacle.platform.contracts.process_contracts import JobOwnerKind, ProcessBackend
 from binnacle.platform.contracts.resource_contracts import ResourceAccounting
 from binnacle.platform.contracts.runtime_path_contracts import RuntimePaths
 from binnacle.platform.contracts.service_lifecycle_contracts import (
@@ -255,12 +256,14 @@ def serve_native_channel(
 
 
 def validate_native_command_states(
-    states: Mapping[str, str], *, execution: ForegroundExecution | None = None
+    states: Mapping[str, str],
+    *,
+    execution: ForegroundExecution | None = None,
+    owner: JobOwnerKind = "embedded",
 ) -> None:
-    """Reject contradictory scopes, including explicit candidate test mappings."""
-    if states.get("stop_job", "UNAVAILABLE") != "UNAVAILABLE":
-        raise RuntimeError("Darwin stop_job must remain UNAVAILABLE")
-    if host_os_family() != "darwin":
+    """Reject contradictory scopes; the stop_job rule is owner-conditioned (1.2.0)."""
+    rows.validate_owner_command_states(states, owner, execution)
+    if host_os_family() != "darwin" or owner == "manager":
         return
     from binnacle.platform.darwin.process_backend import DarwinProcessBackend
 
@@ -270,15 +273,18 @@ def validate_native_command_states(
         DarwinProcessBackend().validate_release_states(states)
 
 
-def native_file_capability(*, release_scope=DARWIN_RELEASE_SCOPE, execution=None):
-    """Read the committed scope; explicit alternatives are test harness inputs."""
+def native_file_capability(*, release_scope=None, execution=None, owner="embedded"):
+    """Read the composed owner's committed rows; alternatives are test inputs."""
+    release_scope = release_scope or rows.release_scope_for_owner(owner)
     validate_native_command_states(
         {tool: row.capability.state.value for tool, row in release_scope.items()},
         execution=execution,
+        owner=owner,
     )
+    rows.validate_release_rows(release_scope, owner)
     if host_os_family() == "linux":
         return None
-    capabilities = [release_scope[tool].capability for tool in FILE_TOOLS]
+    capabilities = [release_scope[tool].capability for tool in rows.FILE_TOOLS]
     return max(capabilities, key=lambda cap: cap.state == CapabilityState.LIMITED)
 
 
@@ -358,12 +364,6 @@ class _NativeProvisionerMapping:
 
     @staticmethod
     def _refuse_handoff():
-        from binnacle.platform.contracts.capability_contracts import (
-            Capability,
-            CapabilityState,
-            CapabilityUnavailable,
-        )
-
         code = "darwin_service_handoff_incomplete"
         raise CapabilityUnavailable(
             code,
@@ -412,7 +412,7 @@ class _ObservedForegroundExecution:
 
 
 def create_foreground_execution(
-    *, command_states=None, foreground_limit_s=50, wait_max_s=50
+    *, command_states=None, foreground_limit_s=50, wait_max_s=50, owner="embedded"
 ) -> ForegroundExecution:
     """Inject A2 only for the composed LIMITED row; bind its sole reaper to A5."""
     if host_os_family() != "darwin":
@@ -432,7 +432,7 @@ def create_foreground_execution(
     execution = _ObservedForegroundExecution(
         DarwinProcessBackend(foreground_runner=runner), DarwinResourceAccounting()
     )
-    validate_native_command_states(states, execution=execution)
+    validate_native_command_states(states, execution=execution, owner=owner)
     return execution
 
 
