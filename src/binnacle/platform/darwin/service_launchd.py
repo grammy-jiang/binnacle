@@ -122,6 +122,16 @@ def _positive_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
+def _private_umask(value: object) -> bool:
+    """Only masks that at least deny group/world write (jobs use 0o077)."""
+    return (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and 0 <= value <= 0o777
+        and value & 0o022 == 0o022
+    )
+
+
 def _limits(value: object) -> bool:
     return (
         isinstance(value, dict)
@@ -223,6 +233,7 @@ class LaunchdUserServices:
             "AbandonProcessGroup",
             "SoftResourceLimits",
             "HardResourceLimits",
+            "Umask",
         }
         env = value.get("EnvironmentVariables", {})
         argv = value.get("ProgramArguments")
@@ -244,6 +255,7 @@ class LaunchdUserServices:
             or value.get("AbandonProcessGroup", False) is not False
             or not all(_limits(value.get(key, {})) for key in _LIMIT_KEYS)
             or not _positive_int(value.get("ThrottleInterval", 1))
+            or not _private_umask(value.get("Umask", 0o077))
         ):
             raise _unknown("launchd_plist_scope_refused")
 

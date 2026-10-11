@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import plistlib
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -127,8 +128,23 @@ def validate_plist_bytes(data: bytes, *, label: str, runtime_dir: Path) -> None:
 JOBS_DAEMON_LABEL = "com.binnacle.jobs"
 MCP_DAEMON_LABEL = "com.binnacle.mcp"
 JOBS_DAEMON_PLIST_PATH = Path("/Library/LaunchDaemons") / f"{JOBS_DAEMON_LABEL}.plist"
-JOBS_PROGRAM_NAME = "binnacle-jobs"
+# Darwin manager entry (J2): ``<venv python> -m <module>``, never the A1 Linux
+# ``binnacle-jobs`` console script.
+JOBS_ENTRY_MODULE = "binnacle.platform.darwin.job_manager_service"
+_PYTHON_NAME = re.compile(r"python(3(\.[0-9]+)?)?")
+# close() budget (CR0 point 3): one TERM sweep, the Linux grace windows
+# (features/commands/jobs.py STOP_SIGTERM/SIGKILL_GRACE_S), one KILL sweep,
+# then exit records are persisted before launchd's ExitTimeOut SIGKILL.
+JOBS_STOP_SIGTERM_GRACE_S = 5.0
+JOBS_STOP_SIGKILL_GRACE_S = 2.0
+JOBS_PERSIST_MARGIN_S = 10.0
 JOBS_EXIT_TIMEOUT_S = 30
+if JOBS_EXIT_TIMEOUT_S < (
+    JOBS_STOP_SIGTERM_GRACE_S + JOBS_STOP_SIGKILL_GRACE_S + JOBS_PERSIST_MARGIN_S
+):  # pragma: no cover - import-time invariant
+    raise RuntimeError("jobs_exit_timeout_below_close_budget")
+# Linux binnacle-jobs runs with UMask=0077; job spools stay private.
+JOBS_UMASK = 0o077
 JOBS_THROTTLE_INTERVAL_S = 10
 JOBS_NUMBER_OF_FILES = 8192
 _MAX_PROCESS_LIMIT = 1 << 20
@@ -149,6 +165,7 @@ _JOBS_DAEMON_KEYS = frozenset(
         "ProcessType",
         "AbandonProcessGroup",
         "ExitTimeOut",
+        "Umask",
         "SoftResourceLimits",
         "HardResourceLimits",
         "StandardOutPath",
@@ -167,6 +184,7 @@ _JOBS_TEST_KEYS = frozenset(
         "ProcessType",
         "AbandonProcessGroup",
         "ExitTimeOut",
+        "Umask",
         "SoftResourceLimits",
         "HardResourceLimits",
         "LimitLoadToSessionType",
@@ -178,17 +196,19 @@ _JOBS_TEST_KEYS = frozenset(
 class JobsDaemonSpec:
     """Inputs for the production ``com.binnacle.jobs`` LaunchDaemon plist.
 
-    ``user_name``/``group_name``, ``home`` and ``config_file`` are those of the
-    deployed ``com.binnacle.mcp`` daemon; ``program`` is the absolute
-    ``<installed venv>/bin/binnacle-jobs`` (never a development checkout that
-    auto-reloads, mirroring Linux's stable job owner).
+    ``user_name``/``group_name``, ``home``, ``config_file`` and ``path`` (the
+    MCP ``PATH``, so jobs find uv, rg and brew tools exactly as MCP commands
+    do) are those of the deployed ``com.binnacle.mcp`` daemon; ``python`` is
+    the absolute ``<installed venv>/bin/python`` (never a development checkout
+    that auto-reloads, mirroring Linux's stable job owner).
     """
 
     user_name: str
     group_name: str
-    program: Path
+    python: Path
     home: Path
     config_file: Path
+    path: str
     stdout_path: Path
     stderr_path: Path
     number_of_processes: int
@@ -197,6 +217,15 @@ class JobsDaemonSpec:
 def _normal_absolute(path: Path) -> bool:
     text = str(path)
     return path.is_absolute() and os.path.normpath(text) == text and "\x00" not in text
+
+
+def search_path(value: object) -> str:
+    """A ``PATH`` of absolute, normalised, non-empty entries; never defaulted."""
+    if not isinstance(value, str) or not value or len(value) > 4096:
+        raise ValueError("jobs_daemon_path_invalid")
+    if not all(_normal_absolute(Path(entry)) for entry in value.split(":")):
+        raise ValueError("jobs_daemon_path_invalid")
+    return value
 
 
 def _account(name: object) -> str:
@@ -223,15 +252,6 @@ def _process_limit(value: object) -> int:
     return value
 
 
-def user_default_process_limit() -> int:
-    """The per-user process ceiling (``kern.maxprocperuid``) set explicitly.
-
-    launchd otherwise hands the daemon whatever it inherits; the design pins
-    it so job behaviour is deterministic.
-    """
-    return _process_limit(os.sysconf("SC_CHILD_MAX"))
-
-
 def _resource_limits(number_of_processes: object) -> dict[str, int]:
     return {
         "NumberOfFiles": JOBS_NUMBER_OF_FILES,
@@ -254,32 +274,41 @@ def _jobs_lifecycle(
         # manager's group and leaves jobs to D-1 (UNKNOWN), never adopted.
         "AbandonProcessGroup": False,
         "ExitTimeOut": JOBS_EXIT_TIMEOUT_S,
+        "Umask": JOBS_UMASK,
         "SoftResourceLimits": dict(limits),
         "HardResourceLimits": dict(limits),
     }
 
 
-def _jobs_program(program: Path) -> str:
+def _jobs_argv(python: Path) -> list[str]:
     if (
-        not _normal_absolute(program)
-        or program.name != JOBS_PROGRAM_NAME
-        or program.parent.name != "bin"
+        not _normal_absolute(python)
+        or not _PYTHON_NAME.fullmatch(python.name)
+        or python.parent.name != "bin"
     ):
         raise ValueError("jobs_daemon_program_invalid")
-    return str(program)
+    return [str(python), "-m", JOBS_ENTRY_MODULE]
 
 
 def render_jobs_daemon_plist(spec: JobsDaemonSpec) -> bytes:
     """Render the system LaunchDaemon plan for ``com.binnacle.jobs``.
 
-    It runs as the ``com.binnacle.mcp`` account (never root), starts at load,
-    restarts only after an unsuccessful exit (a clean ``bootout`` keeps it
-    down) and carries explicit resource limits. Rendering never installs.
+    It runs as the ``com.binnacle.mcp`` account (never root) with that
+    daemon's ``HOME``, config and ``PATH``, starts at load and carries
+    explicit resource limits. Rendering never installs.
+
+    ``KeepAlive={SuccessfulExit=false}``: launchd restarts the manager (after
+    ``ThrottleInterval``) when it exits non-zero or dies from a signal; after
+    exit status 0 the job stays loaded but not running until a kickstart or
+    reboot. ``launchctl bootout`` removes the job whatever KeepAlive says.
+    Manager exit-code contract: exit 0 only for a stop initiated through the
+    provisioner's quiet-window path; every other stop (``launchctl kill``,
+    SIGTERM, a fatal error, a lost writer lock) exits non-zero, so it restarts.
     """
     paths = (spec.home, spec.config_file, spec.stdout_path, spec.stderr_path)
     if not all(_normal_absolute(p) for p in paths):
         raise ValueError("path_not_absolute")
-    body = _jobs_lifecycle([_jobs_program(spec.program)], spec.number_of_processes)
+    body = _jobs_lifecycle(_jobs_argv(spec.python), spec.number_of_processes)
     body.update(
         {
             "Label": JOBS_DAEMON_LABEL,
@@ -289,6 +318,7 @@ def render_jobs_daemon_plist(spec: JobsDaemonSpec) -> bytes:
             "EnvironmentVariables": {
                 "BINNACLE_CONFIG_FILE": str(spec.config_file),
                 "HOME": str(spec.home),
+                "PATH": search_path(spec.path),
             },
             "StandardOutPath": str(spec.stdout_path),
             "StandardErrorPath": str(spec.stderr_path),
@@ -347,9 +377,9 @@ def validate_jobs_daemon_plist_bytes(data: bytes) -> JobsDaemonSpec:
     if (
         value.keys() != _JOBS_DAEMON_KEYS
         or not isinstance(argv, list)
-        or len(argv) != 1
+        or len(argv) != 3
         or not isinstance(env, dict)
-        or env.keys() != {"HOME", "BINNACLE_CONFIG_FILE"}
+        or env.keys() != {"HOME", "BINNACLE_CONFIG_FILE", "PATH"}
         or not isinstance(soft, dict)
         or not _lifecycle_matches(value)
     ):
@@ -358,9 +388,10 @@ def validate_jobs_daemon_plist_bytes(data: bytes) -> JobsDaemonSpec:
         spec = JobsDaemonSpec(
             user_name=_str(value["UserName"]),
             group_name=_str(value["GroupName"]),
-            program=Path(_str(argv[0])),
+            python=Path(_str(argv[0])),
             home=Path(_str(env["HOME"])),
             config_file=Path(_str(env["BINNACLE_CONFIG_FILE"])),
+            path=_str(env["PATH"]),
             stdout_path=Path(_str(value["StandardOutPath"])),
             stderr_path=Path(_str(value["StandardErrorPath"])),
             number_of_processes=_process_limit(soft["NumberOfProcesses"]),
@@ -371,37 +402,6 @@ def validate_jobs_daemon_plist_bytes(data: bytes) -> JobsDaemonSpec:
     if canonical != plistlib.dumps(value, fmt=plistlib.FMT_XML, sort_keys=True):
         raise ValueError("plist_scope_refused")
     return spec
-
-
-@dataclass(frozen=True)
-class McpDaemonIdentity:
-    user_name: str
-    group_name: str
-    home: Path
-    config_file: Path
-
-
-def mcp_daemon_identity(data: bytes) -> McpDaemonIdentity:
-    """Read the run-as identity from caller-supplied ``com.binnacle.mcp`` bytes.
-
-    Pure: the caller decides where the bytes come from. A daemon without an
-    explicit non-root ``UserName``/``GroupName`` is refused, never defaulted.
-    """
-    value = _load_dict(data)
-    env = value.get("EnvironmentVariables")
-    if value.get("Label") != MCP_DAEMON_LABEL or not isinstance(env, dict):
-        raise ValueError("mcp_identity_invalid")
-    home, config = env.get("HOME"), env.get("BINNACLE_CONFIG_FILE")
-    if not isinstance(home, str) or not isinstance(config, str):
-        raise ValueError("mcp_identity_invalid")  # noqa: TRY004 - one error type
-    if not _normal_absolute(Path(home)) or not _normal_absolute(Path(config)):
-        raise ValueError("mcp_identity_invalid")
-    return McpDaemonIdentity(
-        _account(value.get("UserName")),
-        _account(value.get("GroupName")),
-        Path(home),
-        Path(config),
-    )
 
 
 def jobs_test_label(label: str) -> str:
@@ -424,7 +424,8 @@ def render_jobs_test_plist(
     """User-domain test variant of ``com.binnacle.jobs`` for owned test labels.
 
     It shares every lifecycle key with the production plan (RunAtLoad,
-    Standard QoS, AbandonProcessGroup=false, ExitTimeOut, throttle, limits)
+    Standard QoS, AbandonProcessGroup=false, ExitTimeOut, Umask, throttle,
+    limits)
     but stays in A3's accepted test scope: a ``com.binnacle.r3test.*.manager``
     label, ``KeepAlive=false`` (the test owns every restart),
     ``LimitLoadToSessionType=Background``, no ``UserName``/``GroupName`` and

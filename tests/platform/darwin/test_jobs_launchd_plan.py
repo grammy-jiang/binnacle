@@ -1,12 +1,12 @@
-"""com.binnacle.jobs launchd plan (R4 lane J3, design section 2).
+"""com.binnacle.jobs launchd plan (R4 lanes J3/J3r, design section 2).
 
 Pure plan rendering and A3 acceptance of the user-domain test variant. Nothing
-here installs a LaunchDaemon, needs privileges or runs launchctl: every
-launchctl call is replaced by a recording fake.
+here installs a LaunchDaemon, needs privileges or runs launchctl.
 """
 
 from __future__ import annotations
 
+import ast
 import dataclasses
 import os
 import plistlib
@@ -17,21 +17,20 @@ from pathlib import Path
 
 import pytest
 
+import binnacle
+from binnacle.deployment.darwin import plist as plan_constants
 from binnacle.deployment.darwin.plist import (
     JOBS_DAEMON_PLIST_PATH,
     JobsDaemonSpec,
-    mcp_daemon_identity,
     render_jobs_daemon_plist,
     render_jobs_test_plist,
-    user_default_process_limit,
     validate_jobs_daemon_plist_bytes,
     validate_jobs_test_plist_bytes,
 )
-from binnacle.deployment.darwin.provisioner import (
-    JobsDaemonRefused,
-    lookup_account,
+from binnacle.deployment.darwin.setup import (
+    mcp_daemon_identity,
+    per_user_process_limit,
     plan_jobs_daemon,
-    sha256_hex,
 )
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 from binnacle.platform.contracts.native_service_contracts import ServicePlan
@@ -49,19 +48,23 @@ def root(tmp_path: Path) -> Path:
     return r
 
 
-JOBS_PROGRAM = Path("/opt/binnacle/venv/bin/binnacle-jobs")
+JOBS_PYTHON = Path("/opt/binnacle/venv/bin/python")
 JOBS_TEST_LABEL = "com.binnacle.r3test.j3jobs.manager"
+MCP_PATH = "/opt/homebrew/bin:/Users/binnacle/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+LOGS = Path("/Users/binnacle/Library/Logs/binnacle")
+UID = os.getuid()
 
 
 def _jobs_spec(**changes: object) -> JobsDaemonSpec:
     spec = JobsDaemonSpec(
         user_name="binnacle",
         group_name="staff",
-        program=JOBS_PROGRAM,
+        python=JOBS_PYTHON,
         home=Path("/Users/binnacle"),
         config_file=Path("/Users/binnacle/.config/binnacle/config.toml"),
-        stdout_path=Path("/Users/binnacle/Library/Logs/binnacle/jobs.out.log"),
-        stderr_path=Path("/Users/binnacle/Library/Logs/binnacle/jobs.err.log"),
+        path=MCP_PATH,
+        stdout_path=LOGS / "jobs.out.log",
+        stderr_path=LOGS / "jobs.err.log",
         number_of_processes=2666,
     )
     return dataclasses.replace(spec, **changes)  # type: ignore[arg-type]
@@ -76,6 +79,7 @@ def _mcp_plist(**changes: object) -> bytes:
         "EnvironmentVariables": {
             "HOME": "/Users/binnacle",
             "BINNACLE_CONFIG_FILE": "/Users/binnacle/.config/binnacle/config.toml",
+            "PATH": MCP_PATH,
         },
     }
     body.update(changes)
@@ -91,10 +95,16 @@ def test_jobs_daemon_plist_matches_design_section_2() -> None:
         "Label": "com.binnacle.jobs",
         "UserName": "binnacle",
         "GroupName": "staff",
-        "ProgramArguments": [str(JOBS_PROGRAM)],
+        "ProgramArguments": [
+            str(JOBS_PYTHON),
+            "-m",
+            "binnacle.platform.darwin.job_manager_service",
+        ],
         "EnvironmentVariables": {
             "HOME": "/Users/binnacle",
             "BINNACLE_CONFIG_FILE": "/Users/binnacle/.config/binnacle/config.toml",
+            # R-J3-F1: the deployed MCP PATH, so jobs find uv, rg and brew tools.
+            "PATH": MCP_PATH,
         },
         "RunAtLoad": True,
         "KeepAlive": {"SuccessfulExit": False},
@@ -102,10 +112,11 @@ def test_jobs_daemon_plist_matches_design_section_2() -> None:
         "ProcessType": "Standard",
         "AbandonProcessGroup": False,
         "ExitTimeOut": 30,
+        "Umask": 0o077,
         "SoftResourceLimits": limits,
         "HardResourceLimits": limits,
-        "StandardOutPath": "/Users/binnacle/Library/Logs/binnacle/jobs.out.log",
-        "StandardErrorPath": "/Users/binnacle/Library/Logs/binnacle/jobs.err.log",
+        "StandardOutPath": str(LOGS / "jobs.out.log"),
+        "StandardErrorPath": str(LOGS / "jobs.err.log"),
     }
     assert validate_jobs_daemon_plist_bytes(data) == _jobs_spec()
     assert JOBS_DAEMON_PLIST_PATH == Path(
@@ -123,10 +134,15 @@ def test_jobs_daemon_plist_matches_design_section_2() -> None:
         {"user_name": ""},
         {"user_name": "-oops"},
         {"user_name": "a b"},
-        {"program": Path("binnacle-jobs")},
-        {"program": Path("/opt/binnacle/venv/bin/binnacle")},
-        {"program": Path("/opt/binnacle/venv/binnacle-jobs")},
-        {"program": Path("/opt/binnacle/../venv/bin/binnacle-jobs")},
+        {"python": Path("python")},
+        {"python": Path("/opt/binnacle/venv/bin/binnacle-jobs")},
+        {"python": Path("/opt/binnacle/venv/python3")},
+        {"python": Path("/opt/binnacle/../venv/bin/python3.12")},
+        {"path": ""},
+        {"path": "/usr/bin:"},
+        {"path": "/usr/bin:bin"},
+        {"path": "/usr/bin:/opt/../sbin"},
+        {"path": "/usr/bin\x00:/bin"},
         {"home": Path("relative")},
         {"config_file": Path("/a/../b.toml")},
         {"stdout_path": Path("logs/out.log")},
@@ -151,14 +167,21 @@ def test_jobs_daemon_spec_refusals(changes: dict[str, object]) -> None:
         ("AbandonProcessGroup", True),
         ("ExitTimeOut", 30.0),
         ("ExitTimeOut", 5),
+        ("Umask", 18),
         ("ThrottleInterval", 1),
         ("SoftResourceLimits", {"NumberOfFiles": 8192}),
         ("HardResourceLimits", {"NumberOfFiles": 4096, "NumberOfProcesses": 2666}),
-        ("ProgramArguments", [str(JOBS_PROGRAM), "--dev"]),
-        ("ProgramArguments", ["/repo/.venv/bin/binnacle"]),
+        ("ProgramArguments", [str(JOBS_PYTHON)]),
+        ("ProgramArguments", [str(JOBS_PYTHON), "-m", "binnacle.cli"]),
+        ("ProgramArguments", ["/repo/.venv/bin/binnacle-jobs"]),
         ("UserName", "root"),
         ("Label", "com.binnacle.mcp"),
         ("EnvironmentVariables", {"HOME": "/Users/binnacle"}),
+        ("EnvironmentVariables", {"HOME": "/h", "BINNACLE_CONFIG_FILE": "/c"}),
+        (
+            "EnvironmentVariables",
+            {"HOME": "/h", "BINNACLE_CONFIG_FILE": "/c", "PATH": "/b", "TOKEN": "x"},
+        ),
         ("StartInterval", 60),
         ("Sockets", {}),
         ("LimitLoadToSessionType", "Background"),
@@ -182,6 +205,12 @@ def test_mcp_identity_is_the_only_run_as_source() -> None:
     identity = mcp_daemon_identity(_mcp_plist())
     assert (identity.user_name, identity.group_name) == ("binnacle", "staff")
     assert identity.config_file == Path("/Users/binnacle/.config/binnacle/config.toml")
+    assert identity.path == MCP_PATH
+    env = plistlib.loads(_mcp_plist())["EnvironmentVariables"]
+    for path in (None, "", "/usr/bin::/bin", "~/.local/bin:/usr/bin"):
+        bad = {k: v for k, v in dict(env, PATH=path).items() if v is not None}
+        with pytest.raises(ValueError, match="mcp_identity_path_invalid"):
+            mcp_daemon_identity(_mcp_plist(EnvironmentVariables=bad))
     for changes in (
         {"Label": "com.binnacle.jobs"},
         {"UserName": None},
@@ -194,95 +223,58 @@ def test_mcp_identity_is_the_only_run_as_source() -> None:
             mcp_daemon_identity(_mcp_plist(**changes))
 
 
-def test_plan_jobs_daemon_is_pure_and_runs_as_mcp_user(tmp_path: Path) -> None:
-    looked: list[tuple[str, str]] = []
-
-    def lookup(user: str, group: str) -> tuple[int, int]:
-        looked.append((user, group))
-        return 501, 20
-
-    logs = tmp_path / "logs"
-    plan = plan_jobs_daemon(
-        _mcp_plist(),
-        program=JOBS_PROGRAM,
-        log_dir=logs,
-        number_of_processes=2666,
-        lookup=lookup,
-    )
-    assert looked == [("binnacle", "staff")]
-    assert (plan.uid, plan.gid) == (501, 20)
-    assert plan.target_path == JOBS_DAEMON_PLIST_PATH
-    assert plan.capability.state == "LIMITED"
-    assert plan.capability.reason_code == "jobs_daemon_plan_only"
-    assert plan.plist_sha256 == sha256_hex(plan.plist_bytes)
-    assert plan.spec.stdout_path == logs / "com.binnacle.jobs.out.log"
-    assert plan.spec.stderr_path == logs / "com.binnacle.jobs.err.log"
-    assert plan.spec.number_of_processes == 2666
-    assert validate_jobs_daemon_plist_bytes(plan.plist_bytes) == plan.spec
-    # Planning is data only: no directory, log or plist was created.
-    assert list(tmp_path.iterdir()) == []
-
-
 @pytest.mark.skipif(sys.platform != "darwin", reason="kern.maxprocperuid is Darwin")
-def test_default_process_limit_is_the_darwin_per_user_ceiling(tmp_path: Path) -> None:
+def test_default_process_limit_is_kern_maxprocperuid_not_ulimit(tmp_path: Path) -> None:
+    """R-J3-F2: a provisioner under a lowered ``ulimit -u`` still pins the sysctl."""
     sysctl = subprocess.run(
         ["/usr/sbin/sysctl", "-n", "kern.maxprocperuid"],
         capture_output=True,
         text=True,
         check=True,
+    ).stdout.strip()
+    assert per_user_process_limit() == int(sysctl)
+    lowered = (
+        "import os, resource\n"
+        "from binnacle.deployment.darwin.setup import per_user_process_limit\n"
+        "hard = resource.getrlimit(resource.RLIMIT_NPROC)[1]\n"
+        "resource.setrlimit(resource.RLIMIT_NPROC, (300, hard))\n"
+        "print(per_user_process_limit(), os.sysconf('SC_CHILD_MAX'))\n"
     )
-    assert user_default_process_limit() == int(sysctl.stdout)
+    child = subprocess.run(
+        [sys.executable, "-c", lowered], capture_output=True, text=True, check=True
+    )
+    assert child.stdout.split() == [sysctl, "300"]
     plan = plan_jobs_daemon(
         _mcp_plist(),
-        program=JOBS_PROGRAM,
+        python=JOBS_PYTHON,
         log_dir=tmp_path,
-        lookup=lambda user, group: (501, 20),
+        lookup=lambda user, group: (UID, 20),
     )
     limits = plistlib.loads(plan.plist_bytes)["HardResourceLimits"]
-    assert limits["NumberOfProcesses"] == int(sysctl.stdout)
+    assert limits["NumberOfProcesses"] == int(sysctl)
 
 
-@pytest.mark.parametrize("ids", [(0, 20), (501, 0)])
-def test_plan_jobs_daemon_refuses_root_identity(
-    ids: tuple[int, int], tmp_path: Path
-) -> None:
-    with pytest.raises(JobsDaemonRefused) as info:
-        plan_jobs_daemon(
-            _mcp_plist(),
-            program=JOBS_PROGRAM,
-            log_dir=tmp_path,
-            lookup=lambda user, group: ids,
-        )
-    assert info.value.code == "jobs_daemon_root_refused"
-
-
-def test_plan_jobs_daemon_refusals_are_controlled(tmp_path: Path) -> None:
-    for kwargs, code in (
-        ({"program": Path("/repo/.venv/bin/binnacle")}, "jobs_daemon_program_invalid"),
-        ({"log_dir": Path("logs")}, "path_not_absolute"),
-        ({"number_of_processes": 0}, "jobs_daemon_process_limit_invalid"),
-    ):
-        args: dict[str, object] = {
-            "program": JOBS_PROGRAM,
-            "log_dir": tmp_path,
-            "lookup": lambda user, group: (501, 20),
-            **kwargs,
-        }
-        with pytest.raises(JobsDaemonRefused) as info:
-            plan_jobs_daemon(_mcp_plist(), **args)  # type: ignore[arg-type]
-        assert info.value.code == code
-    with pytest.raises(JobsDaemonRefused) as missing:
-        lookup_account("binnacle-j3-no-such-user", "staff")
-    assert missing.value.code == "jobs_daemon_account_missing"
-
-
-def test_lookup_account_reads_local_databases() -> None:
-    import grp
-    import pwd
-
-    me = pwd.getpwuid(os.getuid())
-    group = grp.getgrgid(me.pw_gid).gr_name
-    assert lookup_account(me.pw_name, group) == (me.pw_uid, me.pw_gid)
+def test_exit_timeout_covers_the_close_persist_budget() -> None:
+    """R-J3-F3 (CR0 point 3): one TERM sweep, both grace windows and the
+    persist margin fit inside ExitTimeOut, mirroring the Linux constants."""
+    jobs_py = Path(binnacle.__file__).parent / "features" / "commands" / "jobs.py"
+    linux = {
+        node.targets[0].id: ast.literal_eval(node.value)
+        for node in ast.parse(jobs_py.read_text()).body
+        if isinstance(node, ast.Assign)
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id.startswith("STOP_SIG")
+    }
+    c = plan_constants
+    assert linux == {
+        "STOP_SIGTERM_GRACE_S": c.JOBS_STOP_SIGTERM_GRACE_S,
+        "STOP_SIGKILL_GRACE_S": c.JOBS_STOP_SIGKILL_GRACE_S,
+    }
+    budget = sum(linux.values()) + c.JOBS_PERSIST_MARGIN_S
+    assert c.JOBS_PERSIST_MARGIN_S > 0
+    assert budget <= c.JOBS_EXIT_TIMEOUT_S
+    value = plistlib.loads(render_jobs_daemon_plist(_jobs_spec()))
+    assert value["ExitTimeOut"] == c.JOBS_EXIT_TIMEOUT_S
 
 
 def _jobs_test_plist(

@@ -1,17 +1,11 @@
-"""Darwin provisioning: the test-owned transaction and the jobs daemon plan.
-
-The test transaction runs over an injected launchd lifecycle. The
-``com.binnacle.jobs`` plan is pure data; nothing here installs it.
-"""
+"""Test-owned Darwin provisioning transaction over an injected launchd lifecycle."""
 
 from __future__ import annotations
 
-import grp
 import hashlib
 import os
-import pwd
 import stat
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,14 +13,7 @@ from typing import Protocol
 
 from binnacle.deployment.darwin.plist import (
     DEFAULT_ROLE,
-    JOBS_DAEMON_LABEL,
-    JOBS_DAEMON_PLIST_PATH,
-    JobsDaemonSpec,
-    mcp_daemon_identity,
-    render_jobs_daemon_plist,
     render_plist,
-    user_default_process_limit,
-    validate_jobs_daemon_plist_bytes,
     validate_plist_bytes,
     validate_test_label,
 )
@@ -415,83 +402,3 @@ class DarwinProvisioner:
                 self._restore(root_fd, plan, prior)
                 unlink_at(backups_fd, self._backup_name(label))
         return ServiceReceipt(plan.lease, "rollback", _LIMITED, absent=True)
-
-
-_JOBS_SCOPE = (
-    "com.binnacle.jobs LaunchDaemon plan only; install is the gated deploy lane"
-)
-_PLAN_ONLY = Capability("LIMITED", "jobs_daemon_plan_only", _JOBS_SCOPE)
-JOBS_LOG_NAMES = (f"{JOBS_DAEMON_LABEL}.out.log", f"{JOBS_DAEMON_LABEL}.err.log")
-
-
-class JobsDaemonRefused(ProvisionError):
-    """The jobs daemon plan was refused; nothing was written or loaded."""
-
-
-AccountLookup = Callable[[str, str], tuple[int, int]]
-
-
-def lookup_account(user_name: str, group_name: str) -> tuple[int, int]:
-    """Resolve ``(uid, gid)`` read-only from the local account databases."""
-    try:
-        return pwd.getpwnam(user_name).pw_uid, grp.getgrnam(group_name).gr_gid
-    except KeyError:
-        raise JobsDaemonRefused("jobs_daemon_account_missing", _PLAN_ONLY) from None
-
-
-@dataclass(frozen=True)
-class JobsDaemonPlan:
-    """A rendered production plan; this lane never installs or loads it."""
-
-    spec: JobsDaemonSpec
-    uid: int
-    gid: int
-    plist_bytes: bytes
-    plist_sha256: str
-    target_path: Path
-    capability: Capability
-
-
-def plan_jobs_daemon(
-    mcp_plist: bytes,
-    *,
-    program: Path,
-    log_dir: Path,
-    number_of_processes: int | None = None,
-    lookup: AccountLookup = lookup_account,
-) -> JobsDaemonPlan:
-    """Plan ``com.binnacle.jobs`` to run as the deployed ``com.binnacle.mcp``.
-
-    The run-as identity comes only from the supplied MCP daemon plist. An
-    account that resolves to uid or gid 0 is refused: the manager never runs
-    as root. The result is pure data for the later, gated install.
-    """
-    try:
-        identity = mcp_daemon_identity(mcp_plist)
-        if not log_dir.is_absolute():
-            raise ValueError("path_not_absolute")
-        spec = JobsDaemonSpec(
-            user_name=identity.user_name,
-            group_name=identity.group_name,
-            program=program,
-            home=identity.home,
-            config_file=identity.config_file,
-            stdout_path=log_dir / JOBS_LOG_NAMES[0],
-            stderr_path=log_dir / JOBS_LOG_NAMES[1],
-            number_of_processes=(
-                user_default_process_limit()
-                if number_of_processes is None
-                else number_of_processes
-            ),
-        )
-        data = render_jobs_daemon_plist(spec)
-        if validate_jobs_daemon_plist_bytes(data) != spec:
-            raise ValueError("plist_scope_refused")
-    except ValueError as exc:
-        raise JobsDaemonRefused(str(exc), _PLAN_ONLY) from None
-    uid, gid = lookup(spec.user_name, spec.group_name)
-    if uid == 0 or gid == 0:
-        raise JobsDaemonRefused("jobs_daemon_root_refused", _PLAN_ONLY)
-    return JobsDaemonPlan(
-        spec, uid, gid, data, sha256_hex(data), JOBS_DAEMON_PLIST_PATH, _PLAN_ONLY
-    )
