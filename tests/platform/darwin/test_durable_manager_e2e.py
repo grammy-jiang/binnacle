@@ -69,7 +69,11 @@ def _stop_manager(child, sock):
 
 
 def _available_manager_backend(tmp_path, sock, jobs):
-    """Production composition with test-only AVAILABLE rows (SD-16 item 3)."""
+    """Production composition with explicit AVAILABLE rows (SD-16 test seam).
+
+    The committed manager rows are AVAILABLE from J4f 0aa7efb (gated by J-CR);
+    the explicit rows keep this test independent of that commit.
+    """
     from dataclasses import replace
 
     from binnacle.application import compose_native_tools

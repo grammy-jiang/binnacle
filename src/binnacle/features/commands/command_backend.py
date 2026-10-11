@@ -90,6 +90,8 @@ class DurableCommandBackend:
 DESCENDANTS_UNVERIFIED = "descendants_unverified=true."
 RESOURCES_SAMPLED = "sampled"
 DARWIN_OWNER_LOST_NOTE = "owner lost; process not tracked"
+# SD-41: without PID adoption only the manager can verify a non-terminal record.
+DARWIN_MANAGER_UNAVAILABLE_NOTE = "job manager unavailable; state unverified"
 DARWIN_MANAGER_REVIEW_PENDING = (
     "native_capability_unavailable: Darwin manager-owned commands await their "
     "release review; there is no embedded fallback."
@@ -190,13 +192,24 @@ class DarwinManagerCommandBackend:
         if meta.get("authority") == "UNKNOWN":
             raise CommandFailure(self.bindings.owner_lost_refusal)
         self.bindings.check_partial(meta)
-        state = self.job_state(job_id)
+        state = self._state(job_id, None)  # an unreachable manager fails the stop
         if state is None or state["state"] != "running":
             return state
         self.client.stop(self.socket_path, job_id, call_id=self.bindings.call_id())
         return self.job_state(job_id)
 
+    def _reachable(self) -> bool:
+        try:
+            self.client.ping(self.socket_path)
+        except (CommandFailure, RuntimeError, OSError):
+            return False
+        return True
+
     def job_state(self, job_id: str) -> dict | None:
+        return self._state(job_id, self._reachable)
+
+    def _state(self, job_id: str, reachable: Callable[[], bool] | None) -> dict | None:
+        """Spool state; ``reachable`` verifies a non-terminal record (SD-41)."""
         meta = self._meta(job_id)
         if meta is None or meta.get("pid") is None:
             return None  # absent, or reserved by the manager before spawn
@@ -212,6 +225,8 @@ class DarwinManagerCommandBackend:
             state, note = "unknown", DARWIN_OWNER_LOST_NOTE  # D-1: never exited
         elif "exit_code" in meta or "signal" in meta:
             state = "exited"
+        elif reachable is not None and not reachable():
+            state, note = "unknown", DARWIN_MANAGER_UNAVAILABLE_NOTE  # SD-41
         else:
             state = "running"  # only the manager may decide otherwise
         result = {
@@ -246,19 +261,26 @@ class DarwinManagerCommandBackend:
 
     def list_jobs(self) -> list[dict]:
         ids = self.bindings.store.list_job_ids(self.jobs_dir)
-        states = [s for jid in ids if (s := self.job_state(jid)) is not None]
+        verdict: list[bool] = []
+
+        def reachable() -> bool:  # SD-41: at most one ping per listing
+            if not verdict:
+                verdict.append(self._reachable())
+            return verdict[0]
+
+        states = [s for jid in ids if (s := self._state(jid, reachable)) is not None]
         states.sort(key=lambda s: s["started_at"], reverse=True)
         return states
 
     def await_exit(self, job_id: str, timeout: float) -> dict | None:
         deadline = time.monotonic() + timeout
-        while True:
-            state = self.job_state(job_id)
-            if state is None or state["state"] != "running":
-                return state
+        state = self.job_state(job_id)  # SD-41: verified before and after the wait
+        while state is not None and state["state"] == "running":
             if time.monotonic() >= deadline:
-                return state
+                return self.job_state(job_id)
             time.sleep(0.05)
+            state = self._state(job_id, None)
+        return state
 
     def read_log(self, job_id: str) -> bytes:
         return self.bindings.store.read_log(self.jobs_dir, job_id)
@@ -274,12 +296,15 @@ class DarwinManagerCommandBackend:
         return []
 
     def disclose_status(self, job_id: str, reply: CommandReply) -> CommandReply:
-        """Add D-1 (owner lost) and D-2 (sampled resources) where they occur."""
+        """Add D-1 (owner lost), SD-41 (unverified) and D-2 (sampled) text."""
         state = self.job_state(job_id)
         if state is None:
             return reply
         summary, payload = reply.summary, dict(reply.payload)
-        if note := state.get("note"):
+        note = state.get("note")
+        if note is None and payload.get("state") == "unknown":
+            note = DARWIN_MANAGER_UNAVAILABLE_NOTE  # rendered unverified, never "gone"
+        if note:
             # D-1 replaces the Linux "process is gone" text: never gone or exited.
             summary = f"Job {job_id} state unknown: {note}."
             payload["state"], payload["note"] = "unknown", note
