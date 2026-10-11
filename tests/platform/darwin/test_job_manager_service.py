@@ -94,6 +94,8 @@ class ReferenceOwner:
 
     def release(self, job_id):  # J1 1.2.0-additive ack of a durable record
         with self.cond:
+            if job_id not in self.live and job_id not in self.exits:
+                raise pc.UnverifiedJobProcess("darwin_job_not_owned")  # as J1
             if job_id in self.live:
                 raise ValueError("darwin_job_not_terminal")
             self.released.add(job_id)

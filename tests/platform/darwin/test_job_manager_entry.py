@@ -64,9 +64,11 @@ def test_config_reader_is_pinned_to_binnacle_settings(tmp_path, monkeypatch, tom
     assert ours.jobs.keep_newest == theirs.jobs.keep_newest
     assert ours.run_command.wait_max_s == theirs.run_command.wait_max_s
     assert entry.CONFIG_FILE_ENV == config.CONFIG_FILE_ENV
-    monkeypatch.setenv("BINNACLE_JOBS__DIR", "/elsewhere")
-    with pytest.raises(ValueError, match="config file only"):
-        entry.read_config()
+    for override in ("BINNACLE_JOBS__DIR", "BINNACLE_RUNTIME_DIR"):  # RJ2D-F4
+        monkeypatch.setenv(override, "/elsewhere")
+        with pytest.raises(ValueError, match="config file only"):
+            entry.read_config()
+        monkeypatch.delenv(override)
 
 
 @pytest.fixture
@@ -97,6 +99,27 @@ def test_ping_counts_running_and_unknown_jobs(tmp_path, live):
     assert manager.handle(stop_req(running))["state"] == "exited"
     pong = manager.handle({"version": 1, "op": "ping"})
     assert (pong["running_jobs"], pong["unknown_jobs"]) == (0, 1)
+
+
+def test_moved_names_live_only_in_their_new_homes():
+    # RJ2D-F1 option (b): G7 forbids identity/lazy forwarding, so the J2-a1
+    # path is gone (BREAKING; J4 imports the new homes, ROWS-FOR-J4 item 3).
+    from binnacle.platform.darwin import job_manager_client as client_home
+
+    assert client_home.DarwinJobClient.__module__ == client_home.__name__
+    assert issubclass(client_home.DarwinJobManagerError, RuntimeError)
+    assert entry.serve_job_manager.__module__ == entry.__name__
+    for name in ("DarwinJobClient", "DarwinJobManagerError", "serve_job_manager"):
+        assert not hasattr(svc, name), name  # a stale import fails loudly
+    assert svc.main.__module__ == svc.__name__  # the launchd -m delegate stays
+    fresh = (  # a new interpreter: every home imports without a cycle
+        "import binnacle.platform.darwin.job_manager_service, "
+        "binnacle.platform.darwin.job_manager_client, "
+        "binnacle.platform.darwin.job_manager_entry"
+    )
+    argv = [sys.executable, "-c", fresh]
+    out = subprocess.run(argv, capture_output=True, text=True, check=False)
+    assert out.returncode == 0, out.stderr
 
 
 def test_owner_is_composed_without_its_own_reaper(monkeypatch):
@@ -142,6 +165,20 @@ def test_release_only_after_the_terminal_record_is_durable(tmp_path, monkeypatch
     assert manager.record_exit(exited) and released == [job_id]
     assert meta_of(tmp_path / "jobs", job_id)["exit_code"] == 3
     os.waitpid(owner.live.pop(job_id), 0)
+
+
+def test_reference_owner_release_matches_the_j1_owner(tmp_path):
+    # RJ1D2-F3: the test double refuses ids it never spawned, as J1 does.
+    owner = ReferenceOwner()
+    with pytest.raises(pc.UnverifiedJobProcess, match="darwin_job_not_owned"):
+        owner.release("0" * 12)
+    manager = manager_for(owner, tmp_path / "jobs")
+    job_id = manager.handle(req(tmp_path, "sleep 30"))["job_id"]
+    with pytest.raises(ValueError, match="darwin_job_not_terminal"):
+        owner.release(job_id)
+    manager.close()
+    owner.release(job_id)  # terminal and recorded: acknowledged
+    assert owner.released == {job_id}
 
 
 def test_reaper_fault_records_no_exit_and_ends_the_reaper(tmp_path):

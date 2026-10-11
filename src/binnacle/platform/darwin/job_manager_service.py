@@ -391,7 +391,7 @@ class DarwinJobManager:
         with self._lock:
             queued = tuple(self._unrecorded.values())
         for exited in queued:
-            self.record_exit(exited)
+            self._record_guarded(exited)
         with self._lock:
             return len(self._unrecorded)
 
@@ -458,10 +458,7 @@ class DarwinJobManager:
                 self._record_guarded(exited)
             if self._unrecorded and time.monotonic() >= retry_at:
                 retry_at = time.monotonic() + EXIT_RETRY_S
-                with self._lock:
-                    queued = tuple(self._unrecorded.values())
-                for exited in queued:
-                    self._record_guarded(exited)
+                self.retry_unrecorded()
 
     def _record_guarded(self, exited: OwnedJobExit) -> None:
         try:

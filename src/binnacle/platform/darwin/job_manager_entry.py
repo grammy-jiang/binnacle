@@ -55,7 +55,8 @@ log = logging.getLogger("binnacle.job_manager")
 EX_FAILED, EX_USAGE, EX_TEMPFAIL, EX_CONFIG = 1, 64, 75, 78  # sysexits.h
 STOP_MARKER_SUFFIX = ".stop"
 CONFIG_FILE_ENV = "BINNACLE_CONFIG_FILE"
-_OVERRIDES = ("BINNACLE_JOBS__", "BINNACLE_RUN_COMMAND__")  # env_nested_delimiter
+# env_nested_delimiter overrides, and the runtime root the client would not share
+_OVERRIDES = ("BINNACLE_JOBS__", "BINNACLE_RUN_COMMAND__", "BINNACLE_RUNTIME_DIR")
 
 
 def serve_job_manager(
