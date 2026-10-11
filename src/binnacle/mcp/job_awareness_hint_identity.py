@@ -1,12 +1,15 @@
-"""Producer identity from the resolved native Tool object, never caller strings.
+"""Producer provenance: the bound native Tool object, never caller strings.
 
-FastMCP 4.1.0 does not make (name, version) unique: ToolInjectionMiddleware
-overrides by name, providers mounted without a namespace can serve the same
-component key, and transforms rename or redeclare tools. Mounted tools are new
-wrapper objects on every lookup, so object identity is not usable either. The
-identity is therefore the resolved Tool's exact name, exact version and
-canonical-JSON output schema, read from its backing field map without running
-descriptors, comparison or hashing callbacks of any field value.
+FastMCP 4.1.0 does not make (name, version) or even (name, version, schema)
+unique: ToolInjectionMiddleware overrides by name, a parent local tool shadows
+an unnamespaced mounted child, transforms rename or redeclare tools, and a
+Tool subclass can report an effective output schema that differs from its
+backing field map (CHATGPT-POST-01/02). Provenance is therefore object
+identity with the bound registered tool plus an exact reviewed native type
+(no subclasses, no mounted, proxied, OpenAPI or transformed wrappers). The
+(name, version, canonical-JSON output schema) identity remains an additional
+condition. It is read from the backing field map of an exact-typed object, so
+no descriptor, comparison or hashing callback of any field value runs.
 """
 
 from __future__ import annotations
@@ -15,13 +18,29 @@ import json
 from typing import Any
 
 from fastmcp.tools.base import Tool
+from fastmcp.tools.function_tool import FunctionTool
 
 from binnacle.mcp.job_awareness_hint_walk import Meter, walk
 
-__all__ = ["Identity", "canonical_schema", "producer_identity"]
+__all__ = [
+    "NATIVE_TOOL_TYPES",
+    "Identity",
+    "canonical_schema",
+    "native_tool",
+    "producer_identity",
+]
 
 Identity = tuple[str, str | None, str]
 _FIELDS = ("name", "version", "output_schema")
+# Reviewed directly registered FastMCP 4.1.0 classes. Wrappers (TransformedTool,
+# FastMCPProviderTool, ProxyTool, OpenAPITool) and every subclass are excluded.
+NATIVE_TOOL_TYPES: tuple[type[Tool], ...] = (Tool, FunctionTool)
+
+
+def native_tool(tool: object) -> bool:
+    """True only for an exact reviewed native type; ``type()`` runs no hook."""
+    cls = type(tool)
+    return any(cls is native for native in NATIVE_TOOL_TYPES)
 
 
 def canonical_schema(schema: Any) -> str:
@@ -44,11 +63,12 @@ def canonical_schema(schema: Any) -> str:
 def producer_identity(tool: object) -> Identity | None:
     """Return (name, version, canonical schema) of a native Tool, else None.
 
-    None means unknown: the caller must suppress. Exact-type checks run before
-    any key lookup or equality, so hostile subclasses never get a callback.
+    None means unknown: the caller must suppress. The exact-type check runs
+    before any attribute, key lookup or equality, so a subclass (hostile or
+    not) is unknown and never gets a callback.
     """
     try:
-        if not issubclass(type(tool), Tool):
+        if not native_tool(tool):
             return None
         data = object.__getattribute__(tool, "__dict__")
         if (

@@ -6,7 +6,9 @@ whose name and version equal the bound ones but whose declared output schema
 differs: ToolInjectionMiddleware overrides by name, providers mounted without a
 namespace can serve the same component key, and tool transforms can rename or
 redeclare a tool. The adapter identifies the producer by the resolved Tool
-object (name, version and canonical output schema), never by caller strings.
+object (object identity with the bound tool, exact native type, and its name,
+version and canonical output schema), never by caller strings. Same-triple,
+different-handler producers are in test_hint_identity_provenance.py.
 """
 
 import json
@@ -161,13 +163,6 @@ def _control(app, kind, ran):
         )
         app.mount(child)
         return served, "local"
-    if kind == "mounted_child_without_namespace":
-        child = FastMCP("Q0 child provider")
-        bound = child.add_tool(
-            _tool("synthetic", "1", SCHEMA, {"ok": True}, ran, "child")
-        )
-        app.mount(child)
-        return bound, "child"
     injected = _tool("synthetic", "1", SCHEMA, {"ok": True}, ran, "injected")
     app.add_tool(_tool("synthetic", "1", BETA, {"ok": True, "n": 1}, ran, "registered"))
     app.add_middleware(ToolInjectionMiddleware([injected]))
@@ -178,15 +173,18 @@ def _control(app, kind, ran):
 @pytest.mark.parametrize("carrier", [HintCarrier.META, HintCarrier.TEXT])
 @pytest.mark.parametrize(
     "kind",
-    [
-        "served_local_over_shadowed_child",
-        "mounted_child_without_namespace",
-        "injected_tool_is_bound",
-    ],
+    ["served_local_over_shadowed_child", "injected_tool_is_bound"],
 )
 @in_loop
 async def test_control_bound_to_resolved_tool_still_hints(protocol, carrier, kind):
-    """Positive control: the resolved producer is the bound tool; hint once."""
+    """Positive control: the resolved producer is the bound tool; hint once.
+
+    CHATGPT-POST-01 (Supervisor decision): "mounted_child_without_namespace"
+    was removed from this control. FastMCP resolves a mounted child as a new
+    FastMCPProviderTool wrapper, which is not the bound object and not an
+    exact reviewed native type, so it now fails closed; the negative case is
+    "mounted_child_wrapper" in test_hint_identity_provenance.py.
+    """
     with Lab() as lab:
         app = FastMCP("Q0 g3 synthetic only", version="synthetic")
         ran: list[str] = []
