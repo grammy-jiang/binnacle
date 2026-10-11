@@ -10,7 +10,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from binnacle.deployment.darwin.plist import render_plist, validate_test_label
+from binnacle.deployment.darwin.plist import (
+    DEFAULT_ROLE,
+    render_plist,
+    validate_plist_bytes,
+    validate_test_label,
+)
 
 _SCOPE = "test-owned launchd label under an explicit private root"
 
@@ -67,8 +72,13 @@ class GenerationMismatch(ProvisionError): ...
 class UnsafePath(ProvisionError): ...
 
 
+class ApplyUnknown(ProvisionError):
+    """Bootstrap may have loaded the label; the plist is kept for owned bootout."""
+
+
 _LIMITED = Capability("LIMITED", "test_owned_user_domain_only", _SCOPE)
 _UNAVAILABLE = Capability("UNAVAILABLE", "launchd_lifecycle_missing", _SCOPE)
+_UNKNOWN = Capability("UNKNOWN", "apply_partial_label_may_be_loaded", _SCOPE)
 
 
 class LaunchdLifecycle(Protocol):
@@ -97,6 +107,24 @@ def _read_regular(path: Path) -> bytes | None:
     return path.read_bytes()
 
 
+def ensure_private_subdir(root: Path, name: str, uid: int) -> Path:
+    """Create or accept ``root/name`` only as an owned 0700 real directory."""
+    path = root / name
+    try:
+        os.mkdir(path, 0o700)
+    except FileExistsError:
+        pass
+    except OSError:
+        raise UnsafePath("subdir_unusable", _LIMITED) from None
+    try:
+        st = os.lstat(path)
+    except OSError:
+        raise UnsafePath("subdir_unusable", _LIMITED) from None
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != uid or st.st_mode & 0o077:
+        raise UnsafePath("subdir_not_private", _LIMITED)
+    return path
+
+
 def _atomic_write(path: Path, data: bytes) -> None:
     tmp = path.with_name(f".{path.name}.tmp{os.getpid()}")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -123,7 +151,8 @@ class DarwinProvisioner:
 
     @property
     def plist_dir(self) -> Path:
-        return self._root / "LaunchAgents"
+        """A3 accepts only plists directly inside the private runtime root."""
+        return self._root
 
     @property
     def backup_dir(self) -> Path:
@@ -155,6 +184,7 @@ class DarwinProvisioner:
         argv: Sequence[str],
         environment: Mapping[str, str],
         workdir: Path,
+        role: str = DEFAULT_ROLE,
     ) -> ServicePlan:
         self._check_root(lease)
         path = self._plist_path(lease.label)
@@ -163,7 +193,8 @@ class DarwinProvisioner:
             argv=argv,
             environment=environment,
             workdir=workdir,
-            log_path=self._root / "logs" / f"{lease.label}.log",
+            runtime_dir=self._root,
+            role=role,
         )
         prior = _read_regular(path)
         return ServicePlan(
@@ -183,17 +214,51 @@ class DarwinProvisioner:
         current_sha = None if current is None else sha256_hex(current)
         if current_sha != plan.expected_previous_sha256:
             raise GenerationMismatch("previous_digest_mismatch", _LIMITED)
-        for d in (self.plist_dir, self.backup_dir, self._root / "logs"):
-            d.mkdir(mode=0o700, exist_ok=True)
+        try:
+            validate_plist_bytes(
+                plan.plist_bytes, label=plan.lease.label, runtime_dir=self._root
+            )
+        except ValueError:
+            raise UnsafePath("plist_scope_refused", _LIMITED) from None
+        ensure_private_subdir(self._root, "backups", self._uid)
         if current is not None:
             _atomic_write(self._backup_path(plan.lease.label), current)
         _atomic_write(plan.plist_path, plan.plist_bytes)
-        try:
-            self._lifecycle.bootstrap(plan.lease.label, plan.plist_path)
-        except BaseException:
+        if _read_regular(plan.plist_path) != plan.plist_bytes:
             self._restore(plan, current)
+            raise UnsafePath("plist_persist_mismatch", _LIMITED)
+        label = plan.lease.label
+        try:
+            self._lifecycle.bootstrap(label, plan.plist_path)
+        except BaseException as exc:
+            self._after_failed_bootstrap(self._lifecycle, plan, current, exc)
             raise
         return ServiceReceipt(plan.lease, "apply", _LIMITED, absent=False)
+
+    def _after_failed_bootstrap(
+        self,
+        lifecycle: LaunchdLifecycle,
+        plan: ServicePlan,
+        prior: bytes | None,
+        exc: BaseException,
+    ) -> None:
+        """Never leave a loaded label without its plist.
+
+        Retry teardown through the owned label; only a verified-absent label
+        lets the prior state be restored. Otherwise keep the new plist (so
+        rollback still owns the label) and report typed UNKNOWN.
+        """
+        label = plan.lease.label
+        try:
+            lifecycle.bootout(label)
+            absent = lifecycle.is_absent(label)
+        except Exception:  # noqa: BLE001 - any teardown failure means not proven absent
+            absent = False
+        if absent:
+            self._restore(plan, prior)
+            self._backup_path(label).unlink(missing_ok=True)
+            return
+        raise ApplyUnknown("apply_partial_label_may_be_loaded", _UNKNOWN) from exc
 
     def _restore(self, plan: ServicePlan, prior: bytes | None) -> None:
         if prior is None:
@@ -205,16 +270,26 @@ class DarwinProvisioner:
         if self._lifecycle is None:
             raise CapabilityUnavailable("launchd_lifecycle_missing", _UNAVAILABLE)
         current = self._revalidate(plan)
+        label = plan.lease.label
+        if (
+            current is not None
+            and plan.expected_previous_sha256 is not None
+            and sha256_hex(current) == plan.expected_previous_sha256
+            and current != plan.plist_bytes
+        ):
+            # Already rolled back to the exact prior bytes: idempotent.
+            absent = self._lifecycle.is_absent(label)
+            return ServiceReceipt(plan.lease, "rollback", _LIMITED, absent=absent)
         if current is not None and sha256_hex(current) != sha256_hex(plan.plist_bytes):
             # Foreign bytes: preserve them and do not unload someone else's job.
             raise GenerationMismatch("foreign_plist_preserved", _LIMITED)
-        label = plan.lease.label
         self._lifecycle.bootout(label)
         if not self._lifecycle.is_absent(label):
             # Keep the plist so a retry still owns and can finish the teardown.
             return ServiceReceipt(plan.lease, "rollback", _LIMITED, absent=False)
         prior: bytes | None = None
         if plan.expected_previous_sha256 is not None:
+            ensure_private_subdir(self._root, "backups", self._uid)
             prior = _read_regular(self._backup_path(label))
             if prior is None or sha256_hex(prior) != plan.expected_previous_sha256:
                 raise GenerationMismatch("prior_backup_invalid", _LIMITED)
