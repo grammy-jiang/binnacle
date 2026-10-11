@@ -72,17 +72,24 @@ _absolute_in_root = fd_walk.absolute_in_root
 @contextmanager
 def _opened(
     top: Path, parts: tuple[str, ...], shown: Path
-) -> Iterator[tuple[int, int]]:
-    """Descriptors of the root being listed and of the listed directory.
+) -> Iterator[tuple[list[int], int]]:
+    """The descriptor chain from the root being listed, and the listed fd.
 
-    Both are opened no-follow, component by component (SD-74): a component
+    Every component is opened no-follow, one at a time (SD-74): a component
     swapped for a symlink or a file after resolve_path fails here instead of
-    being followed out of the root.
+    being followed out of the root. The chain only traverses (O_PATH on
+    Linux); the listed directory alone is opened O_RDONLY to be read.
     """
     with ExitStack() as opened:
         try:
-            root_fd = opened.enter_context(fd_walk.open_root(top))
-            fd = opened.enter_context(fd_walk.directory_at(root_fd, parts))
+            # Only the listed directory itself is opened readable.
+            readable = fd_walk.DIRECTORY_FLAGS
+            root_fd = opened.enter_context(
+                fd_walk.open_root(top) if parts else fd_walk.open_root(top, readable)
+            )
+            chain = opened.enter_context(
+                fd_walk.directory_chain(root_fd, parts, readable)
+            )
         except FileNotFoundError as exc:
             raise CodedToolError(
                 "directory_not_found", f"Directory not found: {shown}."
@@ -93,7 +100,10 @@ def _opened(
                 f"Directory changed during the listing: {shown}. "
                 f"A path component is no longer a directory; list it again.",
             ) from exc
-        yield root_fd, fd
+        except PermissionError as exc:
+            raise fd_walk.permission_denied(shown) from exc
+        # Links resolve through the open chain; the listed fd ends it (F3).
+        yield chain, chain[-1]
 
 
 def _entry_info(
@@ -123,10 +133,12 @@ def _list_mode(
     )
     parts = root.relative_to(top).parts
     listed = []
-    with _opened(top, parts, root) as (root_fd, fd):
+    with _opened(top, parts, root) as (chain, fd):
 
         def follow(name: str) -> os.stat_result | None:
-            return fd_walk.link_target_info(root_fd, parts, name, str(top))
+            return fd_walk.link_target_info(
+                chain[0], parts, name, str(top), chain=chain
+            )
 
         for name in os.listdir(fd):
             if name == ".git" or (not include_hidden and name.startswith(".")):
