@@ -12,12 +12,11 @@ from __future__ import annotations
 import ctypes
 import hashlib
 import hmac
-import json
 import logging
 import math
 import os
 import secrets
-import select
+import selectors
 import socket
 import struct
 import sys
@@ -29,6 +28,7 @@ from threading import Event
 from typing import Any
 
 from binnacle.platform.contracts.capability_contracts import (
+    AuthorityUnknown,
     BudgetExceeded,
     Capability,
     CapabilityState,
@@ -42,11 +42,17 @@ from binnacle.platform.contracts.native_service_contracts import (
 )
 from binnacle.platform.darwin.generation_runtime import (
     EndpointRecovery,
+    _close_lock,
     _credentials,
+    _encode,
     _endpoint,
     _identity,
     _lock_root,
+    _publish_entry,
+    _reclaim_endpoint,
+    _record_endpoint,
     _remember_endpoint,
+    _write_credentials,
     bounded_json,
     check_socket_path,
     unlink_owned,
@@ -105,16 +111,9 @@ def _remaining(conn: socket.socket, deadline: float) -> None:
     conn.settimeout(remaining)
 
 
-def _encode(value: object) -> bytes:
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), allow_nan=False
-    ).encode()
-
-
 def _send(conn: socket.socket, value: Mapping[str, object], deadline: float) -> None:
     data = _encode(dict(value))
-    if len(data) > _MAX_FRAME:
-        raise _refuse("ipc_frame_too_large")
+    bounded_json(data)  # enforce the receiver's size and depth before writing
     _remaining(conn, deadline)
     conn.sendall(struct.pack("!I", len(data)) + data)
 
@@ -206,7 +205,10 @@ class _Channel:
             ) from exc
         except (OSError, ValueError, TypeError, NativeCapabilityError) as exc:
             self.close()
-            raise _refuse("ipc_request_failed") from exc
+            code = "ipc_request_failed_outcome_unknown"
+            raise AuthorityUnknown(
+                code, Capability(CapabilityState.UNKNOWN, code, _SCOPE)
+            ) from exc
 
     def request(
         self, payload: Mapping[str, object], *, timeout_s: float
@@ -322,42 +324,47 @@ def _serve_connection(
         key, "client", transcript, _receive(conn, deadline, limit=4096).get("proof")
     )
     sequence = 0
-    while not stop.is_set():
-        # Idle authenticated channels have no expiry. Partial frames get 2 s;
-        # polling lets shutdown drain idle workers without dropping active replies.
-        if not select.select([conn], [], [], 0.1)[0]:
-            continue
-        message = _receive(conn, _deadline(2))
-        kind, payload = message.get("kind"), message.get("payload")
-        value = [transcript, sequence, kind, payload]
-        if type(message.get("sequence")) is not int or message["sequence"] != sequence:
-            raise _refuse("ipc_replay_refused")
-        _verify(key, "request", value, message.get("proof"))
-        validate()
-        if stop.is_set():
-            return
-        if kind == "ping" and payload == {}:
-            response: Mapping[str, object] = {
-                "generation": lease.generation,
-                "ready": True,
-            }
-        elif kind == "rpc" and isinstance(payload, dict):
-            response = handler(payload)
-        else:
-            raise _refuse()
-        try:
-            _send(
-                conn,
-                {
-                    "payload": dict(response),
-                    "proof": _proof(key, "response", [value, dict(response)]),
-                },
-                _deadline(2),  # response I/O budget starts AFTER handler execution
-            )
-        except Exception:
-            _LOG.warning("ipc_response_undelivered")
-            raise
-        sequence += 1
+    with selectors.DefaultSelector() as selector:
+        selector.register(conn, selectors.EVENT_READ)
+        while not stop.is_set():
+            # Idle authenticated channels have no expiry. Partial frames get 2 s;
+            # polling lets shutdown drain idle workers without dropping active replies.
+            if not selector.select(0.1):
+                continue
+            message = _receive(conn, _deadline(2))
+            kind, payload = message.get("kind"), message.get("payload")
+            value = [transcript, sequence, kind, payload]
+            if (
+                type(message.get("sequence")) is not int
+                or message["sequence"] != sequence
+            ):
+                raise _refuse("ipc_replay_refused")
+            _verify(key, "request", value, message.get("proof"))
+            validate()
+            if stop.is_set():
+                return
+            try:
+                if kind == "ping" and payload == {}:
+                    response: Mapping[str, object] = {
+                        "generation": lease.generation,
+                        "ready": True,
+                    }
+                elif kind == "rpc" and isinstance(payload, dict):
+                    response = handler(payload)
+                else:
+                    raise _refuse()
+                _send(
+                    conn,
+                    {
+                        "payload": dict(response),
+                        "proof": _proof(key, "response", [value, dict(response)]),
+                    },
+                    _deadline(2),  # response I/O budget starts AFTER handler execution
+                )
+            except Exception:
+                _LOG.warning("ipc_response_undelivered")
+                raise
+            sequence += 1
 
 
 def serve_authenticated(
@@ -375,18 +382,18 @@ def serve_authenticated(
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
         lock = _lock_root(fd)
-        # Refuse any pre-existing socket, file, symlink or authentication record.
-        for name in (socket_path.name, socket_path.name + ".auth"):
-            try:
-                os.stat(name, dir_fd=fd, follow_symlinks=False)
-            except FileNotFoundError:
-                continue
-            raise _refuse("ipc_stale_endpoint_refused")
-        listener.bind(str(socket_path))
-        owned[socket_path.name] = _identity(fd, socket_path.name)
-        os.chmod(socket_path.name, 0o600, dir_fd=fd, follow_symlinks=False)
+        _reclaim_endpoint(fd, lock, socket_path.name, lease)
+        # Stage under unpredictable names no longer than jobs.sock. A crash
+        # before journalling leaves private debris, never an unowned endpoint.
+        staged_socket, staged_auth = (
+            "s" + secrets.token_hex(4),
+            "a" + secrets.token_hex(4),
+        )
+        listener.bind(str(socket_path.with_name(staged_socket)))
+        owned[staged_socket] = _identity(fd, staged_socket)
+        os.chmod(staged_socket, 0o600, dir_fd=fd, follow_symlinks=False)
         key = secrets.token_bytes(32)
-        info = owned[socket_path.name]
+        info = owned[staged_socket]
         credentials = {
             "key": key.hex(),
             "pid": os.getpid(),
@@ -396,19 +403,23 @@ def serve_authenticated(
             "device": info[0],
             "inode": info[1],
         }
-        name = socket_path.name + ".auth"
-        key_fd = os.open(
-            name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd
+        name = staged_auth
+        _write_credentials(fd, name, credentials, owned)
+        publication = {
+            staged_socket: socket_path.name,
+            staged_auth: socket_path.name + ".auth",
+        }
+        _record_endpoint(
+            fd,
+            lock,
+            lease,
+            {dst: owned[src] for src, dst in publication.items()},
+            credentials,
         )
-        try:
-            key_info = os.fstat(key_fd)
-            owned[name] = (key_info.st_dev, key_info.st_ino)
-            with os.fdopen(key_fd, "wb", closefd=False) as stream:
-                stream.write(_encode(credentials))
-                stream.flush()
-                os.fsync(key_fd)
-        finally:
-            os.close(key_fd)
+        for source, target in publication.items():
+            _publish_entry(fd, source, target)
+            owned[target] = owned.pop(source)
+        name = socket_path.name + ".auth"
         listener.listen(8)
         listener.settimeout(0.1)
         lock_info = os.fstat(lock)
@@ -436,7 +447,7 @@ def serve_authenticated(
             raise _refuse("ipc_cleanup_failed") from exc
         finally:
             if lock >= 0:
-                os.close(lock)  # Persistent lock inode is never unlinked.
+                _close_lock(lock)  # Persistent lock inode is never unlinked.
             os.close(fd)
         if not clean:
             raise _refuse("ipc_cleanup_identity_changed")

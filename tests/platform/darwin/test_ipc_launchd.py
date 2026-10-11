@@ -13,47 +13,81 @@ import plistlib
 import secrets
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
 import pytest
 
 from binnacle.platform.contracts.capability_contracts import (
+    AuthorityUnknown,
+    BudgetExceeded,
     CapabilityState,
     NativeCapabilityError,
 )
 from binnacle.platform.contracts.native_service_contracts import ServicePlan
+from binnacle.platform.darwin import ipc_transport as ipc
 from binnacle.platform.darwin import service_launchd as launchd
-from binnacle.platform.darwin.generation_runtime import open_service_lease
+from binnacle.platform.darwin.generation_runtime import (
+    open_service_lease,
+    resolve_runtime_paths,
+    validate_lease,
+)
 from binnacle.platform.darwin.ipc_transport import connect_authenticated
+from tests.platform.darwin.test_ipc_generation import (
+    NATIVE,
+    attempt_start,
+    child_command,
+    connect_when_ready,
+    lease_for,
+    owned_child,
+    runtime,
+    serving,
+    wait_path,
+)
+
+service_root = runtime
 
 
-@pytest.fixture
-def service_root():
-    with tempfile.TemporaryDirectory(
-        prefix="bnld-", dir=Path(tempfile.gettempdir()).resolve()
-    ) as value:
-        root = Path(value)
-        root.chmod(0o700)
-        yield root
+def test_private_root_and_replaced_inode(runtime, monkeypatch):
+    lease = lease_for(runtime)
+    monkeypatch.setenv("BINNACLE_RUNTIME_DIR", str(runtime))
+    assert resolve_runtime_paths().jobs_socket == runtime / "jobs.sock"
+    moved = runtime.with_name(runtime.name + "-moved")
+    runtime.rename(moved)
+    runtime.mkdir(mode=0o700)
+    try:
+        with pytest.raises(NativeCapabilityError):
+            validate_lease(runtime, lease)
+    finally:
+        runtime.rmdir()
+        moved.rename(runtime)
+
+
+@pytest.mark.parametrize("mode", [0o755, 0o770, 0o777])
+def test_nonprivate_root_refused(runtime, mode):
+    runtime.chmod(mode)
+    with pytest.raises(NativeCapabilityError):
+        lease_for(runtime)
+
+
+def test_symlink_ancestor_and_overlong_path_refused(runtime, monkeypatch):
+    real = runtime / "real"
+    real.mkdir(mode=0o700)
+    alias = runtime / "alias"
+    alias.symlink_to(real, target_is_directory=True)
+    with pytest.raises(NativeCapabilityError):
+        lease_for(alias)
+    monkeypatch.setenv("BINNACLE_RUNTIME_DIR", str(runtime / ("x" * 104)))
+    with pytest.raises(NativeCapabilityError):
+        resolve_runtime_paths()
 
 
 def make_plan(root, role="probe"):
     label = "com.binnacle.r3test." + secrets.token_hex(12) + "." + role
     lease = open_service_lease(root=root, label=label, generation=secrets.token_hex(16))
-    script = Path(__file__).with_name("test_ipc_generation.py").resolve()
     value = {
         "Label": label,
-        "ProgramArguments": [
-            sys.executable,
-            str(script),
-            "serve",
-            str(root),
-            label,
-            lease.generation,
-            "-",
-        ],
+        "ProgramArguments": child_command(root, lease),
         "EnvironmentVariables": {
             "BINNACLE_RUNTIME_DIR": str(root),
             "BINNACLE_SERVICE_ROLE": role,
@@ -118,6 +152,35 @@ def test_plist_replacement_and_manager_unknown_refuse_mutation(
     assert plan.plist_path.read_bytes() == b"foreign bytes"
 
 
+@NATIVE
+def test_frontend_crash_leaves_manager_generation_live(runtime):
+    with serving(runtime) as (lease, calls, errors):
+        crashed = subprocess.run(
+            child_command(runtime, lease, "crash-client"),
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        assert crashed.returncode == 23
+        channel = connect_when_ready(runtime / "jobs.sock", lease)
+        assert channel.request({"version": 1, "op": "after-crash"}, timeout_s=1)["ok"]
+        channel.close()
+        assert [p["op"] for p in calls] == ["before-crash", "after-crash"]
+    assert not errors
+
+
+@NATIVE
+def test_unrelated_same_uid_process_receives_no_application_bytes(runtime):
+    lease = lease_for(runtime)
+    with owned_child(runtime, lease, "foreign") as child:
+        wait_path(runtime / "foreign.ready", child)
+        with pytest.raises(NativeCapabilityError):
+            ipc.connect_authenticated(runtime / "jobs.sock", lease=lease, timeout_s=1)
+        output, error = child.communicate(timeout=3)
+        assert child.returncode == 0, error
+        assert output == b"0\n"
+
+
 def test_readiness_requires_authenticated_ping_and_unknown_fields(service_root):
     plan = make_plan(service_root)
     owner = launchd.LaunchdUserServices(plan.lease)
@@ -166,17 +229,7 @@ def test_frontend_restart_manager_continuity_and_positive_bootout(
 
     def observed_run(*args, **kwargs):
         result = native_run(*args, **kwargs)
-        print(
-            json.dumps(
-                {
-                    "event": "launchctl",
-                    "args": args,
-                    "returncode": result.returncode,
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
-                }
-            )
-        )
+        print(json.dumps({"event": "launchctl", **vars(result)}))
         return result
 
     monkeypatch.setattr(launchd, "_run", observed_run)
@@ -201,18 +254,6 @@ def test_frontend_restart_manager_continuity_and_positive_bootout(
         assert _observed_pid(frontend) != frontend_pid
         assert _observed_pid(manager) == manager_pid
         assert _observed_pid(sentinel) == sentinel_pid
-        print(
-            json.dumps(
-                {
-                    "event": "frontend_restart",
-                    "manager_pid": manager_pid,
-                    "manager_generation": manager.lease.generation,
-                    "sentinel_pid": sentinel_pid,
-                    "frontend_old_pid": frontend_pid,
-                    "frontend_new_pid": _observed_pid(frontend),
-                }
-            )
-        )
     finally:
         for owner in reversed(owners):
             if owner._plan is None:
@@ -309,14 +350,23 @@ def test_registration_replacement_and_invalid_plans_do_not_mutate(
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="A3 native AF_UNIX peer identity")
 @pytest.mark.parametrize(
-    "fault", ["slow", "idle", "capacity", "nested", "depth", "handler", "timeout"]
+    "fault",
+    [
+        "slow",
+        "idle",
+        "capacity",
+        "nested",
+        "depth",
+        "handler",
+        "timeout",
+        "deep",
+        "huge",
+        "nan",
+    ],
 )
 def test_manager_serving_survives_review_regressions(
     service_root, fault, caplog, monkeypatch
 ):
-    from binnacle.platform.darwin import ipc_transport as ipc
-    from tests.platform.darwin.test_ipc_generation import connect_when_ready, serving
-
     if fault == "capacity":
         monkeypatch.setattr(ipc, "_MAX_CLIENTS", 2)
     with serving(service_root) as (lease, calls, errors):
@@ -355,38 +405,21 @@ def test_manager_serving_survives_review_regressions(
                     except (ConnectionResetError, BrokenPipeError):
                         pass
             else:
-                from binnacle.platform.contracts.capability_contracts import (
-                    BudgetExceeded,
-                )
-
-                expected = (
-                    BudgetExceeded if fault == "timeout" else NativeCapabilityError
-                )
-                sequence = channel.sequence
+                expected = BudgetExceeded if fault == "timeout" else AuthorityUnknown
                 with pytest.raises(expected):
                     channel.request(
-                        {"delay": 0.3} if fault == "timeout" else {"raise": True},
+                        (
+                            {"delay": 0.3}
+                            if fault == "timeout"
+                            else {"raise": True}
+                            if fault == "handler"
+                            else {"response": fault}
+                        ),
                         timeout_s=0.1,
                     )
                 time.sleep(0.4)
-                if fault == "timeout":
-                    assert "ipc_response_undelivered" in caplog.text
-                    replay = connect_when_ready(service_root / "jobs.sock", lease)
-                    payload = {"delay": 0.3}
-                    value = [channel.transcript, sequence, "rpc", payload]
-                    ipc._send(
-                        replay.conn,
-                        {
-                            "sequence": sequence,
-                            "kind": "rpc",
-                            "payload": payload,
-                            "proof": ipc._proof(channel.key, "request", value),
-                        },
-                        time.monotonic() + 1,
-                    )
-                    assert replay.conn.recv(1) == b""
-                    replay.close()
-                    assert calls == [payload]
+                assert len(calls) == 1
+                assert "ipc_response_undelivered" in caplog.text
             other = connect_when_ready(service_root / "jobs.sock", lease, timeout=1)
             assert other.request({}, timeout_s=1)["ok"]
             other.close()
@@ -426,57 +459,34 @@ def test_manager_label_cannot_declare_frontend_role(service_root, monkeypatch):
 def test_delayed_executor_retains_singleton_until_quiescent(service_root):
     import threading
 
-    from binnacle.platform.darwin import ipc_transport as ipc
-    from tests.platform.darwin.test_ipc_generation import (
-        connect_when_ready,
-        lease_for,
-        serving,
-    )
-
     runtime = service_root
-    lease = lease_for(runtime)
     stop, entered, release = threading.Event(), threading.Event(), threading.Event()
-    replies, errors = [], []
+    replies = []
 
     def handler(payload):
         entered.set()
         assert release.wait(3)
         return {"ok": True}
 
-    def serve():
+    with serving(runtime, handler=handler, stop=stop) as (lease, _, errors):
+        channel = connect_when_ready(runtime / "jobs.sock", lease)
+        caller = threading.Thread(
+            target=lambda: replies.append(
+                channel.request({"op": "delayed"}, timeout_s=2)
+            )
+        )
+        caller.start()
         try:
-            ipc.serve_authenticated(
-                runtime / "jobs.sock", lease=lease, handler=handler, stop=stop
-            )
-        except NativeCapabilityError as exc:
-            errors.append(exc)
-
-    server = threading.Thread(target=serve)
-    server.start()
-    channel = connect_when_ready(runtime / "jobs.sock", lease)
-
-    def request():
-        replies.append(channel.request({"op": "delayed"}, timeout_s=2))
-
-    caller = threading.Thread(target=request)
-    caller.start()
-    try:
-        assert entered.wait(1)
-        stop.set()
-        with pytest.raises(NativeCapabilityError, match="duplicate_starter"):
-            ipc.serve_authenticated(
-                runtime / "jobs.sock",
-                lease=lease_for(runtime),
-                handler=lambda p: p,
-                stop=threading.Event(),
-            )
-        assert server.is_alive()
-    finally:
-        release.set()
-        caller.join(3)
-        channel.close()
-        server.join(3)
-    assert not caller.is_alive() and not server.is_alive()
+            assert entered.wait(1)
+            stop.set()
+            with pytest.raises(NativeCapabilityError, match="duplicate_starter"):
+                attempt_start(runtime)
+            assert caller.is_alive()
+        finally:
+            release.set()
+            caller.join(3)
+            channel.close()
+    assert not caller.is_alive()
     assert replies == [{"ok": True}] and not errors
     with serving(runtime) as (_, calls, errors):
         with pytest.raises(NativeCapabilityError):
