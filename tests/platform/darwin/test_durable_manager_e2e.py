@@ -124,7 +124,7 @@ def test_tools_run_end_to_end_through_the_real_job_manager(tmp_path):
         payload = done.structured_content
         assert payload["state"] == "exited" and payload["exit_code"] == 3
         assert payload["output"] == "hi\n" and payload["background_job"] is False
-        assert str(done.content).count("descendants_unverified=true") == 1
+        assert "descendants_unverified" not in str(done.content)  # SD-50
         status = js.job_status_impl(payload["job_id"], 10, backend=backend)
         assert status.structured_content["state"] == "exited"
         record = backend.job_state(payload["job_id"])  # the J2 spool record
