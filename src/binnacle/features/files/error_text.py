@@ -1,0 +1,110 @@
+"""Linux wording for file-tool failures raised by the Darwin adapters.
+
+The adapters report terse codes (``path_not_found``); the Linux tools say what
+happened and what to do next. This module maps one to the other so both hosts
+give the same sentence for the same condition. It never decides whether a
+request is allowed; it only words a refusal that was already made.
+"""
+
+from collections.abc import Iterable, Sequence
+from contextvars import ContextVar
+from pathlib import Path, PurePath
+
+from binnacle.errors import CodedToolError
+from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
+from binnacle.platform.contracts.file_access_contracts import (
+    FileAccess,
+    ListRequest,
+    RootGrant,
+)
+
+# Tool named by the last access.require() in this call context.
+TOOL: ContextVar[str] = ContextVar("binnacle_file_tool", default="read_file")
+TERSE_OUTSIDE = ("Path outside opened roots.", "Unsafe relative path.")
+
+# Linux texts for a missing target, per tool.
+MISSING_ERRORS = {
+    "list_files": ("directory_not_found", "Directory not found"),
+    "search_text": ("path_not_found", "Path not found"),
+}
+DEFAULT_MISSING = ("file_not_found", "File not found")
+
+
+def outside_error(allowed: Iterable[Path], display: Path) -> CodedToolError:
+    roots = ", ".join(str(r) for r in allowed)
+    return CodedToolError(
+        "path_outside_root", f"Path outside allowed roots ({roots}): {display}"
+    )
+
+
+def format_nearby(parent: Path, names: Sequence[str]) -> str:
+    if not names:
+        return f" Directory {parent} is empty."
+    more = " …" if len(names) > 10 else ""
+    return (
+        f" Files in {parent}: {', '.join(names[:10])}{more}. Use list_files for more."
+    )
+
+
+def _nearby(
+    files: FileAccess | None, grant: RootGrant, parts: tuple[str, ...], display: Path
+) -> str:
+    """Linux nearby_hint wording, listed through the grant, not the pathname."""
+    if not parts or files is None:
+        return ""
+    request = ListRequest("/".join(parts[:-1]), None, True, 1000, 10000, 5.0)
+    try:
+        entries = files.list_entries(grant, request).entries
+    except (NativeCapabilityError, OSError):
+        return ""
+    parent = display.parent
+    names = []
+    for e in entries:
+        n = PurePath(e.relative_path).name
+        # An out-of-root symlink has no typed target here; Linux follows it.
+        is_dir = (e.target_kind or e.kind) == "directory" or (
+            e.kind == "other" and (parent / n).is_dir()
+        )
+        names.append(n + "/" if is_dir else n)
+    return format_nearby(parent, sorted(names))
+
+
+def linux_error(
+    exc: NativeCapabilityError,
+    tool: str,
+    *,
+    files: FileAccess | None,
+    grants: Iterable[Path],
+    allowed: Iterable[Path],
+    grant: RootGrant,
+    rel: str,
+    display: Path,
+) -> CodedToolError | None:
+    """The sentence Linux gives for the condition behind a terse adapter code."""
+    code = exc.code
+    if code in ("file_not_found", "path_not_found"):
+        code, text = MISSING_ERRORS.get(tool, DEFAULT_MISSING)
+        tail = " To create a new file, use write_file." if tool == "edit_file" else ""
+        hint = _nearby(files, grant, PurePath(rel).parts, display)
+        return CodedToolError(code, f"{text}: {display}.{hint}{tail}")
+    if code == "path_is_directory":
+        use = "" if tool == "edit_file" else " Use list_files to browse it."
+        return CodedToolError(code, f"Path is a directory, not a file: {display}.{use}")
+    if code != "symlink_or_wrong_path_type":
+        return None
+    try:
+        resolved = display.resolve()
+        if not any(resolved.is_relative_to(r.resolve()) for r in grants):
+            return outside_error(allowed, resolved)
+    except (RuntimeError, OSError):
+        return None
+    if tool == "list_files" and resolved.is_file():
+        return CodedToolError(
+            "path_is_file",
+            f"Path is a file, not a directory: {display}. Use read_file to read it.",
+        )
+    if tool == "write_file" and any(p.is_file() for p in display.parents):
+        return CodedToolError(
+            "write_failed", f"Could not write {display}: File exists."
+        )
+    return None

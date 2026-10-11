@@ -179,7 +179,7 @@ def test_failed_read_hint_stays_inside_grant_and_edit_conflict_is_preserved(
         capability=Capability(CapabilityState.LIMITED, "test_only", "opened-object"),
     )
     try:
-        with pytest.raises(CodedToolError, match="Nearby: file.txt"):
+        with pytest.raises(CodedToolError, match="Files in .*: file.txt"):
             access.read("missing.txt", 1024)
         read = access.read
 

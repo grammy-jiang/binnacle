@@ -170,11 +170,7 @@ def test_http_tool_errors_are_results_not_transport_failures():
             {"path": "/etc/passwd"},
         )
         assert outside["result"]["isError"] is True
-        expected = (
-            "outside opened roots"
-            if sys.platform == "darwin"
-            else "outside allowed roots"
-        )
+        expected = "outside allowed roots"
         assert expected in outside["result"]["content"][0]["text"]
 
         invalid = await http_tool_call(
