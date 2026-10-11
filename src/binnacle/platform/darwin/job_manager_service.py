@@ -4,6 +4,7 @@ Sole writer for jobs its ``DarwinJobOwner`` spawned; nothing from disk, a peer o
 ps is adopted. D-1: other incarnations' unfinished records become UNKNOWN.
 Layering forbids Commands imports: ``job_store``/``job_stop`` values are restated
 and pinned to the Linux source by tests. A3's cooperative-UID boundary applies.
+Serving lives in ``job_manager_entry``; the client in ``job_manager_client``.
 """
 
 from __future__ import annotations
@@ -16,7 +17,6 @@ import math
 import os
 import re
 import shutil
-import signal
 import threading
 import time
 import uuid
@@ -27,7 +27,6 @@ from typing import Any, Literal
 
 from binnacle.platform.contracts import process_contracts as pc
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
-from binnacle.platform.contracts.native_service_contracts import ServiceLease
 from binnacle.platform.contracts.process_contracts import OwnedJobExit
 from binnacle.provenance import runtime_provenance
 
@@ -46,6 +45,7 @@ PARTIAL_SIGNAL_FIELD = "stop_signal_partial"
 PARTIAL_SIGNAL_MESSAGE = "previous verified process signal delivery was incomplete"
 _JOB_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 _STOP_PHASES: tuple[Literal["terminate", "kill"], ...] = ("terminate", "kill")
+EXIT_RETRY_S = 1.0  # an unpersisted exit is retried, never dropped
 
 
 @contextmanager
@@ -62,6 +62,20 @@ def _flock(path: Path, operation: int, busy: str = "") -> Iterator[None]:
         yield
     finally:
         os.close(fd)
+
+
+def _exit_meta(meta: dict[str, Any], exited: OwnedJobExit) -> dict[str, Any]:
+    if exited.signal is not None:
+        meta.update(signal=exited.signal, exit_code=None)
+    else:
+        meta["exit_code"] = exited.exit_code
+    meta["ended_at"] = time.time()
+    reason = "signal" if exited.signal is not None else "normal_exit"
+    if exited.termination_reason == "owner_restart":
+        reason = "owner_restart"
+    stopped = meta.get("stop_requested")
+    meta["termination_reason"] = "stop_requested" if stopped else reason
+    return meta
 
 
 def jobs_dir_writer(jobs_dir: Path) -> Any:
@@ -110,6 +124,7 @@ class DarwinJobManager:
         self.wait_max_s, self.keep_newest = float(wait_max_s), int(keep_newest)
         self.grace, self.provenance = grace, runtime_provenance()
         self._lock = threading.RLock()
+        self._unrecorded: dict[str, OwnedJobExit] = {}  # reaped, not yet durable
 
     @contextmanager
     def _transaction(self) -> Iterator[None]:
@@ -160,6 +175,7 @@ class DarwinJobManager:
             reply.update(owner_instance_id=self.owner_instance_id, boot_id=self.boot_id)
             reply["pid"] = os.getpid()
             reply["package_version"] = self.provenance.package_version
+            reply["running_jobs"], reply["unknown_jobs"] = self.job_counts()
             return {**reply, "revision": self.provenance.revision}
         if op == "start":
             return self._start(request)
@@ -289,12 +305,16 @@ class DarwinJobManager:
         return state
 
     def _persist_partial(self, job_id: str) -> None:
-        """Never acknowledge a partial stop unless its durable marker was written."""
-        with self._transaction():  # an OSError surfaces as a failed request
-            meta = self._meta(job_id)
-            if meta is None:
-                raise Partial("partial stop not persisted")
-            self._write_meta(job_id, {**meta, PARTIAL_SIGNAL_FIELD: True})
+        """``job_stop.persist_partial_or_raise``: no partial ack without a marker."""
+        try:
+            with self._transaction():
+                meta = self._meta(job_id)
+                if meta is not None:
+                    self._write_meta(job_id, {**meta, PARTIAL_SIGNAL_FIELD: True})
+                    return
+        except OSError as exc:
+            raise Partial("partial stop not persisted") from exc
+        raise Partial("partial stop not persisted")
 
     def state(self, job_id: str) -> str:
         """Linux vocabulary; uncertainty is ``unknown``, never ``exited``."""
@@ -308,32 +328,49 @@ class DarwinJobManager:
         seen = self.owner.authority(job_id)
         return "running" if seen.authority == "OWNED" and seen.alive else "unknown"
 
+    def job_counts(self) -> tuple[int, int]:
+        """(running, unknown) usable records, in ``state`` vocabulary (D3 ping)."""
+        ids = [job_id for job_id in list_job_ids(self.jobs_dir) if self._meta(job_id)]
+        states = [self.state(job_id) for job_id in ids]
+        return states.count("running"), states.count("unknown")
+
     def record_exit(self, exited: OwnedJobExit) -> bool:
-        """Idempotent terminal write for this incarnation's own records only."""
-        with self._transaction():
-            meta = self._meta(exited.job_id)
-            if meta is None or meta.get("owner_instance_id") != self.owner_instance_id:
-                log.warning("event=job_exit_unrecorded job_id=%s", exited.job_id)
-                return False
-            if _terminal(meta):
-                return True
-            if exited.signal is not None:
-                meta.update(signal=exited.signal, exit_code=None)
-            else:
-                meta["exit_code"] = exited.exit_code
-            meta["ended_at"] = time.time()
-            reason = "signal" if exited.signal is not None else "normal_exit"
-            if exited.termination_reason == "owner_restart":
-                reason = "owner_restart"
-            stopped = meta.get("stop_requested")
-            meta["termination_reason"] = "stop_requested" if stopped else reason
-            try:
-                self._write_meta(exited.job_id, meta)
-            except OSError:
-                log.warning("event=job_exit_unrecorded job_id=%s", exited.job_id)
-                return False
+        """Idempotent terminal write for this incarnation's own records only.
+
+        An I/O failure (including the jobs-dir lock open) keeps the exit queued
+        for the reaper's retry; the record stays non-terminal, so ``state`` says
+        ``unknown`` (the owner no longer reports OWNED), never ``exited``.
+        """
+        try:
+            with self._transaction():
+                meta, owner_id = self._meta(exited.job_id), self.owner_instance_id
+                if meta is None or meta.get("owner_instance_id") != owner_id:
+                    self._unrecorded.pop(exited.job_id, None)  # never ours to write
+                    log.warning("event=job_exit_unrecorded job_id=%s", exited.job_id)
+                    return False
+                if not _terminal(meta):
+                    self._write_meta(exited.job_id, _exit_meta(meta, exited))
+                self._unrecorded.pop(exited.job_id, None)
+        except OSError as exc:
+            with self._lock:
+                self._unrecorded[exited.job_id] = exited
+            log.warning(
+                "event=job_exit_unrecorded job_id=%s errno=%s retry=queued",
+                exited.job_id,
+                exc.errno,
+            )
+            return False
         log.info("event=job_exit job_id=%s", exited.job_id)
         return True
+
+    def retry_unrecorded(self) -> int:
+        """Re-attempt queued exits; returns how many are still not durable."""
+        with self._lock:
+            queued = tuple(self._unrecorded.values())
+        for exited in queued:
+            self.record_exit(exited)
+        with self._lock:
+            return len(self._unrecorded)
 
     def _mark_unknown(self, job_id: str, meta: dict[str, Any], reason: str) -> None:
         meta.update(exit_code=None, signal=None, ended_at=time.time())
@@ -373,7 +410,11 @@ class DarwinJobManager:
                 shutil.rmtree(stale, ignore_errors=True)
 
     def reap_forever(self, stop: threading.Event) -> None:
-        """Drive the owner's sole reaper and persist every exit it reports."""
+        """Drive the owner's sole reaper and persist every exit it reports.
+
+        One failed record never ends this loop: the exit is queued and retried.
+        """
+        retry_at = 0.0
         while not stop.is_set():
             try:
                 exits = self.owner.reap_exits(0.1)
@@ -382,11 +423,26 @@ class DarwinJobManager:
                 stop.wait(0.1)
                 continue
             for exited in exits:
-                self.record_exit(exited)
+                self._record_guarded(exited)
+            if self._unrecorded and time.monotonic() >= retry_at:
+                retry_at = time.monotonic() + EXIT_RETRY_S
+                with self._lock:
+                    queued = tuple(self._unrecorded.values())
+                for exited in queued:
+                    self._record_guarded(exited)
+
+    def _record_guarded(self, exited: OwnedJobExit) -> None:
+        try:
+            self.record_exit(exited)
+        except Exception:
+            with self._lock:
+                self._unrecorded[exited.job_id] = exited
+            log.exception("event=job_exit_unrecorded job_id=%s", exited.job_id)
 
     def close(self) -> Sequence[OwnedJobExit]:
         """Persist reaped exits BEFORE returning; unreaped stay UNKNOWN."""
         exits = self.owner.close()
+        self.retry_unrecorded()  # unpersisted exits that stay so become UNKNOWN
         for exited in exits:
             self.record_exit(exited)
         with self._transaction():
@@ -396,105 +452,3 @@ class DarwinJobManager:
                 if mine and not _terminal(meta):
                     self._mark_unknown(job_id, meta, "owner_restart")
         return exits
-
-
-def serve_job_manager(
-    manager: DarwinJobManager,
-    *,
-    socket_path: Path,
-    lease: ServiceLease,
-    stop: threading.Event,
-) -> int:
-    """Serve until ``stop``; the jobs-dir writer lock spans recovery and close."""
-    from binnacle.platform.darwin.ipc_transport import serve_authenticated
-
-    if signal.getsignal(signal.SIGCHLD) != signal.SIG_DFL:
-        raise RuntimeError("darwin_exclusive_reaper_required")
-    with jobs_dir_writer(manager.jobs_dir):
-        recovered = manager.recover()
-        log.info("event=job_manager_start pid=%d recovered=%d", os.getpid(), recovered)
-        halt = threading.Event()
-        reaper = threading.Thread(target=manager.reap_forever, args=(halt,))
-        reaper.start()
-        try:
-            handler = manager.handle
-            serve_authenticated(socket_path, lease=lease, handler=handler, stop=stop)
-        finally:
-            halt.set()
-            reaper.join()
-            manager.close()
-    return recovered
-
-
-class DarwinJobManagerError(RuntimeError):
-    """The manager could not accept or complete an ownership operation."""
-
-
-class DarwinJobClient:
-    """``job_client`` over A3: one channel per call; only connect is retried."""
-
-    def __init__(
-        self, *, label: str = MANAGER_LABEL, error_type: type[Exception] | None = None
-    ) -> None:
-        self.label, self.error_type = label, error_type
-
-    def _error(self, message: str) -> Exception:
-        return (self.error_type or DarwinJobManagerError)(message)
-
-    def request(
-        self, socket_path: Path, payload: dict[str, Any], *, timeout_s: float = 5.0
-    ) -> dict[str, Any]:
-        from binnacle.platform.darwin.generation_runtime import (
-            discover_service_lease as discover,
-        )
-        from binnacle.platform.darwin.ipc_transport import connect_authenticated
-
-        failure: Exception | None = None
-        for _attempt in range(2):  # a rotated generation re-reads credentials
-            try:
-                lease = discover(root=socket_path.parent, label=self.label)
-                channel = connect_authenticated(socket_path, lease=lease, timeout_s=5)
-                break
-            except (NativeCapabilityError, OSError) as exc:
-                failure = exc
-        else:
-            code = getattr(failure, "code", type(failure).__name__)
-            message = f"{pc.JOB_MANAGER_UNAVAILABLE} at {socket_path}: {code}"
-            raise self._error(message) from failure
-        try:  # a dispatched request is never replayed
-            response = channel.request(payload, timeout_s=min(60.0, timeout_s))
-        except NativeCapabilityError as exc:
-            message = "job manager closed the connection without a response"
-            raise self._error(message) from exc
-        finally:
-            channel.close()
-        if response.get("ok") is not True:
-            error = response.get("error") or "job manager request failed"
-            raise self._error(str(error))
-        return dict(response)
-
-    def ping(self, socket_path: Path) -> dict[str, Any]:
-        return self.request(socket_path, {"version": PROTOCOL_VERSION, "op": "ping"})
-
-    def start(
-        self,
-        socket_path: Path,
-        *,
-        command: str,
-        workdir: Path,
-        stdin: str | None,
-        wait_seconds: float,
-        call_id: str,
-    ) -> dict[str, Any]:
-        payload = {"version": PROTOCOL_VERSION, "op": "start", "command": command}
-        payload.update(workdir=str(workdir), stdin=stdin, wait_seconds=wait_seconds)
-        payload["call_id"] = call_id
-        timeout = max(5.0, wait_seconds + 5.0)
-        return self.request(socket_path, payload, timeout_s=timeout)
-
-    def stop(
-        self, socket_path: Path, job_id: str, *, call_id: str = "-"
-    ) -> dict[str, Any]:
-        payload = {"version": PROTOCOL_VERSION, "op": "stop", "job_id": job_id}
-        payload["call_id"] = call_id
-        return self.request(socket_path, payload, timeout_s=10.0)
