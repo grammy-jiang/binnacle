@@ -70,7 +70,7 @@
     "LINUX": 62
   },
   "coverage_complete": true,
-  "implementation_commit": "225a7bbf71ac69946f6a98d4fdaadd68ddbbb901",
+  "implementation_commit": "9f95f5293b8f08b31b89438739462b24364d0697",
   "production_module_count": 196,
   "rows": [
     {
@@ -4498,7 +4498,7 @@
       "owner": "BOUNDARY",
       "path": "src/binnacle/features/commands/job_stop.py",
       "rationale": "Explicit composition or compatibility seam; implementation-specific actions are delegated",
-      "sha256": "900adc3d79a862bcd8c0c0f53e08ba58a91da3f56894d55ce15166ee3c9b2598",
+      "sha256": "d1919904b43b31397bd0dea6be1b859f574748a4a6aa92d63821b99b8ee5da32",
       "stage": "OS3",
       "was_in_baseline": false
     },
@@ -5506,7 +5506,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/mcp/job_awareness_hint_identity.py",
       "rationale": "FastMCP-native integration; MCP framework remains solely responsible for Providers and Middleware",
-      "sha256": "f3dc95b362373be308d045b53a0f2e031da4210e67662aca583a2a5b50132fb6",
+      "sha256": "a01551a3c4b7f71c5bb7d20e78c5c6ec566822019c186b1e69b294d8d2af92b0",
       "stage": "OS6",
       "was_in_baseline": false
     },
