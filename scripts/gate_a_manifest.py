@@ -88,6 +88,13 @@ def manifest_groups() -> dict[str, set[str]]:
             "features/commands/job_awareness/hint_render.py",
             "features/commands/job_awareness/receipt_schema.py",
             "features/commands/job_awareness/receipt_store.py",
+            "features/commands/job_awareness/session_binding.py",
+            "features/commands/job_awareness/session_emission.py",
+            "features/commands/job_awareness/session_fence.py",
+            "features/commands/job_awareness/session_lab.py",
+            "features/commands/job_awareness/session_route.py",
+            "features/commands/job_awareness/session_serving.py",
+            "features/commands/job_awareness/session_snapshot.py",
         },
         # Native FastMCP adapter modules; mirrors job-awareness-adapter-isolation.
         "job_awareness_adapter": {
