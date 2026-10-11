@@ -479,6 +479,7 @@ source_modules = [
     "binnacle.mcp.job_awareness_hint",
     "binnacle.mcp.job_awareness_hint_schema",
     "binnacle.mcp.job_awareness_hint_walk",
+    "binnacle.mcp.job_awareness_hint_identity",
 ]
 forbidden_modules = [
     "binnacle.features",

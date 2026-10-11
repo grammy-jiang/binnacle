@@ -68,6 +68,22 @@ class Limits:
                 raise ValueError("Invalid private limits")
 
 
+_BUSY_PRIMARY_CODES = (5, 6)  # SQLITE_BUSY, SQLITE_LOCKED
+_BUSY_MESSAGES = ("database is locked", "database table is locked")
+
+
+def _is_busy(exc: sqlite3.Error) -> bool:
+    """Classify SQLITE_BUSY/SQLITE_LOCKED on every supported Python.
+
+    ``sqlite_errorcode`` exists only on Python 3.11+. Older interpreters expose
+    the SQLite error message alone, so the message decides when the code is absent.
+    """
+    code = getattr(exc, "sqlite_errorcode", None)
+    if isinstance(code, int):
+        return (code & 255) in _BUSY_PRIMARY_CODES
+    return str(exc).lower() in _BUSY_MESSAGES
+
+
 def encode(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
@@ -347,10 +363,9 @@ class ReceiptDatabase:
         except sqlite3.IntegrityError:
             return Failure(BoundaryError(ErrorCode.DENIED))
         except sqlite3.Error as exc:
-            code = getattr(exc, "sqlite_errorcode", 0) & 255
             return Failure(
                 BoundaryError(
-                    ErrorCode.BUSY if code in (5, 6) else ErrorCode.STORAGE_UNAVAILABLE
+                    ErrorCode.BUSY if _is_busy(exc) else ErrorCode.STORAGE_UNAVAILABLE
                 )
             )
         except (OSError, ValueError, TypeError, KeyError, OverflowError):

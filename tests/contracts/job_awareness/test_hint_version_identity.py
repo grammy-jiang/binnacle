@@ -1,4 +1,8 @@
-"""Producer version checks precede workers, callbacks, and awareness reads."""
+"""Producer version checks precede workers, callbacks, and awareness reads.
+
+Q0-SEC-03: the producer is the resolved native Tool object; its version is read
+from that object, never from a caller-supplied string.
+"""
 
 from collections.abc import Callable
 from dataclasses import replace
@@ -24,6 +28,13 @@ def native_tool(version):
     return Tool(name="synthetic", version=version, parameters={}, output_schema=SCHEMA)
 
 
+def raw_tool(version):
+    """A producer whose version bypasses model validation (hostile or malformed)."""
+    return Tool.model_construct(
+        name="synthetic", version=version, parameters={}, output_schema=SCHEMA
+    )
+
+
 @pytest.mark.parametrize("carrier", [HintCarrier.META, HintCarrier.TEXT])
 @pytest.mark.parametrize(
     "bound_version,producer_version",
@@ -42,7 +53,7 @@ async def test_other_version_returns_original_before_worker(
         value = original()
         before = value.model_dump_json()
         result = await HintAdapter.adapt(
-            adapter, value, tool_name="synthetic", tool_version=producer_version
+            adapter, value, tool=native_tool(producer_version)
         )
         assert result is value  # nosec B101 - pytest assertion
         assert value.model_dump_json() == before  # nosec B101 - pytest assertion
@@ -57,7 +68,10 @@ async def test_missing_version_is_unknown_even_for_unversioned_binding(version):
             lab.adapter(enabled=True), tool=native_tool(version), workers=NoWorkers()
         )
         value = original()
-        assert await HintAdapter.adapt(adapter, value, tool_name="synthetic") is value  # nosec B101 - pytest assertion
+        assert await HintAdapter.adapt(adapter, value) is value  # nosec B101 - pytest assertion
+        producer = native_tool(version)
+        object.__getattribute__(producer, "__dict__").pop("version")
+        assert await HintAdapter.adapt(adapter, value, tool=producer) is value  # nosec B101 - pytest assertion
         assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion
 
 
@@ -70,10 +84,7 @@ async def test_invalid_producer_version_fails_closed(version):
         )
         value = original()
         assert (  # nosec B101 - pytest assertion
-            await HintAdapter.adapt(
-                adapter, value, tool_name="synthetic", tool_version=version
-            )
-            is value
+            await HintAdapter.adapt(adapter, value, tool=raw_tool(version)) is value
         )
         assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion
 
@@ -99,14 +110,10 @@ async def test_hostile_version_cannot_run_comparison_callbacks():
         )
         value = original()
         assert (  # nosec B101 - pytest assertion
-            await HintAdapter.adapt(
-                adapter, value, tool_name="synthetic", tool_version=Version("1")
-            )
+            await HintAdapter.adapt(adapter, value, tool=raw_tool(Version("1")))
             is value
         )
-        hostile = Tool.model_construct(
-            name="synthetic", parameters={}, output_schema=SCHEMA, version=Version("1")
-        )
+        hostile = raw_tool(Version("1"))
         with pytest.raises(ValueError, match="explicit native tool binding required"):
             replace(adapter, tool=hostile)
         assert calls == []  # nosec B101 - pytest assertion
@@ -120,9 +127,6 @@ async def test_matching_version_keeps_default_off(version):
         adapter = replace(lab.adapter(), tool=native_tool(version), workers=NoWorkers())
         value = original()
         assert (  # nosec B101 - pytest assertion
-            await HintAdapter.adapt(
-                adapter, value, tool_name="synthetic", tool_version=version
-            )
-            is value
+            await HintAdapter.adapt(adapter, value, tool=native_tool(version)) is value
         )
         assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion

@@ -11,6 +11,11 @@ from typing import Any, Protocol, TypeVar
 from fastmcp.tools.base import Tool, ToolResult
 from mcp.types import ContentBlock, TextContent
 
+from binnacle.mcp.job_awareness_hint_identity import (
+    Identity,
+    canonical_schema,
+    producer_identity,
+)
 from binnacle.mcp.job_awareness_hint_schema import Schema, equal
 from binnacle.mcp.job_awareness_hint_walk import (
     Meter,
@@ -24,16 +29,18 @@ __all__ = [
     "META_KEY",
     "HintAdapter",
     "HintBindings",
+    "Identity",
     "Meter",
     "Schema",
     "Unsupported",
     "Workers",
+    "canonical_schema",
     "equal",
+    "producer_identity",
     "walk",
 ]
 
 META_KEY = "binnacle/job-awareness/synthetic-v1"
-_UNKNOWN_VERSION = object()
 T = TypeVar("T")
 
 
@@ -84,6 +91,7 @@ class HintAdapter:
     tool_name: str = field(init=False)
     tool_version: str | None = field(init=False)
     schema: Any = field(init=False)
+    identity: Identity | None = field(init=False)
     server_info: Any = None  # controller snapshot of the pinned native server stamp
     enabled: bool = False
     carrier: Enum | None = None
@@ -107,35 +115,37 @@ class HintAdapter:
             self.schema = Schema(self.tool.output_schema)
         except (ValueError, TypeError, RecursionError):
             self.schema = None
+        self.identity = None if self.schema is None else producer_identity(self.tool)
 
     async def adapt(
         self,
         original: ToolResult,
         *,
-        tool_name: object = None,
-        tool_version: object = _UNKNOWN_VERSION,
+        tool: object = None,
     ) -> ToolResult:
         """Suppress unknown producers before worker admission or awareness reads.
 
-        The controller must supply the registered native tool at construction and
-        the resolved producing tool's exact name AND version on every call.
-        Explicit None means an unversioned producer; omission means unknown.
-        A request selector is not a resolved version: default dispatch, version
-        aliases and unversioned fallback must be resolved by native FastMCP.
-        No schema or identity is inferred from a result. Registrations and
-        routing stay fixed for this adapter's lifetime; rebuild on changes.
+        Identity rule: ``tool`` must be the native Tool object that FastMCP
+        resolved for this call (injection, mounted providers, transforms and
+        version selection already applied). The adapter proceeds only when that
+        object's exact name, exact version and canonical-JSON output schema all
+        equal the bound tool's, and the structured result then validates
+        against that schema. Caller-supplied name or version strings, request
+        selectors and object identity are never an identity. A missing, None,
+        non-Tool or malformed producer is unknown and returns the original
+        result unchanged. No schema or identity is inferred from a result.
+        Registrations and routing stay fixed for this adapter's lifetime.
         """
         if (
             self.enabled is not True
             or self.exclusive is not True
             or type(original) is not ToolResult
             or self.schema is None
-            or type(tool_name) is not str
-            or len(tool_name) > 128
-            or tool_name != self.tool_name
-            or (tool_version is not None and type(tool_version) is not str)
-            or tool_version != self.tool_version
+            or self.identity is None
         ):
+            return original
+        producer = producer_identity(tool)
+        if producer is None or producer != self.identity:
             return original
         return await self.workers.run(
             lambda stop: self._adapt(original, stop), original

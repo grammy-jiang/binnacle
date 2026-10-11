@@ -9,10 +9,16 @@ from binnacle.mcp.job_awareness_hint import HintAdapter
 
 
 class VersionBoundCarrier(Middleware):
-    """Use native selection, including highest-version and unversioned fallback.
+    """Pass the Tool object FastMCP resolves for this call to the adapter.
 
-    This lab has fixed registrations and no downstream middleware that rewrites
-    routing or substitutes results. The resolved tool is the actual producer.
+    Native resolution applies injection, mounted providers, transforms,
+    highest-version selection and unversioned fallback. FastMCP 4.1.0 exposes
+    no resolved tool in the middleware context, so this lab resolves it with the
+    server's own get_tool() and the dispatch selector. The lab has fixed
+    registrations and no downstream middleware that rewrites routing or
+    substitutes results, so the resolved tool is the actual producer. The
+    adapter, not this carrier, decides identity; an unresolved tool is passed
+    as None and suppresses (fail closed).
     """
 
     def __init__(
@@ -34,15 +40,6 @@ class VersionBoundCarrier(Middleware):
         producer = await self.app.get_tool(context.message.name, version=version)
         value = await call_next(context)
         self.seen.append(value)
-        result = (
-            value
-            if producer is None
-            else await HintAdapter.adapt(
-                self.adapter,
-                value,
-                tool_name=producer.name,
-                tool_version=producer.version,
-            )
-        )
+        result = await HintAdapter.adapt(self.adapter, value, tool=producer)
         self.adapted.append(result)
         return result

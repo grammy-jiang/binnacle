@@ -27,6 +27,7 @@
     "src/binnacle/features/commands/job_awareness/snapshots.py",
     "src/binnacle/features/commands/job_stop.py",
     "src/binnacle/mcp/job_awareness_hint.py",
+    "src/binnacle/mcp/job_awareness_hint_identity.py",
     "src/binnacle/mcp/job_awareness_hint_schema.py",
     "src/binnacle/mcp/job_awareness_hint_walk.py",
     "src/binnacle/platform/composition.py",
@@ -36,12 +37,12 @@
   "baseline_paths_missing": [],
   "classification_counts": {
     "BOUNDARY": 20,
-    "KEEP": 138,
+    "KEEP": 139,
     "LINUX": 62
   },
   "coverage_complete": true,
-  "implementation_commit": "d61761356ee0fce8ea6d73b0c3043b4881c5645e",
-  "production_module_count": 170,
+  "implementation_commit": "bf2a7615ee935220573789eef97a2da5d59a3002",
+  "production_module_count": 171,
   "rows": [
     {
       "imports": [],
@@ -759,7 +760,7 @@
       "owner": "KEEP",
       "path": "scripts/gate_a_manifest.py",
       "rationale": "External repository management/testing; subprocess for Git, uv or ripgrep is portable, not a host adapter",
-      "sha256": "9bdc8845496b8d2ce3976c9337b7a0639a2a9af29ed5a190e7e69875d4524b11",
+      "sha256": "709e56d131a22989d90d1e2938a21951179985736f0b66260339c84341a3dae1",
       "stage": "OS6",
       "was_in_baseline": true
     },
@@ -3919,7 +3920,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/features/commands/job_awareness/receipt_schema.py",
       "rationale": "Core durable record, RPC, output cursor or command business logic",
-      "sha256": "f97abe4c9530e047fbf5265423d63d71cd8b161f92693c264d86e2377a170b71",
+      "sha256": "451af55f184abbe48676844f40e9395465c294673af00ec0c35089e4035da13d",
       "stage": "OS6",
       "was_in_baseline": false
     },
@@ -5040,6 +5041,10 @@
       "imports": [
         "__future__",
         "__future__.annotations",
+        "binnacle.mcp.job_awareness_hint_identity",
+        "binnacle.mcp.job_awareness_hint_identity.Identity",
+        "binnacle.mcp.job_awareness_hint_identity.canonical_schema",
+        "binnacle.mcp.job_awareness_hint_identity.producer_identity",
         "binnacle.mcp.job_awareness_hint_schema",
         "binnacle.mcp.job_awareness_hint_schema.Schema",
         "binnacle.mcp.job_awareness_hint_schema.equal",
@@ -5075,7 +5080,30 @@
       "owner": "KEEP",
       "path": "src/binnacle/mcp/job_awareness_hint.py",
       "rationale": "FastMCP-native integration; MCP framework remains solely responsible for Providers and Middleware",
-      "sha256": "3ece1d93a020802790f0959b58103caaae5484c0f8ec6649e54d65d551553dc7",
+      "sha256": "f52081ac5540f5fae15acf47d2949b29bbf5316c36d8fef3c34f821de73fe5dd",
+      "stage": "OS6",
+      "was_in_baseline": false
+    },
+    {
+      "imports": [
+        "__future__",
+        "__future__.annotations",
+        "binnacle.mcp.job_awareness_hint_walk",
+        "binnacle.mcp.job_awareness_hint_walk.Meter",
+        "binnacle.mcp.job_awareness_hint_walk.walk",
+        "fastmcp.tools.base",
+        "fastmcp.tools.base.Tool",
+        "json",
+        "typing",
+        "typing.Any"
+      ],
+      "lexical_host_tokens": [],
+      "module": "binnacle.mcp.job_awareness_hint_identity",
+      "original_owner": null,
+      "owner": "KEEP",
+      "path": "src/binnacle/mcp/job_awareness_hint_identity.py",
+      "rationale": "FastMCP-native integration; MCP framework remains solely responsible for Providers and Middleware",
+      "sha256": "d4ae384dba114ec1a4094a68840be4520ee65537079c9396544dcb615829810d",
       "stage": "OS6",
       "was_in_baseline": false
     },

@@ -8,20 +8,18 @@ from fastmcp.tools.base import ToolResult
 import binnacle.mcp.job_awareness_hint as adapter
 from binnacle.mcp.job_awareness_hint import HintAdapter
 
+_BOUND = object()
+
 
 class SyntheticHintAdapter(HintAdapter):
-    """Direct calls have one unversioned producer; middleware supplies identity."""
+    """Direct calls model a resolved producer that is the bound Tool object.
 
-    async def adapt(
-        self,
-        original: ToolResult,
-        *,
-        tool_name: object = "synthetic",
-        tool_version: object = None,
-    ) -> ToolResult:
-        return await super().adapt(
-            original, tool_name=tool_name, tool_version=tool_version
-        )
+    Server-composed tests call HintAdapter.adapt through the carrier with the
+    Tool FastMCP resolves; only direct calls without a producer use this shim.
+    """
+
+    async def adapt(self, original: ToolResult, *, tool: object = _BOUND) -> ToolResult:
+        return await super().adapt(original, tool=self.tool if tool is _BOUND else tool)
 
 
 def assert_adapter_import_topology():

@@ -139,13 +139,17 @@ async def test_bound_tool_uses_its_declared_schema(protocol, carrier):
 )
 @in_loop
 async def test_component_rejects_unbound_name_without_admitting_worker(name):
-    """A permissive middleware cannot make the component hint another tool."""
+    """A permissive middleware cannot make the component hint another tool.
+
+    Q0-SEC-03: names are read from the resolved producer Tool object only.
+    """
     with Lab() as lab:
         adapter, value = lab.adapter(enabled=True), original()
-        # Call the production entry directly, without the single-tool fixture shim.
-        result = await HintAdapter.adapt(
-            adapter, value, tool_name=name, tool_version=None
+        producer = Tool.model_construct(
+            name=name, version=None, parameters={}, output_schema=SCHEMA
         )
+        # Call the production entry directly, without the single-tool fixture shim.
+        result = await HintAdapter.adapt(adapter, value, tool=producer)
         assert result is value  # nosec B101 - pytest assertion
         assert adapter.last_meter is None  # nosec B101 - pytest assertion
         assert lab.catalog_reads == lab.queries == lab.payload.reads == 0  # nosec B101 - pytest assertion
@@ -165,12 +169,10 @@ async def test_component_missing_or_hostile_name_fails_closed():
     with Lab() as lab:
         adapter, value = lab.adapter(enabled=True), original()
         assert await HintAdapter.adapt(adapter, value) is value  # nosec B101 - pytest assertion
-        assert (
-            await HintAdapter.adapt(
-                adapter, value, tool_name=Name("synthetic"), tool_version=None
-            )
-            is value
-        )  # nosec B101 - pytest assertion
+        hostile = Tool.model_construct(
+            name=Name("synthetic"), version=None, parameters={}, output_schema=SCHEMA
+        )
+        assert await HintAdapter.adapt(adapter, value, tool=hostile) is value  # nosec B101 - pytest assertion
         assert calls == []  # nosec B101 - pytest assertion
         assert adapter.last_meter is None  # nosec B101 - pytest assertion
         assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion
@@ -187,15 +189,10 @@ async def test_component_validates_bound_native_tool_without_middleware(carrier)
         adapter = replace(lab.adapter(enabled=True, carrier=carrier), tool=tool)
         value = original()
         # Valid under the previous fixture schema, invalid under beta's schema.
-        assert (
-            await HintAdapter.adapt(adapter, value, tool_name="beta", tool_version=None)
-            is value
-        )  # nosec B101 - pytest assertion
+        assert await HintAdapter.adapt(adapter, value, tool=tool) is value  # nosec B101 - pytest assertion
         assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion
         value.structured_content["n"] = 1
-        result = await HintAdapter.adapt(
-            adapter, value, tool_name="beta", tool_version=None
-        )
+        result = await HintAdapter.adapt(adapter, value, tool=tool)
         assert result is not value  # nosec B101 - pytest assertion
         assert result.structured_content == {"ok": True, "n": 1}  # nosec B101 - pytest assertion
         text = (
@@ -215,12 +212,7 @@ async def test_missing_or_unsupported_native_schema_suppresses(schema):
         tool = Tool(name="synthetic", parameters={}, output_schema=schema)
         adapter = replace(lab.adapter(enabled=True), tool=tool)
         value = original()
-        assert (
-            await HintAdapter.adapt(
-                adapter, value, tool_name="synthetic", tool_version=None
-            )
-            is value
-        )  # nosec B101 - pytest assertion
+        assert await HintAdapter.adapt(adapter, value, tool=tool) is value  # nosec B101 - pytest assertion
         assert adapter.last_meter is None  # nosec B101 - pytest assertion
         assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion
 

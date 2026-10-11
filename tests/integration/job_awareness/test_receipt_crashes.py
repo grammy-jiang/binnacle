@@ -4,7 +4,6 @@ import hashlib
 import multiprocessing
 import os
 import sqlite3
-import subprocess
 import sys
 import types
 import unittest
@@ -28,33 +27,35 @@ from binnacle.features.commands.job_awareness.receipt_store import (
     ReceiptStore,
     ReceiptTransaction,
 )
+from tests.integration.job_awareness.test_receipt_store import StoreFixture
 from tests.unit.core.job_awareness.test_grants import LabFixture
+
+REVIEWED_I02_SNAPSHOTS = (
+    Path(__file__).resolve().parent / "fixtures" / "reviewed_i02_snapshots.py.txt"
+)
+REVIEWED_I02_SNAPSHOTS_SHA256 = (
+    "e5f4b3e0900e4981864cae315e66c6a5c4c60519e793bb2909b563b72ce60440"
+)
+
+
+def observer_references():
+    """Count references one local name adds, as getrefcount reports them.
+
+    Python 3.14 stopped counting getrefcount's temporary argument reference, so
+    the baseline is measured on a fresh object instead of assumed.
+    """
+    probe = bytes(4096)
+    return sys.getrefcount(probe)
+
+
+OBSERVER_REFERENCES = observer_references()
 
 
 @lru_cache(maxsize=1)
 def reviewed_snapshots():
-    """Execute the actual sealed I0-2 blob; never edit or import another checkout."""
-    source = subprocess.run(
-        [
-            "git",
-            "show",
-            (
-                "4e201ee87a749faceb5934305acd4a7d92b0de51:"
-                "src/binnacle/features/commands/job_awareness/snapshots.py"
-            ),
-        ],
-        cwd=Path(__file__).resolve().parents[3],
-        env={
-            key: value
-            for key, value in os.environ.items()
-            if not key.startswith("GIT_")
-        },
-        check=True,
-        capture_output=True,
-    ).stdout
-    if hashlib.sha256(source).hexdigest() != (
-        "e5f4b3e0900e4981864cae315e66c6a5c4c60519e793bb2909b563b72ce60440"
-    ):
+    """Execute the vendored sealed I0-2 bytes; never read git history."""
+    source = REVIEWED_I02_SNAPSHOTS.read_bytes()
+    if hashlib.sha256(source).hexdigest() != REVIEWED_I02_SNAPSHOTS_SHA256:
         raise AssertionError("Reviewed I0-2 source mismatch")
     module = types.ModuleType("_reviewed_i02_snapshots")
     sys.modules[module.__name__] = module
@@ -100,8 +101,9 @@ def observe_retired_references(lab, workers):
         original(lease, *args)
         lab.catalog.memory.evict_unpinned()
         stats = lab.catalog.memory.stats()
-        # Only this observer and getrefcount's temporary argument may own bytes.
-        retired = sys.getrefcount(borrowed) - 2
+        # Only this observer's local name (plus getrefcount's argument reference
+        # on interpreters that take one) may own the bytes.
+        retired = sys.getrefcount(borrowed) - OBSERVER_REFERENCES
         del borrowed
         permit = workers.reserve()
         observations.append(
@@ -359,3 +361,24 @@ class CrashTests(LabFixture, unittest.TestCase):
         self.assertEqual(self.counts(), (1, 0, 0))
         self.assertEqual(self.catalog.pins, 0)
         self.ok(service.acknowledge(self.handle, self.snapshot, (page.proof,)))
+
+
+class PortableBusyTests(StoreFixture, unittest.TestCase):
+    def test_busy_classification_is_portable_across_python_versions(self):
+        """Python 3.10 has no sqlite_errorcode; message-only errors stay BUSY."""
+        for message, expected in (
+            ("database is locked", ErrorCode.BUSY),
+            ("database table is locked", ErrorCode.BUSY),
+            ("disk full injected", ErrorCode.STORAGE_UNAVAILABLE),
+            ("unable to open database file", ErrorCode.STORAGE_UNAVAILABLE),
+        ):
+            with self.subTest(message=message):
+                self.assertFalse(
+                    hasattr(sqlite3.OperationalError(message), "sqlite_errorcode")
+                )
+
+                def fail(tx, message=message):
+                    raise sqlite3.OperationalError(message)
+
+                result = self.store.controller_transaction(fail)
+                self.assertEqual(result.error.code, expected)
