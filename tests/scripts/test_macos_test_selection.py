@@ -35,6 +35,9 @@ ALLOWED_PLATFORM_SKIPS = {
     "tests/platform/darwin/test_foreground_commands.py": (
         "A2: per-test Darwin posix_spawn owned-child mechanism"
     ),
+    "tests/platform/darwin/test_process_native.py": (
+        "A2: per-test Darwin kqueue/posix_spawn child and witness probes"
+    ),
     "tests/platform/darwin/test_ipc_generation.py": (
         "A3: per-test Darwin getpeereid/LOCAL_PEERPID contract"
     ),
