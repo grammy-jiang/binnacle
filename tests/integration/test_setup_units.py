@@ -2,6 +2,7 @@
 a temporary directory, systemctl and loginctl recorded, the quiet gate faked."""
 
 import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -13,6 +14,12 @@ from binnacle.platform.contracts.service_lifecycle_contracts import ServiceActio
 from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from binnacle.platform.linux.service_provisioning_linux import LinuxServiceProvisioner
 from tests.service_fakes import FakeServiceController
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="systemd unit inspector; Darwin launchd inspector is follow-up "
+    "DARWIN-FOLLOWUP-service-inspector",
+)
 
 
 @pytest.fixture
@@ -211,6 +218,7 @@ def test_mode_status_reports_the_marker(host, capsys):
     )
 
 
+@LINUX_ONLY
 def test_mode_switch_rewrites_reloads_and_restarts_at_a_quiet_moment(
     host, capsys, monkeypatch
 ):
@@ -242,6 +250,7 @@ def test_mode_switch_rewrites_reloads_and_restarts_at_a_quiet_moment(
     assert host.controller.calls == [(cli.SERVER_UNIT, None)]
 
 
+@LINUX_ONLY
 def test_mode_first_upgrade_still_protects_embedded_jobs(host, capsys, monkeypatch):
     cli.setup(dev=host.repo, port=8000)
     capsys.readouterr()
@@ -289,6 +298,7 @@ def test_mode_embedded_rollback_still_blocks_on_running_jobs(host, capsys, monke
     assert "background job" in capsys.readouterr().out
 
 
+@LINUX_ONLY
 def test_mode_refuses_a_busy_moment_unless_forced(host, capsys, monkeypatch):
     cli.setup(dev=host.repo, port=8000)
     host.calls.clear()
@@ -312,6 +322,7 @@ def test_mode_refuses_a_busy_moment_unless_forced(host, capsys, monkeypatch):
     assert host.controller.calls == [(cli.SERVER_UNIT, None)]
 
 
+@LINUX_ONLY
 def test_mode_unreadable_journal_blocks_before_write_reload_or_restart(
     host, capsys, monkeypatch
 ):
@@ -341,6 +352,7 @@ def test_mode_unreadable_journal_blocks_before_write_reload_or_restart(
     assert host.controller.calls == []
 
 
+@LINUX_ONLY
 def test_mode_needs_a_managed_unit_and_a_repo_for_dev(host, capsys, monkeypatch):
     with pytest.raises(SystemExit):
         cli.mode("dev")
@@ -358,6 +370,7 @@ def test_mode_needs_a_managed_unit_and_a_repo_for_dev(host, capsys, monkeypatch)
     assert marker is not None and marker.params["mode"] == "dev"
 
 
+@LINUX_ONLY
 def test_mode_reports_a_failed_restart(host, capsys, monkeypatch):
     cli.setup(dev=host.repo, port=8000)
     capsys.readouterr()

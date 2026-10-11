@@ -86,6 +86,7 @@ integration/test_run_command_output_shaping.py | T0: Linux durable job engine; D
 integration/test_run_command_policy_telemetry.py | T0: Linux auto-background durable job; Darwin counterpart tests/platform/darwin/test_native_smoke_mcp.py::test_run_command_sd18
 integration/test_run_command_error_telemetry.py | T0: Linux run_command default backend via composed server; Darwin counterpart tests/platform/darwin/test_native_smoke_mcp.py::test_run_command_sd18
 integration/test_search_settings.py | T0: Search child over Linux pathname Core (CR0-06); Darwin counterpart tests/platform/darwin/test_search_parity.py::test_native_local_ignore_and_glob_parity
+integration/test_setup_units.py | B0: systemd unit inspector; Darwin launchd inspector is follow-up DARWIN-FOLLOWUP-service-inspector (per-test LINUX_ONLY on the 6 binnacle mode tests that build it; R4 J4, Supervisor ruling A, PO-J4-3)
 contracts/test_darwin_interface.py | B0: Darwin root-grant lifecycle tests need native descriptors (R2D-T0A6-01 fix ecf6aea)
 platform/darwin/test_missing_roots.py | B0: Darwin missing-root lifespan tests need native descriptors (SD-24 fix 8132d8d)
 """
@@ -128,6 +129,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/integration/test_run_command_policy_telemetry.py": 1,
     "tests/integration/test_run_command_error_telemetry.py": 1,
     "tests/integration/test_search_settings.py": 1,
+    "tests/integration/test_setup_units.py": 1,
     **dict.fromkeys(LINUX_PIN_FILES, 1),
     **dict.fromkeys(T0A9_PIN_FILES, 1),
 }
