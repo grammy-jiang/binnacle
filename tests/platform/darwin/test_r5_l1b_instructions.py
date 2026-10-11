@@ -15,7 +15,13 @@ from pathlib import Path
 import pytest
 
 from binnacle import application
-from tests.contracts.test_surface_tokens import SD52_CLAUSE, darwin_manager_disclosure
+from binnacle.observability.token_telemetry import _load_encoding
+from tests.contracts.test_surface_tokens import (
+    DARWIN_DISCLOSURE_BUDGET,
+    ENCODING,
+    SD52_CLAUSE,
+    darwin_manager_disclosure,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 _LINUX_PIN = ROOT / "docs/os-independent-stage1-evidence/os0-raw-mcp-surface.json"
@@ -32,6 +38,21 @@ def _sha256(text: str) -> str:
 def _instructions(monkeypatch, system, owner):
     monkeypatch.setattr(application.platform, "system", lambda: system)
     return application._server_instructions(owner)
+
+
+def test_steer01_descendants_clause_is_the_manager_disclosure(monkeypatch):
+    """STEER-01: once r5 L1 drops descendants_unverified from routine
+    run_command text, this sentence is the only model-facing disclosure."""
+    darwin = _instructions(monkeypatch, "Darwin", "manager")
+    assert SD52_CLAUSE in darwin
+    assert SD52_CLAUSE in application._DARWIN_MANAGER_INSTRUCTIONS
+    linux = _instructions(monkeypatch, "Linux", "manager")
+    assert SD52_CLAUSE not in linux and "new session" not in linux
+    assert _sha256(linux) == LINUX_SHA256
+    assert linux == application._LINUX_INSTRUCTIONS
+    # SD-33 budget on the Darwin disclosure sentence (clause + D-1).
+    tokens = len(_load_encoding(ENCODING).encode(darwin_manager_disclosure()))
+    assert tokens <= DARWIN_DISCLOSURE_BUDGET == 35
 
 
 def test_manager_instructions_carry_the_clause_once(monkeypatch):
