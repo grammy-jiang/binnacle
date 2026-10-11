@@ -236,7 +236,8 @@ def test_unreadable_target_metadata_is_omitted(tree, monkeypatch):
     real_lstat = os.lstat
 
     def denied(path, *args, **kwargs):
-        if Path(path) == root / "hello.txt":
+        # SD-74: hello.txt is read by name relative to a directory descriptor.
+        if Path(path).name == "hello.txt":
             raise PermissionError("lstat denied")
         return real_lstat(path, *args, **kwargs)
 
@@ -297,7 +298,8 @@ def test_probe_m_retarget_after_the_read_types_the_checked_target(tree, monkeypa
 
     def readlink_then_retarget(path, *args, **kwargs):
         text = real_readlink(path, *args, **kwargs)
-        if os.fspath(path) == str(race) and not fired:
+        # SD-74: the link is read by name relative to its directory descriptor.
+        if Path(path).name == "race" and not fired:
             fired.append(text)
             race.unlink()
             race.symlink_to(out / "secret.txt")
@@ -316,20 +318,22 @@ def test_probe_m_retarget_after_the_read_types_the_checked_target(tree, monkeypa
     assert typed(tree) == BASE  # Now outside: omitted.
 
 
-def test_target_swapped_for_a_link_after_the_walk_is_omitted(tree, monkeypatch):
+def test_target_swapped_for_a_link_before_its_read_is_omitted(tree, monkeypatch):
+    # SD-74: the walk's own no-follow lstat of the target is the one read, so
+    # the swap lands between the link text read and that lstat.
     root, out = tree["root"], tree["out"]
     (root / "t.txt").write_text("t")
     (root / "alink").symlink_to(root / "t.txt")
-    real_target = lf._link_target
+    real_readlink = os.readlink
 
-    def target_then_swap(link, allowed):
-        target = real_target(link, allowed)
-        if target is not None and target.name == "t.txt":
-            target.unlink()
-            target.symlink_to(out / "secret.txt")
-        return target
+    def readlink_then_swap(path, *args, **kwargs):
+        text = real_readlink(path, *args, **kwargs)
+        if Path(path).name == "alink" and (root / "t.txt").is_file():
+            (root / "t.txt").unlink()
+            (root / "t.txt").symlink_to(out / "secret.txt")
+        return text
 
-    monkeypatch.setattr(lf, "_link_target", target_then_swap)
+    monkeypatch.setattr(os, "readlink", readlink_then_swap)
     result = run(tree)
     assert str(len(SECRET)) not in blob(result)
     assert "alink" not in blob(result)

@@ -69,7 +69,8 @@ def test_retarget_after_the_check_never_reports_the_outside_target(tree, monkeyp
 
     def readlink_then_retarget(path, *args, **kwargs):
         text = real_readlink(path, *args, **kwargs)
-        if os.fspath(path) == str(race) and not fired:
+        # SD-74: the link is read by name relative to its directory descriptor.
+        if Path(path).name == "race" and not fired:
             fired.append(text)
             race.unlink()
             race.symlink_to(out / "secret.txt")
@@ -92,30 +93,50 @@ def test_retarget_after_the_check_never_reports_the_outside_target(tree, monkeyp
     }
 
 
-def test_target_swapped_for_a_link_after_the_walk_is_omitted(tree, monkeypatch):
+def test_target_swapped_for_a_link_before_its_read_is_omitted(tree, monkeypatch):
+    # SD-74: the walk's own no-follow lstat of the target is the one read, so
+    # the swap lands between the link text read and that lstat.
     root, out = tree["root"], tree["out"]
     (root / "t.txt").write_text("t")
     (root / "flink").symlink_to("t.txt")
-    real_target = lf._link_target
+    real_readlink = os.readlink
 
-    def target_then_swap(link, allowed):
-        target = real_target(link, allowed)
-        if target is not None and target.name == "t.txt":
-            target.unlink()
-            target.symlink_to(out / "secret.txt")
-        return target
+    def readlink_then_swap(path, *args, **kwargs):
+        text = real_readlink(path, *args, **kwargs)
+        if Path(path).name == "flink" and (root / "t.txt").is_file():
+            (root / "t.txt").unlink()
+            (root / "t.txt").symlink_to(out / "secret.txt")
+        return text
 
-    monkeypatch.setattr(lf, "_link_target", target_then_swap)
+    monkeypatch.setattr(os, "readlink", readlink_then_swap)
     result = run(tree)
     assert str(len(SECRET)) not in blob(result)
     assert "flink" not in blob(result)
 
 
 def test_a_target_outside_the_roots_is_never_typed(tree, monkeypatch):
-    # Defence in depth behind the walk's per-component containment check.
-    (tree["root"] / "flink").symlink_to("hello.txt")
-    monkeypatch.setattr(lf, "_link_target", lambda *_: tree["out"] / "secret.txt")
-    assert typed(tree) == {"d": ("dir", None), "hello.txt": ("file", 6)}
+    # Defence in depth (SD-74): below '/', no call names a path with a '/',
+    # so no path string can be followed out of the root being listed.
+    root = tree["root"]
+    (root / "flink").symlink_to("hello.txt")
+    (root / "olink").symlink_to("../out/secret.txt")
+    for name in ("lstat", "readlink", "open"):
+        real = getattr(os, name)
+
+        def guarded(path, *args, _real=real, **kwargs):
+            text = os.fspath(path)
+            assert text == "/" or ("/" not in text and "dir_fd" in kwargs), text
+            return _real(path, *args, **kwargs)
+
+        monkeypatch.setattr(lf.fd_walk.os, name, guarded)
+    result = lf._list_mode(root, 200, False, (root,))
+    monkeypatch.undo()
+    assert str(len(SECRET)) not in blob(result)
+    assert result.structured_content is not None
+    assert {
+        Path(e["path"]).name: e.get("bytes")
+        for e in result.structured_content["entries"]
+    } == {"d": None, "flink": 6, "hello.txt": 6}
 
 
 # F2: link text that leaves the roots at any component is omitted.
