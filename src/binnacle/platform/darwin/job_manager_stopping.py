@@ -5,16 +5,20 @@ sets it) releases every waiting handler at once: a start returns its job id
 auto-backgrounded, a stop its current state; close() then owns the stop.
 JCRP-F3: owner-proven losses become durable authority UNKNOWN (D-1).
 JCRP-F6: the additive read-only ``processes`` op (Linux: running jobs only).
+R-M1-N1: ``hold_jobs_dir``, the jobs dir whose writer lock this manager holds;
+R-M1a2-F1: after the proof all record I/O and the ``.lock`` use that held dir.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import re
 import threading
 import time
 from collections.abc import Mapping
 from contextlib import AbstractContextManager
+from pathlib import Path
 from typing import Any, Literal
 
 from binnacle.platform.contracts import process_contracts as pc
@@ -40,6 +44,8 @@ class _ManagerStopping:
     owner_instance_id: str
     grace: tuple[float, float]
     stopping: threading.Event
+    jobs_dir: Path
+    held_jobs_dir: str | None
 
     def _transaction(self) -> AbstractContextManager[None]:
         raise NotImplementedError
@@ -64,6 +70,32 @@ class _ManagerStopping:
 
     def state(self, job_id: str) -> str:
         raise NotImplementedError
+
+    def hold_jobs_dir(self, lock_fd: int) -> str:
+        """R-M1-N1: the realpath is the jobs dir only if it names the locked inode.
+
+        ``lock_fd`` is this manager's ``<jobs_dir>/.manager.lock`` with the
+        writer flock held. A symlinked jobs dir retargeted between the lock and
+        the realpath names a dir this manager does not hold: fail closed, before
+        recovery and binding. ``lstat``: a linked lock file is never ours.
+        R-M1a2-F1: once proven, the held dir replaces ``jobs_dir``, so recovery,
+        every record and the ``.lock`` transactions use it, never the configured
+        (possibly symlinked) name a later retarget could move.
+        """
+        held = os.path.realpath(self.jobs_dir)
+        locked = os.fstat(lock_fd)
+        try:
+            named = os.lstat(os.path.join(held, ".manager.lock"))
+        except OSError:
+            named = None
+        identity = (locked.st_dev, locked.st_ino)
+        if named is None or (named.st_dev, named.st_ino) != identity:
+            event = "event=job_manager_jobs_dir_mismatch jobs_dir=%s realpath=%s"
+            log.error(event, self.jobs_dir, held)
+            raise RuntimeError("job_manager_jobs_dir_mismatch")
+        self.held_jobs_dir = held
+        self.jobs_dir = Path(held)
+        return held
 
     def _wait_exit(self, job_id: str, seconds: float) -> OwnedJobExit | None:
         """owner.wait in short slices; returns None early once ``stopping``."""

@@ -7,7 +7,6 @@ Runtime data is ephemeral and must never contain durable job history.
 
 from __future__ import annotations
 
-import ctypes
 import fcntl
 import hashlib
 import json
@@ -30,6 +29,12 @@ from binnacle.platform.contracts.capability_contracts import (
 )
 from binnacle.platform.contracts.native_service_contracts import ServiceLease
 from binnacle.platform.contracts.runtime_path_contracts import RuntimePaths
+from binnacle.platform.darwin.generation_publish import (  # R-M1a2-S1 split
+    _publish_entry as _publish_entry,  # noqa: PLC0414 - re-export
+)
+from binnacle.platform.darwin.generation_publish import (
+    _write_credentials as _write_credentials,  # noqa: PLC0414 - re-export
+)
 
 _ROOTS: dict[ServiceLease, Path] = {}
 _LOCKS: set[int] = set()
@@ -49,6 +54,7 @@ def _close_inherited_locks() -> None:
 
 os.register_at_fork(after_in_child=_close_inherited_locks)
 _SCOPE = "private cooperative-account runtime; no durable job authority"
+RUNTIME_ROOT = "Library/Application Support/Binnacle/r3"  # SD-68: never Caches
 
 
 def denied(code: str) -> UnsafePath:
@@ -56,9 +62,13 @@ def denied(code: str) -> UnsafePath:
 
 
 def check_socket_path(path: Path) -> None:
-    # sockaddr_un.sun_path is 104 bytes on Darwin, including the terminator.
-    if not path.is_absolute() or len(os.fsencode(path)) >= 104:
-        raise denied("runtime_socket_path_invalid")
+    size = len(os.fsencode(path))  # sun_path: 104 bytes on Darwin, NUL included
+    if size >= 104:
+        detail = f"darwin_socket_path_too_long: {size} bytes > 103: {path}"
+        raise denied("runtime_socket_path_invalid") from ValueError(detail)
+    if not path.is_absolute():
+        detail = f"darwin_socket_path_not_absolute: {path}"
+        raise denied("runtime_socket_path_invalid") from ValueError(detail)
 
 
 def open_private_root(root: Path, *, create: bool = False) -> int:
@@ -100,9 +110,7 @@ def open_private_root(root: Path, *, create: bool = False) -> int:
 
 def resolve_runtime_paths() -> RuntimePaths:
     configured = os.environ.get("BINNACLE_RUNTIME_DIR")
-    root = (
-        Path(configured) if configured else Path.home() / "Library/Caches/Binnacle/r3"
-    )
+    root = Path(configured) if configured else Path.home() / RUNTIME_ROOT
     check_socket_path(root / "jobs.sock")
     fd = open_private_root(root, create=True)
     os.close(fd)
@@ -259,41 +267,6 @@ def _lock_root(fd: int, *, create: bool = True) -> int:
     except (OSError, NativeCapabilityError) as exc:
         os.close(lock)
         raise _refuse("ipc_duplicate_starter") from exc
-
-
-def _write_credentials(
-    fd: int, name: str, credentials: dict[str, Any], owned: dict[str, tuple[int, int]]
-) -> None:
-    key_fd = os.open(
-        name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd
-    )
-    try:
-        info = os.fstat(key_fd)
-        owned[name] = (info.st_dev, info.st_ino)
-        with os.fdopen(key_fd, "wb", closefd=False) as stream:
-            stream.write(json.dumps(credentials).encode())
-            stream.flush()
-            os.fsync(key_fd)
-    finally:
-        os.close(key_fd)
-
-
-def _publish_entry(fd: int, source: str, target: str) -> None:
-    """Darwin RENAME_EXCL publishes an inode without overwriting any entry."""
-    libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
-    rename = libc.renameatx_np
-    rename.argtypes = [
-        ctypes.c_int,
-        ctypes.c_char_p,
-        ctypes.c_int,
-        ctypes.c_char_p,
-        ctypes.c_uint,
-    ]
-    rename.restype = ctypes.c_int
-    if rename(fd, os.fsencode(source), fd, os.fsencode(target), 0x4) != 0:
-        error = ctypes.get_errno()
-        raise OSError(error, os.strerror(error))
-    os.fsync(fd)
 
 
 def _record_endpoint(

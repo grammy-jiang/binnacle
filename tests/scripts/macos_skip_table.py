@@ -86,6 +86,12 @@ platform/darwin/test_r5_l2b_strict_client.py | B0: per-test Darwin KERN_PROC_PGR
 platform/darwin/test_r5_l2c_output_snapshot.py | B0: per-test Darwin real com.binnacle.jobs burst-writer output/output_bytes one-snapshot repro (r5 L2c); the pairing unit test runs everywhere
 platform/darwin/test_r6_d2_stop_marker_start.py | B0: per-test Darwin real com.binnacle.jobs entry start refusal under its own quiet-window stop marker (r6 D2); the in-process and marker-reader tests run everywhere
 platform/darwin/test_r6_d1_runtime_rebind.py | B0: per-test Darwin real com.binnacle.jobs endpoint rebind after socket/runtime-root removal, foreign debris and sun_path overflow (r6 D1); the sun_path and rebind-policy unit tests run everywhere
+platform/darwin/test_r6w2_m1_runtime_root.py | B0: per-test Darwin real com.binnacle.jobs entry on the moved Application Support runtime root, legacy marker and live legacy writer (r6 W2 M1, SD-68); the root-resolution and no-fallback unit tests run everywhere
+platform/darwin/test_r6w2_m1_ping_jobs_dir.py | B0: per-test Darwin real com.binnacle.jobs entry ping jobs_dir = the held realpath across a config edit (r6 W2 M1, SD-74 STEER-01); the unlocked in-process ping test runs everywhere
+platform/darwin/test_r6w2_m1_d3_minors.py | B0: per-test Darwin real KERN_PROC_PGRP listing after a transient size race (r6 W2 M1 D3, PRE-J1g-F5); both tests import the Darwin process_authority decoder
+platform/darwin/test_r6w2_m1_a2_followups.py | B0: per-test Darwin real com.binnacle.jobs entry rebind after the test HOME's default Application Support root is removed, and the held jobs-dir refusal after a symlink retarget (r6 W2 M1-a2, R-M1-N1/N5); the lock-inode and socket-path reason unit tests run everywhere
+platform/darwin/test_r6w2_m1_a3_proof_order.py | B0: Darwin entry proof before recover
+platform/darwin/test_r6w2_m1_a3_held_dir_io.py | B0: Darwin entry held-dir I/O (F1)
 platform/darwin/test_r6_x2_absolute_in_root_links.py | B0: per-test Darwin /tmp -> /private/tmp configured-root alias (r6 X2, SD-67 STEER-01 item 3); the Darwin/Linux probe parity cases run everywhere
 platform/darwin/test_ipc_launchd.py | A3: per-test opt-in real launchd bootstrap (BINNACLE_A3_LAUNCHD=1)
 platform/darwin/test_search_parity.py | A4: in-body skip when APFS rejects a non-UTF-8 filename
@@ -140,6 +146,12 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_r5_l2c_output_snapshot.py": 1,
     "tests/platform/darwin/test_r6_d2_stop_marker_start.py": 1,
     "tests/platform/darwin/test_r6_d1_runtime_rebind.py": 1,
+    "tests/platform/darwin/test_r6w2_m1_runtime_root.py": 1,
+    "tests/platform/darwin/test_r6w2_m1_ping_jobs_dir.py": 1,
+    "tests/platform/darwin/test_r6w2_m1_d3_minors.py": 1,
+    "tests/platform/darwin/test_r6w2_m1_a2_followups.py": 1,
+    "tests/platform/darwin/test_r6w2_m1_a3_proof_order.py": 1,
+    "tests/platform/darwin/test_r6w2_m1_a3_held_dir_io.py": 1,
     "tests/platform/darwin/test_r6_x2_absolute_in_root_links.py": 1,
     "tests/platform/darwin/test_ipc_launchd.py": 3,
     "tests/platform/darwin/test_search_parity.py": 1,

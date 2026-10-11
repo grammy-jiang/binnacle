@@ -74,6 +74,7 @@ BOOT_SESSION = re.compile(r"[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}")
 SUN_PATH_MAX = 104  # Darwin sockaddr_un.sun_path bytes, terminating NUL included
 REBIND_DELAY_S = (0.1, 5.0)  # D1: first and longest wait before an endpoint rebind
 REBIND_WARN_S = 60.0  # SR6-F4: one endpoint-loss warning per code per 60 s
+GROUP_LISTING_ATTEMPTS = 3  # PRE-J1g-F5: then [] (no listing), as before
 
 
 def serve_job_manager(
@@ -93,7 +94,8 @@ def serve_job_manager(
     manager.stop_pending = lambda: stop_pending_refusal(
         socket_path, manager.owner_instance_id
     )
-    with jobs_dir_writer(manager.jobs_dir):
+    with jobs_dir_writer(manager.jobs_dir) as lock_fd:
+        manager.hold_jobs_dir(lock_fd)  # M1-2, STEER-01; R-M1-N1: fail closed
         recovered = manager.recover()
         log.info("event=job_manager_start pid=%d recovered=%d", os.getpid(), recovered)
         halt, died = threading.Event(), threading.Event()
@@ -368,8 +370,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except Exception:
         log.exception("event=job_manager_owner_unavailable")
         return EX_FAILED
-    reaper = owner.reaper_running
-    log.info("event=job_manager_compose owner_reaper_thread=%s", reaper)
+    log.info("event=job_manager_compose owner_reaper_thread=%s", owner.reaper_running)
     stop = threading.Event()
     for number in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(number, lambda *_: stop.set())
@@ -467,14 +468,13 @@ def group_listing(pgid: int, max_cmd_chars: int) -> list[dict]:
     (SD-59 ruling 2 is pending). The owner calls this only for its verified
     group; it grants no signal right.
     """
-    import time
-
     from binnacle.platform.darwin.process_authority import _decode_process_records
 
-    try:
-        raw = _sysctl((1, 14, 2, pgid), 648 * 65536)
-    except OSError:
-        return []
+    raw = b""  # PRE-J1g-F5: a forking group races the size + read pair (ENOMEM)
+    for _ in range(GROUP_LISTING_ATTEMPTS):
+        with suppress(OSError):
+            raw = _sysctl((1, 14, 2, pgid), 648 * 65536)
+            break
     listing: list[dict] = []
     now = time.time()  # p_starttime is wall clock (microtime at fork)
     for offset in range(0, len(raw) - len(raw) % 648, 648):
