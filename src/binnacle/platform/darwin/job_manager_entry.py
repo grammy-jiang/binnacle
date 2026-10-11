@@ -36,6 +36,7 @@ from pydantic_settings import (
 
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 from binnacle.platform.contracts.native_service_contracts import ServiceLease
+from binnacle.platform.contracts.process_contracts import JOB_MANAGER_UNAVAILABLE
 from binnacle.platform.darwin.generation_runtime import (
     bounded_json,
     check_socket_path,
@@ -55,6 +56,7 @@ from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
 log = logging.getLogger("binnacle.job_manager")
 EX_FAILED, EX_USAGE, EX_TEMPFAIL, EX_CONFIG = 1, 64, 75, 78  # sysexits.h
 STOP_MARKER_SUFFIX = ".stop"
+STOP_PENDING_CODE = "manager_stopping"  # D2: typed, retryable start refusal
 CONFIG_FILE_ENV = "BINNACLE_CONFIG_FILE"
 # env_nested_delimiter overrides, and the runtime root the client would not share
 _OVERRIDES = ("BINNACLE_JOBS__", "BINNACLE_RUN_COMMAND__", "BINNACLE_RUNTIME_DIR")
@@ -77,6 +79,9 @@ def serve_job_manager(
     # manager's stopping event releases every waiting handler at once, so the
     # serving drain never delays close() past launchd's ExitTimeOut.
     manager.stopping = stop
+    manager.stop_pending = lambda: stop_pending_refusal(
+        socket_path, manager.owner_instance_id
+    )
     with jobs_dir_writer(manager.jobs_dir):
         recovered = manager.recover()
         log.info("event=job_manager_start pid=%d recovered=%d", os.getpid(), recovered)
@@ -198,8 +203,7 @@ def compose_owner(boot: str) -> DarwinJobProcessOwner:
     return DarwinJobProcessOwner(boot_id=boot, start_reaper=False)
 
 
-def provisioner_stop(socket_path: Path, owner_instance_id: str) -> bool:
-    """Consume the quiet-window stop marker; it must name this incarnation."""
+def _stop_marker(socket_path: Path, owner_instance_id: str, *, consume: bool) -> bool:
     name = socket_path.name + STOP_MARKER_SUFFIX
     try:
         root = open_private_root(socket_path.parent)
@@ -211,11 +215,37 @@ def provisioner_stop(socket_path: Path, owner_instance_id: str) -> bool:
                 value = bounded_json(stream.read(65537))
         except (OSError, ValueError, NativeCapabilityError):
             return False
-        with suppress(OSError):
-            os.unlink(name, dir_fd=root)
+        if consume:
+            with suppress(OSError):
+                os.unlink(name, dir_fd=root)
     finally:
         os.close(root)
     return value.get("owner_instance_id") == owner_instance_id
+
+
+def stop_pending_refusal(
+    socket_path: Path, owner_instance_id: str
+) -> dict[str, object] | None:
+    """D2: refuse ``start`` while the quiet-window marker names this incarnation.
+
+    Typed and retryable; the text is the existing manager-unavailable class
+    (no new tool text), and the caller creates no job record.
+    """
+    if not stop_marker_names(socket_path, owner_instance_id):
+        return None
+    log.info("event=job_start_refused reason=stop_marker")
+    error = f"{JOB_MANAGER_UNAVAILABLE} at {socket_path}: {STOP_PENDING_CODE}"
+    return {"ok": False, "error": error, "code": STOP_PENDING_CODE, "retryable": True}
+
+
+def provisioner_stop(socket_path: Path, owner_instance_id: str) -> bool:
+    """Consume the quiet-window stop marker; it must name this incarnation."""
+    return _stop_marker(socket_path, owner_instance_id, consume=True)
+
+
+def stop_marker_names(socket_path: Path, owner_instance_id: str) -> bool:
+    """D2: read-only peek; a marker naming another incarnation is ignored."""
+    return _stop_marker(socket_path, owner_instance_id, consume=False)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
