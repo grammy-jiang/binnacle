@@ -380,7 +380,7 @@ def test_search_summary_names_per_file_limit_without_schema_change(tmp_path):
             file_access=access,
         )
         assert result.structured_content["count"] == 1
-        assert not result.structured_content["truncated"]  # skipped, not capped
+        assert result.structured_content["truncated"]
         assert (
             "1 file(s) skipped: larger than the per-file limit"
             in result.content[0].text

@@ -222,9 +222,9 @@ def test_search_budgets_report_truncation_without_partial_line_matches(tree):
     root, _, grant, search, _ = tree
     (root / "file").write_text("needle\n" * 100)
     result = search.search(grant, request(max_bytes=10))
-    # An oversize file is skipped and reported, not a capped result set.
-    assert not result.truncated and not content(result.events)
-    assert result.files_searched == 0
+    assert (
+        result.truncated and not content(result.events) and result.files_searched == 0
+    )
     assert result.events[-1]["data"]["stats"]["skipped_oversize"] == 1
     (root / "file").write_text("needle\n")
     result = search.search(grant, request(max_bytes=100))

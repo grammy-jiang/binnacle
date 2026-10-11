@@ -3,8 +3,8 @@
 Ignore discovery is confined to the grant: .gitignore/.ignore/.rgignore above
 it and global policies are never read. Search treats NUL-containing files as
 text (rg --text, as on Linux); binary_files_skipped stays in the summary stats
-at 0. Files skipped for size or concurrent change are counted in those stats but
-never set ``truncated``: only caps (file, input or output budgets) do.
+at 0. Files skipped for concurrent change are counted in those stats without
+setting ``truncated``; an oversize/budget skip still does (reviewed r3 behavior).
 Files use deterministic path order (rg --sort path); default rg order is unspecified. Listing includes
 binary files, matching rg --files. The helper owns one direct rg child, closes
 pipes and reaps on every exit. This is not general process-tree control.
@@ -314,7 +314,7 @@ class DarwinSearchAccess:
                 continue
             if len(data) > input_left:
                 # Never search a cut line and report a false regex/end anchor hit.
-                # Reported through skipped_oversize; not a capped result set.
+                truncated = True
                 skipped_oversize += 1
                 continue
             input_left -= len(data)
