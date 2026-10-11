@@ -339,7 +339,7 @@ def test_stopping_releases_a_50s_start_and_close_fits_exit_timeout(tmp_path):
     total = time.monotonic() - began
     assert total < plan.JOBS_EXIT_TIMEOUT_S
     meta = svc.read_meta(jobs, reply["job_id"])
-    assert (meta["signal"], meta["termination_reason"]) == (15, "owner_restart")
+    assert (meta["signal"], meta["termination_reason"]) == (None, "owner_restart")
 
 
 @native

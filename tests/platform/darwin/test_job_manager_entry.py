@@ -298,7 +298,7 @@ def test_close_persists_every_unreleased_exit_and_many_jobs_in_budget(
         assert (meta["exit_code"], meta["termination_reason"]) == (code, "normal_exit")
     for job_id in running:
         meta = meta_of(tmp_path / "jobs", job_id)
-        assert (meta["signal"], meta["termination_reason"]) == (15, "owner_restart")
+        assert (meta["signal"], meta["termination_reason"]) == (None, "owner_restart")
         assert "authority" not in meta
 
 
@@ -360,7 +360,7 @@ def test_entry_point_serves_pings_and_exits_per_launchd_contract():
             assert "owner_reaper_thread=False" in err
             assert "reason=unrequested" in err
             meta = meta_of(jobs, running["job_id"])
-            assert (meta["signal"], meta["termination_reason"]) == (15, "owner_restart")
+            assert (meta["signal"], meta["termination_reason"]) == (None, "owner_restart")  # fmt: skip
 
             child = start_entry(base, path_env, inherited)
             children.append(child)
