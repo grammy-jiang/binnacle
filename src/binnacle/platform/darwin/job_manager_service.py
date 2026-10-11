@@ -23,7 +23,7 @@ import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from binnacle.platform.contracts import process_contracts as pc
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
@@ -46,6 +46,13 @@ PARTIAL_SIGNAL_MESSAGE = "previous verified process signal delivery was incomple
 _JOB_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 _STOP_PHASES: tuple[Literal["terminate", "kill"], ...] = ("terminate", "kill")
 EXIT_RETRY_S = 1.0  # an unpersisted exit is retried, never dropped
+REAP_FAILURE_LIMIT = 20  # consecutive reap_exits failures before the manager stops
+
+
+class ReleasingJobOwner(pc.DarwinJobOwner, Protocol):
+    """1.2.0 owner plus J1's additive ack (darwin-side; contracts stay frozen)."""
+
+    def release(self, job_id: str) -> None: ...
 
 
 @contextmanager
@@ -112,7 +119,7 @@ class DarwinJobManager:
     def __init__(
         self,
         *,
-        owner: pc.DarwinJobOwner,
+        owner: ReleasingJobOwner,
         jobs_dir: Path,
         boot_id: str,
         wait_max_s: float,
@@ -199,7 +206,10 @@ class DarwinJobManager:
             job_id = self._launch(command, workdir, stdin, call_id)
         except (OSError, NativeCapabilityError) as exc:
             return {"ok": False, "error": f"could not start job: {exc}"}
-        exited = self.owner.wait(job_id, wait_seconds)
+        try:
+            exited = self.owner.wait(job_id, wait_seconds)
+        except pc.JobOwnerLost:  # reaper fault: authority UNKNOWN, record no exit
+            exited = None
         if exited is not None:
             self.record_exit(exited)
         return {"ok": True, "job_id": job_id, "state": self.state(job_id)}
@@ -293,7 +303,11 @@ class DarwinJobManager:
             except Partial as exc:
                 partial.append(exc)
                 self._persist_partial(job_id)
-            exited = self.owner.wait(job_id, grace)
+            try:
+                exited = self.owner.wait(job_id, grace)
+            except pc.JobOwnerLost:
+                log.warning("event=job_stop_owner_lost job_id=%s", job_id)
+                break  # authority UNKNOWN: record no exit, signal nothing more
             if exited is not None:
                 self.record_exit(exited)
                 break
@@ -348,9 +362,10 @@ class DarwinJobManager:
                     self._unrecorded.pop(exited.job_id, None)  # never ours to write
                     log.warning("event=job_exit_unrecorded job_id=%s", exited.job_id)
                     return False
-                if not _terminal(meta):
+                if not _terminal(meta):  # first writer wins; never overwritten
                     self._write_meta(exited.job_id, _exit_meta(meta, exited))
                 self._unrecorded.pop(exited.job_id, None)
+                self._release(exited.job_id)
         except OSError as exc:
             with self._lock:
                 self._unrecorded[exited.job_id] = exited
@@ -362,6 +377,14 @@ class DarwinJobManager:
             return False
         log.info("event=job_exit job_id=%s", exited.job_id)
         return True
+
+    def _release(self, job_id: str) -> None:
+        """J1 1.2.0-additive ack, only once the terminal record is durable."""
+        try:
+            self.owner.release(job_id)
+        except (Unowned, ValueError, pc.JobOwnerLost):
+            # Durable already; close() re-returns it and record_exit is idempotent.
+            log.warning("event=job_release_refused job_id=%s", job_id)
 
     def retry_unrecorded(self) -> int:
         """Re-attempt queued exits; returns how many are still not durable."""
@@ -413,15 +436,24 @@ class DarwinJobManager:
         """Drive the owner's sole reaper and persist every exit it reports.
 
         One failed record never ends this loop: the exit is queued and retried.
+        A lost owner, or ``REAP_FAILURE_LIMIT`` consecutive reap failures, ends
+        it instead: serving then stops, launchd restarts and D-1 applies.
         """
-        retry_at = 0.0
+        retry_at, failures = 0.0, 0
         while not stop.is_set():
             try:
                 exits = self.owner.reap_exits(0.1)
+            except pc.JobOwnerLost:  # this process no longer owns the reaper
+                log.exception("event=job_manager_owner_lost")
+                return
             except Exception:
                 log.exception("event=job_manager_reap_error")
+                failures += 1
+                if failures >= REAP_FAILURE_LIMIT:
+                    return
                 stop.wait(0.1)
                 continue
+            failures = 0
             for exited in exits:
                 self._record_guarded(exited)
             if self._unrecorded and time.monotonic() >= retry_at:
@@ -452,3 +484,14 @@ class DarwinJobManager:
                 if mine and not _terminal(meta):
                     self._mark_unknown(job_id, meta, "owner_restart")
         return exits
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """``python -m binnacle.platform.darwin.job_manager_service`` (launchd argv)."""
+    from binnacle.platform.darwin.job_manager_entry import main as serve_main
+
+    return serve_main(argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

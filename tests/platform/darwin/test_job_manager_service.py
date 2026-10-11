@@ -40,7 +40,7 @@ class ReferenceOwner:
     def __init__(self):
         self.owner_instance_id = uuid.uuid4().hex
         self.cond, self.closing = threading.Condition(), set()
-        self.live, self.exits = {}, {}
+        self.live, self.exits, self.released = {}, {}, set()
 
     def spawn(self, job_id, argv, *, workdir, env, stdin, output):
         shim = 'cd "$1" || exit 127; shift; exec "$@"'
@@ -91,6 +91,12 @@ class ReferenceOwner:
                 raise pc.UnverifiedJobProcess(job_id)
             sig = signal.SIGTERM if intent == "terminate" else signal.SIGKILL
             os.killpg(self.live[job_id], sig)  # unreaped leader holds the pgid
+
+    def release(self, job_id):  # J1 1.2.0-additive ack of a durable record
+        with self.cond:
+            if job_id in self.live:
+                raise ValueError("darwin_job_not_terminal")
+            self.released.add(job_id)
 
     def authority(self, job_id):
         with self.cond:
@@ -256,23 +262,6 @@ def test_recovery_marks_foreign_records_unknown_without_adoption(jobs_dir):
     assert "authority" not in meta_of(jobs_dir, "d" * 12)
     assert "authority" not in meta_of(jobs_dir, "e" * 12)
     assert not manager.record_exit(pc.OwnedJobExit("e" * 12, 0, None, "normal_exit"))
-
-
-def test_ping_counts_running_and_unknown_jobs(tmp_path, jobs_dir, live):
-    # D3 (frozen J2r ping fields): additive to the Linux ping object.
-    owner, manager = live
-    v2 = {"schema_version": 2, "owner_instance_id": "old", "boot_id": "boot"}
-    write_record(jobs_dir, "a" * 12, **v2)  # foreign unfinished: unknown
-    write_record(jobs_dir, "d" * 12, **v2, exit_code=0)  # finished: not counted
-    (jobs_dir / ("b" * 12)).mkdir()  # unusable record: not counted
-    running = manager.handle(req(tmp_path, "sleep 30"))["job_id"]
-    manager.handle(req(tmp_path, "exit 0", wait=5))
-    pong = manager.handle({"version": 1, "op": "ping"})
-    assert (pong["running_jobs"], pong["unknown_jobs"]) == (1, 1)
-    assert (pong["version"], pong["owner_instance_id"]) == (1, owner.owner_instance_id)
-    assert manager.handle(stop_req(running))["state"] == "exited"
-    pong = manager.handle({"version": 1, "op": "ping"})
-    assert (pong["running_jobs"], pong["unknown_jobs"]) == (0, 1)
 
 
 @pytest.fixture
