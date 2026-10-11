@@ -54,7 +54,7 @@ asyncio.run(check())
 """
     result = subprocess.run(
         [sys.executable, "-c", script],
-        env={**os.environ, "BINNACLE_CONFIG_FILE": str(config)},
+        env={**os.environ, "HOME": str(tmp_path), "BINNACLE_CONFIG_FILE": str(config)},
         capture_output=True,
         text=True,
         check=False,

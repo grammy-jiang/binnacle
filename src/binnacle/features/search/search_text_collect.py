@@ -141,7 +141,7 @@ def search_opened(
     from binnacle.features.search.search_text_budget import enforce_result_budget
     from binnacle.platform.contracts.file_access_contracts import SearchRequest
 
-    with access.operation(path) as (grant, relative, display):
+    with access.operation(path, "search_text") as (grant, relative, display):
         if access.search is None:
             raise CodedToolError(
                 "native_capability_unavailable", "Search provider missing."

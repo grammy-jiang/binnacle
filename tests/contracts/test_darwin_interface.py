@@ -321,7 +321,9 @@ _DARWIN_ONLY = pytest.mark.skipif(
 )
 
 
-def _generation_app(tmp_path, monkeypatch):
+def _generation_app(
+    tmp_path, monkeypatch, extra_roots=(), tools=("read_file", "list_files")
+):
     from dataclasses import replace
 
     from binnacle.application import compose_native_tools
@@ -332,14 +334,14 @@ def _generation_app(tmp_path, monkeypatch):
     root = (tmp_path / "root").resolve()
     root.mkdir()
     (root / "file").write_text("hello")
-    settings = Settings(roots=RootsSettings(default_root=root, extra_roots=()))
+    settings = Settings(roots=RootsSettings(default_root=root, extra_roots=extra_roots))
     scope = {
         tool: replace(
             row, capability=Capability(CapabilityState.UNAVAILABLE, "test", tool)
         )
         for tool, row in DARWIN_RELEASE_SCOPE.items()
     }
-    for tool in ("read_file", "list_files"):
+    for tool in tools:
         scope[tool] = replace(
             scope[tool], capability=Capability(CapabilityState.LIMITED, "test", tool)
         )

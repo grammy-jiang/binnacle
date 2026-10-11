@@ -5,6 +5,7 @@ does not) and §7.11. Sanitization details: docs/tools/read_file.md §3.
 """
 
 import fnmatch
+import logging
 import re
 
 # These bindings contain ordinary injected contracts, never host selection.
@@ -27,6 +28,15 @@ from binnacle.platform.contracts.file_access_contracts import (
     RootGrant,
     SearchAccess,
 )
+
+log = logging.getLogger(__name__)
+
+# Linux texts for a request that lands in a missing root, per tool.
+_MISSING_ROOT_ERRORS = {
+    "list_files": ("directory_not_found", "Directory not found"),
+    "search_text": ("path_not_found", "Path not found"),
+}
+_DEFAULT_MISSING = ("file_not_found", "File not found")
 
 
 def _canonical_roots(roots: RootsSettings) -> tuple[Path, ...]:
@@ -236,6 +246,9 @@ class FileToolAccess:
         self.capability = capability
         self.capabilities = dict(capabilities) if capabilities is not None else None
         self.default_root = roots.default_root.expanduser()
+        self._allowed = roots.allowed
+        # alias/canonical -> (canonical, reason) for roots skipped at entry.
+        self.skipped: dict[Path, tuple[Path, str]] = {}
         self.grants: dict[Path, RootGrant] = {}
         self.closed = False
         self._lock = RLock()
@@ -272,7 +285,18 @@ class FileToolAccess:
                 "native_capability_unavailable", "File provider missing."
             )
         for alias, canonical in self._pairs:
-            grant = self.files.grant(canonical, generation=generation)
+            try:
+                grant = self.files.grant(canonical, generation=generation)
+            except (NativeCapabilityError, OSError) as exc:
+                if self._factory is None:
+                    raise
+                # A missing/unopenable root has no grant this generation; it is
+                # retried only at the next lifespan entry, never live.
+                reason = getattr(exc, "code", None) or type(exc).__name__
+                self.skipped[alias] = (canonical, reason)
+                self.skipped[canonical] = (canonical, reason)
+                log.warning("event=root_skipped root=%s reason=%s", canonical, reason)
+                continue
             self.grants[alias] = grant
             self.grants[canonical] = grant
 
@@ -282,6 +306,7 @@ class FileToolAccess:
             if self._factory is not None and self._active == 0 and self._pairs:
                 files, search = self._factory()
                 self.files, self.search, self.grants = files, search, {}
+                self.skipped = {}
                 try:
                     self._open_grants(f"{self._generation}-{uuid4().hex}")
                 except BaseException:
@@ -315,7 +340,30 @@ class FileToolAccess:
             )
         return self.files
 
-    def select(self, raw: str) -> tuple[RootGrant, str, Path]:
+    def _unopened_root_error(self, raw: str, tool: str) -> CodedToolError | None:
+        """Linux-equivalent error for a request that no opened grant covers."""
+        cleaned = raw.strip().removeprefix("@")
+        candidate = Path(cleaned).expanduser()
+        if not candidate.is_absolute():
+            candidate = self.default_root / candidate
+        display = candidate
+        inside = False
+        for root, (canonical, _reason) in self.skipped.items():
+            if candidate.is_relative_to(root):
+                display = canonical / candidate.relative_to(root)
+                inside = True
+                break
+        if self.grants:
+            if not inside:
+                return None
+            code, text = _MISSING_ROOT_ERRORS.get(tool, _DEFAULT_MISSING)
+            return CodedToolError(code, f"{text}: {display}.")
+        allowed = ", ".join(str(r) for r in self._allowed)
+        return CodedToolError(
+            "path_outside_root", f"Path outside allowed roots ({allowed}): {display}"
+        )
+
+    def select(self, raw: str, tool: str = "read_file") -> tuple[RootGrant, str, Path]:
         with self._lock:
             if self.closed:
                 raise CodedToolError(
@@ -326,13 +374,24 @@ class FileToolAccess:
                     "native_capability_unavailable",
                     "native_capability_unavailable: Files and search are unavailable on macOS.",
                 )
-            return select_root_grant(
-                raw, default_root=self.default_root, grants=dict(self.grants)
-            )
+            try:
+                return select_root_grant(
+                    raw, default_root=self.default_root, grants=dict(self.grants)
+                )
+            except CodedToolError as exc:
+                if (
+                    self.skipped
+                    and str(exc) == "Path outside opened roots."
+                    and (err := self._unopened_root_error(raw, tool)) is not None
+                ):
+                    raise err from None
+                raise
 
     @contextmanager
-    def operation(self, raw: str) -> Iterator[tuple[RootGrant, str, Path]]:
-        grant, relative, display = self.select(raw)
+    def operation(
+        self, raw: str, tool: str = "read_file"
+    ) -> Iterator[tuple[RootGrant, str, Path]]:
+        grant, relative, display = self.select(raw, tool)
         try:
             yield grant, relative, display
         except NativeCapabilityError as exc:
