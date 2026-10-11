@@ -18,9 +18,28 @@ from binnacle.features.commands.command_contracts import (
 
 
 class DurableCommandBackend:
-    """Delegate without owning configuration, processes, caches, or resources."""
+    """Delegate without owning configuration, processes, caches, or resources.
 
-    __slots__ = ()
+    r6 X1 (SD-67): the only state is the r5 L2c pairing below. A job state's
+    log size pins this thread's next log read of that job to the same
+    append-only prefix, so a reply's text and byte count are one snapshot.
+    """
+
+    __slots__ = ("_snapshot",)
+
+    def __init__(self) -> None:
+        self._snapshot = threading.local()
+
+    def _pin(self, job_id: str, state: dict | None) -> dict | None:
+        size = state.get("log_bytes") if isinstance(state, dict) else None
+        self._snapshot.last = (job_id, size) if isinstance(size, int) else None
+        return state
+
+    def _snapshot_bytes(self, job_id: str) -> int | None:
+        """Consume the log size the paired job state measured, if any."""
+        last = getattr(self._snapshot, "last", None)
+        self._snapshot.last = None
+        return last[1] if last is not None and last[0] == job_id else None
 
     def start_and_wait(
         self, command: str, workdir: Path, stdin: str | None, wait_seconds: float
@@ -37,7 +56,7 @@ class DurableCommandBackend:
     def job_state(self, job_id: str) -> dict | None:
         from binnacle.features.commands import jobs
 
-        return jobs.job_state(job_id)
+        return self._pin(job_id, jobs.job_state(job_id))
 
     def list_jobs(self) -> list[dict]:
         from binnacle.features.commands import jobs
@@ -47,19 +66,25 @@ class DurableCommandBackend:
     def await_exit(self, job_id: str, timeout: float) -> dict | None:
         from binnacle.features.commands import jobs
 
-        return jobs.await_exit(job_id, timeout)
+        return self._pin(job_id, jobs.await_exit(job_id, timeout))
 
     def read_log(self, job_id: str) -> bytes:
         from binnacle.features.commands import jobs
 
-        return jobs.read_log(job_id)
+        size = self._snapshot_bytes(job_id)
+        data = jobs.read_log(job_id)
+        return data if size is None else data[:size]
 
     def read_log_range(
         self, job_id: str, start: int, max_bytes: int
     ) -> tuple[bytes, int]:
         from binnacle.features.commands import jobs
 
-        return jobs.read_log_range(job_id, start, max_bytes)
+        size = self._snapshot_bytes(job_id)
+        read = jobs.read_log_range(job_id, start, max_bytes)
+        if size is None or not start <= size <= read[1]:
+            return read  # unpinned, or no longer append-only: never invent one
+        return read[0][: size - start], size
 
     def job_processes(self, job_id: str, max_cmd_chars: int = 200) -> list[dict]:
         from binnacle.features.commands import jobs
