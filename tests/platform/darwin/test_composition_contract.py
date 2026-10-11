@@ -4,6 +4,8 @@ import os
 import subprocess
 import sys
 
+import pytest
+
 
 def test_native_server_import_has_no_linux_engine(tmp_path):
     token = tmp_path / "token"
@@ -463,3 +465,19 @@ def test_cli_preserves_linux_loop_and_reserves_darwin_sigchld(monkeypatch):
         cli.serve()
         assert called[-1]["loop"] == loop
         assert called[-1]["http"] == "httptools"
+
+
+@pytest.mark.skipif(
+    sys.platform != "darwin", reason="B0 native authenticated IPC capacity"
+)
+def test_concurrent_handlers_capacity_backlog_and_fresh_generation(
+    native_channel_qualification,
+):
+    receipt = native_channel_qualification
+    assert receipt["backlogs"] == [8]
+    assert receipt["peak"] == 2
+    assert receipt["calls"] == 2 and receipt["effects"] == 1
+    assert receipt["replies"] == [{"effects": 1}, {"effects": 1}]
+    assert receipt["capacity_error"] in ("ipc_connect_refused", "ipc_connect_timeout")
+    assert 0.1 <= receipt["refusal_time"] < 1
+    assert receipt["unique_generations"] and receipt["generation_bits"] >= 128

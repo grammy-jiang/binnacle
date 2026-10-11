@@ -25,6 +25,7 @@ from binnacle.platform.contracts.darwin_release_scope import (
 from binnacle.platform.contracts.file_access_contracts import FileAccess, SearchAccess
 from binnacle.platform.contracts.native_service_contracts import (
     AuthenticatedChannel,
+    NativeRequestHandler,
     ServiceLease,
 )
 from binnacle.platform.contracts.process_contracts import ProcessBackend
@@ -191,23 +192,59 @@ def create_service_log_writer(
     )
 
 
-def create_service_lease(*, root: Path, label: str, generation: str) -> ServiceLease:
+def create_service_lease(
+    *, root: Path, label: str, generation: str | None = None
+) -> ServiceLease:
+    """Create fresh per-start authority; explicit generations support test peers."""
     if host_os_family() != "darwin":
         raise UnsupportedHostOS("Native service lease requires Darwin")
     from binnacle.platform.darwin.generation_runtime import open_service_lease
 
+    if generation is None:
+        from secrets import token_hex
+
+        generation = token_hex(16)
     return open_service_lease(root=root, label=label, generation=generation)
 
 
 def connect_native_channel(*, socket_path: Path, lease: ServiceLease, timeout_s: float):
     if host_os_family() != "darwin":
         raise UnsupportedHostOS("Native authenticated channel requires Darwin")
+    import time
+
+    from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
     from binnacle.platform.darwin.ipc_transport import connect_authenticated
 
-    return connect_authenticated(socket_path, lease=lease, timeout_s=timeout_s)
+    # A3 caps channels at 16 with backlog 8. Retry only the authenticated
+    # connection/readiness handshake; never replay a dispatched RPC mutation.
+    deadline = time.monotonic() + timeout_s
+    while True:
+        try:
+            return connect_authenticated(socket_path, lease=lease, timeout_s=timeout_s)
+        except NativeCapabilityError as exc:
+            remaining = deadline - time.monotonic()
+            if (
+                exc.code not in ("ipc_connect_refused", "ipc_connect_timeout")
+                or remaining <= 0
+            ):
+                raise
+            time.sleep(min(0.02, remaining))
+            timeout_s = max(0.000001, deadline - time.monotonic())
 
 
-def serve_native_channel(*, socket_path: Path, lease: ServiceLease, handler, stop):
+def serve_native_channel(
+    *,
+    socket_path: Path,
+    lease: ServiceLease,
+    handler: NativeRequestHandler,
+    stop: Event,
+):
+    """Forward concurrent bounded handlers; callers own locks and idempotency.
+
+    Capacity is 16 channels with listen backlog 8; keep long-lived witness
+    channels well below capacity. Saturation can temporarily deny readiness.
+    No production Darwin manager or mutating RPC handler is enabled here.
+    """
     if host_os_family() != "darwin":
         raise UnsupportedHostOS("Native authenticated channel requires Darwin")
     from binnacle.platform.darwin.ipc_transport import serve_authenticated
