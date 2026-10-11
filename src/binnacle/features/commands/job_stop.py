@@ -74,6 +74,12 @@ def stop_embedded(
             job_id,
             type(exc).__name__,
         )
+        if (meta or {}).get("stop_requested"):
+            # A concurrent stop may have just killed the leader. It is then a
+            # zombie or gone, so verification fails while the owner has not yet
+            # persisted the exit. Wait for that durable record instead of
+            # returning the transient "running"/"unknown" state.
+            return await_exit(job_id, stop_sigkill_grace_s)
         return job_state(job_id)
 
     partial_failures: list[JobSignalDeliveryError] = []

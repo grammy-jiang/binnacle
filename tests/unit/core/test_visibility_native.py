@@ -1,6 +1,7 @@
 """Native Visibility owns marking and filtering; policy remains request-local."""
 
 import asyncio
+import gc
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -82,7 +83,12 @@ def test_no_context_and_no_session_introspection_are_unrestricted():
         transform = ClientToolVisibilityTransform()
         tools = [Tool(name="one", parameters={})]
         assert await transform.list_tools(tools) is tools
-        async with Context(FastMCP("direct")):
+        # Context keeps only a weak reference to its server. Hold the server
+        # strongly so a cyclic-GC pass cannot collect it before __aenter__.
+        server = FastMCP("direct")
+        context = Context(server)
+        gc.collect()  # force the hazard: only a strong reference keeps it alive
+        async with context:
             assert await transform.list_tools(tools) is tools
 
     asyncio.run(go())
