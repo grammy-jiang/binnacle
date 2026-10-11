@@ -166,6 +166,14 @@ repos:
         language: system
         files: (^src/binnacle/.*\.py$|^scripts/g7_legacy_gate\.py$)
         pass_filenames: false
+      # TYPE-01: Job Awareness typing contract with exact negative controls.
+      # Runs from the locked environment; the script verifies mypy against uv.lock.
+      - id: job-awareness-types
+        name: Job Awareness typing contract (TYPE-01)
+        entry: uv run --no-sync python scripts/check_job_awareness_types.py
+        language: system
+        files: (^src/binnacle/features/commands/job_awareness/.*\.py$|^tests/contracts/job_awareness/.*\.py$|^scripts/check_job_awareness_types\.py$|^uv\.lock$)
+        pass_filenames: false
       - id: fast-tests
         name: fast unit and contract tests
         entry: uv run --no-sync python scripts/run_test_suite.py --suite fast --seed 12345
