@@ -222,6 +222,7 @@ extend-select = ["B", "I", "UP", "C4", "PIE", "RET", "DTZ", "T10"]
 
 [tool.importlinter]
 root_package = "binnacle"
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 id = "commands-tools-only-commands-server"
@@ -452,4 +453,41 @@ allowed_importers = [
     "binnacle.observability.logstats_io",
     "binnacle.observability.system_resource_history",
     "binnacle.deployment.units",
+]
+
+[[tool.importlinter.contracts]]
+id = "job-awareness-core-isolation"
+name = "Job Awareness Core and portable ledger do not import framework or platform owners"
+type = "forbidden"
+source_modules = ["binnacle.features.commands.job_awareness"]
+forbidden_modules = [
+    "fastmcp",
+    "binnacle.mcp",
+    "binnacle.platform",
+    "binnacle.companions",
+    "binnacle.deployment",
+    "binnacle.features.commands.jobs",
+    "binnacle.features.commands.job_owner",
+    "binnacle.features.commands.job_manager",
+    "binnacle.features.commands.job_client",
+    "binnacle.features.commands.job_store",
+    "binnacle.features.commands.command_backend",
+    "binnacle.features.commands.job_resource_history",
+]
+
+[[tool.importlinter.contracts]]
+id = "job-awareness-adapter-isolation"
+name = "Inert Job Awareness MCP adapter depends only on native framework and injected bindings"
+type = "forbidden"
+source_modules = [
+    "binnacle.mcp.job_awareness_hint",
+    "binnacle.mcp.job_awareness_hint_schema",
+    "binnacle.mcp.job_awareness_hint_walk",
+    "binnacle.mcp.job_awareness_hint_identity",
+]
+forbidden_modules = [
+    "binnacle.features",
+    "binnacle.platform",
+    "binnacle.companions",
+    "binnacle.deployment",
 ]

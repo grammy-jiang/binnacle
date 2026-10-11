@@ -1,0 +1,537 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:binnacle:ja:p0:contracts:v1",
+  "$defs": {
+    "JobRef": {
+      "type": "object",
+      "properties": {
+        "run_namespace": {
+          "type": "string",
+          "pattern": "^ja1_[0-9a-f]{32}$",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "job_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{12}$",
+          "minLength": 12,
+          "maxLength": 12
+        },
+        "incarnation": {
+          "type": "string",
+          "pattern": "^g1_[0-9a-f]{32}$",
+          "minLength": 35,
+          "maxLength": 35
+        }
+      },
+      "required": [
+        "run_namespace",
+        "job_id",
+        "incarnation"
+      ],
+      "additionalProperties": false
+    },
+    "PrincipalClaims": {
+      "type": "object",
+      "properties": {
+        "issuer_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$",
+          "minLength": 32,
+          "maxLength": 32
+        },
+        "tenant_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$",
+          "minLength": 32,
+          "maxLength": 32
+        },
+        "subject_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$",
+          "minLength": 32,
+          "maxLength": 32
+        },
+        "consumer_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$",
+          "minLength": 32,
+          "maxLength": 32
+        },
+        "audience": {
+          "const": "binnacle-ja-lab-v1"
+        }
+      },
+      "required": [
+        "issuer_id",
+        "tenant_id",
+        "subject_id",
+        "consumer_id",
+        "audience"
+      ],
+      "additionalProperties": false
+    },
+    "TerminalOutcome": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "EXIT_CODE",
+            "SIGNAL"
+          ]
+        },
+        "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "OutputSnapshot": {
+      "type": "object",
+      "properties": {
+        "job": {
+          "$ref": "#/$defs/JobRef"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1048576
+        },
+        "terminal": {
+          "$ref": "#/$defs/TerminalOutcome"
+        },
+        "sealed_at_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "retained_until_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "source_kind": {
+          "const": "CONTROLLER_SEALED_SYNTHETIC"
+        },
+        "seal_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$",
+          "minLength": 32,
+          "maxLength": 32
+        }
+      },
+      "required": [
+        "job",
+        "sha256",
+        "byte_length",
+        "terminal",
+        "sealed_at_ms",
+        "retained_until_ms",
+        "source_kind",
+        "seal_id"
+      ],
+      "additionalProperties": false
+    },
+    "RunGrantClaims": {
+      "type": "object",
+      "properties": {
+        "principal": {
+          "$ref": "#/$defs/PrincipalClaims"
+        },
+        "issuer_epoch": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$",
+          "minLength": 32,
+          "maxLength": 32
+        },
+        "grant_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$",
+          "minLength": 32,
+          "maxLength": 32
+        },
+        "run_namespace": {
+          "type": "string",
+          "pattern": "^ja1_[0-9a-f]{32}$",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "jobs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/JobRef"
+          },
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "observe",
+              "read",
+              "ack"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true
+        },
+        "issued_at_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "expires_at_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "consent_version": {
+          "const": "lab-user-run-v1"
+        },
+        "authority_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "principal",
+        "issuer_epoch",
+        "grant_id",
+        "run_namespace",
+        "jobs",
+        "scopes",
+        "issued_at_ms",
+        "expires_at_ms",
+        "consent_version",
+        "authority_revision"
+      ],
+      "additionalProperties": false,
+      "$comment": "Capability generation=(issuer_epoch,grant_id); new capability requires a fresh grant_id. Current trusted authority and opaque handle registry are checked through HandleAuthorityPort; claims parsing is never authorization."
+    },
+    "ByteRange": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1048576
+        },
+        "stop": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1048576
+        }
+      },
+      "required": [
+        "start",
+        "stop"
+      ],
+      "additionalProperties": false
+    },
+    "PageEnvelope": {
+      "type": "object",
+      "properties": {
+        "snapshot": {
+          "$ref": "#/$defs/OutputSnapshot"
+        },
+        "range": {
+          "$ref": "#/$defs/ByteRange"
+        },
+        "page_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "data_base64": {
+          "type": "string",
+          "maxLength": 21848,
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+        },
+        "proof": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "expires_at_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "snapshot",
+        "range",
+        "page_sha256",
+        "data_base64",
+        "proof",
+        "expires_at_ms"
+      ],
+      "additionalProperties": false
+    },
+    "ReceiptProofRecord": {
+      "type": "object",
+      "properties": {
+        "proof_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "principal": {
+          "$ref": "#/$defs/PrincipalClaims"
+        },
+        "issuer_epoch": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$",
+          "minLength": 32,
+          "maxLength": 32
+        },
+        "grant_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$",
+          "minLength": 32,
+          "maxLength": 32
+        },
+        "job": {
+          "$ref": "#/$defs/JobRef"
+        },
+        "snapshot_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "range": {
+          "$ref": "#/$defs/ByteRange"
+        },
+        "page_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "expires_at_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "consumed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "proof_sha256",
+        "principal",
+        "issuer_epoch",
+        "grant_id",
+        "job",
+        "snapshot_sha256",
+        "range",
+        "page_sha256",
+        "expires_at_ms",
+        "consumed"
+      ],
+      "additionalProperties": false
+    },
+    "ConsumerReceipt": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "enum": [
+            "UNCONFIRMED",
+            "PARTIAL",
+            "COMPLETE",
+            "OUTPUT_EXPIRED"
+          ]
+        },
+        "job": {
+          "$ref": "#/$defs/JobRef"
+        },
+        "snapshot_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "ranges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ByteRange"
+          },
+          "maxItems": 64
+        },
+        "empty_confirmed": {
+          "type": "boolean"
+        },
+        "commit_version": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "authority_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "state",
+        "job",
+        "snapshot_sha256",
+        "ranges",
+        "empty_confirmed",
+        "commit_version",
+        "authority_revision"
+      ],
+      "additionalProperties": false
+    },
+    "BoundaryError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "enum": [
+            "DENIED",
+            "INVALID_SELECTOR",
+            "SOURCE_UNSEALED",
+            "SOURCE_UNAVAILABLE",
+            "OUTPUT_CHANGED",
+            "OUTPUT_EXPIRED",
+            "INVALID_PROOF",
+            "CLOCK_UNSAFE",
+            "QUOTA_EXCEEDED",
+            "BUSY",
+            "STORAGE_UNAVAILABLE",
+            "UNSUPPORTED_RESULT"
+          ]
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "additionalProperties": false
+    },
+    "ReceiptQueryResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "const": true
+            },
+            "receipt": {
+              "$ref": "#/$defs/ConsumerReceipt"
+            }
+          },
+          "required": [
+            "ok",
+            "receipt"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "$ref": "#/$defs/BoundaryError"
+            }
+          },
+          "required": [
+            "ok",
+            "error"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ReminderCandidate": {
+      "type": "object",
+      "properties": {
+        "job": {
+          "$ref": "#/$defs/JobRef"
+        },
+        "category": {
+          "enum": [
+            "TERMINAL_UNCONFIRMED",
+            "TERMINAL_PARTIAL",
+            "RUNNING"
+          ]
+        },
+        "observation_epoch": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$",
+          "minLength": 32,
+          "maxLength": 32
+        },
+        "snapshot_sha256": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "minLength": 64,
+              "maxLength": 64
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "job",
+        "category",
+        "observation_epoch",
+        "snapshot_sha256"
+      ],
+      "additionalProperties": false
+    },
+    "RenderedHint": {
+      "type": "object",
+      "properties": {
+        "carrier": {
+          "enum": [
+            "META",
+            "TEXT"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "utf8_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 512
+        }
+      },
+      "required": [
+        "carrier",
+        "text",
+        "utf8_bytes"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "description": "Proposed internal LAB_ONLY data shapes. Parsing these schemas never authenticates a caller. Runtime relations in shared-contracts.json are mandatory.",
+  "$comment": "Original native ToolResult is not a shared wire record. I2-2 must apply resource-budget.json and RESULT-VALIDATION.md before copying/schema evaluation; JSON Schema cannot enforce work, depth or UTF-8 byte counts. HandleAuthorityPort and opaque handles are Python-only, never deserialized authority."
+}

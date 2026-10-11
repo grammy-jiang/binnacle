@@ -70,6 +70,31 @@ def manifest_groups() -> dict[str, set[str]]:
             "features/commands/job_resource_history.py",
             "features/commands/job_store.py",
         },
+        # Inert, default-off Job Awareness: portable core plus SQLite ledger.
+        # Mirrors the job-awareness-core-isolation import-linter contract.
+        "job_awareness_core": {
+            "features/commands/job_awareness/__init__.py",
+            "features/commands/job_awareness/models.py",
+            "features/commands/job_awareness/ports.py",
+            "features/commands/job_awareness/identifiers.py",
+            "features/commands/job_awareness/observation.py",
+            "features/commands/job_awareness/snapshots.py",
+            "features/commands/job_awareness/projection.py",
+            "features/commands/job_awareness/receipts.py",
+            "features/commands/job_awareness/grants.py",
+            "features/commands/job_awareness/proofs.py",
+            "features/commands/job_awareness/hint_policy.py",
+            "features/commands/job_awareness/hint_render.py",
+            "features/commands/job_awareness/receipt_schema.py",
+            "features/commands/job_awareness/receipt_store.py",
+        },
+        # Native FastMCP adapter modules; mirrors job-awareness-adapter-isolation.
+        "job_awareness_adapter": {
+            "mcp/job_awareness_hint.py",
+            "mcp/job_awareness_hint_schema.py",
+            "mcp/job_awareness_hint_walk.py",
+            "mcp/job_awareness_hint_identity.py",
+        },
         "platform_contracts": {
             "platform/__init__.py",
             "platform/contracts/__init__.py",
