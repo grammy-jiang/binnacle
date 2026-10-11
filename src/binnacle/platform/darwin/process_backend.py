@@ -5,6 +5,9 @@ enabled by configuration, environment, witness state or request fields. R1 and
 CR1 approval of the exact candidate plus B0 wiring are still required. Native
 tests exercise the private runner directly; this is not runtime acceptance.
 Durable launch/stop and historical PID adoption remain unavailable.
+On completion the private runner terminates background members of its owned
+group before reaping the leader. Processes that leave the group (setpgid,
+setsid, shell set -m) are not tracked; every result still reports descendants_unverified=true.
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ from binnacle.platform.contracts.process_contracts import (
     UnverifiedJobProcess,
 )
 from binnacle.platform.darwin.process_authority import (
+    DirectChildExitObserver,
     _ForegroundOwner,
     _is_darwin,
     _unavailable,
@@ -50,8 +54,21 @@ class DarwinProcessBackend:
         return observe_authority(job_id, witness=self._witness)
 
     def run_foreground(
-        self, request: ForegroundRequest, *, cancel: Event
+        self,
+        request: ForegroundRequest,
+        *,
+        cancel: Event,
+        on_direct_child_exit: DirectChildExitObserver | None = None,
     ) -> ForegroundResult:
+        """Keep execution and the owned-reaper observer inert until acceptance.
+
+        Once enabled, the optional observer receives the sole wait4 rusage once
+        under the owner lock/generation, including timeout/cancel cleanup. It
+        must be bounded and must not wait on another thread using this owner.
+        B0 may bind a job ID to A5's record_direct_child_exit; no second waiter
+        or private runner access is needed. Callback failure is a typed error,
+        never a retry or a job-wide resource measurement.
+        """
         raise _unavailable("native_capability_unavailable")
 
     def launch(
@@ -257,7 +274,11 @@ class _ForegroundRunner:
             raise _unavailable("darwin_foreground_cancelled")
 
     def run_foreground(
-        self, request: ForegroundRequest, *, cancel: Event
+        self,
+        request: ForegroundRequest,
+        *,
+        cancel: Event,
+        on_direct_child_exit: DirectChildExitObserver | None = None,
     ) -> ForegroundResult:
         self._validate(request, cancel)
         started = time.monotonic()
@@ -284,7 +305,12 @@ class _ForegroundRunner:
                 for key, value in os.environ.items()
                 if key not in ("BASH_ENV", "ENV")
             }
-            owner = _ForegroundOwner(argv, env=env, file_actions=pipes.actions())
+            owner = _ForegroundOwner(
+                argv,
+                env=env,
+                file_actions=pipes.actions(),
+                on_direct_child_exit=on_direct_child_exit,
+            )
             pipes.spawned()
             status = self._wait(owner, pipes, request, cancel, started)
             pipes.drain()
