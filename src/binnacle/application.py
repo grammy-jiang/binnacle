@@ -20,6 +20,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from binnacle.config import Settings
+from binnacle.features.commands.command_backend import (
+    configure_native_release_states,
+)
 from binnacle.features.commands.command_contracts import (
     CommandBackend,
     CommandFailure,
@@ -51,6 +54,13 @@ from binnacle.platform.contracts.darwin_release_scope import (
     DARWIN_RELEASE_SCOPE,
     FILE_TOOLS,
     ReleaseDecision,
+)
+
+configure_native_release_states(
+    {
+        tool: DARWIN_RELEASE_SCOPE[tool].capability.state.value
+        for tool in ("run_command", "job_status", "stop_job")
+    }
 )
 
 _LINUX_INSTRUCTIONS = (
