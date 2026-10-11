@@ -277,11 +277,15 @@ class DarwinSearchAccess:
         paths, truncated = self._paths(grant, request)
         events: list[Mapping[str, object]] = []
         files_searched = binary_files_skipped = unreadable_files_skipped = 0
+        skipped_oversize = skipped_changed = 0
+        input_budget_exhausted = output_budget_exhausted = 0
         input_left = output_left = request.max_bytes
         for path in paths:
             if time.monotonic() >= deadline:
                 raise BudgetExceeded("rg_timeout", capability("rg_timeout"))
             if input_left <= 0 or output_left <= 0:
+                input_budget_exhausted = int(input_left <= 0)
+                output_budget_exhausted = int(output_left <= 0)
                 truncated = True
                 break
             try:
@@ -294,20 +298,33 @@ class DarwinSearchAccess:
                     raise
                 unreadable_files_skipped += 1
                 continue
+            except UnsafePath as exc:
+                if path == request.relative_path or exc.code not in {
+                    "path_not_found",
+                    "symlink_or_wrong_path_type",
+                    "entry_changed",
+                    "special_file_unsupported",
+                    "path_is_directory",
+                }:
+                    raise
+                skipped_changed += 1
+                truncated = True
+                continue
             if b"\0" in data:
                 binary_files_skipped += 1
-                input_left -= min(len(data), input_left)
                 continue
             if len(data) > input_left:
                 # Never search a cut line and report a false regex/end anchor hit.
                 truncated = True
-                break
+                skipped_oversize += 1
+                continue
             input_left -= len(data)
             output, capped = _run_rg(argv, data, deadline, output_left)
             output_left -= len(output)
             events.extend(_events(output, path, capped))
             files_searched += 1
             if capped:
+                output_budget_exhausted = 1
                 truncated = True
                 break
         # Binary-only, unreadable-only and empty trees still validate rg/pattern.
@@ -318,6 +335,10 @@ class DarwinSearchAccess:
             time.monotonic_ns() - started,
             {
                 "files_searched": files_searched,
+                "input_budget_exhausted": input_budget_exhausted,
+                "output_budget_exhausted": output_budget_exhausted,
+                "skipped_oversize": skipped_oversize,
+                "skipped_changed": skipped_changed,
                 "binary_files_skipped": binary_files_skipped,
                 "unreadable_files_skipped": unreadable_files_skipped,
             },
