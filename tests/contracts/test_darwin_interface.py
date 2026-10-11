@@ -427,3 +427,41 @@ def test_no_descriptor_leak_across_twenty_lifespans(tmp_path, monkeypatch):
         assert open_fds() <= before
 
     asyncio.run(exercise())
+
+
+@_DARWIN_ONLY
+def test_overlapping_inprocess_clients_non_nested_exit_fail_closed(
+    tmp_path, monkeypatch
+):
+    """Documented limit: in-process clients that exit out of order fail closed.
+
+    When client A (entered first) exits before client B, the shared grants are
+    closed under B; B's calls get the typed native_access_closed error, never
+    stale data or a crash. A new client then reopens a fresh generation. HTTP
+    serving is unaffected (covered by the Task Manager's live probes).
+    """
+    app, access, root = _generation_app(tmp_path, monkeypatch)
+
+    async def closed_error(client, tool, arguments):
+        result = await client.call_tool(tool, arguments, raise_on_error=False)
+        assert result.is_error
+        text = " ".join(getattr(part, "text", "") for part in result.content)
+        assert "Opened grants are closed." in text
+        return text
+
+    async def exercise():
+        first = Client(app)
+        second = Client(app)
+        await first.__aenter__()
+        await second.__aenter__()
+        await _both_tools_succeed(second, root)
+        await first.__aexit__(None, None, None)
+        await closed_error(second, "read_file", {"path": str(root / "file")})
+        await closed_error(second, "list_files", {"path": str(root)})
+        await second.__aexit__(None, None, None)
+        assert access.closed and not access.grants
+        async with Client(app) as third:
+            await _both_tools_succeed(third, root)
+        assert access.closed
+
+    asyncio.run(exercise())
