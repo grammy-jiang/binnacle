@@ -25,6 +25,7 @@ from binnacle.features.files.error_text import (
     TERSE_OUTSIDE,
     TOOL,
     linux_error,
+    outside_display,
     outside_error,
 )
 from binnacle.features.files.textio import human_size
@@ -68,8 +69,9 @@ def resolve_path(raw: str, *, roots: RootsSettings | None = None) -> Path:
         ) from None
     if not any(resolved.is_relative_to(root) for root in allowed_roots):
         allowed = ", ".join(str(r) for r in roots.allowed)
+        shown = outside_display(candidate, resolved, allowed_roots)
         raise CodedToolError(
-            "path_outside_root", f"Path outside allowed roots ({allowed}): {resolved}"
+            "path_outside_root", f"Path outside allowed roots ({allowed}): {shown}"
         )
     return resolved
 

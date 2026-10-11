@@ -6,6 +6,7 @@ give the same sentence for the same condition. It never decides whether a
 request is allowed; it only words a refusal that was already made.
 """
 
+import os
 from collections.abc import Iterable, Sequence
 from contextvars import ContextVar
 from pathlib import Path, PurePath
@@ -28,6 +29,8 @@ MISSING_ERRORS = {
     "search_text": ("path_not_found", "Path not found"),
 }
 DEFAULT_MISSING = ("file_not_found", "File not found")
+# Symlink hops caller_form follows before it gives up (the kernel's MAXSYMLINKS).
+_MAX_LINKS = 32
 
 
 def outside_error(allowed: Iterable[Path], display: Path) -> CodedToolError:
@@ -35,6 +38,59 @@ def outside_error(allowed: Iterable[Path], display: Path) -> CodedToolError:
     return CodedToolError(
         "path_outside_root", f"Path outside allowed roots ({roots}): {display}"
     )
+
+
+def caller_form(requested: Path, resolved: Path, roots: Iterable[Path]) -> Path:
+    """`resolved` spelled the way the caller and the configuration spelled it.
+
+    Display only; every decision has already been made on `resolved`. The
+    caller's text and configured root prefixes are kept as written, so /tmp
+    stays /tmp on macOS. Only symlinks inside an allowed (canonical) root are
+    followed, through their own link text: they are what moved the request
+    elsewhere. The result names the same location as `resolved`, otherwise
+    `resolved` itself is returned.
+    """
+    if not requested.is_absolute():
+        return resolved
+    canonical = tuple(roots)
+    shown = Path(requested.anchor)
+    pending = list(requested.parts[1:])
+    links = 0
+    try:
+        while pending:
+            part = pending.pop(0)
+            if part == "..":
+                shown = shown.parent
+                continue
+            step = shown / part
+            here = shown.resolve()
+            if any(here.is_relative_to(r) for r in canonical) and step.is_symlink():
+                links += 1
+                if links > _MAX_LINKS:
+                    return resolved
+                target = PurePath(os.readlink(step))
+                if target.is_absolute():
+                    shown = Path(target.anchor)
+                pending[:0] = target.parts[1:] if target.is_absolute() else target.parts
+                continue
+            shown = step
+        same = shown.resolve() == resolved
+    except (RuntimeError, OSError, ValueError):
+        return resolved
+    return shown if same else resolved
+
+
+def outside_display(requested: Path, resolved: Path, roots: Iterable[Path]) -> Path:
+    """Refusal wording only: the caller's spelling on macOS, the real path on Linux.
+
+    Linux keeps its long-standing wording byte for byte; macOS spells system
+    aliases (/tmp, /etc, /var) as the caller did instead of /private/... .
+    """
+    from binnacle.platform.composition import host_os_family
+
+    if host_os_family() == "linux":
+        return resolved
+    return caller_form(requested, resolved, roots)
 
 
 def format_nearby(parent: Path, names: Sequence[str]) -> str:
@@ -94,8 +150,9 @@ def linux_error(
         return None
     try:
         resolved = display.resolve()
-        if not any(resolved.is_relative_to(r.resolve()) for r in grants):
-            return outside_error(allowed, resolved)
+        canonical = [r.resolve() for r in grants]
+        if not any(resolved.is_relative_to(r) for r in canonical):
+            return outside_error(allowed, caller_form(display, resolved, canonical))
     except (RuntimeError, OSError):
         return None
     if tool == "list_files" and resolved.is_file():

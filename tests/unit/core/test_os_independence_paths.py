@@ -7,6 +7,7 @@ import pytest
 
 from binnacle.config import RootsSettings
 from binnacle.errors import CodedToolError
+from binnacle.features.files.error_text import caller_form
 from binnacle.features.files.paths import nearby_hint, resolve_path
 
 LINUX_ONLY = pytest.mark.skipif(
@@ -131,3 +132,57 @@ def test_case_sensitive_file_names_are_not_silently_conflated(tmp_path: Path):
     roots = RootsSettings(default_root=root, extra_roots=())
     assert resolve_path("Case.txt", roots=roots).read_text() == "upper"
     assert resolve_path("case.txt", roots=roots).read_text() == "lower"
+
+
+def _aliased_layout(tmp_path: Path) -> tuple[Path, Path, RootsSettings]:
+    """A /tmp -> /private/tmp style alias over a root and a sibling outside it."""
+    real = tmp_path / "private-tmp"
+    (real / "root").mkdir(parents=True)
+    (real / "outside").mkdir()
+    (real / "outside" / "secret").write_text("secret")
+    alias = tmp_path / "tmp"
+    alias.symlink_to(real, target_is_directory=True)
+    (real / "root" / "escape").symlink_to(alias / "outside", target_is_directory=True)
+    return alias, real, RootsSettings(default_root=alias / "root", extra_roots=())
+
+
+@pytest.mark.parametrize(
+    ("host", "spelled"), [("darwin", "tmp"), ("linux", "private-tmp")]
+)
+def test_outside_refusal_spells_path_as_caller_on_macos_only(
+    tmp_path: Path, monkeypatch, host, spelled
+):
+    """r5 L3 (SD-50): wording follows the caller's spelling; the decision does not."""
+    from binnacle.platform import composition
+
+    monkeypatch.setattr(composition, "host_os_family", lambda: host)
+    alias, real, roots = _aliased_layout(tmp_path)
+    shown = tmp_path / spelled / "outside" / "secret"
+    for request in ("escape/secret", str(alias / "outside/secret")):
+        with pytest.raises(CodedToolError) as exc:
+            resolve_path(request, roots=roots)
+        assert exc.value.telemetry_code == "path_outside_root"
+        assert (
+            str(exc.value) == f"Path outside allowed roots ({alias / 'root'}): {shown}"
+        )
+    # Inside the root the real path is still what callers receive.
+    assert resolve_path("new.txt", roots=roots) == real / "root" / "new.txt"
+
+
+def test_caller_form_follows_only_in_root_links_and_never_misnames(tmp_path: Path):
+    alias, real, roots = _aliased_layout(tmp_path)
+    canonical = roots.canonical_allowed
+
+    def shown(request: Path) -> Path:
+        return caller_form(request, request.resolve(), canonical)
+
+    assert shown(alias / "root/escape/secret") == alias / "outside/secret"
+    assert shown(alias / "outside/../outside/secret") == alias / "outside/secret"
+    (real / "root" / "rel").symlink_to("../root/escape", target_is_directory=True)
+    assert shown(alias / "root/rel/secret") == alias / "outside/secret"
+    (real / "root" / "loop").symlink_to("loop")
+    assert shown(alias / "root/loop") == (alias / "root/loop").resolve()
+    # A spelling that names another location falls back to the real path.
+    resolved = (real / "outside" / "secret").resolve()
+    assert caller_form(alias / "root/x", resolved, canonical) == resolved
+    assert caller_form(Path("relative"), resolved, canonical) == resolved
