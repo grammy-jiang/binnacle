@@ -13,6 +13,7 @@ import re
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -357,3 +358,141 @@ def test_refuses_when_sigchld_is_not_default():
             DarwinJobProcessOwner(boot_id="b", start_reaper=False)
     finally:
         signal.signal(signal.SIGCHLD, previous)
+
+
+class _ReapedAfterTimeout(_ExitSource):
+    """wait() timed out, then the reaper reaped before exit_for() (RJ1-F1)."""
+
+    def wait(self, job_id, timeout):
+        self.calls.append((job_id, timeout))
+
+
+def test_owned_process_handle_exit_reaped_after_timeout_is_an_exit():
+    source = _ReapedAfterTimeout(OwnedJobExit("j", 7, None, "normal_exit"))
+    assert OwnedProcessHandle(source, "j", 4242).wait(0.01) == 7
+
+
+@native
+def test_reaper_fault_wakes_waiters_and_close_still_reaps(spool):
+    created = DarwinJobProcessOwner(
+        boot_id="b", stop_sigterm_grace_s=1.0, stop_sigkill_grace_s=1.0
+    )
+    started = _spawn(created, "job-f", "sleep 0.5; exit 4", spool)
+
+    def broken_poll(timeout):
+        raise ValueError("injected non-OSError in the reaper poll")
+
+    created._poll_exit_events = broken_poll
+    outcome = []
+
+    def waiter():
+        try:
+            outcome.append(created.wait("job-f", None))
+        except JobOwnerLost as exc:
+            outcome.append(exc)
+
+    thread = threading.Thread(target=waiter, daemon=True)
+    thread.start()
+    thread.join(5)
+    assert not thread.is_alive(), "wait() hung on a dead reaper"
+    assert not created.reaper_running
+    assert created._fault == "darwin_job_reaper_failed"
+    assert [str(e) for e in outcome] == ["darwin_job_reaper_failed"]
+    observed = created.authority("job-f")
+    assert (observed.authority, observed.alive, observed.reason_code) == (
+        "UNKNOWN",
+        None,
+        "darwin_job_reaper_failed",
+    )
+    with pytest.raises(Exception, match="darwin_job_reaper_failed"):
+        _spawn(created, "job-late", "true", spool)
+    del created._poll_exit_events  # close() drives the sole reap path itself
+    exits = created.close()
+    assert [e.job_id for e in exits] == ["job-f"]
+    assert not _alive(started.pid)
+
+
+@native
+def test_close_returns_unreleased_exits_and_release_keeps_the_id(owner, spool):
+    for n in range(3):
+        _spawn(owner, f"job-r{n}", f"exit {n + 1}", spool)
+    for n in range(3):
+        assert owner.wait(f"job-r{n}", 5) is not None
+    running = _spawn(owner, "job-live", "sleep 30", spool)
+    with pytest.raises(ValueError, match="darwin_job_not_terminal"):
+        owner.release("job-live")
+    with pytest.raises(UnverifiedJobProcess, match="darwin_job_not_owned"):
+        owner.release("job-unknown")
+    owner.release("job-r0")
+    owner.release("job-r0")  # idempotent after persistence
+    assert "job-r0" not in owner._jobs  # out of the per-tick scans (RJ1-F4)
+    assert owner.exit_for("job-r0") == OwnedJobExit("job-r0", 1, None, "normal_exit")
+    assert owner.wait("job-r0", 0) == owner.exit_for("job-r0")
+    assert owner.authority("job-r0").reason_code == "darwin_job_reaped"
+    with pytest.raises(ValueError, match="darwin_job_already_owned"):
+        _spawn(owner, "job-r0", "true", spool)
+    exits = owner.close()
+    # Exits reaped before close keep their Linux reason (RJ1-F8); only the
+    # job still running when the stop began is an owner_restart.
+    assert {e.job_id: (e.exit_code, e.termination_reason) for e in exits} == {
+        "job-r1": (2, "normal_exit"),
+        "job-r2": (3, "normal_exit"),
+        "job-live": (None, "owner_restart"),
+    }
+    assert not _alive(running.pid)
+
+
+@native
+def test_job_signal_dispositions_are_reset_like_linux(spool):
+    _root, _stdin, output = spool
+    previous = signal.signal(signal.SIGUSR1, signal.SIG_IGN)
+    created = DarwinJobProcessOwner(boot_id="b")
+    try:
+        # SIGXFSZ is SIG_IGN in every Python process; Popen restores it.
+        _spawn(
+            created,
+            "job-xfsz",
+            "ulimit -f 1; dd if=/dev/zero of=big bs=1024 count=8 2>/dev/null;"
+            " echo rc=$?",
+            spool,
+        )
+        assert created.wait("job-xfsz", 10) is not None
+        _spawn(created, "job-usr1", "kill -USR1 $$; exit 0", spool)
+        result = created.wait("job-usr1", 10)
+    finally:
+        created.close()
+        signal.signal(signal.SIGUSR1, previous)
+    output.seek(0)
+    assert b"rc=153" in output.read()  # 128 + SIGXFSZ: killed, not EFBIG
+    assert result == OwnedJobExit("job-usr1", None, signal.SIGUSR1, "signal")
+
+
+@native
+def test_stop_racing_the_leaders_own_exit_is_delivered(spool, monkeypatch):
+    created = DarwinJobProcessOwner(boot_id="b", start_reaper=False)
+    real_killpg = os.killpg
+    raced = []
+
+    def leader_exits_first(pgid, number):
+        if raced:
+            return real_killpg(pgid, number)
+        raced.append(pgid)
+        os.kill(pgid, signal.SIGKILL)
+        deadline = time.monotonic() + 5
+        while job_process_owner._process_records(1, pgid)[0].state != 5:
+            assert time.monotonic() < deadline
+            time.sleep(0.01)
+        raise ProcessLookupError
+
+    try:
+        _spawn(created, "job-z", "sleep 30", spool)
+        monkeypatch.setattr(os, "killpg", leader_exits_first)
+        created.signal_owned_group("job-z", "terminate")  # no false partial
+        assert raced
+        reaped = created.reap_exits(2)
+    finally:
+        exits = created.close()
+    assert [(e.signal, e.termination_reason) for e in reaped] == [
+        (signal.SIGKILL, "stop_requested")
+    ]
+    assert exits == tuple(reaped)  # not released yet: close() still returns it
