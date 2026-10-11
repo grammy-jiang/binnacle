@@ -217,12 +217,12 @@ class DarwinJobManager(_ManagerStopping):
             raise ValueError("wait_seconds outside manager bounds")
         if self.stopping.is_set():  # PRE-J1g-F6: never launch into close()
             return {"ok": False, "error": "could not start job: job manager stopping"}
-        if refusal := self.stop_pending():  # D2: before any record is reserved
-            return refusal
         try:
             job_id = self._launch(command, workdir, stdin, call_id, shown)
         except (OSError, NativeCapabilityError) as exc:
             return {"ok": False, "error": f"could not start job: {exc}"}
+        if isinstance(job_id, dict):  # D2: the stop-marker refusal; no record
+            return job_id
         try:
             # Stopping: the start returns its job id auto-backgrounded (F2).
             exited = (
@@ -238,13 +238,16 @@ class DarwinJobManager(_ManagerStopping):
 
     def _launch(
         self, command: str, workdir: Path, stdin: str | None, call_id: str, shown: Path
-    ) -> str:
+    ) -> str | dict[str, Any]:
         """Reserve meta, spawn, complete meta: one interprocess transaction.
 
         The job spawns in ``workdir``; the record keeps the caller's ``shown``.
+        SR6-F2: the D2 stop-marker check runs inside it, before any record.
         """
         with self._transaction():
             self._prune(reserve=1)
+            if refusal := self.stop_pending():
+                return refusal
             job_id = uuid.uuid4().hex[:12]  # job_store.new_job_id
             directory = self.jobs_dir / job_id
             directory.mkdir(parents=True)
