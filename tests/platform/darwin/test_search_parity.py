@@ -211,20 +211,20 @@ def test_native_rg_bad_pattern_empty_tree_and_missing_binary(tree):
     assert search.search(grant, request()).files_searched == 0
 
 
-def test_search_budgets_report_truncation_without_partial_line_matches(tree):
-    root, _, grant, search, _ = tree
+def test_search_byte_budget_is_an_explicit_memory_limit_not_truncation(tree):
+    root, _, grant, search, rg = tree
     (root / "file").write_text("needle\n" * 100)
     result = search.search(grant, request(max_bytes=10))
-    # Searched whole; only the output budget truncates; cut JSON is never a match.
-    assert (
-        result.truncated and not content(result.events) and result.files_searched == 1
-    )
+    texts = [e[3]["text"] for e in content(result.events)]
+    assert not result.truncated and result.files_searched == 1
+    assert texts == ["needle\n"] + [""] * 99
     stats = result.events[-1]["data"]["stats"]
-    assert stats["output_budget_exhausted"] == 1
-    assert "skipped_oversize" not in stats and "input_budget_exhausted" not in stats
+    assert stats["skipped_text_over_memory_limit"] == 99  # Explicit, not truncation.
+    assert not {"output_budget_exhausted", "skipped_oversize"} & set(stats)
     (root / "file").write_text("needle\n")
-    result = search.search(grant, request(max_bytes=100))
-    assert result.truncated  # JSON output budget, not just input bytes.
+    result = search.search(grant, req := request(max_bytes=100))
+    assert not result.truncated  # No output cap: all rg output is consumed.
+    assert content(result.events) == content(baseline(root, rg, req))
     (root / "other").write_text("needle\n")
     assert search.search(grant, request(max_files=1)).truncated
     for req in (
@@ -486,7 +486,7 @@ def test_large_files_stream_whole_through_the_descriptor_like_linux(tree, monkey
     assert content(result.events) == content(baseline(root, rg, req))
     stats = result.events[-1]["data"]["stats"]
     assert stats["bytes_searched"] == len(big) + 13 > req.max_bytes
-    assert stats["output_budget_exhausted"] == stats["skipped_io_error"] == 0
+    assert stats["skipped_text_over_memory_limit"] == stats["skipped_io_error"] == 0
     assert max(reads) == search_access.CHUNK and sum(reads) == len(big) + 13  # Bounded
     # A mid-stream read failure is an explicit I/O limit, never truncation.
     fail, reads[:] = True, []
