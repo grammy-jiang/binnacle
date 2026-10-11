@@ -144,8 +144,9 @@ def test_steps_out_of_the_root_omit_even_an_in_root_target(tree):
     (root / "via_dlink").symlink_to("dlink/../hello.txt")  # Physical '..'.
     (root / "d" / "up").symlink_to("../hello.txt")  # '..' stays in the root.
     (root / "d" / "abs_mid").symlink_to("../abs")  # Absolute intermediate link.
-    (root / "abs").symlink_to(root / "hello.txt")
+    (root / "abs").symlink_to(root / "hello.txt")  # Listed since r6 X2.
     assert typed(tree) == {
+        "abs": ("file", 6),
         "d": ("dir", None),
         "dlink": ("dir", None),
         "hello.txt": ("file", 6),

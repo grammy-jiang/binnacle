@@ -44,22 +44,42 @@ from binnacle.platform.darwin.file_traversal import (
 MAX_LINK_HOPS = 40
 
 
+def absolute_in_root(text: str, root: str) -> list[str] | None:
+    """Lexical gate for absolute link text (r6 X2; Linux list_files.py twin).
+
+    The components of text below root, or None: any ``..`` component, or text
+    outside root. Only empty and ``.`` components are dropped; the filesystem
+    is never consulted, so text that steps out and back is no existence oracle.
+    """
+    parts = [part for part in text.split("/") if part not in ("", ".")]
+    base = [part for part in root.split("/") if part]
+    if ".." in parts or parts[: len(base)] != base:
+        return None
+    return parts[len(base) :]
+
+
 def link_target_info(
-    root_fd: int, directory: tuple[str, ...], name: str
+    root_fd: int, directory: tuple[str, ...], name: str, root_path: str | None
 ) -> os.stat_result | None:
     """Stat a symlink's target only if it resolves inside the opened root.
 
     Every component is examined with no-follow descriptor calls starting at the
-    root descriptor. Absolute targets, ``..`` above the root, dangling links,
-    loops and non-file/non-directory targets yield None; the root is never
-    widened and no path string is followed.
+    root descriptor. Absolute link text is walked from the root descriptor only
+    when ``absolute_in_root`` accepts it for ``root_path``, the granted root;
+    absolute intermediate links, ``..`` above the root, dangling links, loops
+    and non-file/non-directory targets yield None; the root is never widened
+    and no path string is followed.
     """
     stack = list(directory)
     try:
         with directory_at(root_fd, directory) as start:
-            pending = os.readlink(name, dir_fd=start).split("/")
+            text = os.readlink(name, dir_fd=start)
+        pending = text.split("/")
         if pending[0] == "":
-            return None  # Absolute target: the root path is not known here.
+            below = None if root_path is None else absolute_in_root(text, root_path)
+            if below is None:
+                return None  # '..', another root or an unknown root path.
+            stack, pending = [], below
         hops = 1
         info: os.stat_result | None = None
         while pending:
@@ -98,9 +118,10 @@ def link_target_info(
 
 
 class _RootGrant:
-    def __init__(self, fd: int, generation: str) -> None:
+    def __init__(self, fd: int, generation: str, path: str) -> None:
         self.fd = fd
         self._generation = generation
+        self.path = path  # The granted canonical root, for absolute link text.
         self.lock = RLock()
 
     @property
@@ -246,7 +267,7 @@ class DarwinFileAccess:
             fd = os.open("/", DIRECTORY_FLAGS)
             try:
                 with directory_at(fd, parts) as directory:
-                    grant = _RootGrant(os.dup(directory), generation)
+                    grant = _RootGrant(os.dup(directory), generation, str(root))
             finally:
                 os.close(fd)
             self._grants.add(grant)
@@ -292,7 +313,8 @@ class DarwinFileAccess:
             self._root(grant) as root,
             listing_directory(root, parts, listing) as directory,
         ):
-            listing.resolve_link = lambda name: link_target_info(root, parts, name)
+            top = grant.path if isinstance(grant, _RootGrant) else None
+            listing.resolve_link = lambda name: link_target_info(root, parts, name, top)
             listing.walk(directory)
         return listing.result(parts)
 

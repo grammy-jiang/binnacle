@@ -88,9 +88,10 @@ def test_in_root_links_are_listed_unchanged(tree):
     (root / "dlink").symlink_to("d", target_is_directory=True)
     (root / "abs_flink").symlink_to(root / "hello.txt")
     (root / "cross_root").symlink_to(other / "o.txt")
-    # SD-60 (R-L4-F2, L4b): absolute link text is omitted as on Darwin
-    # (file_access.py link_target_info), even when it resolves in a root.
+    # r6 X2 (SD-67): absolute link text under the link's own root is listed
+    # as on Darwin (file_access.py link_target_info); another root's is not.
     assert typed(tree) == {
+        "abs_flink": ("file", 6),
         "d": ("dir", None),
         "dlink": ("dir", None),
         "flink": ("file", 6),

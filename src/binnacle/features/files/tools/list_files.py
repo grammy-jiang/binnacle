@@ -68,18 +68,42 @@ def _inside(path: Path, allowed: tuple[Path, ...]) -> bool:
     return any(path.is_relative_to(root) for root in allowed)
 
 
+def _absolute_in_root(text: str, root: str) -> list[str] | None:
+    """Lexical gate for absolute link text (r6 X2; Darwin file_access.py twin).
+
+    The components of text below root, or None: any '..' component, or text
+    outside root. Only '' and '.' components are dropped; the filesystem is
+    never consulted, so text that steps out and back is no existence oracle.
+    """
+    parts = [part for part in text.split("/") if part not in ("", ".")]
+    base = [part for part in root.split("/") if part]
+    if ".." in parts or parts[: len(base)] != base:
+        return None
+    return parts[len(base) :]
+
+
 def _link_target(link: Path, allowed: tuple[Path, ...]) -> Path | None:
     """Walk a link's text as Darwin's link_target_info does; None = omit.
 
-    Every component is checked with lstat and must stay inside a root, so
-    an absolute target, any step out of the roots (also out-and-back),
-    more than MAX_LINK_HOPS links, a dangling link or a loop yields None.
+    Absolute text must first pass _absolute_in_root for the innermost root
+    that holds the link; the walk then starts at that root. Every component
+    is checked with lstat and must stay inside a root, so any step out of
+    the roots (also out-and-back), an absolute intermediate link, more than
+    MAX_LINK_HOPS links, a dangling link or a loop yields None.
     """
     try:
-        pending = os.readlink(link).split("/")
-        if pending[0] == "":
-            return None  # Absolute target: omitted, as on Darwin.
+        text = os.readlink(link)
+        pending = text.split("/")
         current, hops = link.parent, 1
+        if pending[0] == "":
+            homes = [root for root in allowed if link.parent.is_relative_to(root)]
+            if not homes:
+                return None
+            current = max(homes, key=lambda root: len(root.parts))
+            below = _absolute_in_root(text, str(current))
+            if below is None:
+                return None  # '..' or another root: omitted, as on Darwin.
+            pending = below
         while pending:
             part = pending.pop(0)
             if part in ("", "."):
