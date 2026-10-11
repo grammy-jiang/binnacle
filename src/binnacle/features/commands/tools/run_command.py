@@ -71,7 +71,7 @@ def run_command_impl(
     from pathlib import Path
 
     from binnacle.features.commands.command_backend import DarwinManagerCommandBackend
-    from binnacle.features.files.error_text import outside_display
+    from binnacle.features.files.paths import outside_display
 
     cleaned = workdir.replace("\0", "").strip().removeprefix("@")  # as resolve_path
     requested = roots.default_root / Path(cleaned).expanduser()
