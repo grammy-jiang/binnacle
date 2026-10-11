@@ -12,6 +12,8 @@ verified record (RULE-NO-PKILL).
 import functools
 import sys
 import time
+from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -75,3 +77,52 @@ def test_background_member_survives_leader_exit_like_linux(tmp_path):
     finally:
         if member is not None and _alive_exact(member.pid, member.birth):
             signal_safety.kill_verified(member.pid, member.birth)
+
+
+@_DARWIN
+def test_job_status_lists_the_running_group_through_the_manager(tmp_path):
+    """JCRP-F6: job_status.processes comes from the manager's verified group."""
+    with _real_manager() as (child, sock, jobs, log):
+        settings, root, backend = _available_manager_backend(tmp_path, sock, jobs)
+        _ping_when_ready(backend, child)
+        run = functools.partial(_run, settings, root, backend)
+        job = run("sleep 30 & sleep 31; wait", 1).structured_content
+        assert job["state"] == "running"
+        leader = backend.job_state(job["job_id"])["pid"]
+        deadline = time.monotonic() + 5
+        while len(processes := backend.job_processes(job["job_id"])) < 3:
+            assert time.monotonic() < deadline, processes
+            time.sleep(0.05)
+        status = js.job_status_impl(job["job_id"], 10, backend=backend)
+        listed = status.structured_content["processes"]
+        by_pid = {item["pid"]: item for item in listed}
+        assert leader in by_pid and by_pid[leader]["state"] in {"R", "S"}
+        commands = sorted(item.get("cmd", "") for item in listed)
+        assert "sleep 30" in commands and "sleep 31" in commands
+        assert all(item["ppid"] in {leader, child.pid} for item in listed)
+        short = backend.job_processes(job["job_id"], max_cmd_chars=5)
+        assert all(len(item.get("cmd", "")) <= 5 for item in short)
+        stopped = sj.stop_job_impl(job["job_id"], backend=backend)
+        assert stopped.structured_content["state"] == "exited"
+        assert backend.job_processes(job["job_id"]) == []  # Linux: running only
+        assert _stop_manager(child, sock) == 0, log.read_text()
+    assert backend.job_processes(job["job_id"]) == []  # unreachable manager
+
+
+def test_backend_job_processes_degrades_to_empty_without_the_manager():
+    from binnacle.features.commands.command_backend import (
+        DarwinManagerCommandBackend,
+    )
+
+    backend = object.__new__(DarwinManagerCommandBackend)
+    backend._socket_path = "/nonexistent/jobs.sock"
+    backend.client = mock.Mock(**{"processes.side_effect": RuntimeError("down")})
+    assert backend.job_processes("abc") == []
+    reply = {"ok": True, "processes": [{"pid": 1, "ppid": 0, "state": "S"}]}
+    backend.client = mock.Mock(**{"processes.return_value": reply})
+    assert backend.job_processes("abc", 7) == reply["processes"]
+    backend.client.processes.assert_called_with(
+        Path("/nonexistent/jobs.sock"), "abc", max_cmd_chars=7
+    )
+    backend.client = object()  # a client without the additive op
+    assert backend.job_processes("abc") == []

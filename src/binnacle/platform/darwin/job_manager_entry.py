@@ -313,7 +313,7 @@ def group_listing(pgid: int, max_cmd_chars: int) -> list[dict]:
     """JCRP-F6 (Linux job_processes shape): pid, ppid, state and cmd.
 
     ``cmd`` is the KERN_PROCARGS2 argv bounded by ``max_cmd_chars``, else the
-    kinfo_proc comm when PROCARGS2 is denied, else None: never invented. The
+    kinfo_proc comm when PROCARGS2 is denied, else omitted: never invented. The
     owner calls this only for its verified group; it grants no signal right.
     """
     from binnacle.platform.darwin.process_authority import _decode_process_records
@@ -336,5 +336,6 @@ def group_listing(pgid: int, max_cmd_chars: int) -> list[dict]:
             cmd = entry[243:260].split(b"\0", 1)[0].decode(errors="replace") or None
         state = _STATE_LETTERS.get(member.state, "?")
         listing.append({"pid": member.pid, "ppid": member.parent, "state": state})
-        listing[-1]["cmd"] = None if cmd is None else cmd[:max_cmd_chars]
+        if cmd is not None:  # unknown: omitted (job_status schema), never invented
+            listing[-1]["cmd"] = cmd[:max_cmd_chars]
     return sorted(listing, key=lambda item: int(item["pid"]))
