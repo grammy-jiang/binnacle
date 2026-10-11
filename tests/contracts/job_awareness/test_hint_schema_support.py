@@ -12,28 +12,32 @@ from binnacle.mcp.job_awareness_hint import HintAdapter
 _BOUND = object()
 
 
-def executed(tool: object) -> identity.Execution:
-    """Test-only receipt naming ``tool`` without running it.
+def executed(result: object, tool: object) -> identity.Execution:
+    """Test fixture: register a receipt for ``result`` naming ``tool``.
 
-    Production receipts come only from ExecutionScope after a witnessed body
-    ran. Direct tests mint one with the private key so that the adapter's own
-    identity and exact-type checks still face arbitrary producer objects.
+    Production receipts come only from witnessed_call after a witnessed body
+    completed. In-process code is trusted, so direct tests may register one
+    here to drive the adapter's own identity and exact-type checks with
+    arbitrary producer objects. This is not a bypass the adapter defends.
     """
-    return identity.Execution(identity._MINT, tool)
+    receipt = identity.Execution(tool, result)  # type: ignore[arg-type]
+    with identity._LOCK:
+        identity._ISSUED.add(receipt)
+    return receipt
 
 
 class SyntheticHintAdapter(HintAdapter):
     """Direct calls model a receipt for the bound Tool object.
 
     Server-composed tests call HintAdapter.adapt through ExecutionCarrier with
-    the receipt its ExecutionScope issues; only direct calls use this shim.
+    the receipt witnessed_call issues; only direct calls use this shim.
     """
 
     async def adapt(  # type: ignore[override]
         self, original: ToolResult, *, tool: object = _BOUND
     ) -> ToolResult:
         producer = self.tool if tool is _BOUND else tool
-        return await super().adapt(original, execution=executed(producer))
+        return await super().adapt(original, execution=executed(original, producer))
 
 
 def assert_adapter_import_topology():

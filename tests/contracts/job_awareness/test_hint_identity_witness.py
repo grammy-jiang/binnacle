@@ -3,11 +3,13 @@
 The independent adversarial review (L4 Q0 g4) found that ``adapt()`` took any
 ``tool`` object, so a future controller could pass a Tool it looked up by name
 (``app.get_tool``) instead of the Tool that ran. With a rerouting or answering
-inner middleware that lookup is fail-open. ``adapt()`` now takes only a
-single-use ``Execution`` receipt that an ``ExecutionScope`` issues when exactly
-one ``witnessed_tool`` body ran on the scope's own server. Tool objects, names,
-registry results, value-equal tools and forged or reused receipts suppress with
-zero worker admissions, observation reads and receipt queries.
+inner middleware that lookup is fail-open. ``adapt()`` now takes only an
+``Execution`` receipt that ``witnessed_call`` issues when exactly one
+``witnessed_tool`` body completed on the dispatching server. Tool objects,
+names, registry results and value-equal tools suppress with zero worker
+admissions, observation reads and receipt queries. Receipt lifecycle (result
+binding, reuse, failures) is in test_hint_identity_receipt.py. In-process code
+is trusted; these tests cover controller mis-wiring, not hostile code.
 """
 
 import asyncio
@@ -22,8 +24,8 @@ from binnacle.mcp import job_awareness_hint_identity as identity
 from binnacle.mcp.job_awareness_hint import (
     META_KEY,
     Execution,
-    ExecutionScope,
     HintAdapter,
+    witnessed_call,
     witnessed_tool,
 )
 from tests.contracts.job_awareness.synthetic_app import SCHEMA, Lab, in_loop
@@ -70,13 +72,12 @@ class Keep(Middleware):
         self.receipts = receipts
 
     async def on_call_tool(self, context, call_next):
-        with ExecutionScope() as scope:
-            result = await call_next(context)
-        self.receipts.append(scope.execution())
+        result, execution = await witnessed_call(call_next, context)
+        self.receipts.append((result, execution))
         return result
 
 
-def _app(lab, bound, *inner):
+def _app(lab, bound, *inner, carrier=True):
     app = FastMCP("ADV-G4-01 synthetic only", version="synthetic")
     adapter = lab.adapter(enabled=True)
     adapter.server_info = app._mcp_server.server_info_stamp
@@ -90,11 +91,11 @@ def _app(lab, bound, *inner):
         enabled=True,
         exclusive=True,
     )
-    carrier = ExecutionCarrier(app, bound_adapter, [])
-    app.add_middleware(carrier)
-    for middleware in inner:
-        app.add_middleware(middleware)
-    return app, carrier, bound_adapter
+    outer = ExecutionCarrier(app, bound_adapter, []) if carrier else None
+    for middleware in (outer, *inner):
+        if middleware is not None:
+            app.add_middleware(middleware)
+    return app, outer, bound_adapter
 
 
 def _hinted(result):
@@ -156,6 +157,7 @@ async def test_tool_objects_names_and_registry_results_are_refused():
             [bound],
             bound.model_copy(),
             Tool(name="synthetic", parameters={}, output_schema=SCHEMA),
+            Execution(bound, value),  # hand-built, never issued by a dispatch
         ]
         for lookalike in lookalikes:
             assert await adapter.adapt(value, execution=lookalike) is value  # nosec B101 - pytest assertion
@@ -184,69 +186,38 @@ async def test_different_but_equal_witnessed_tool_that_ran_is_refused(twin):
         _untouched(lab, carrier)
 
 
-def test_execution_receipt_cannot_be_forged_subclassed_or_changed():
-    bound = _sealed([], "bound")
-    for key in (None, object(), "mint"):
-        with pytest.raises(TypeError, match="issued only by ExecutionScope"):
-            Execution(key, bound)
-    with pytest.raises(TypeError, match="cannot be subclassed"):
-        type("Forged", (Execution,), {})
-    receipt = Execution(identity._MINT, bound)  # module-private key only
-    with pytest.raises(AttributeError):
-        receipt._tool = Tool(name="x", parameters={})
-    assert identity.claim(receipt) is bound  # nosec B101 - pytest assertion
-    assert identity.claim(receipt) is None  # nosec B101 - single use
+class Twice(Middleware):
+    """An inner middleware that dispatches the call twice."""
+
+    async def on_call_tool(self, context, call_next):
+        await call_next(context)
+        return await call_next(context)
 
 
 @in_loop
-async def test_receipt_is_single_use():
-    with Lab() as lab:
-        bound = _sealed([], "bound")
-        app, _, adapter = _app(lab, bound)
-        app.add_tool(bound)
-        value = ToolResult(
-            content=[TextContent(type="text", text="x")],
-            structured_content={"ok": True},
-        )
-        with ExecutionScope() as scope:
-            await app.call_tool("synthetic", {}, run_middleware=False)
-        assert scope.execution() is None  # nosec B101 - no server outside dispatch
-        receipts = []
-
-        app.add_middleware(Keep(receipts))
-        await app.call_tool("synthetic", {})
-        receipt = receipts[-1]
-        assert type(receipt) is Execution  # nosec B101 - pytest assertion
-        assert _hinted(await adapter.adapt(value, execution=receipt))  # nosec B101 - pytest assertion
-        reads = lab.catalog_reads
-        assert await adapter.adapt(value, execution=receipt) is value  # nosec B101 - pytest assertion
-        assert lab.catalog_reads == reads  # nosec B101 - reuse reads nothing
-
-
-@in_loop
-async def test_scope_issues_nothing_while_open_twice_or_after_two_runs():
+async def test_no_receipt_for_two_runs_or_without_a_dispatching_server():
     with Lab() as lab:
         ran: list[str] = []
         bound = _sealed(ran, "bound")
-        app, _, _ = _app(lab, bound)
+        receipts: list[tuple[object, object]] = []
+        app, _, _ = _app(lab, bound, Keep(receipts), Twice(), carrier=False)
         app.add_tool(bound)
-        issued = []
-
-        class Twice(Middleware):
-            async def on_call_tool(self, context, call_next):
-                with ExecutionScope() as scope:
-                    result = await call_next(context)
-                    issued.append(scope.execution())  # still open, one run
-                    await call_next(context)
-                issued.extend((scope.execution(), scope.execution()))
-                with pytest.raises(RuntimeError, match="single-use"):
-                    scope.__enter__()
-                return result
-
-        app.add_middleware(Twice())
         await app.call_tool("synthetic", {})
         assert ran == ["bound", "bound"]  # nosec B101 - pytest assertion
-        assert issued == [None, None, None]  # nosec B101 - pytest assertion
+        assert receipts[0][1] is None  # nosec B101 - two bodies completed
+
+        async def direct(_):
+            return await app.call_tool("synthetic", {}, run_middleware=False)
+
+        result, execution = await witnessed_call(direct, None)
+        assert (ran[-1], execution) == ("bound", None)  # nosec B101 - no server at start
+        assert result.structured_content == {"ok": True}  # nosec B101 - pytest assertion
+
+        async def bare(_):  # the body runs with no FastMCP server at all
+            return await bound.run({})
+
+        result, execution = await witnessed_call(bare, None)
+        assert (ran, execution) == (["bound"] * 4, None)  # nosec B101 - pytest assertion
 
 
 @pytest.mark.parametrize("topology", ["transform_of_bound", "mounted_child_bound"])
@@ -288,11 +259,11 @@ async def test_async_and_threaded_bodies_are_witnessed():
     ):
         app = FastMCP("ADV-G4-01 kinds")
         app.add_tool(tool)
-        receipts = []
-
+        receipts: list[tuple[object, object]] = []
         app.add_middleware(Keep(receipts))
         await app.call_tool("synthetic", {})
-        assert identity.claim(receipts[0]) is tool  # nosec B101 - pytest assertion
+        result, execution = receipts[0]
+        assert identity.claim(execution, result) is tool  # nosec B101 - pytest assertion
     assert ran == ["async", "thread"]  # nosec B101 - pytest assertion
 
 
@@ -313,7 +284,7 @@ def test_witnessed_tool_needs_a_plain_function():
 
 
 @in_loop
-async def test_body_outside_any_scope_records_nothing():
+async def test_body_outside_any_dispatch_records_nothing():
     ran: list[str] = []
     app = FastMCP("ADV-G4-01 no controller")
     app.add_tool(_sealed(ran, "bound"))

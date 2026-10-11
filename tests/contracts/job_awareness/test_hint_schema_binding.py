@@ -150,7 +150,9 @@ async def test_component_rejects_unbound_name_without_admitting_worker(name):
             name=name, version=None, parameters={}, output_schema=SCHEMA
         )
         # Call the production entry directly, without the single-tool fixture shim.
-        result = await HintAdapter.adapt(adapter, value, execution=executed(producer))
+        result = await HintAdapter.adapt(
+            adapter, value, execution=executed(value, producer)
+        )
         assert result is value  # nosec B101 - pytest assertion
         assert adapter.last_meter is None  # nosec B101 - pytest assertion
         assert lab.catalog_reads == lab.queries == lab.payload.reads == 0  # nosec B101 - pytest assertion
@@ -174,7 +176,7 @@ async def test_component_missing_or_hostile_name_fails_closed():
             name=Name("synthetic"), version=None, parameters={}, output_schema=SCHEMA
         )
         assert (
-            await HintAdapter.adapt(adapter, value, execution=executed(hostile))
+            await HintAdapter.adapt(adapter, value, execution=executed(value, hostile))
             is value
         )  # nosec B101 - pytest assertion
         assert calls == []  # nosec B101 - pytest assertion
@@ -194,11 +196,14 @@ async def test_component_validates_bound_native_tool_without_middleware(carrier)
         value = original()
         # Valid under the previous fixture schema, invalid under beta's schema.
         assert (
-            await HintAdapter.adapt(adapter, value, execution=executed(tool)) is value
+            await HintAdapter.adapt(adapter, value, execution=executed(value, tool))
+            is value
         )  # nosec B101 - pytest assertion
         assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion
         value.structured_content["n"] = 1
-        result = await HintAdapter.adapt(adapter, value, execution=executed(tool))
+        result = await HintAdapter.adapt(
+            adapter, value, execution=executed(value, tool)
+        )
         assert result is not value  # nosec B101 - pytest assertion
         assert result.structured_content == {"ok": True, "n": 1}  # nosec B101 - pytest assertion
         text = (
@@ -219,7 +224,8 @@ async def test_missing_or_unsupported_native_schema_suppresses(schema):
         adapter = replace(lab.adapter(enabled=True), tool=tool)
         value = original()
         assert (
-            await HintAdapter.adapt(adapter, value, execution=executed(tool)) is value
+            await HintAdapter.adapt(adapter, value, execution=executed(value, tool))
+            is value
         )  # nosec B101 - pytest assertion
         assert adapter.last_meter is None  # nosec B101 - pytest assertion
         assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion

@@ -54,7 +54,7 @@ async def test_other_version_returns_original_before_worker(
         value = original()
         before = value.model_dump_json()
         result = await HintAdapter.adapt(
-            adapter, value, execution=executed(native_tool(producer_version))
+            adapter, value, execution=executed(value, native_tool(producer_version))
         )
         assert result is value  # nosec B101 - pytest assertion
         assert value.model_dump_json() == before  # nosec B101 - pytest assertion
@@ -73,7 +73,7 @@ async def test_missing_version_is_unknown_even_for_unversioned_binding(version):
         producer = native_tool(version)
         object.__getattribute__(producer, "__dict__").pop("version")
         assert (
-            await HintAdapter.adapt(adapter, value, execution=executed(producer))
+            await HintAdapter.adapt(adapter, value, execution=executed(value, producer))
             is value
         )  # nosec B101 - pytest assertion
         assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion
@@ -89,7 +89,7 @@ async def test_invalid_producer_version_fails_closed(version):
         value = original()
         assert (  # nosec B101 - pytest assertion
             await HintAdapter.adapt(
-                adapter, value, execution=executed(raw_tool(version))
+                adapter, value, execution=executed(value, raw_tool(version))
             )
             is value
         )
@@ -118,7 +118,7 @@ async def test_hostile_version_cannot_run_comparison_callbacks():
         value = original()
         assert (  # nosec B101 - pytest assertion
             await HintAdapter.adapt(
-                adapter, value, execution=executed(raw_tool(Version("1")))
+                adapter, value, execution=executed(value, raw_tool(Version("1")))
             )
             is value
         )
@@ -137,7 +137,7 @@ async def test_matching_version_keeps_default_off(version):
         value = original()
         assert (  # nosec B101 - pytest assertion
             await HintAdapter.adapt(
-                adapter, value, execution=executed(native_tool(version))
+                adapter, value, execution=executed(value, native_tool(version))
             )
             is value
         )

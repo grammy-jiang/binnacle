@@ -45,7 +45,7 @@ def bound_adapter(lab, version=None, *, workers=True, carrier=HintCarrier.META):
 async def assert_suppressed(lab, adapter, value, admitted=False, **producer):
     before = value.model_dump_json()
     if "tool" in producer:  # direct calls name a producer through a test receipt
-        producer = {"execution": executed(producer.pop("tool")), **producer}
+        producer = {"execution": executed(value, producer.pop("tool")), **producer}
     assert await HintAdapter.adapt(adapter, value, **producer) is value  # nosec B101 - pytest assertion
     assert value.model_dump_json() == before  # nosec B101 - pytest assertion
     assert (adapter.last_meter is not None) is admitted  # nosec B101 - worker admission
@@ -245,7 +245,7 @@ async def test_control_bound_object_with_canonically_equal_schema_hints(
             )
             value = original()
             result = await HintAdapter.adapt(
-                adapter, value, execution=executed(adapter.tool)
+                adapter, value, execution=executed(value, adapter.tool)
             )
             assert result is not value  # nosec B101 - pytest assertion
             text = (
