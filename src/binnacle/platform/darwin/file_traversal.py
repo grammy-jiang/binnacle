@@ -3,7 +3,8 @@
 No path below a grant is reopened by absolute name. Captured directories retain
 identity across rename; this is not continuous pathname containment or a hostile
 same-UID sandbox. Recursive ignore rules come only from inside the grant;
-.gitignore requires an in-grant .git marker. Global and above-grant policies are
+.gitignore/.ignore/.rgignore apply whether or not the grant is a git
+repository (as rg --no-require-git). Global and above-grant policies are
 never read. Git metadata is never opened. ACLs/xattrs are not preserved on write.
 """
 
@@ -220,8 +221,6 @@ def _local_rules(
         pass
     local = list(rules)
     for priority, name in enumerate((".gitignore", ".ignore", ".rgignore")):
-        if priority == 0 and not in_git:
-            continue
         try:
             info = os.stat(name, dir_fd=fd, follow_symlinks=False)
         except FileNotFoundError:

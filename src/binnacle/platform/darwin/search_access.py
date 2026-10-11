@@ -58,7 +58,14 @@ from binnacle.platform.darwin.file_traversal import (
 
 
 def _command(rg_bin: str, request: SearchRequest) -> list[str]:
-    argv = [rg_bin, "--no-config", "--json", "--smart-case", "--text"]
+    argv = [
+        rg_bin,
+        "--no-config",
+        "--no-require-git",
+        "--json",
+        "--smart-case",
+        "--text",
+    ]
     if request.fixed_strings:
         argv.append("--fixed-strings")
     if request.context_lines:
