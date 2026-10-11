@@ -28,7 +28,6 @@ tests/integration/test_jobs_state_machine.py
 tests/integration/test_jobs_stop_paths.py
 tests/integration/test_jobs_store.py
 tests/integration/test_log_privacy.py
-tests/integration/test_logging.py
 tests/integration/test_logging_jobs.py
 tests/integration/test_mounted_call_context.py
 tests/integration/test_os_job_rpc_cross_version.py

@@ -95,9 +95,8 @@ def test_per_request_smoke_proof_correlates_actual_middleware_without_payload_le
     assert all("smoke=" not in row for row in calls if "smoke=" + proof not in row)
 
 
-@LINUX_ONLY
 def test_http_transport_smoke_proof_is_visible_to_native_middleware(
-    caplog, monkeypatch, tmp_path
+    caplog, monkeypatch, tmp_path, tmp_path_is_allowed_root
 ):
     """Real authenticated HTTP/ASGI transport exercises request.meta handoff."""
     import httpx2
