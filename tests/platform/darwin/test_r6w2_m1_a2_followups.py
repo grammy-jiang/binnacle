@@ -1,9 +1,10 @@
-"""r6 W2 M1-a2 (R-M1 review N1): the ping reports only a jobs dir it HOLDS.
+"""r6 W2 M1-a2 (R-M1 review N1, N2): held jobs dir and socket-path reasons.
 
 N1: the ping ``jobs_dir`` is the realpath only when that dir's ``.manager.lock``
 is the inode whose writer flock this manager holds (st_dev, st_ino). A symlinked
 jobs dir retargeted between the lock and the realpath is refused, fail closed,
 with ``event=job_manager_jobs_dir_mismatch``, before recovery and binding.
+N2: an unusable socket path names its actual reason (not absolute vs too long).
 """
 
 from __future__ import annotations
@@ -19,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
+from binnacle.platform.darwin import generation_runtime as runtime
 from binnacle.platform.darwin import job_manager_entry as entry
 from tests.platform.darwin.test_job_manager_service import (
     ReferenceOwner,
@@ -152,3 +155,42 @@ def test_hold_jobs_dir_compares_the_lock_inode_not_the_name(tmp_path, caplog):
         os.close(fd)
         manager.close()
     assert caplog.text.count("event=job_manager_jobs_dir_mismatch") == 1
+
+
+# --- N2 -------------------------------------------------------------------
+
+
+def cause(path: Path) -> str:
+    with pytest.raises(NativeCapabilityError) as refused:
+        runtime.check_socket_path(path)
+    assert refused.value.code == "runtime_socket_path_invalid"
+    return str(refused.value.__cause__)
+
+
+def test_a_short_relative_socket_path_is_reported_not_absolute():
+    relative = Path("relative") / "jobs.sock"
+    assert cause(relative) == f"darwin_socket_path_not_absolute: {relative}"
+    assert "bytes" not in cause(relative) and "too_long" not in cause(relative)
+    with pytest.raises(NativeCapabilityError) as refused:
+        entry.require_socket_path(relative)  # the manager entry's own check
+    assert str(refused.value.__cause__).startswith("darwin_socket_path_not_absolute")
+
+
+def test_an_overlong_socket_path_is_reported_too_long():
+    long = Path("/tmp") / ("x" * 100) / "jobs.sock"
+    size = len(os.fsencode(long))
+    assert size >= 104
+    assert cause(long) == f"darwin_socket_path_too_long: {size} bytes > 103: {long}"
+    relative = Path("x" * 100) / "jobs.sock"  # both: the size is reported first
+    assert cause(relative).startswith("darwin_socket_path_too_long: ")
+    runtime.check_socket_path(Path("/tmp/fits/jobs.sock"))  # no error
+
+
+def test_a_relative_runtime_dir_names_the_reason(monkeypatch):
+    monkeypatch.setenv("BINNACLE_RUNTIME_DIR", "relative-runtime")
+    with pytest.raises(NativeCapabilityError) as refused:
+        runtime.resolve_runtime_paths()
+    assert str(refused.value.__cause__) == (
+        "darwin_socket_path_not_absolute: relative-runtime/jobs.sock"
+    )
+    assert not Path("relative-runtime").exists()

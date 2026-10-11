@@ -57,9 +57,9 @@ def denied(code: str) -> UnsafePath:
 
 
 def check_socket_path(path: Path) -> None:
-    size = len(os.fsencode(path))  # sun_path: 104 bytes on Darwin, NUL included
-    if not path.is_absolute() or size >= 104:
-        detail = f"darwin_socket_path_too_long: {size} bytes > 103: {path}"
+    if (size := len(os.fsencode(path))) >= 104 or not path.is_absolute():
+        why = f"too_long: {size} bytes > 103" if size >= 104 else "not_absolute"
+        detail = f"darwin_socket_path_{why}: {path}"  # sun_path: 104 bytes on Darwin, NUL included
         raise denied("runtime_socket_path_invalid") from ValueError(detail)
 
 
