@@ -17,10 +17,33 @@ dependency (2026-08-31).
 
 import asyncio
 import json
+import re
+import sys
+import tempfile
+from pathlib import Path
 
+import pytest
 from fastmcp import Client
 
 from binnacle import server
+
+
+@pytest.fixture()
+def tmp_path(tmp_path):
+    """On Darwin the configured roots hold /tmp, not pytest's /private/var/folders."""
+    if sys.platform != "darwin":
+        yield tmp_path
+        return
+    with tempfile.TemporaryDirectory(prefix="t0-", dir="/tmp") as directory:
+        yield Path(directory)
+
+
+#: Linux says "allowed roots"; Darwin says "opened roots" (or names the file kind).
+_REFUSED = re.compile(
+    r"allowed roots"
+    if sys.platform == "linux"
+    else r"opened roots|allowed roots|special_file_unsupported"
+)
 
 #: The contract each hint carries for ChatGPT's connector UI:
 #: The SDK exposes MCP annotation fields as snake_case Python attributes.
@@ -168,7 +191,7 @@ def test_run_command_synchronous_result_reports_no_job(tmp_path):
 def test_path_outside_the_roots_is_a_tool_error_not_a_crash():
     r = call("read_file", path="/etc/passwd")
     assert r.is_error
-    assert "allowed roots" in text_of(r)
+    assert _REFUSED.search(text_of(r)), text_of(r)
 
 
 def test_unknown_tool_is_a_protocol_error():
@@ -183,4 +206,6 @@ def test_symlink_escape_is_rejected_through_mcp(tmp_path):
     result = call("read_file", path=str(link))
 
     assert result.is_error
-    assert "allowed roots" in text_of(result)
+    # Darwin names the refusal by its grant (opened roots) or its file kind
+    # (special_file_unsupported); the escape is refused either way.
+    assert _REFUSED.search(text_of(result)), text_of(result)

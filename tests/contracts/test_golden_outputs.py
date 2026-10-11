@@ -19,6 +19,9 @@ import asyncio
 import json
 import os
 import signal
+import sys
+import tempfile
+from pathlib import Path
 
 import pytest
 from fastmcp import Client
@@ -26,6 +29,22 @@ from fastmcp import Client
 from binnacle import server
 from binnacle.features.commands import jobs
 from tests.contracts.golden_support import SNAPSHOT_DIR, Masker, check
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux golden outputs: Linux roots/paths and Linux-only background jobs/stop_job; Darwin grants and job surface differ",
+)
+
+
+@pytest.fixture()
+def tmp_path(tmp_path):
+    """On Darwin the configured roots hold /tmp, not pytest's /private/var/folders."""
+    if sys.platform != "darwin":
+        yield tmp_path
+        return
+    with tempfile.TemporaryDirectory(prefix="t0-", dir="/tmp") as directory:
+        yield Path(directory)
+
 
 CASES = (
     "read_file-small",
@@ -146,6 +165,13 @@ def test_write_file_then_edit_file(work, tmp_path):
     assert target.read_text() == "one\nthree\n"
 
 
+@pytest.mark.xfail(
+    sys.platform == "darwin",
+    strict=True,
+    reason="R2D-T0A6-01: Linux golden bytes (job_id/log_path fields); Darwin "
+    "foreground run_command checked by tests/platform/darwin/test_foreground_commands.py"
+    "::test_native_normal_exit_cwd_stdin_binary_combined_output",
+)
 def test_run_command_fast(work, tmp_path):
     async def steps(call):
         return await call(
@@ -155,6 +181,11 @@ def test_run_command_fast(work, tmp_path):
     check("run_command-fast", Masker(tmp_path).record(run(steps)))
 
 
+@pytest.mark.xfail(
+    sys.platform == "darwin",
+    strict=True,
+    reason="R2D-T0A6-01: needs durable background jobs, UNAVAILABLE on Darwin by release scope",
+)
 def test_job_that_outlives_its_wait(work, tmp_path):
     masker = Masker(tmp_path)
 
@@ -181,6 +212,7 @@ def test_job_that_outlives_its_wait(work, tmp_path):
     check("job_status-listing", masker.record(listing))
 
 
+@LINUX_ONLY
 def test_stop_job(work, tmp_path):
     masker = Masker(tmp_path)
 

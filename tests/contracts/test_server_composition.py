@@ -2,7 +2,10 @@
 
 import asyncio
 import hashlib
+import sys
+import tempfile
 from collections import Counter
+from pathlib import Path
 
 import mcp.types
 import pytest
@@ -18,6 +21,24 @@ from binnacle.mcp.tool_order import PublicToolOrder
 from tests.contracts.surface_support import digest, served, surface
 from tests.contracts.test_input_validation import text_of
 from tests.contracts.test_tool_surface import INSTRUCTIONS_SHA256, SURFACE_SHA256
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason=(
+        "Linux text/hash and roots pin; Darwin text pinned by tests/contracts/test_darwin_interface.py::test_native_wire_schema_preserves_v101_with_declared_description_exception"
+    ),
+)
+
+
+@pytest.fixture()
+def tmp_path(tmp_path):
+    """On Darwin the configured roots hold /tmp, not pytest's /private/var/folders."""
+    if sys.platform != "darwin":
+        yield tmp_path
+        return
+    with tempfile.TemporaryDirectory(prefix="t0-", dir="/tmp") as directory:
+        yield Path(directory)
+
 
 PROFILES = [
     (None, None, "default"),
@@ -89,6 +110,7 @@ def test_current_root_has_exact_local_inventory_and_raw_multiplicity():
         asyncio.run(go(root))
 
 
+@LINUX_ONLY
 @pytest.mark.parametrize("collision", ["root-child", "child-child"])
 def test_wire_pins_can_hide_duplicates_that_raw_contract_rejects(collision):
     async def build():
@@ -122,6 +144,7 @@ def test_wire_pins_can_hide_duplicates_that_raw_contract_rejects(collision):
     assert hashlib.sha256(instructions.encode()).hexdigest() == INSTRUCTIONS_SHA256
 
 
+@LINUX_ONLY
 @pytest.mark.parametrize(("name", "mode", "profile"), PROFILES)
 def test_fresh_root_matches_pins_and_exported_wire_surface(name, mode, profile):
     tools, instructions = served(name, mode, mcp_server=server.create_server())

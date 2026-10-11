@@ -21,6 +21,7 @@ import asyncio
 import json
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -30,6 +31,12 @@ from fastmcp import Client
 from binnacle import server
 from binnacle.features.commands import jobs
 from binnacle.platform.linux.job_process import _proc_starttime
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux spool/boot-identity (procfs) job-record compatibility; Darwin has no such identity here",
+)
+
 
 FIXTURE = Path(__file__).parent / "fixtures" / "job_spool" / "2026-09-28"
 FINISHED = "3f9a1c2b7d10"
@@ -55,6 +62,7 @@ def call(name: str, **arguments) -> tuple[dict, str]:
     return result.structured_content, text
 
 
+@LINUX_ONLY
 def test_finished_job_reads_as_exited(spool):
     status, text = call("job_status", job_id=FINISHED)
     assert status["state"] == "exited"
@@ -68,6 +76,7 @@ def test_finished_job_reads_as_exited(spool):
     assert text == f"Job {FINISHED} exited 0 after 1.5 s."
 
 
+@LINUX_ONLY
 def test_running_record_without_its_process_reads_as_unknown(spool):
     status, text = call("job_status", job_id=RUNNING)
     assert status["state"] == "unknown"
@@ -80,6 +89,7 @@ def test_running_record_without_its_process_reads_as_unknown(spool):
     assert status["command"] == "sleep 3600"
 
 
+@LINUX_ONLY
 def test_listing_reads_both_records_newest_first(spool):
     rows = call("job_status")[0]["jobs"]
     assert [(r["job_id"], r["state"], r["exit_code"]) for r in rows] == [
@@ -89,6 +99,7 @@ def test_listing_reads_both_records_newest_first(spool):
     assert [r["started_at"] for r in rows] == [1790500100.5, 1790500000.25]
 
 
+@LINUX_ONLY
 def test_running_record_of_a_live_process_reads_as_running(spool):
     """The same record, pointed at a live process, is a running job."""
     proc = subprocess.Popen(["sleep", "30"], start_new_session=True)

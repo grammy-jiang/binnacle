@@ -8,10 +8,17 @@ validate; Claude Code, Codex and the in-memory client do.
 """
 
 import asyncio
+import sys
 
+import pytest
 from fastmcp import Client
 
 from binnacle import server
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux background-job schemas; Darwin background jobs are unavailable",
+)
 
 
 def call(name: str, **args) -> dict:
@@ -24,6 +31,7 @@ def call(name: str, **args) -> dict:
     return asyncio.run(run())
 
 
+@LINUX_ONLY
 def test_running_job_status_validates():
     p = call("run_command", command="sleep 30", workdir="/tmp", background=True)
     s = call("job_status", job_id=p["job_id"])
@@ -31,6 +39,7 @@ def test_running_job_status_validates():
     call("stop_job", job_id=p["job_id"])
 
 
+@LINUX_ONLY
 def test_signal_killed_job_validates_in_all_three_tools():
     p = call("run_command", command="sleep 30", workdir="/tmp", background=True)
     r = call("stop_job", job_id=p["job_id"])
@@ -41,6 +50,7 @@ def test_signal_killed_job_validates_in_all_three_tools():
     assert k["signal"] == 15 and k["exit_code"] is None
 
 
+@LINUX_ONLY
 def test_listing_validates_with_mixed_states():
     p = call("run_command", command="sleep 30", workdir="/tmp", background=True)
     rows = call("job_status")["jobs"]
@@ -61,6 +71,7 @@ def test_job_status_schema_has_no_guard_fields():
     assert {"waited_s", "wait_requested_s", "wait_effective_s"} <= set(props)
 
 
+@LINUX_ONLY
 def test_positive_wait_job_status_validates_without_guard_fields():
     p = call("run_command", command="sleep 30", workdir="/tmp", background=True)
     s = call("job_status", job_id=p["job_id"], wait_seconds=1)

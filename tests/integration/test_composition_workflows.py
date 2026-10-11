@@ -3,7 +3,9 @@
 import asyncio
 import json
 import logging
+import sys
 
+import pytest
 from fastmcp import Client
 
 from binnacle import server
@@ -13,7 +15,13 @@ from binnacle.features.files.files_server import create_files_server
 from binnacle.features.search.search_server import create_search_server
 from tests.integration.job_test_support import stop
 
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="Linux Commands/stop_job workflows; Darwin Commands are scope-gated",
+)
 
+
+@LINUX_ONLY
 def test_files_child_scratch_workflow(tmp_path):
     path = tmp_path / "file.txt"
 
@@ -45,6 +53,7 @@ def test_files_child_scratch_workflow(tmp_path):
     assert path.read_text() == "alpha\ngamma\n"
 
 
+@LINUX_ONLY
 def test_search_child_result_and_telemetry_parity(tmp_path, caplog):
     (tmp_path / "file.txt").write_text("alpha\nbeta\n")
 
@@ -71,6 +80,7 @@ def test_search_child_result_and_telemetry_parity(tmp_path, caplog):
     assert "call=- " not in dispatch[1]
 
 
+@LINUX_ONLY
 def test_commands_child_sync_background_cursor_and_stop(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path / "jobs")
     monkeypatch.setattr(jobs, "OWNER_MODE", "embedded")
