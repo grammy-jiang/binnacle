@@ -223,6 +223,62 @@ BYPASSES = {
         "@pytest.mark.skipif(condition=platform.system() != 'Darwin', reason='x')\n"
         "def test_a(): ...\n"
     ),
+    # R2D-T0-01: conditions the scanner cannot read are platform-suspect.
+    "module-helper-function": (
+        "import pytest, sys\n"
+        "def _on_mac():\n"
+        "    return sys.platform == 'darwin'\n"
+        "@pytest.mark.skipif(_on_mac(), reason='x')\n"
+        "def test_a(): ...\n"
+    ),
+    "helper-function-hiding-an-imported-flag": (
+        "import pytest\n"
+        "from helpers import ON_MAC\n"
+        "def _gate():\n"
+        "    return not ON_MAC\n"
+        "@pytest.mark.skipif(_gate(), reason='x')\n"
+        "def test_a(): ...\n"
+    ),
+    "imported-flag": (
+        "import pytest\n"
+        "from os.path import supports_unicode_filenames as ON_MAC\n"
+        "@pytest.mark.skipif(ON_MAC, reason='x')\n"
+        "def test_a(): ...\n"
+    ),
+    "imported-helper-call": (
+        "import pytest\n"
+        "from helpers import is_mac\n"
+        "@pytest.mark.skipif(is_mac(), reason='x')\n"
+        "def test_a(): ...\n"
+    ),
+    "attribute-flag": (
+        "import pytest, helpers\n"
+        "@pytest.mark.skipif(helpers.ON_MAC, reason='x')\n"
+        "def test_a(): ...\n"
+    ),
+    "flag-aliased-through-a-module-variable": (
+        "import pytest, helpers\n"
+        "GATE = helpers.ON_MAC\n"
+        "@pytest.mark.skipif(GATE, reason='x')\n"
+        "def test_a(): ...\n"
+    ),
+    "in-body-skip-on-imported-flag": (
+        "import pytest\n"
+        "from helpers import ON_MAC\n"
+        "def test_a():\n"
+        "    if not ON_MAC:\n"
+        "        pytest.skip('x')\n"
+    ),
+    "xfail-run-false": (
+        "import pytest, sys\n"
+        "@pytest.mark.xfail(sys.platform == 'darwin', run=False, reason='x')\n"
+        "def test_a(): ...\n"
+    ),
+    "xfail-run-false-condition-keyword": (
+        "import pytest, sys\n"
+        "@pytest.mark.xfail(condition=sys.platform == 'darwin', run=False)\n"
+        "def test_a(): ...\n"
+    ),
 }
 WHOLE_MODULE = {
     "pytestmark-direct": (
@@ -238,6 +294,26 @@ WHOLE_MODULE = {
     ),
     "module-level-call": BYPASSES["module-pytest-skip"],
     "unconditional-module-call": "import pytest\npytest.skip('x', allow_module_level=True)\n",
+    "importorskip-module-level": (
+        "import pytest\nx = pytest.importorskip('linux_only_mod')\ndef test_a(): ...\n"
+    ),
+    "importorskip-bare-statement": (
+        "import pytest\npytest.importorskip('linux_only_mod')\n"
+    ),
+    "importorskip-under-platform-if": (
+        "import pytest, sys\n"
+        "if sys.platform == 'darwin':\n"
+        "    pytest.importorskip('linux_only_mod')\n"
+    ),
+    "pytestmark-xfail-run-false": (
+        "import pytest\npytestmark = pytest.mark.xfail(run=False)\n"
+    ),
+    "pytestmark-helper-function": (
+        "import pytest, sys\n"
+        "def _on_mac():\n"
+        "    return sys.platform == 'darwin'\n"
+        "pytestmark = pytest.mark.skipif(_on_mac())\n"
+    ),
     "autouse-fixture": (
         "import pytest, sys\n"
         "@pytest.fixture(autouse=True)\n"
@@ -257,6 +333,28 @@ def test_scanner_finds_every_platform_skip_shape(name):
 @pytest.mark.parametrize("name", sorted(WHOLE_MODULE))
 def test_scanner_flags_whole_module_skips(name):
     assert whole_module_skips(WHOLE_MODULE[name]), name
+
+
+def test_scanner_ignores_xfail_that_still_runs_the_test():
+    source = (
+        "import pytest, sys\n"
+        "@pytest.mark.xfail(sys.platform == 'darwin', reason='x')\n"
+        "def test_a(): ...\n"
+        "@pytest.mark.xfail\n"
+        "def test_b(): ...\n"
+    )
+    assert scan_skips(source) == []
+
+
+def test_scanner_follows_stdlib_flags_without_flagging_them_as_suspect():
+    source = (
+        "import pytest, os, shutil\n"
+        "ROOT = os.geteuid() == 0\n"
+        "@pytest.mark.skipif(ROOT or shutil.which('nmcli') is None, reason='x')\n"
+        "def test_a(): ...\n"
+    )
+    sites = scan_skips(source)
+    assert len(sites) == 1 and not sites[0].platform
 
 
 def test_scanner_keeps_narrow_and_non_platform_skips_local():
