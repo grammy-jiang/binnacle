@@ -23,9 +23,10 @@ from fastmcp.tools.tool_transform import ToolTransformConfig
 from mcp.types import TextContent
 
 from binnacle.features.commands.job_awareness.models import HintCarrier
+from binnacle.mcp.job_awareness_hint import witnessed_tool
 from tests.contracts.job_awareness.synthetic_app import SCHEMA, Lab, in_loop
 from tests.contracts.job_awareness.test_hint_schema_binding import raw_call
-from tests.contracts.job_awareness.test_hint_version_support import VersionBoundCarrier
+from tests.contracts.job_awareness.test_hint_version_support import ExecutionCarrier
 
 BETA = {
     "type": "object",
@@ -48,7 +49,7 @@ def _tool(name, version, schema, payload, ran, tag):
             content=[TextContent(type="text", text="x")], structured_content=payload
         )
 
-    return Tool.from_function(fn, name=name, version=version, output_schema=schema)
+    return witnessed_tool(fn, name=name, version=version, output_schema=schema)
 
 
 def _compose(app, topology, version, ran):
@@ -93,7 +94,7 @@ async def _run(lab, app, bound, name, protocol, carrier=HintCarrier.META):
     adapter.server_info = app._mcp_server.server_info_stamp
     bound_adapter = replace(adapter, tool=bound)
     seen: list[ToolResult] = []
-    middleware = VersionBoundCarrier(app, bound_adapter, seen)
+    middleware = ExecutionCarrier(app, bound_adapter, seen)
     app.add_middleware(middleware)
     wire, error = await raw_call(app, name, protocol)
     return wire, error, seen, middleware, bound_adapter

@@ -56,14 +56,14 @@ from binnacle.features.commands.job_awareness.snapshots import (
     SnapshotStore,
     TrustedCatalog,
 )
-from binnacle.mcp.job_awareness_hint import HintAdapter, HintBindings
+from binnacle.mcp.job_awareness_hint import HintAdapter, HintBindings, witnessed_tool
 from binnacle.mcp.job_awareness_hint import Workers as WorkerPort
 from tests.contracts.job_awareness.test_hint_schema_support import (
     SyntheticHintAdapter,
     assert_adapter_import_topology,
     callback_trap,
 )
-from tests.contracts.job_awareness.test_hint_version_support import VersionBoundCarrier
+from tests.contracts.job_awareness.test_hint_version_support import ExecutionCarrier
 
 __all__ = [
     "SCHEMA",
@@ -260,11 +260,11 @@ def app_for(adapter, result=None, *, error=None, schema=SCHEMA):
         return result if result is not None else original()
 
     tool = app.add_tool(
-        Tool.from_function(synthetic, name="synthetic", output_schema=schema)
+        witnessed_tool(synthetic, name="synthetic", output_schema=schema)
     )
     bound_adapter = replace(adapter, tool=tool)
 
-    app.add_middleware(VersionBoundCarrier(app, bound_adapter, seen))
+    app.add_middleware(ExecutionCarrier(app, bound_adapter, seen))
     return app, seen
 
 
