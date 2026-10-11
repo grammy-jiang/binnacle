@@ -198,7 +198,7 @@ def list_files_impl(
         rg_bin = defaults.rg_bin if rg_bin is None else rg_bin
     if file_access is not None:
         file_access.require("list_files")
-        with file_access.operation(path) as (grant, relative, display):
+        with file_access.operation(path, "list_files") as (grant, relative, display):
             listing = file_access.provider.list_entries(
                 grant,
                 ListRequest(
