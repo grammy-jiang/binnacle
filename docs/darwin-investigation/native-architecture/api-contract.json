@@ -1,0 +1,853 @@
+{
+  "schema_revision": "binnacle-darwin-r3-interface-1.0.0",
+  "source_base_sha": "c2234f16bdfb1a17500b99101d3184b797ebb673",
+  "status": "PROPOSED_PENDING_R0_CR0",
+  "freeze_authority": "Supervisor CR0 only; revision ID is pinned proposal, not approval",
+  "python_minimum": "3.10",
+  "declaration_prelude": "from __future__ import annotations; standard typing/collections.abc Protocol, Literal, Mapping, Sequence, Callable; dataclasses.dataclass; enum.Enum; pathlib.Path; threading.Event. Cross-module names resolve uniquely from module declarations or preserved base interfaces. No declaration is executable product code in A0.",
+  "enums": {
+    "CapabilityState": [
+      "AVAILABLE",
+      "LIMITED",
+      "UNKNOWN",
+      "UNAVAILABLE"
+    ],
+    "TargetState": [
+      "full",
+      "limited",
+      "unavailable"
+    ]
+  },
+  "existing_interfaces": [
+    {
+      "path": "src/binnacle/deployment/provisioning_contracts.py",
+      "module": "binnacle.deployment.provisioning_contracts",
+      "sha256": "d5ee72c2d6ddecbaa6007a1f30eb44dde30b415bd6dea66a181a349b827def8f",
+      "declarations": [
+        "class PlannedUnit()",
+        "PlannedUnit.path: Path",
+        "PlannedUnit.spec: units.UnitSpec",
+        "PlannedUnit.write: units.WritePlan",
+        "PlannedUnit.@property\ndef name(self) -> str",
+        "class UnitProvisioner(Protocol)",
+        "UnitProvisioner.backup_dir: Path",
+        "UnitProvisioner.def unit_path(self, service: str) -> Path",
+        "UnitProvisioner.def plan_unit(self, spec: units.UnitSpec, *, adopt: bool=False) -> PlannedUnit",
+        "UnitProvisioner.def plan_server_jobs(self, mode: str, repo: Path | None, host: str, port: int, *, adopt: bool=False) -> list[PlannedUnit]",
+        "UnitProvisioner.def plan_server(self, mode: str, repo: Path | None, host: str, port: int) -> PlannedUnit",
+        "UnitProvisioner.def write_unit(self, planned: PlannedUnit) -> Path | None",
+        "UnitProvisioner.def current_marker(self, service: str) -> units.Marker | None",
+        "UnitProvisioner.def reload_definitions(self) -> object",
+        "UnitProvisioner.def enable_now(self, service: str) -> object",
+        "UnitProvisioner.def enable_persistence(self) -> object",
+        "UnitProvisioner.def systemctl(self, *args: str, check: bool=True) -> subprocess.CompletedProcess[str]",
+        "UnitProvisioner.def inspect_persistence(self, *, user: str | None=None) -> object"
+      ],
+      "policy": "preserve Linux methods, defaults, exceptions and wire behavior; additive types only by B0"
+    },
+    {
+      "path": "src/binnacle/features/commands/command_contracts.py",
+      "module": "binnacle.features.commands.command_contracts",
+      "sha256": "54afa9968b023b73c6af02034a58d4f8167011f010f646f343ea73f9ad21abb3",
+      "declarations": [
+        "class CommandReply()",
+        "CommandReply.summary: str",
+        "CommandReply.payload: dict",
+        "class CommandFailure(Exception)",
+        "class CommandBackend(Protocol)",
+        "CommandBackend.def start_and_wait(self, command: str, workdir: Path, stdin: str | None, wait_seconds: float) -> str",
+        "CommandBackend.def stop_job(self, job_id: str) -> dict | None",
+        "CommandBackend.def job_state(self, job_id: str) -> dict | None",
+        "CommandBackend.def list_jobs(self) -> list[dict]",
+        "CommandBackend.def await_exit(self, job_id: str, timeout: float) -> dict | None",
+        "CommandBackend.def read_log(self, job_id: str) -> bytes",
+        "CommandBackend.def read_log_range(self, job_id: str, start: int, max_bytes: int) -> tuple[bytes, int]",
+        "CommandBackend.def job_processes(self, job_id: str, max_cmd_chars: int=200) -> list[dict]",
+        "CommandBackend.@property\ndef owner_mode(self) -> str",
+        "CommandBackend.@property\ndef warmup_s(self) -> float",
+        "CommandBackend.@property\ndef max_output_chars(self) -> int"
+      ],
+      "policy": "preserve Linux methods, defaults, exceptions and wire behavior; additive types only by B0"
+    },
+    {
+      "path": "src/binnacle/platform/contracts/__init__.py",
+      "module": "binnacle.platform.contracts.__init__",
+      "sha256": "b159fd680c261b20723ab19e0eba1f21f377b1405e9b165d526629c5e3de5f23",
+      "declarations": [],
+      "policy": "preserve Linux methods, defaults, exceptions and wire behavior; additive types only by B0"
+    },
+    {
+      "path": "src/binnacle/platform/contracts/process_contracts.py",
+      "module": "binnacle.platform.contracts.process_contracts",
+      "sha256": "f6c18f6ce2bc3a10a08867a0d1b4114fbedd423d4564a8072ba1a9aca9ec1414",
+      "declarations": [
+        "class UnverifiedJobProcess(RuntimeError)",
+        "class JobSignalDeliveryError(RuntimeError)",
+        "class JobProcessIdentity()",
+        "JobProcessIdentity.native: object",
+        "class JobSignalLease(Protocol)",
+        "JobSignalLease.def signal(self, intent: Literal['terminate', 'kill']) -> None",
+        "JobSignalLease.def close(self) -> None",
+        "class ProcessHandle(Protocol)",
+        "ProcessHandle.@property\ndef pid(self) -> int",
+        "ProcessHandle.@property\ndef returncode(self) -> int | None",
+        "ProcessHandle.def wait(self, timeout: float | None=None) -> int",
+        "class ProcessBackend(Protocol)",
+        "ProcessBackend.def launch(self, argv: Sequence[str], *, workdir: Path, env: Mapping[str, str], stdin: BinaryIO, output: BinaryIO) -> ProcessHandle",
+        "ProcessBackend.def starttime(self, pid: int) -> int | None",
+        "ProcessBackend.def alive(self, pid: int, starttime: int | None=None) -> bool",
+        "ProcessBackend.def processes(self, pgid: int, max_cmd_chars: int=200) -> list[dict]",
+        "ProcessBackend.def descendants(self, pid: int) -> set[int]",
+        "ProcessBackend.def signal_job(self, pgid: int, strays: set[int], intent: Literal['terminate', 'kill']) -> None",
+        "ProcessBackend.def identity_from_record(self, metadata: Mapping[str, object]) -> JobProcessIdentity | None",
+        "ProcessBackend.def open_job_signals(self, identity: JobProcessIdentity) -> JobSignalLease",
+        "ProcessBackend.def inspect_job(self, identity: JobProcessIdentity, max_cmd_chars: int=200) -> list[dict]",
+        "ProcessBackend.def boot_id(self) -> str"
+      ],
+      "policy": "preserve Linux methods, defaults, exceptions and wire behavior; additive types only by B0"
+    },
+    {
+      "path": "src/binnacle/platform/contracts/resource_contracts.py",
+      "module": "binnacle.platform.contracts.resource_contracts",
+      "sha256": "39b7d1e6d1438dc126fd7ced3dadd893e91a0e098e67b5d6dd487479bdc0247e",
+      "declarations": [
+        "class ResourceAccounting(Protocol)",
+        "ResourceAccounting.def prepare(self, *, log_ready: bool=False) -> str | None",
+        "ResourceAccounting.def create(self, job_id: str) -> str | None",
+        "ResourceAccounting.def wrap_argv(self, argv: list[str], identity: str | None) -> list[str]",
+        "ResourceAccounting.def snapshot(self, identity: str | None) -> dict[str, object]",
+        "ResourceAccounting.def wait_empty(self, identity: str) -> bool",
+        "ResourceAccounting.def cleanup(self, identity: str | None) -> bool",
+        "class NoResourceAccounting()",
+        "NoResourceAccounting.def prepare(self, *, log_ready: bool=False) -> str | None",
+        "NoResourceAccounting.def create(self, job_id: str) -> str | None",
+        "NoResourceAccounting.def wrap_argv(self, argv: list[str], identity: str | None) -> list[str]",
+        "NoResourceAccounting.def snapshot(self, identity: str | None) -> dict[str, object]",
+        "NoResourceAccounting.def wait_empty(self, identity: str) -> bool",
+        "NoResourceAccounting.def cleanup(self, identity: str | None) -> bool"
+      ],
+      "policy": "preserve Linux methods, defaults, exceptions and wire behavior; additive types only by B0"
+    },
+    {
+      "path": "src/binnacle/platform/contracts/runtime_path_contracts.py",
+      "module": "binnacle.platform.contracts.runtime_path_contracts",
+      "sha256": "28993da79853d150aa578ed0cc663ef0e395b462107449994895d88b61fb9c71",
+      "declarations": [
+        "class RuntimePaths()",
+        "RuntimePaths.binnacle_runtime_dir: Path",
+        "RuntimePaths.jobs_socket: Path"
+      ],
+      "policy": "preserve Linux methods, defaults, exceptions and wire behavior; additive types only by B0"
+    },
+    {
+      "path": "src/binnacle/platform/contracts/service_lifecycle_contracts.py",
+      "module": "binnacle.platform.contracts.service_lifecycle_contracts",
+      "sha256": "004e202f5977ab7b7827d55b3c140b9e502dd1b31a9077110aaa24694ad58c66",
+      "declarations": [
+        "class ManagedServiceStatus()",
+        "ManagedServiceStatus.state: str",
+        "ManagedServiceStatus.main_pid: int | None = None",
+        "ManagedServiceStatus.restart_count: int | None = None",
+        "class ServiceAction()",
+        "ServiceAction.returncode: int",
+        "ServiceAction.stdout: str = ''",
+        "ServiceAction.stderr: str = ''",
+        "ServiceAction.timed_out: bool = False",
+        "ServiceAction.launch_error: str | None = None",
+        "class ManagedServiceInspector(Protocol)",
+        "ManagedServiceInspector.def status(self, service: str) -> ManagedServiceStatus",
+        "ManagedServiceInspector.def started_at_epoch(self, service: str) -> float | None",
+        "ManagedServiceInspector.def rss_kb(self, service: str) -> float | None",
+        "ManagedServiceInspector.def main_process_has_environment(self, service: str, name: str, value: str) -> bool | None",
+        "ManagedServiceInspector.def main_process_path(self, service: str) -> str | None",
+        "class ManagedServiceController(Protocol)",
+        "ManagedServiceController.def restart(self, service: str, *, timeout: float | None=None) -> ServiceAction"
+      ],
+      "policy": "preserve Linux methods, defaults, exceptions and wire behavior; additive types only by B0"
+    },
+    {
+      "path": "src/binnacle/platform/contracts/service_log_contracts.py",
+      "module": "binnacle.platform.contracts.service_log_contracts",
+      "sha256": "f5a9e9ad309ab3ede64b8d8fee830f5593b6f9c3d3cbdfbde8761bb2d8da1c98",
+      "declarations": [
+        "class ServiceLogError(RuntimeError)",
+        "class ServiceLogSource(Protocol)",
+        "ServiceLogSource.def read_window(self, services: Sequence[str], since_epoch: float, until_epoch: float | None=None) -> str"
+      ],
+      "policy": "preserve Linux methods, defaults, exceptions and wire behavior; additive types only by B0"
+    }
+  ],
+  "modules": [
+    {
+      "module": "binnacle.platform.contracts.capability_contracts",
+      "path": "src/binnacle/platform/contracts/capability_contracts.py",
+      "owner": "B0",
+      "status": "proposed_not_implemented",
+      "imports": [],
+      "declarations": "class CapabilityState(str, Enum):\n    AVAILABLE = \"AVAILABLE\"\n    LIMITED = \"LIMITED\"\n    UNKNOWN = \"UNKNOWN\"\n    UNAVAILABLE = \"UNAVAILABLE\"\n@dataclass(frozen=True)\nclass Capability:\n    state: CapabilityState\n    reason_code: str\n    scope: str\n    evidence_id: str | None = None\nclass NativeCapabilityError(RuntimeError):\n    code: str\n    capability: Capability\n    def __init__(self, code: str, capability: Capability) -> None: ...\nclass CapabilityUnavailable(NativeCapabilityError): ...\nclass AuthorityUnknown(NativeCapabilityError): ...\nclass GenerationMismatch(NativeCapabilityError): ...\nclass PermissionDenied(NativeCapabilityError): ...\nclass UnsafePath(NativeCapabilityError): ...\nclass CursorExpired(NativeCapabilityError): ...\nclass BudgetExceeded(NativeCapabilityError): ...",
+      "semantics": [
+        "UNKNOWN is insufficient evidence now; UNAVAILABLE is unsupported or deliberately disabled. Neither authorizes actions.",
+        "AVAILABLE/LIMITED are valid only within declared scope and current generation; LIMITED is never implicit whole-job authority.",
+        "Error code/reason contains no token, arbitrary native stderr or secret path. Typed internal values do not add Linux MCP output fields."
+      ],
+      "signatures": [
+        "NativeCapabilityError.def __init__(self, code: str, capability: Capability) -> None"
+      ],
+      "implements": {}
+    },
+    {
+      "module": "binnacle.platform.contracts.stop_contracts",
+      "path": "src/binnacle/platform/contracts/stop_contracts.py",
+      "owner": "B0",
+      "status": "proposed_not_implemented",
+      "imports": [],
+      "declarations": "@dataclass(frozen=True)\nclass StopIntent:\n    job_id: str\n    owner_epoch: str\n    request_id: str\n@dataclass(frozen=True)\nclass StopReceipt:\n    intent: StopIntent\n    state: Literal[\"admitted\", \"signaling\", \"closed\", \"unknown\", \"failed\"]\n    target_set_closed: bool\n    outcome_persisted: bool\nclass StopCoordinator(Protocol):\n    def admit(self, job_id: str) -> StopIntent: ...\n    def open_signals(self, intent: StopIntent) -> JobSignalLease: ...\n    def observe(self, intent: StopIntent, *, timeout_s: float) -> StopReceipt: ...\n    def record(self, receipt: StopReceipt) -> StopReceipt: ...",
+      "semantics": [
+        "admit serializes stop/reaper by job+owner epoch and durably commits before returning; persistence error means no signal. Same active job generation/request is idempotent.",
+        "open_signals pins verified targets for the admitted epoch or refuses; it does not signal. observe must account for all authorized targets, not only leader exit.",
+        "record atomically validates owner/request epoch and commits outcome. Success requires closed target set AND persisted closed receipt; errors never convert to success. Existing Linux record fields and RPC v1 preserved; new admission metadata is additive and old readers stay readable.",
+        "B0 owns store/owner/reaper coordinator wiring; A1 owns orchestration. No second source writer."
+      ],
+      "signatures": [
+        "StopCoordinator.def admit(self, job_id: str) -> StopIntent",
+        "StopCoordinator.def open_signals(self, intent: StopIntent) -> JobSignalLease",
+        "StopCoordinator.def observe(self, intent: StopIntent, *, timeout_s: float) -> StopReceipt",
+        "StopCoordinator.def record(self, receipt: StopReceipt) -> StopReceipt"
+      ],
+      "implements": {}
+    },
+    {
+      "module": "binnacle.features.commands.job_stop",
+      "path": "src/binnacle/features/commands/job_stop.py",
+      "owner": "A1",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.stop_contracts",
+        "binnacle.platform.contracts.process_contracts"
+      ],
+      "declarations": "def stop_with_intent(job_id: str, *, coordinator: StopCoordinator, term_grace_s: float, kill_grace_s: float) -> StopReceipt: ...",
+      "semantics": [
+        "A1 additive entrypoint: admit first, then open one lease, TERM, observe full closure, KILL on same lease only if needed, record final receipt before acknowledgement; close lease in finally.",
+        "Durable admission survives crash before/after signal. Epoch mismatch/store failure/partial delivery/uncertain closure produce failed or unknown receipt/error, never stopped. Concurrent reaper uses the same coordinator serialization; no historic PID recovery.",
+        "B0 integrates this entrypoint into shared owner flow after A1 independent review; legacy stop_embedded remains import compatible."
+      ],
+      "signatures": [
+        "def stop_with_intent(job_id: str, *, coordinator: StopCoordinator, term_grace_s: float, kill_grace_s: float) -> StopReceipt"
+      ],
+      "implements": {}
+    },
+    {
+      "module": "binnacle.platform.contracts.darwin_contracts",
+      "path": "src/binnacle/platform/contracts/darwin_contracts.py",
+      "owner": "B0",
+      "status": "proposed_not_implemented",
+      "imports": [],
+      "declarations": "@dataclass(frozen=True)\nclass OwnerGeneration:\n    manager_epoch: str\n    witness_epoch: str\n    job_id: str\n@dataclass(frozen=True)\nclass AuthorityObservation:\n    capability: Capability\n    generation: OwnerGeneration | None\n    membership_closed: bool\n    can_signal: bool\nclass OwnedWitness(Protocol):\n    def observe(self, job_id: str) -> AuthorityObservation: ...\n    def reconnect(self, generation: OwnerGeneration) -> AuthorityObservation: ...\n    def close(self) -> None: ...",
+      "semantics": [
+        "Generation strings are identifiers, never bearer secrets or ownership proof. Authenticated live channel and positive enrollment are required.",
+        "In this revision can_signal=False in shipped Darwin adapters. A2 may exercise owned direct-child mechanisms only in isolated tests.",
+        "Loss of manager and witness yields UNKNOWN, membership_closed=False, can_signal=False. Reconnect cannot reconstruct capabilities from persisted PID/PGID/birth/boot."
+      ],
+      "signatures": [
+        "OwnedWitness.def observe(self, job_id: str) -> AuthorityObservation",
+        "OwnedWitness.def reconnect(self, generation: OwnerGeneration) -> AuthorityObservation",
+        "OwnedWitness.def close(self) -> None"
+      ],
+      "implements": {}
+    },
+    {
+      "module": "binnacle.platform.contracts.file_access_contracts",
+      "path": "src/binnacle/platform/contracts/file_access_contracts.py",
+      "owner": "B0",
+      "status": "proposed_not_implemented",
+      "imports": [],
+      "declarations": "class RootGrant(Protocol):\n    @property\n    def generation(self) -> str: ...\n    def close(self) -> None: ...\nclass OpenedFile(Protocol):\n    @property\n    def display_path(self) -> str: ...\n    def read(self, max_bytes: int) -> bytes: ...\n    def close(self) -> None: ...\n@dataclass(frozen=True)\nclass FileEntry:\n    relative_path: str\n    kind: Literal[\"file\", \"directory\", \"other\"]\n    size_bytes: int | None\nclass FileAccess(Protocol):\n    def grant(self, root: Path, *, generation: str) -> RootGrant: ...\n    def open_read(self, grant: RootGrant, relative_path: str) -> OpenedFile: ...\n    def list_entries(self, grant: RootGrant, relative_path: str, *, max_entries: int) -> Sequence[FileEntry]: ...\n    def write_bytes(self, grant: RootGrant, relative_path: str, data: bytes, *, expected_sha256: str | None = None) -> int: ...\n    def close(self) -> None: ...\n@dataclass(frozen=True)\nclass SearchRequest:\n    relative_path: str\n    pattern: str\n    fixed_strings: bool\n    context_lines: int\n    glob: str | None\n    timeout_s: float\n    max_bytes: int\n    max_files: int\n@dataclass(frozen=True)\nclass SearchBatch:\n    events: Sequence[Mapping[str, object]]\n    truncated: bool\n    files_searched: int\n    capability: Capability\nclass SearchAccess(Protocol):\n    def search(self, grant: RootGrant, request: SearchRequest) -> SearchBatch: ...",
+      "semantics": [
+        "RootGrant and OpenedFile own descriptors; idempotent close, use-after-close rejected. Caller closes in finally; app lifetime owns grants.",
+        "Captured configured canonical root is opened once. Traverse relative components with dir_fd and no-follow checks; reject absolute path, dotdot, symlink/reparse ambiguity. Never reopen an authorized pathname.",
+        "Opened-object semantics: grant follows the original directory object across rename, never replacement path. Newly encountered moved/symlink objects are rejected if authority cannot be proved. No continuous pathname confinement or hostile same-UID guarantee.",
+        "Regular files only for content. Read has a hard byte budget. Missing/denied/TCC-possible paths never become empty results.",
+        "write_bytes owns parent FD, temporary file, flush/fsync/rename cleanup. expected_sha256 guards detected content conflicts for edits, not hostile concurrent-writer serializability. No follow of existing symlink; reject hardlinked mutation unless writing a replacement entry.",
+        "Search enumerates through grant and supplies each authorized open regular file to rg stdin, uses bounded resources and remaps stdin events to relative display path. Never pass an unchecked root path or /dev/fd directory to recursive rg. Ignore/glob parity requires native tests; unsupported cases error explicitly."
+      ],
+      "signatures": [
+        "RootGrant.@property\ndef generation(self) -> str",
+        "RootGrant.def close(self) -> None",
+        "OpenedFile.@property\ndef display_path(self) -> str",
+        "OpenedFile.def read(self, max_bytes: int) -> bytes",
+        "OpenedFile.def close(self) -> None",
+        "FileAccess.def grant(self, root: Path, *, generation: str) -> RootGrant",
+        "FileAccess.def open_read(self, grant: RootGrant, relative_path: str) -> OpenedFile",
+        "FileAccess.def list_entries(self, grant: RootGrant, relative_path: str, *, max_entries: int) -> Sequence[FileEntry]",
+        "FileAccess.def write_bytes(self, grant: RootGrant, relative_path: str, data: bytes, *, expected_sha256: str | None=None) -> int",
+        "FileAccess.def close(self) -> None",
+        "SearchAccess.def search(self, grant: RootGrant, request: SearchRequest) -> SearchBatch"
+      ],
+      "implements": {}
+    },
+    {
+      "module": "binnacle.platform.contracts.native_service_contracts",
+      "path": "src/binnacle/platform/contracts/native_service_contracts.py",
+      "owner": "B0",
+      "status": "proposed_not_implemented",
+      "imports": [],
+      "declarations": "@dataclass(frozen=True)\nclass ServiceLease:\n    uid: int\n    label: str\n    generation: str\n    root_device: int\n    root_inode: int\n@dataclass(frozen=True)\nclass ServicePlan:\n    lease: ServiceLease\n    plist_bytes: bytes\n    plist_path: Path\n    expected_previous_sha256: str | None\n@dataclass(frozen=True)\nclass ServiceReceipt:\n    lease: ServiceLease\n    action: str\n    capability: Capability\n    absent: bool\nclass NativeProvisioner(Protocol):\n    def plan(self, lease: ServiceLease, *, argv: Sequence[str], environment: Mapping[str, str], workdir: Path) -> ServicePlan: ...\n    def apply(self, plan: ServicePlan) -> ServiceReceipt: ...\n    def rollback(self, plan: ServicePlan) -> ServiceReceipt: ...\nclass AuthenticatedChannel(Protocol):\n    def request(self, payload: Mapping[str, object], *, timeout_s: float) -> Mapping[str, object]: ...\n    def close(self) -> None: ...",
+      "semantics": [
+        "Test-owned user/UID launchd namespace only; label alone does not authorize bootout or filesystem removal. Service lease must match authenticated generation and owned inode.",
+        "Plan is pure. Apply validates no foreign overwrite and records previous bytes; rollback restores only its own exact prior state and positively verifies service/child/socket absence. Quiet active-job gate always applies to manager mutations.",
+        "Linux UnitProvisioner is unchanged; do not emulate systemctl via launchctl or treat enabling user service as login persistence.",
+        "Protocol is cooperative same UID. Peer UID, live generation challenge, bounded framing and private root permissions required; copied marker alone is not authentication. Deny stale/unresponsive endpoint; never blind unlink."
+      ],
+      "signatures": [
+        "NativeProvisioner.def plan(self, lease: ServiceLease, *, argv: Sequence[str], environment: Mapping[str, str], workdir: Path) -> ServicePlan",
+        "NativeProvisioner.def apply(self, plan: ServicePlan) -> ServiceReceipt",
+        "NativeProvisioner.def rollback(self, plan: ServicePlan) -> ServiceReceipt",
+        "AuthenticatedChannel.def request(self, payload: Mapping[str, object], *, timeout_s: float) -> Mapping[str, object]",
+        "AuthenticatedChannel.def close(self) -> None"
+      ],
+      "implements": {}
+    },
+    {
+      "module": "binnacle.platform.contracts.metric_log_contracts",
+      "path": "src/binnacle/platform/contracts/metric_log_contracts.py",
+      "owner": "B0",
+      "status": "proposed_not_implemented",
+      "imports": [],
+      "declarations": "@dataclass(frozen=True)\nclass MetricValue:\n    capability: Capability\n    value: int | float | None\n    unit: str\n    scope: Literal[\"self\", \"direct_child\", \"job\"]\n    sampled_at_epoch: float | None\n    final: bool\n@dataclass(frozen=True)\nclass LogCursor:\n    service_generation: str\n    stream_epoch: str\n    device: int\n    inode: int\n    offset: int\n@dataclass(frozen=True)\nclass LogBatch:\n    data: bytes\n    next_cursor: LogCursor\n    capability: Capability\n    gap: bool\n    truncated: bool\nclass ScopedMetrics(Protocol):\n    def snapshot_scoped(self, job_id: str | None = None) -> Mapping[str, MetricValue]: ...\nclass CursorLogSource(Protocol):\n    def read_cursor(self, service: str, cursor: LogCursor | None, *, max_bytes: int, max_lines: int) -> LogBatch: ...",
+      "semantics": [
+        "UNKNOWN/UNAVAILABLE metric value must be None, never numeric zero. Zero only for an actually measured available quantity. Units and scope mandatory.",
+        "wait4 stats come from the single existing owning reaper; no competing waiter and no sum presented as full descendant totals. Private libproc sampling disabled in this revision.",
+        "Cursor epochs rotate on restart/truncate; old inode read requires retained owned descriptor and known epoch. Missing or ambiguous coverage returns gap/error, never proof of event absence.",
+        "Private 0700 root/0600 files, bounded bytes+lines and redaction before persistence; no secrets in logs/errors. read_window must raise ServiceLogError if completeness cannot be satisfied."
+      ],
+      "signatures": [
+        "ScopedMetrics.def snapshot_scoped(self, job_id: str | None=None) -> Mapping[str, MetricValue]",
+        "CursorLogSource.def read_cursor(self, service: str, cursor: LogCursor | None, *, max_bytes: int, max_lines: int) -> LogBatch"
+      ],
+      "implements": {}
+    },
+    {
+      "module": "binnacle.platform.darwin.process_backend",
+      "path": "src/binnacle/platform/darwin/process_backend.py",
+      "owner": "A2",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.process_contracts",
+        "binnacle.platform.contracts.darwin_contracts"
+      ],
+      "declarations": "class DarwinProcessBackend:\n    def __init__(self, *, witness: OwnedWitness | None = None) -> None: ...\n    def authority(self, job_id: str) -> AuthorityObservation: ...",
+      "semantics": [
+        "Implements every unchanged ProcessBackend method. launch and signal_job raise CapabilityUnavailable; open_job_signals raises UnverifiedJobProcess.",
+        "identity_from_record returns None absent current authenticated enrollment; historical Linux records are never Darwin capabilities.",
+        "Legacy boolean alive/sets/lists cannot represent UNKNOWN: raise AuthorityUnknown rather than return False/empty for uncertainty. starttime returns None if unavailable; boot_id is observational only.",
+        "New typed observation is additive; B0 must never route UNKNOWN through legacy negative/exit inference."
+      ],
+      "signatures": [
+        "DarwinProcessBackend.def __init__(self, *, witness: OwnedWitness | None=None) -> None",
+        "DarwinProcessBackend.def authority(self, job_id: str) -> AuthorityObservation"
+      ],
+      "implements": {
+        "DarwinProcessBackend": [
+          "ProcessBackend"
+        ]
+      }
+    },
+    {
+      "module": "binnacle.platform.darwin.process_authority",
+      "path": "src/binnacle/platform/darwin/process_authority.py",
+      "owner": "A2",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.darwin_contracts"
+      ],
+      "declarations": "def observe_authority(job_id: str, *, witness: OwnedWitness | None) -> AuthorityObservation: ...",
+      "semantics": [
+        "Read-only authority observation; never enumerate numeric PIDs to adopt a job."
+      ],
+      "signatures": [
+        "def observe_authority(job_id: str, *, witness: OwnedWitness | None) -> AuthorityObservation"
+      ],
+      "implements": {}
+    },
+    {
+      "module": "binnacle.platform.darwin.witness_protocol",
+      "path": "src/binnacle/platform/darwin/witness_protocol.py",
+      "owner": "A2",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.darwin_contracts",
+        "binnacle.platform.contracts.native_service_contracts"
+      ],
+      "declarations": "class DarwinWitness:\n    def __init__(self, channel: AuthenticatedChannel, generation: OwnerGeneration) -> None: ...\n    def observe(self, job_id: str) -> AuthorityObservation: ...\n    def reconnect(self, generation: OwnerGeneration) -> AuthorityObservation: ...\n    def close(self) -> None: ...",
+      "semantics": [
+        "Implements OwnedWitness; no public stop authority enabled. Expired, wrong-generation or disconnected observations fail closed."
+      ],
+      "signatures": [
+        "DarwinWitness.def __init__(self, channel: AuthenticatedChannel, generation: OwnerGeneration) -> None",
+        "DarwinWitness.def observe(self, job_id: str) -> AuthorityObservation",
+        "DarwinWitness.def reconnect(self, generation: OwnerGeneration) -> AuthorityObservation",
+        "DarwinWitness.def close(self) -> None"
+      ],
+      "implements": {
+        "DarwinWitness": [
+          "OwnedWitness"
+        ]
+      }
+    },
+    {
+      "module": "binnacle.platform.darwin.generation_runtime",
+      "path": "src/binnacle/platform/darwin/generation_runtime.py",
+      "owner": "A3",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.runtime_path_contracts",
+        "binnacle.platform.contracts.native_service_contracts"
+      ],
+      "declarations": "def resolve_runtime_paths() -> RuntimePaths: ...\ndef open_service_lease(*, root: Path, label: str, generation: str) -> ServiceLease: ...",
+      "semantics": [
+        "Root must be current UID owned 0700, not symlinked; socket path length checked before bind. Explicit configured private runtime root supported; fail if unavailable.",
+        "Default private runtime root under current user platform cache Binnacle/r3; verify every ancestor/trust assumption. Persistent logs/state use separately configured private dirs, never temp cleanup of history."
+      ],
+      "signatures": [
+        "def resolve_runtime_paths() -> RuntimePaths",
+        "def open_service_lease(*, root: Path, label: str, generation: str) -> ServiceLease"
+      ],
+      "implements": {}
+    },
+    {
+      "module": "binnacle.platform.darwin.ipc_transport",
+      "path": "src/binnacle/platform/darwin/ipc_transport.py",
+      "owner": "A3",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.native_service_contracts"
+      ],
+      "declarations": "def connect_authenticated(socket_path: Path, *, lease: ServiceLease, timeout_s: float) -> AuthenticatedChannel: ...\ndef serve_authenticated(socket_path: Path, *, lease: ServiceLease, handler: Callable[[Mapping[str, object]], Mapping[str, object]], stop: Event) -> None: ...",
+      "semantics": [
+        "Handshake before any action, peer UID plus generation proof on both ends. Darwin envelope version 1 carries unchanged RPC v1 payload; never send this envelope to Linux endpoint.",
+        "Bind/singleton generation lease includes descriptor/inode verification; two-starter loser refuses. Readiness requires authenticated ping for exact generation, not pathname existence."
+      ],
+      "signatures": [
+        "def connect_authenticated(socket_path: Path, *, lease: ServiceLease, timeout_s: float) -> AuthenticatedChannel",
+        "def serve_authenticated(socket_path: Path, *, lease: ServiceLease, handler: Callable[[Mapping[str, object]], Mapping[str, object]], stop: Event) -> None"
+      ],
+      "implements": {}
+    },
+    {
+      "module": "binnacle.platform.darwin.service_launchd",
+      "path": "src/binnacle/platform/darwin/service_launchd.py",
+      "owner": "A3",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.native_service_contracts",
+        "binnacle.platform.contracts.service_lifecycle_contracts"
+      ],
+      "declarations": "class LaunchdUserServices:\n    def __init__(self, lease: ServiceLease) -> None: ...\n    def bootstrap(self, plan: ServicePlan) -> ServiceReceipt: ...\n    def bootout(self, lease: ServiceLease, *, timeout_s: float) -> ServiceReceipt: ...\n    def readiness(self, lease: ServiceLease, *, timeout_s: float) -> Capability: ...",
+      "semantics": [
+        "Implements ManagedServiceInspector and ManagedServiceController exactly. Unknown fields return None/state unknown, not guessed facts.",
+        "restart refuses manager with active/unknown durable jobs; frontend can restart separately. bootstrap/bootout use argument arrays, bounded waits, captured sanitized failures."
+      ],
+      "signatures": [
+        "LaunchdUserServices.def __init__(self, lease: ServiceLease) -> None",
+        "LaunchdUserServices.def bootstrap(self, plan: ServicePlan) -> ServiceReceipt",
+        "LaunchdUserServices.def bootout(self, lease: ServiceLease, *, timeout_s: float) -> ServiceReceipt",
+        "LaunchdUserServices.def readiness(self, lease: ServiceLease, *, timeout_s: float) -> Capability"
+      ],
+      "implements": {
+        "LaunchdUserServices": [
+          "ManagedServiceInspector",
+          "ManagedServiceController"
+        ]
+      }
+    },
+    {
+      "module": "binnacle.platform.darwin.file_access",
+      "path": "src/binnacle/platform/darwin/file_access.py",
+      "owner": "A4",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.file_access_contracts"
+      ],
+      "declarations": "class DarwinFileAccess:\n    def __init__(self) -> None: ...",
+      "semantics": [
+        "Implements FileAccess exactly. Core owns decoding and edit matching; adapter owns opened-object operations and denial."
+      ],
+      "signatures": [
+        "DarwinFileAccess.def __init__(self) -> None"
+      ],
+      "implements": {
+        "DarwinFileAccess": [
+          "FileAccess"
+        ]
+      }
+    },
+    {
+      "module": "binnacle.platform.darwin.file_traversal",
+      "path": "src/binnacle/platform/darwin/file_traversal.py",
+      "owner": "A4",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.file_access_contracts"
+      ],
+      "declarations": "def validate_relative_path(relative_path: str) -> tuple[str, ...]: ...",
+      "semantics": [
+        "Internal component validation only; it does not establish authority without descriptor traversal."
+      ],
+      "signatures": [
+        "def validate_relative_path(relative_path: str) -> tuple[str, ...]"
+      ],
+      "implements": {}
+    },
+    {
+      "module": "binnacle.platform.darwin.search_access",
+      "path": "src/binnacle/platform/darwin/search_access.py",
+      "owner": "A4",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.file_access_contracts"
+      ],
+      "declarations": "class DarwinSearchAccess:\n    def __init__(self, files: FileAccess, *, rg_bin: str) -> None: ...",
+      "semantics": [
+        "Implements SearchAccess. Own/close rg direct child and pipes on every timeout/cancel/error. Native tests must prove ignore/glob/case behavior; otherwise report explicit limited support."
+      ],
+      "signatures": [
+        "DarwinSearchAccess.def __init__(self, files: FileAccess, *, rg_bin: str) -> None"
+      ],
+      "implements": {
+        "DarwinSearchAccess": [
+          "SearchAccess"
+        ]
+      }
+    },
+    {
+      "module": "binnacle.platform.darwin.log_source",
+      "path": "src/binnacle/platform/darwin/log_source.py",
+      "owner": "A5",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.metric_log_contracts",
+        "binnacle.platform.contracts.service_log_contracts"
+      ],
+      "declarations": "class PrivateServiceLogSource:\n    def __init__(self, *, root: Path, generation: str) -> None: ...",
+      "semantics": [
+        "Implements ServiceLogSource and CursorLogSource; CLI semantic epoch window is not an unbounded text-file read."
+      ],
+      "signatures": [
+        "PrivateServiceLogSource.def __init__(self, *, root: Path, generation: str) -> None"
+      ],
+      "implements": {
+        "PrivateServiceLogSource": [
+          "ServiceLogSource",
+          "CursorLogSource"
+        ]
+      }
+    },
+    {
+      "module": "binnacle.platform.darwin.log_cursor",
+      "path": "src/binnacle/platform/darwin/log_cursor.py",
+      "owner": "A5",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.metric_log_contracts"
+      ],
+      "declarations": "def validate_cursor(cursor: LogCursor, *, generation: str, epoch: str, device: int, inode: int, size: int) -> None: ...",
+      "semantics": [
+        "Generation/inode/epoch/negative or beyond-end offset mismatch raises CursorExpired. Truncate and regrow is not detected by size alone; writer must issue new epoch."
+      ],
+      "signatures": [
+        "def validate_cursor(cursor: LogCursor, *, generation: str, epoch: str, device: int, inode: int, size: int) -> None"
+      ],
+      "implements": {}
+    },
+    {
+      "module": "binnacle.platform.darwin.resource_accounting",
+      "path": "src/binnacle/platform/darwin/resource_accounting.py",
+      "owner": "A5",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.resource_contracts",
+        "binnacle.platform.contracts.metric_log_contracts"
+      ],
+      "declarations": "class DarwinResourceAccounting:\n    def __init__(self) -> None: ...\n    def snapshot_scoped(self, job_id: str | None = None) -> Mapping[str, MetricValue]: ...",
+      "semantics": [
+        "Implements ResourceAccounting compatibility: prepare/create -> None, wrap_argv unchanged, snapshot -> {} for unavailable legacy counters, wait_empty -> False, cleanup true only when identity None; scoped API supplies explicit UNAVAILABLE values.",
+        "NoResourceAccounting remains unchanged for Linux callers. No cgroup identity is reinterpreted as Darwin containment."
+      ],
+      "signatures": [
+        "DarwinResourceAccounting.def __init__(self) -> None",
+        "DarwinResourceAccounting.def snapshot_scoped(self, job_id: str | None=None) -> Mapping[str, MetricValue]"
+      ],
+      "implements": {
+        "DarwinResourceAccounting": [
+          "ResourceAccounting",
+          "ScopedMetrics"
+        ]
+      }
+    },
+    {
+      "module": "binnacle.deployment.darwin.plist",
+      "path": "src/binnacle/deployment/darwin/plist.py",
+      "owner": "A6",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.native_service_contracts"
+      ],
+      "declarations": "def render_plist(lease: ServiceLease, *, argv: Sequence[str], environment: Mapping[str, str], workdir: Path, stdout_path: Path, stderr_path: Path) -> bytes: ...",
+      "semantics": [
+        "Pure plistlib rendering; no shell, secret token argv/env or network wildcard listener defaults."
+      ],
+      "signatures": [
+        "def render_plist(lease: ServiceLease, *, argv: Sequence[str], environment: Mapping[str, str], workdir: Path, stdout_path: Path, stderr_path: Path) -> bytes"
+      ],
+      "implements": {}
+    },
+    {
+      "module": "binnacle.deployment.darwin.provisioner",
+      "path": "src/binnacle/deployment/darwin/provisioner.py",
+      "owner": "A6",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.native_service_contracts",
+        "binnacle.platform.darwin.service_launchd"
+      ],
+      "declarations": "class DarwinProvisioner:\n    def __init__(self, *, root: Path, services: LaunchdUserServices) -> None: ...",
+      "semantics": [
+        "Implements NativeProvisioner; uses A3 lifecycle, owns plan/write/restore only. No second launchctl implementation."
+      ],
+      "signatures": [
+        "DarwinProvisioner.def __init__(self, *, root: Path, services: LaunchdUserServices) -> None"
+      ],
+      "implements": {
+        "DarwinProvisioner": [
+          "NativeProvisioner"
+        ]
+      }
+    },
+    {
+      "module": "binnacle.deployment.darwin.setup",
+      "path": "src/binnacle/deployment/darwin/setup.py",
+      "owner": "A6",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.deployment.darwin.provisioner"
+      ],
+      "declarations": "def main(argv: Sequence[str] | None = None) -> int: ...",
+      "semantics": [
+        "Test-root/label explicit; plan/apply/rollback subcommands, no global install or login item change. Scripts delegate here; existing Linux CLI remains unchanged."
+      ],
+      "signatures": [
+        "def main(argv: Sequence[str] | None=None) -> int"
+      ],
+      "implements": {}
+    },
+    {
+      "module": "binnacle.features.commands.restricted_backend",
+      "path": "src/binnacle/features/commands/restricted_backend.py",
+      "owner": "B0",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.features.commands.command_contracts",
+        "binnacle.platform.contracts.capability_contracts"
+      ],
+      "declarations": "class RestrictedDarwinCommandBackend:\n    def __init__(self, *, history_root: Path, generation: str, warmup_s: float, max_output_chars: int) -> None: ...",
+      "semantics": [
+        "Implements CommandBackend. start_and_wait and stop_job raise CapabilityUnavailable with stable reason darwin_commands_unavailable before any process action.",
+        "job_state/list_jobs/read_log/read_log_range/await_exit read only authorized Darwin history; preserve unknown, cursor/truncation rules. job_processes raises AuthorityUnknown if no live proof; no metadata-derived PID enumeration.",
+        "No current history is a valid empty listing; inaccessible/corrupt history must error. owner_mode is darwin-history; no native jobs launched through public tools this revision."
+      ],
+      "signatures": [
+        "RestrictedDarwinCommandBackend.def __init__(self, *, history_root: Path, generation: str, warmup_s: float, max_output_chars: int) -> None"
+      ],
+      "implements": {
+        "RestrictedDarwinCommandBackend": [
+          "CommandBackend"
+        ]
+      }
+    },
+    {
+      "module": "binnacle.platform.composition",
+      "path": "src/binnacle/platform/composition.py",
+      "owner": "B0",
+      "status": "proposed_not_implemented",
+      "imports": [
+        "binnacle.platform.contracts.file_access_contracts",
+        "binnacle.platform.contracts.native_service_contracts"
+      ],
+      "declarations": "def host_os_family(system: str | None = None) -> Literal[\"linux\", \"darwin\"]: ...\ndef create_file_access() -> FileAccess | None: ...\ndef create_search_access(files: FileAccess, *, rg_bin: str) -> SearchAccess: ...\ndef create_native_provisioner(*, root: Path, services: LaunchdUserServices) -> NativeProvisioner: ...",
+      "semantics": [
+        "Retain all existing factories/signatures and create_linux_provisioner as Linux-only. Lazy import exact OS adapter only; unknown host UnsupportedHostOS.",
+        "Linux file factory None preserves existing path behavior; Darwin requires descriptor adapter. Native provisioner is Darwin-only. Factories and types are ordinary Python, never a Provider registry.",
+        "Existing notify_job_manager_ready keeps Linux sd_notify; Darwin uses A3 authenticated readiness. No Linux path imports during Darwin startup."
+      ],
+      "signatures": [
+        "def host_os_family(system: str | None=None) -> Literal['linux', 'darwin']",
+        "def create_file_access() -> FileAccess | None",
+        "def create_search_access(files: FileAccess, *, rg_bin: str) -> SearchAccess",
+        "def create_native_provisioner(*, root: Path, services: LaunchdUserServices) -> NativeProvisioner"
+      ],
+      "implements": {}
+    }
+  ],
+  "tool_capability_matrix": {
+    "read_file": {
+      "linux": {
+        "state": "AVAILABLE",
+        "scope": "unchanged base schema/behavior; existing runtime failures still apply",
+        "surface_sha256": "54ed0646b239adce52a7b872a26203f1d7547199d952d5eb78e8156cad1d0c30"
+      },
+      "darwin": {
+        "state": "LIMITED",
+        "target_state": "limited",
+        "enable_only_after_native_review": true,
+        "runtime_default_before_acceptance": "UNAVAILABLE",
+        "scope": "opened-root Files/Search or read-only durable history; no process stop/launch authority",
+        "error_if_unavailable": "native_capability_unavailable"
+      }
+    },
+    "list_files": {
+      "linux": {
+        "state": "AVAILABLE",
+        "scope": "unchanged base schema/behavior; existing runtime failures still apply",
+        "surface_sha256": "3199643b89945d9c6a5f15522cf884d697b1e6b946c4a2528839304b471c24a2"
+      },
+      "darwin": {
+        "state": "LIMITED",
+        "target_state": "limited",
+        "enable_only_after_native_review": true,
+        "runtime_default_before_acceptance": "UNAVAILABLE",
+        "scope": "opened-root Files/Search or read-only durable history; no process stop/launch authority",
+        "error_if_unavailable": "native_capability_unavailable"
+      }
+    },
+    "search_text": {
+      "linux": {
+        "state": "AVAILABLE",
+        "scope": "unchanged base schema/behavior; existing runtime failures still apply",
+        "surface_sha256": "bd6f6e576567dad6fd759fac233667aa4b6089d546b90079832fa4761739848a"
+      },
+      "darwin": {
+        "state": "LIMITED",
+        "target_state": "limited",
+        "enable_only_after_native_review": true,
+        "runtime_default_before_acceptance": "UNAVAILABLE",
+        "scope": "opened-root Files/Search or read-only durable history; no process stop/launch authority",
+        "error_if_unavailable": "native_capability_unavailable"
+      }
+    },
+    "edit_file": {
+      "linux": {
+        "state": "AVAILABLE",
+        "scope": "unchanged base schema/behavior; existing runtime failures still apply",
+        "surface_sha256": "de1636ef9ac176c7876f6418caaef428e33f8918e6c77cdc67fa55991684a83b"
+      },
+      "darwin": {
+        "state": "LIMITED",
+        "target_state": "limited",
+        "enable_only_after_native_review": true,
+        "runtime_default_before_acceptance": "UNAVAILABLE",
+        "scope": "opened-root Files/Search or read-only durable history; no process stop/launch authority",
+        "error_if_unavailable": "native_capability_unavailable"
+      }
+    },
+    "write_file": {
+      "linux": {
+        "state": "AVAILABLE",
+        "scope": "unchanged base schema/behavior; existing runtime failures still apply",
+        "surface_sha256": "caed318767151115e1715c2cfb27400fa545019cbf3508c7cfb6de426a919e31"
+      },
+      "darwin": {
+        "state": "LIMITED",
+        "target_state": "limited",
+        "enable_only_after_native_review": true,
+        "runtime_default_before_acceptance": "UNAVAILABLE",
+        "scope": "opened-root Files/Search or read-only durable history; no process stop/launch authority",
+        "error_if_unavailable": "native_capability_unavailable"
+      }
+    },
+    "run_command": {
+      "linux": {
+        "state": "AVAILABLE",
+        "scope": "unchanged base schema/behavior; existing runtime failures still apply",
+        "surface_sha256": "86bad9e89fba8852069598a9d415f0d556aa5ff0cef5c5f2497dfdc737c7abed"
+      },
+      "darwin": {
+        "state": "UNAVAILABLE",
+        "target_state": "unavailable",
+        "enable_only_after_native_review": false,
+        "runtime_default_before_acceptance": "UNAVAILABLE",
+        "scope": "opened-root Files/Search or read-only durable history; no process stop/launch authority",
+        "error_if_unavailable": "darwin_commands_unavailable"
+      }
+    },
+    "job_status": {
+      "linux": {
+        "state": "AVAILABLE",
+        "scope": "unchanged base schema/behavior; existing runtime failures still apply",
+        "surface_sha256": "943496173b29f5c8cf9746fb355fd5ccf4d7351089b6841202e0d8279aa7f1a3"
+      },
+      "darwin": {
+        "state": "LIMITED",
+        "target_state": "limited",
+        "enable_only_after_native_review": true,
+        "runtime_default_before_acceptance": "UNAVAILABLE",
+        "scope": "opened-root Files/Search or read-only durable history; no process stop/launch authority",
+        "error_if_unavailable": "native_capability_unavailable"
+      }
+    },
+    "stop_job": {
+      "linux": {
+        "state": "AVAILABLE",
+        "scope": "unchanged base schema/behavior; existing runtime failures still apply",
+        "surface_sha256": "ef13121e05987b54c837ce1963f8b967cb67064e91e06604f7e6a63535d02a2d"
+      },
+      "darwin": {
+        "state": "UNAVAILABLE",
+        "target_state": "unavailable",
+        "enable_only_after_native_review": false,
+        "runtime_default_before_acceptance": "UNAVAILABLE",
+        "scope": "opened-root Files/Search or read-only durable history; no process stop/launch authority",
+        "error_if_unavailable": "darwin_commands_unavailable"
+      }
+    }
+  },
+  "linux_schema_pins": {
+    "chatgpt": {
+      "job_status": "943496173b29f5c8cf9746fb355fd5ccf4d7351089b6841202e0d8279aa7f1a3",
+      "list_files": "3199643b89945d9c6a5f15522cf884d697b1e6b946c4a2528839304b471c24a2",
+      "read_file": "54ed0646b239adce52a7b872a26203f1d7547199d952d5eb78e8156cad1d0c30",
+      "run_command": "86bad9e89fba8852069598a9d415f0d556aa5ff0cef5c5f2497dfdc737c7abed",
+      "search_text": "bd6f6e576567dad6fd759fac233667aa4b6089d546b90079832fa4761739848a",
+      "stop_job": "ef13121e05987b54c837ce1963f8b967cb67064e91e06604f7e6a63535d02a2d"
+    },
+    "default": {
+      "edit_file": "de1636ef9ac176c7876f6418caaef428e33f8918e6c77cdc67fa55991684a83b",
+      "job_status": "943496173b29f5c8cf9746fb355fd5ccf4d7351089b6841202e0d8279aa7f1a3",
+      "list_files": "3199643b89945d9c6a5f15522cf884d697b1e6b946c4a2528839304b471c24a2",
+      "read_file": "54ed0646b239adce52a7b872a26203f1d7547199d952d5eb78e8156cad1d0c30",
+      "run_command": "86bad9e89fba8852069598a9d415f0d556aa5ff0cef5c5f2497dfdc737c7abed",
+      "search_text": "bd6f6e576567dad6fd759fac233667aa4b6089d546b90079832fa4761739848a",
+      "stop_job": "ef13121e05987b54c837ce1963f8b967cb67064e91e06604f7e6a63535d02a2d",
+      "write_file": "caed318767151115e1715c2cfb27400fa545019cbf3508c7cfb6de426a919e31"
+    }
+  },
+  "wire_policy": {
+    "linux": "all input/output schemas, descriptions, annotations, order, profile visibility 8/6/6/8 and instructions preserved byte/hash-equivalently",
+    "darwin": "same eight registered tool names and argument/output schemas; OS-specific descriptions/instructions must truthfully state disabled Commands and bounded Files/Search/history. Capability errors use existing CodedToolError MCP error path, never fabricated successful payloads. Do not claim Linux composite surface digest parity for different Darwin descriptions.",
+    "no_new_tools": true,
+    "linux_rpc_version": 1,
+    "darwin_transport_envelope_version": 1
+  },
+  "private_api_policy": {
+    "private_libproc_allowed": false,
+    "cross_version_signal_claim": false,
+    "cold_pid_adoption_allowed": false,
+    "darwin_stop_enabled": false
+  },
+  "freeze_protocol": [
+    "R0 reviews exact docs commit and all artifact hashes",
+    "CR0 accepts revision and exact ownership/card amendments",
+    "Task Manager records FROZEN-API-CONTRACT.json containing revision, docs commit, api/ownership/capability SHA-256 and CR0 receipt",
+    "Single B0-contract precursor creates shared declarations/initializers; source-bound check before dependent adapter cards",
+    "Any interface/owner/capability change increments revision and returns to CR0; authors cannot silently extend it"
+  ]
+}

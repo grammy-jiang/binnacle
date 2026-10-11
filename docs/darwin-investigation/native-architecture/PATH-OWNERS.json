@@ -1,0 +1,840 @@
+{
+  "schema_revision": "binnacle-darwin-r3-interface-1.0.0",
+  "source_base_sha": "c2234f16bdfb1a17500b99101d3184b797ebb673",
+  "status": "PROPOSED_EXCLUSIVE_OWNERS_REQUIRES_CR0_AND_DISPATCH_CARDS",
+  "scope": "Closed-world source allowlist. All base paths not listed are read-only. Every future source file must be listed exactly; draft globs confer no open-ended creation right. Evidence namespaces stay in each lane task card.",
+  "manifest_sha256": "c95cea16cc01a6504a33603275d233ba468185205685a47ef198d88e1c817a97",
+  "draft_sha256": "33ea963c5744a5df82ccb05f49c1eeabb73c8bd6f2276324c1d5c4b1fc293f3f",
+  "base_tree_path_count": 675,
+  "patterns_expanded_against_base": [
+    {
+      "lane": "A1",
+      "draft_glob": "src/binnacle/features/commands/job_stop.py",
+      "existing_base_paths": [
+        "src/binnacle/features/commands/job_stop.py"
+      ],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A1",
+      "draft_glob": "tests/unit/core/test_os_job_stop_*.py",
+      "existing_base_paths": [
+        "tests/unit/core/test_os_job_stop_policy.py"
+      ],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A1",
+      "draft_glob": "tests/integration/test_jobs_stop_*.py",
+      "existing_base_paths": [
+        "tests/integration/test_jobs_stop_paths.py"
+      ],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A2",
+      "draft_glob": "src/binnacle/platform/darwin/process_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A2",
+      "draft_glob": "src/binnacle/platform/darwin/witness_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A2",
+      "draft_glob": "tests/platform/darwin/process_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A3",
+      "draft_glob": "src/binnacle/platform/darwin/service_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A3",
+      "draft_glob": "src/binnacle/platform/darwin/ipc_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A3",
+      "draft_glob": "src/binnacle/platform/darwin/generation_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A3",
+      "draft_glob": "tests/platform/darwin/ipc_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A4",
+      "draft_glob": "src/binnacle/platform/darwin/file_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A4",
+      "draft_glob": "src/binnacle/platform/darwin/search_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A4",
+      "draft_glob": "tests/platform/darwin/files_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A4",
+      "draft_glob": "tests/platform/darwin/search_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A5",
+      "draft_glob": "src/binnacle/platform/darwin/log_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A5",
+      "draft_glob": "src/binnacle/platform/darwin/resource_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A5",
+      "draft_glob": "tests/platform/darwin/log_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A5",
+      "draft_glob": "tests/platform/darwin/resource_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A6",
+      "draft_glob": "src/binnacle/deployment/darwin/*",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A6",
+      "draft_glob": "scripts/macos_setup_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A6",
+      "draft_glob": "scripts/macos_package_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "A6",
+      "draft_glob": "tests/platform/darwin/package_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "T0",
+      "draft_glob": "tests/platform/darwin/collection_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "T0",
+      "draft_glob": "tests/scripts/macos_test_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "T0",
+      "draft_glob": "tests/scripts/macos_collection_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "B0",
+      "draft_glob": "src/binnacle/platform/composition.py",
+      "existing_base_paths": [
+        "src/binnacle/platform/composition.py"
+      ],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "B0",
+      "draft_glob": "src/binnacle/application.py",
+      "existing_base_paths": [
+        "src/binnacle/application.py"
+      ],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "B0",
+      "draft_glob": "tests/platform/darwin/composition_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    },
+    {
+      "lane": "E0",
+      "draft_glob": "tests/platform/darwin/native_smoke_*.py",
+      "existing_base_paths": [],
+      "future_glob_grant": false
+    }
+  ],
+  "assignments": [
+    {
+      "path": "pyproject.toml",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "quality-policy.json",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "scripts/macos_package_smoke.py",
+      "owner": "A6",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "scripts/macos_setup_test.py",
+      "owner": "A6",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/application.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/cli.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/config.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/deployment/darwin/__init__.py",
+      "owner": "A6",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/deployment/darwin/plist.py",
+      "owner": "A6",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/deployment/darwin/provisioner.py",
+      "owner": "A6",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/deployment/darwin/setup.py",
+      "owner": "A6",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/deployment/provisioning_contracts.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/commands/command_backend.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/commands/command_contracts.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/commands/command_execution.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/commands/command_status.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/commands/job_client.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/commands/job_manager.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/commands/job_owner.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/commands/job_stop.py",
+      "owner": "A1",
+      "kind": "existing",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/features/commands/job_store.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/commands/jobs.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/commands/restricted_backend.py",
+      "owner": "B0",
+      "kind": "new",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/commands/tools/__init__.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/commands/tools/job_status.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/commands/tools/run_command.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/commands/tools/stop_job.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/files/files_server.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/files/tools/__init__.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/files/tools/edit_file.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/files/tools/list_files.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/files/tools/read_file.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/files/tools/write_file.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/search/search_server.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/search/search_text_collect.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/search/search_text_pipeline.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/search/search_text_rg.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/search/search_text_stream.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/search/tools/__init__.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/features/search/tools/search_text.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/platform/composition.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/platform/contracts/__init__.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/platform/contracts/capability_contracts.py",
+      "owner": "B0",
+      "kind": "new",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/platform/contracts/darwin_contracts.py",
+      "owner": "B0",
+      "kind": "new",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/platform/contracts/file_access_contracts.py",
+      "owner": "B0",
+      "kind": "new",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/platform/contracts/metric_log_contracts.py",
+      "owner": "B0",
+      "kind": "new",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/platform/contracts/native_service_contracts.py",
+      "owner": "B0",
+      "kind": "new",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/platform/contracts/process_contracts.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/platform/contracts/resource_contracts.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/platform/contracts/runtime_path_contracts.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/platform/contracts/service_lifecycle_contracts.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/platform/contracts/service_log_contracts.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/platform/contracts/stop_contracts.py",
+      "owner": "B0",
+      "kind": "new",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/platform/darwin/__init__.py",
+      "owner": "B0",
+      "kind": "new",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/platform/darwin/file_access.py",
+      "owner": "A4",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/platform/darwin/file_traversal.py",
+      "owner": "A4",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/platform/darwin/generation_runtime.py",
+      "owner": "A3",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/platform/darwin/ipc_transport.py",
+      "owner": "A3",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/platform/darwin/log_cursor.py",
+      "owner": "A5",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/platform/darwin/log_source.py",
+      "owner": "A5",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/platform/darwin/process_authority.py",
+      "owner": "A2",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/platform/darwin/process_backend.py",
+      "owner": "A2",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/platform/darwin/resource_accounting.py",
+      "owner": "A5",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/platform/darwin/search_access.py",
+      "owner": "A4",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/platform/darwin/service_launchd.py",
+      "owner": "A3",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/platform/darwin/witness_protocol.py",
+      "owner": "A2",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "src/binnacle/platform/deployment_platform.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/platform/job_platform.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "src/binnacle/server.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "tests/conftest.py",
+      "owner": "B0",
+      "kind": "existing",
+      "shared_contract": true
+    },
+    {
+      "path": "tests/contracts/test_darwin_interface.py",
+      "owner": "B0",
+      "kind": "new",
+      "shared_contract": true
+    },
+    {
+      "path": "tests/integration/test_jobs_stop_durability.py",
+      "owner": "A1",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/integration/test_jobs_stop_paths.py",
+      "owner": "A1",
+      "kind": "existing",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/platform/__init__.py",
+      "owner": "B0",
+      "kind": "new",
+      "shared_contract": true
+    },
+    {
+      "path": "tests/platform/darwin/__init__.py",
+      "owner": "B0",
+      "kind": "new",
+      "shared_contract": true
+    },
+    {
+      "path": "tests/platform/darwin/collection_contract.py",
+      "owner": "T0",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/platform/darwin/composition_contract.py",
+      "owner": "B0",
+      "kind": "new",
+      "shared_contract": true
+    },
+    {
+      "path": "tests/platform/darwin/conftest.py",
+      "owner": "B0",
+      "kind": "new",
+      "shared_contract": true
+    },
+    {
+      "path": "tests/platform/darwin/files_roots.py",
+      "owner": "A4",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/platform/darwin/files_tcc.py",
+      "owner": "A4",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/platform/darwin/ipc_generation.py",
+      "owner": "A3",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/platform/darwin/ipc_launchd.py",
+      "owner": "A3",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/platform/darwin/log_epochs.py",
+      "owner": "A5",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/platform/darwin/native_smoke_mcp.py",
+      "owner": "E0",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/platform/darwin/package_install.py",
+      "owner": "A6",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/platform/darwin/process_authority.py",
+      "owner": "A2",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/platform/darwin/process_native.py",
+      "owner": "A2",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/platform/darwin/resource_scope.py",
+      "owner": "A5",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/platform/darwin/search_parity.py",
+      "owner": "A4",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/scripts/macos_collection_native.py",
+      "owner": "T0",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/scripts/macos_test_selection.py",
+      "owner": "T0",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/unit/core/test_os_job_stop_durability.py",
+      "owner": "A1",
+      "kind": "new",
+      "shared_contract": false
+    },
+    {
+      "path": "tests/unit/core/test_os_job_stop_policy.py",
+      "owner": "A1",
+      "kind": "existing",
+      "shared_contract": false
+    }
+  ],
+  "new_files_by_lane": {
+    "A1": [
+      "tests/unit/core/test_os_job_stop_durability.py",
+      "tests/integration/test_jobs_stop_durability.py"
+    ],
+    "A2": [
+      "src/binnacle/platform/darwin/process_backend.py",
+      "src/binnacle/platform/darwin/process_authority.py",
+      "src/binnacle/platform/darwin/witness_protocol.py",
+      "tests/platform/darwin/process_authority.py",
+      "tests/platform/darwin/process_native.py"
+    ],
+    "A3": [
+      "src/binnacle/platform/darwin/service_launchd.py",
+      "src/binnacle/platform/darwin/ipc_transport.py",
+      "src/binnacle/platform/darwin/generation_runtime.py",
+      "tests/platform/darwin/ipc_generation.py",
+      "tests/platform/darwin/ipc_launchd.py"
+    ],
+    "A4": [
+      "src/binnacle/platform/darwin/file_access.py",
+      "src/binnacle/platform/darwin/file_traversal.py",
+      "src/binnacle/platform/darwin/search_access.py",
+      "tests/platform/darwin/files_roots.py",
+      "tests/platform/darwin/files_tcc.py",
+      "tests/platform/darwin/search_parity.py"
+    ],
+    "A5": [
+      "src/binnacle/platform/darwin/log_source.py",
+      "src/binnacle/platform/darwin/log_cursor.py",
+      "src/binnacle/platform/darwin/resource_accounting.py",
+      "tests/platform/darwin/log_epochs.py",
+      "tests/platform/darwin/resource_scope.py"
+    ],
+    "A6": [
+      "src/binnacle/deployment/darwin/__init__.py",
+      "src/binnacle/deployment/darwin/plist.py",
+      "src/binnacle/deployment/darwin/provisioner.py",
+      "src/binnacle/deployment/darwin/setup.py",
+      "scripts/macos_setup_test.py",
+      "scripts/macos_package_smoke.py",
+      "tests/platform/darwin/package_install.py"
+    ],
+    "T0": [
+      "tests/platform/darwin/collection_contract.py",
+      "tests/scripts/macos_test_selection.py",
+      "tests/scripts/macos_collection_native.py"
+    ],
+    "B0": [
+      "src/binnacle/platform/darwin/__init__.py",
+      "src/binnacle/platform/contracts/capability_contracts.py",
+      "src/binnacle/platform/contracts/stop_contracts.py",
+      "src/binnacle/platform/contracts/darwin_contracts.py",
+      "src/binnacle/platform/contracts/file_access_contracts.py",
+      "src/binnacle/platform/contracts/native_service_contracts.py",
+      "src/binnacle/platform/contracts/metric_log_contracts.py",
+      "src/binnacle/features/commands/restricted_backend.py",
+      "tests/platform/darwin/composition_contract.py",
+      "tests/platform/__init__.py",
+      "tests/platform/darwin/__init__.py",
+      "tests/platform/darwin/conftest.py",
+      "tests/contracts/test_darwin_interface.py"
+    ],
+    "E0": [
+      "tests/platform/darwin/native_smoke_mcp.py"
+    ]
+  },
+  "shared_contract_owner": "B0",
+  "dispatch_amendments": {
+    "B0": "Task Manager must issue a CR0-approved B0-contract prerequisite card for shared types and inert package initializers before A1-A6/T0 compile. B0 integration remains after adapter lanes; never schedule both B0 phases concurrently. Expand B0 original card to these exact shared seams.",
+    "T0": "Current non-test-prefixed lane files require explicit collection; B0 exclusively owns tests/platform/darwin/conftest.py and any tests/conftest.py or pyproject.toml hook. T0 supplies collector design and named file selectors; do not silently skip them.",
+    "all": "Any extra file, dependency lock update, inventory output or fixture needs a fresh exact-path amendment and overlap proof; no inferred wildcard permission."
+  },
+  "pairwise_non_overlap": {
+    "method": "Expand draft globs against git ls-tree BASE. Replace future globs with finite exact new-file lists. Check exact path and NFC+casefold identity uniqueness across all lane pairs; reject absolute paths, dot/dotdot components, symlink ancestors and file/directory prefix collisions. Revalidate canonical real paths at dispatch.",
+    "lane_pairs": 36,
+    "duplicate_paths": [],
+    "canonical_aliases": [],
+    "result": "PASS_CLOSED_WORLD",
+    "negative_fixture": {
+      "path": "src/binnacle/platform/contracts/process_contracts.py",
+      "attempted_second_owner": "A2",
+      "expected": "REJECT_DUPLICATE"
+    }
+  }
+}

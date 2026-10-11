@@ -1,0 +1,763 @@
+{
+  "schema_revision": "binnacle-darwin-r3-interface-1.0.0",
+  "source_base_sha": "c2234f16bdfb1a17500b99101d3184b797ebb673",
+  "status": "TARGET_POLICY_PENDING_CR0_NOT_NATIVE_ACCEPTANCE",
+  "evidence_root": "run inputs directory; paths relative to inputs/",
+  "historical_evidence_sha256": {
+    "index": {
+      "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/CAPABILITY-CURRENT.json",
+      "sha256": "039e80dadb9fb069bbbd3715763e6433ef23196605f6a271a17650fab5c38203",
+      "class": "historical_bounded_evidence_not_candidate_acceptance"
+    },
+    "summary": {
+      "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+      "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+      "class": "historical_bounded_evidence_not_candidate_acceptance"
+    },
+    "N2": {
+      "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/A/N2-OWNERSHIP.json",
+      "sha256": "346f06e667371dda93430e9f6731adf5f6774197fd462fa33430b48dd6f38de5",
+      "class": "historical_bounded_evidence_not_candidate_acceptance"
+    },
+    "api": {
+      "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/B/N2-API.json",
+      "sha256": "2208d5a172f8e980b718d778e742787d1d81c5fd5bf651046587170850f06e86",
+      "class": "historical_bounded_evidence_not_candidate_acceptance"
+    },
+    "N5": {
+      "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/C/N5-STATE.json",
+      "sha256": "0ac520bb08bacdc79ed8b1388c3e82e007e47609459f256c241b307e3d78e83c",
+      "class": "historical_bounded_evidence_not_candidate_acceptance"
+    },
+    "logs": {
+      "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/D/N6-LOGS.json",
+      "sha256": "0cc395f2519e235f3c7beece5f1856d0cb72511d85ae13ecbb2cb723a8031a9a",
+      "class": "historical_bounded_evidence_not_candidate_acceptance"
+    },
+    "metrics": {
+      "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+      "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+      "class": "historical_bounded_evidence_not_candidate_acceptance"
+    }
+  },
+  "capabilities": [
+    {
+      "id": "N1.arm64_package_fastmcp",
+      "target_state": "limited",
+      "runtime_state": "LIMITED",
+      "owner": "A6",
+      "rationale": "Finite fake-platform schema and package proof supports native build work, not full runtime.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/CAPABILITY-CURRENT.json",
+          "sha256": "039e80dadb9fb069bbbd3715763e6433ef23196605f6a271a17650fab5c38203",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N2.public_commands_launch",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A2",
+      "rationale": "Arbitrary shell descendants cannot be bounded/proven from existing research; do not advertise durable shell execution.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/A/N2-OWNERSHIP.json",
+          "sha256": "346f06e667371dda93430e9f6731adf5f6774197fd462fa33430b48dd6f38de5",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/B/N2-API.json",
+          "sha256": "2208d5a172f8e980b718d778e742787d1d81c5fd5bf651046587170850f06e86",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N2.public_commands_stop",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A2",
+      "rationale": "No proven complete membership/closure or supported cross-build signal authority.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/A/N2-OWNERSHIP.json",
+          "sha256": "346f06e667371dda93430e9f6731adf5f6774197fd462fa33430b48dd6f38de5",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/B/N2-API.json",
+          "sha256": "2208d5a172f8e980b718d778e742787d1d81c5fd5bf651046587170850f06e86",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N2.cold_recovery",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A2",
+      "rationale": "Lost manager and witness leave ownership UNKNOWN. Persisted PID/PGID/birth never restore it.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/A/N2-OWNERSHIP.json",
+          "sha256": "346f06e667371dda93430e9f6731adf5f6774197fd462fa33430b48dd6f38de5",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N2.read_only_history",
+      "target_state": "limited",
+      "runtime_state": "LIMITED",
+      "owner": "B0",
+      "rationale": "Read persisted bytes/recorded results; uncertain active records stay unknown, never exited by inference.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/A/N2-OWNERSHIP.json",
+          "sha256": "346f06e667371dda93430e9f6731adf5f6774197fd462fa33430b48dd6f38de5",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/CAPABILITY-CURRENT.json",
+          "sha256": "039e80dadb9fb069bbbd3715763e6433ef23196605f6a271a17650fab5c38203",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N3.user_launchd",
+      "target_state": "limited",
+      "runtime_state": "LIMITED",
+      "owner": "A3",
+      "rationale": "Test-owned user-domain service with separate frontend; readiness and teardown need native product proof.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/D/N6-LOGS.json",
+          "sha256": "0cc395f2519e235f3c7beece5f1856d0cb72511d85ae13ecbb2cb723a8031a9a",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N4.authenticated_ipc",
+      "target_state": "limited",
+      "runtime_state": "LIMITED",
+      "owner": "A3",
+      "rationale": "Peer UID plus generation under cooperative same-UID trust, not malicious same-UID isolation.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/CAPABILITY-CURRENT.json",
+          "sha256": "039e80dadb9fb069bbbd3715763e6433ef23196605f6a271a17650fab5c38203",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N4.opened_root_files",
+      "target_state": "limited",
+      "runtime_state": "LIMITED",
+      "owner": "A4",
+      "rationale": "Opened-object authority across rename; no continuous-path or hostile same-UID claim. TCC denial explicit.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/CAPABILITY-CURRENT.json",
+          "sha256": "039e80dadb9fb069bbbd3715763e6433ef23196605f6a271a17650fab5c38203",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N4.descriptor_search",
+      "target_state": "limited",
+      "runtime_state": "LIMITED",
+      "owner": "A4",
+      "rationale": "Only authorized opened file bytes enter rg; no unsafe recursive reopen; parity must be demonstrated.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/CAPABILITY-CURRENT.json",
+          "sha256": "039e80dadb9fb069bbbd3715763e6433ef23196605f6a271a17650fab5c38203",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N5.awake_unlocked_session",
+      "target_state": "limited",
+      "runtime_state": "LIMITED",
+      "owner": "A3",
+      "rationale": "Finite SSH observations do not establish continuous launchd lifetime. No interval claims inferred from endpoint states.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/C/N5-STATE.json",
+          "sha256": "0ac520bb08bacdc79ed8b1388c3e82e007e47609459f256c241b307e3d78e83c",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/CAPABILITY-CURRENT.json",
+          "sha256": "039e80dadb9fb069bbbd3715763e6433ef23196605f6a271a17650fab5c38203",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N5.sleep_logout_preunlock",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A3",
+      "rationale": "System sleep, logout and FileVault preunlock continuity not proven.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/C/N5-STATE.json",
+          "sha256": "0ac520bb08bacdc79ed8b1388c3e82e007e47609459f256c241b307e3d78e83c",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.private_service_logs",
+      "target_state": "limited",
+      "runtime_state": "LIMITED",
+      "owner": "A5",
+      "rationale": "Finite owned launchd stdout/stderr proof; durable epochs, rotation, redaction and gaps need new tests.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/D/N6-LOGS.json",
+          "sha256": "0cc395f2519e235f3c7beece5f1856d0cb72511d85ae13ecbb2cb723a8031a9a",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.direct_child_wait4",
+      "target_state": "limited",
+      "runtime_state": "LIMITED",
+      "owner": "A5",
+      "rationale": "Single owning reaper final direct-child metrics only; never job-wide totals.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.private_libproc_samples",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "Historical private API samples are not a supported cross-version production interface.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/B/N2-API.json",
+          "sha256": "2208d5a172f8e980b718d778e742787d1d81c5fd5bf651046587170850f06e86",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.cpu.stat.usage_usec",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "No proven complete job-membership scope",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.cpu.stat.user_usec",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "No complete membership/proven provenance",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.cpu.stat.system_usec",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "No complete membership",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.memory.current",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "Darwin process snapshots not semantically Linux cgroup current memory",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.memory.peak",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "No demonstrated job-scoped peak",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.pids.current",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "No complete membership primitive",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.io.stat.rbytes",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "Different accounting scope",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.io.stat.wbytes",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "Different accounting scope",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.memory.events.oom",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "No cgroup memory events or OOM-kill count",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.scope.wait_empty",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "No cgroup-equivalent empty scope",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.resource_history.final",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "Needs single reaper and durable transaction",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.memory.stat",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "No demonstrated complete job-scoped native equivalent.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.memory.swap.current",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "No demonstrated complete job-scoped native equivalent.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.memory.swap.peak",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "No demonstrated complete job-scoped native equivalent.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.memory.swap.events",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "No demonstrated complete job-scoped native equivalent.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.pids.peak",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "No demonstrated complete job-scoped native equivalent.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.processes",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "No demonstrated complete job-scoped native equivalent.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.io.stat.rios/wios",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "No demonstrated complete job-scoped native equivalent.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    },
+    {
+      "id": "N6.memory.events.oom_kill",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "owner": "A5",
+      "rationale": "No demonstrated complete job-scoped native equivalent.",
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "acceptance": "Requires new exact-source native tests and independent review before enabling; target is not implementation status."
+    }
+  ],
+  "tools": [
+    {
+      "tool": "read_file",
+      "target_state": "limited",
+      "runtime_state": "LIMITED",
+      "capabilities": [
+        "N4.opened_root_files"
+      ],
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/CAPABILITY-CURRENT.json",
+          "sha256": "039e80dadb9fb069bbbd3715763e6433ef23196605f6a271a17650fab5c38203",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+    },
+    {
+      "tool": "list_files",
+      "target_state": "limited",
+      "runtime_state": "LIMITED",
+      "capabilities": [
+        "N4.opened_root_files"
+      ],
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/CAPABILITY-CURRENT.json",
+          "sha256": "039e80dadb9fb069bbbd3715763e6433ef23196605f6a271a17650fab5c38203",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+    },
+    {
+      "tool": "search_text",
+      "target_state": "limited",
+      "runtime_state": "LIMITED",
+      "capabilities": [
+        "N4.descriptor_search"
+      ],
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/CAPABILITY-CURRENT.json",
+          "sha256": "039e80dadb9fb069bbbd3715763e6433ef23196605f6a271a17650fab5c38203",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+    },
+    {
+      "tool": "edit_file",
+      "target_state": "limited",
+      "runtime_state": "LIMITED",
+      "capabilities": [
+        "N4.opened_root_files"
+      ],
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/CAPABILITY-CURRENT.json",
+          "sha256": "039e80dadb9fb069bbbd3715763e6433ef23196605f6a271a17650fab5c38203",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+    },
+    {
+      "tool": "write_file",
+      "target_state": "limited",
+      "runtime_state": "LIMITED",
+      "capabilities": [
+        "N4.opened_root_files"
+      ],
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/finish/results/S/SUPERVISOR-SUMMARY.md",
+          "sha256": "82d526d55f83cd08fbb70741ace60733e113ce2b73bf51fb110d9660f9440490",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/CAPABILITY-CURRENT.json",
+          "sha256": "039e80dadb9fb069bbbd3715763e6433ef23196605f6a271a17650fab5c38203",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+    },
+    {
+      "tool": "run_command",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "capabilities": [
+        "N2.public_commands_launch"
+      ],
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/A/N2-OWNERSHIP.json",
+          "sha256": "346f06e667371dda93430e9f6731adf5f6774197fd462fa33430b48dd6f38de5",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/B/N2-API.json",
+          "sha256": "2208d5a172f8e980b718d778e742787d1d81c5fd5bf651046587170850f06e86",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "public_behavior": "MCP tool error before side effects; remains discoverable with explicit unavailable description"
+    },
+    {
+      "tool": "job_status",
+      "target_state": "limited",
+      "runtime_state": "LIMITED",
+      "capabilities": [
+        "N2.read_only_history",
+        "N6.direct_child_wait4"
+      ],
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/A/N2-OWNERSHIP.json",
+          "sha256": "346f06e667371dda93430e9f6731adf5f6774197fd462fa33430b48dd6f38de5",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/E/N6-METRICS.json",
+          "sha256": "dc70b53461a075f3574927e3b81b3d35a162e5898adf4d01a95abb2274942a6d",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "public_behavior": "Bounded operation; denial/uncertainty explicit; no full Linux parity claim"
+    },
+    {
+      "tool": "stop_job",
+      "target_state": "unavailable",
+      "runtime_state": "UNAVAILABLE",
+      "capabilities": [
+        "N2.public_commands_stop"
+      ],
+      "evidence": [
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/A/N2-OWNERSHIP.json",
+          "sha256": "346f06e667371dda93430e9f6731adf5f6774197fd462fa33430b48dd6f38de5",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        },
+        {
+          "path": "n1-n6/binnacle-darwin-targeted-s-20261010/docs/darwin-investigation/native-validation/targeted-verification/results/B/N2-API.json",
+          "sha256": "2208d5a172f8e980b718d778e742787d1d81c5fd5bf651046587170850f06e86",
+          "class": "historical_bounded_evidence_not_candidate_acceptance"
+        }
+      ],
+      "public_behavior": "MCP tool error before side effects; remains discoverable with explicit unavailable description"
+    }
+  ],
+  "promotion_rule": "No promotion to full or Commands enablement by adapter author. New revision, native negative evidence, R1/R2 review and CR0/CR1 exact-source decision required.",
+  "runtime_unknown_rule": "Insufficient observation is UNKNOWN; null metrics and no authority. Tool policy remains UNAVAILABLE for public launch/stop even with finite retained-witness test success."
+}
