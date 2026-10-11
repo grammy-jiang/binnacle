@@ -70,7 +70,7 @@
     "LINUX": 62
   },
   "coverage_complete": true,
-  "implementation_commit": "f1b682e43e244162740be96fa248d3e4436e4d0d",
+  "implementation_commit": "225a7bbf71ac69946f6a98d4fdaadd68ddbbb901",
   "production_module_count": 196,
   "rows": [
     {
@@ -4498,7 +4498,7 @@
       "owner": "BOUNDARY",
       "path": "src/binnacle/features/commands/job_stop.py",
       "rationale": "Explicit composition or compatibility seam; implementation-specific actions are delegated",
-      "sha256": "d1919904b43b31397bd0dea6be1b859f574748a4a6aa92d63821b99b8ee5da32",
+      "sha256": "900adc3d79a862bcd8c0c0f53e08ba58a91da3f56894d55ce15166ee3c9b2598",
       "stage": "OS3",
       "was_in_baseline": false
     },
