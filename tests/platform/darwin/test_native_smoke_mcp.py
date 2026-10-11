@@ -15,9 +15,7 @@ import os
 import re
 import secrets
 import shutil
-import signal
 import socket
-import subprocess
 import sys
 import tempfile
 import threading
@@ -28,6 +26,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
+from tests.platform.darwin import _signal_safety as safety
 
 FULL_PARITY = "FULL_PARITY_NO_GO"
 TOOLS = "read_file list_files search_text edit_file write_file run_command job_status stop_job"
@@ -396,6 +396,7 @@ def test_run_command_sd18(endpoint: Endpoint) -> None:
         endpoint, [(k, "run_command", {"workdir": wd, **v}) for k, v in cmds.items()]
     )
     esc_pid = int(esc.read_text()) if esc.exists() else None
+    esc_rec = safety.observe(esc_pid) if esc_pid is not None else None
     evidence: dict[str, Any] = {"full_parity": FULL_PARITY, "calls": out}
     try:
         assert out["echo"]["data"]["output"] == "hi\n"
@@ -423,13 +424,10 @@ def test_run_command_sd18(endpoint: Endpoint) -> None:
     finally:
         # Kill ONLY the exact recorded escapee, after confirming what it is.
         if esc_pid is not None and not _gone(esc_pid, timeout=0):
-            ps = ["ps", "-p", str(esc_pid), "-o", "command="]
-            cmd = subprocess.run(
-                ps, capture_output=True, text=True, check=False
-            ).stdout.strip()
+            cmd = safety.command_of(esc_pid)
             evidence["escapee_command"] = cmd
-            if cmd == "sleep 602":
-                os.kill(esc_pid, signal.SIGKILL)
+            if cmd == "sleep 602" and esc_rec is not None:
+                safety.kill_verified(esc_pid, esc_rec.birth)
         evidence["escapee_dead"] = esc_pid is None or _gone(esc_pid)
         _record("sd18-run-command", evidence)
     assert evidence["escapee_dead"]

@@ -9,6 +9,8 @@ import errno
 import os
 import signal
 import socket
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -364,3 +366,29 @@ def test_unreadable_current_boot_identity_fails_closed(jobs_dir):
     assert manager.job_counts() == (0, 1)
     assert booted(jobs_dir, session()).recover() == 1  # finalised once provable
     assert "authority" not in meta_of(jobs_dir, "a" * 12)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Darwin libproc")
+def test_verified_teardown_signal_skips_stale_or_reused_targets():
+    from tests.platform.darwin import _signal_safety as safety
+
+    proc = subprocess.Popen(["/bin/sleep", "30"], start_new_session=True)
+    try:
+        record = safety.observe(proc.pid)
+        assert record and record.parent == os.getpid() and record.group == proc.pid
+        stale = (record.birth[0] - 5, record.birth[1])  # same pid, other birth
+        before = len(safety.SKIPPED)
+        assert not safety.kill_verified(proc.pid, stale, group=True)
+        assert not safety.kill_verified(proc.pid, record.birth, parent=1)
+        assert len(safety.SKIPPED) >= before + 2
+        assert proc.poll() is None  # nothing was signalled
+        assert safety.kill_verified(
+            proc.pid, record.birth, group=True, parent=os.getpid()
+        )
+        proc.wait(timeout=5)
+        assert proc.returncode == -signal.SIGKILL
+        assert not safety.kill_verified(proc.pid, record.birth, group=True)  # gone
+    finally:
+        if proc.poll() is None:
+            proc.kill()  # own unreaped child
+            proc.wait()
