@@ -35,6 +35,7 @@ from binnacle.platform.contracts.process_contracts import (
 )
 from binnacle.platform.darwin.process_authority import (
     _is_darwin,
+    _OwnedLeaderWait,
     _process_records,
     _process_token,
     _ProcessRecord,
@@ -179,7 +180,7 @@ class DarwinJobProcessOwner:
                 self._by_pid.pop(pid, None)
                 with suppress(OSError):
                     os.kill(pid, signal.SIGKILL)
-                    os.waitpid(pid, 0)
+                    _OwnedLeaderWait(pid).wait4(block=True)
                 raise
             self._changed.notify_all()
             return OwnedJobProcess(
@@ -287,11 +288,9 @@ class DarwinJobProcessOwner:
         return timeout
 
     def _reap_locked(self, job: _OwnedJob) -> OwnedJobExit | None:
-        """Reap an exited leader; its zombie reserves the pgid until then.
+        """Reap an exited leader, whose zombie reserves the pgid until then.
 
-        Members still in the owned group are terminated first (the exit is not
-        yet published), because a reaped leader closes the signal fence.
-        """
+        Group members are terminated first: a reap closes the signal fence."""
         if self._verified_record_locked(job) is None:
             return None
         try:
@@ -311,7 +310,7 @@ class DarwinJobProcessOwner:
             with suppress(OSError):
                 os.killpg(job.pid, signal.SIGKILL)
         try:
-            waited, status, _usage = os.wait4(job.pid, os.WNOHANG)
+            waited, status = _OwnedLeaderWait(job.pid).wait4()
         except ChildProcessError:
             # ECHILD: another waiter reaped our child. Never claim an exit.
             self._mark_lost_locked(job, "darwin_exclusive_reaper_required")

@@ -213,6 +213,23 @@ def _validate_process_layout() -> None:
         raise OSError("kinfo_proc self round-trip failed")
 
 
+class _OwnedLeaderWait:
+    """The one wait4 site for R4 manager-owned job leaders (sole reaper).
+
+    Only DarwinJobProcessOwner constructs it, for a pid it spawned in this
+    incarnation and has not reaped; never for a pid read from disk or a peer.
+    """
+
+    __slots__ = ("_pid",)
+
+    def __init__(self, pid: int) -> None:
+        self._pid = pid
+
+    def wait4(self, *, block: bool = False) -> tuple[int, int]:
+        waited, status, _usage = os.wait4(self._pid, 0 if block else os.WNOHANG)
+        return waited, status
+
+
 class _ForegroundOwner:
     """Own one posix_spawn child and serialize *every* signal and reap.
 
