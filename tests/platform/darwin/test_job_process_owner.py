@@ -373,23 +373,20 @@ def test_refuses_when_sigchld_is_not_default():
         signal.signal(signal.SIGCHLD, previous)
 
 
-class _ReapedAfterTimeout(_ExitSource):
-    """wait() timed out, then the reaper reaped before exit_for() (RJ1-F1)."""
-
-    def wait(self, job_id, timeout):
-        self.calls.append((job_id, timeout))
-
-
 def test_owned_process_handle_exit_reaped_after_timeout_is_an_exit():
-    source = _ReapedAfterTimeout(OwnedJobExit("j", 7, None, "normal_exit"))
+    # wait() timed out, then the reaper reaped before exit_for() (RJ1-F1).
+    source = mock.Mock(**{"wait.return_value": None})
+    source.exit_for.return_value = OwnedJobExit("j", 7, None, "normal_exit")
     assert OwnedProcessHandle(source, "j", 4242).wait(0.01) == 7
 
 
 @native
 @pytest.mark.parametrize("built_in", [True, False])
-def test_reaper_fault_wakes_waiters_and_close_still_reaps(spool, built_in):
-    created = DarwinJobProcessOwner(boot_id="b", start_reaper=built_in)
-    started = _spawn(created, "job-f", "sleep 0.5; exit 4", spool)
+@pytest.mark.parametrize("recovers", [True, False])
+def test_reaper_fault_wakes_waiters_and_close_still_reaps(spool, built_in, recovers):
+    graces = {"stop_sigterm_grace_s": 0.3, "stop_sigkill_grace_s": 0.3}
+    created = DarwinJobProcessOwner(boot_id="b", start_reaper=built_in, **graces)
+    started = _spawn(created, "job-f", "sleep 30 & sleep 0.5; exit 4", spool)
     created._poll_exit_events = mock.Mock(side_effect=ValueError("injected"))
     if not built_in:  # the caller-driven reap faults the owner too (RJ1D-F2)
         with pytest.raises(ValueError, match="injected"):
@@ -399,27 +396,31 @@ def test_reaper_fault_wakes_waiters_and_close_still_reaps(spool, built_in):
     outcome = []
 
     def waiter():
-        try:
-            outcome.append(created.wait("job-f", None))
-        except JobOwnerLost as exc:
-            outcome.append(exc)
+        with pytest.raises(JobOwnerLost, match="darwin_job_reaper_failed"):
+            created.wait("job-f", None)
+        outcome.append("raised")
 
     thread = threading.Thread(target=waiter, daemon=True)
     thread.start()
     thread.join(5)
-    assert not thread.is_alive(), "wait() hung on a dead reaper"
+    assert outcome == ["raised"], "wait() hung or returned on a dead reaper"
     if created._reaper is not None:
         created._reaper.join(1)  # it ends once the fault is recorded
     assert not created.reaper_running
-    assert [str(e) for e in outcome] == ["darwin_job_reaper_failed"]
     unknown = OwnedJobObservation("job-f", "UNKNOWN", None, "darwin_job_reaper_failed")
     assert created.authority("job-f") == unknown
     with pytest.raises(Exception, match="darwin_job_reaper_failed"):
         _spawn(created, "job-late", "true", spool)
-    del created._poll_exit_events  # close() drives the sole reap path itself
-    exits = created.close()
-    assert [e.job_id for e in exits] == ["job-f"]
-    assert not _alive(started.pid)
+    _await_zombie(started.pid)  # exited leader; its group member still runs
+    group = job_process_owner._process_records(2, started.pid)
+    members = [m.pid for m in group if m.pid != started.pid]
+    if recovers:
+        del created._poll_exit_events  # close() drives the sole reap pass itself
+    exits = created.close()  # a persistent fault cannot reap: UNKNOWN, no exit
+    assert [(e.job_id, e.exit_code, e.termination_reason) for e in exits] == (
+        [("job-f", 4, "normal_exit")] if recovers else []
+    )
+    assert members and not any(_alive(pid) for pid in members)  # RJ1D2-F1
 
 
 @native

@@ -90,7 +90,7 @@ class DarwinJobProcessOwner(_OwnedExitTable):
         self._by_pid: dict[int, _OwnedJob] = {}
         self._released: dict[str, _OwnedJob] = {}
         self._fault: str | None = None  # reaping failed: unreaped jobs UNKNOWN
-        self._closing = False
+        self._closing = self._kill_phase = False
         self._closed = False
         self._reaper: Thread | None = None
         if sys.platform == "darwin":
@@ -305,10 +305,8 @@ class DarwinJobProcessOwner(_OwnedExitTable):
                 with suppress(OSError):
                     os.killpg(job.pid, signal.SIGTERM)
                 job.straggler_deadline = now + self._graces[1][1]
-                if not self._closing:
-                    return None
-            if not self._closing and now < job.straggler_deadline:
-                return None
+            if now < job.straggler_deadline and not self._kill_phase:
+                return None  # Linux stop grace, also in close()'s TERM phase
             with suppress(OSError):
                 os.killpg(job.pid, signal.SIGKILL)
         try:
@@ -460,8 +458,9 @@ class DarwinJobProcessOwner(_OwnedExitTable):
                 job.close_signalled = not job.exit_seen
         for number, grace_s in self._graces:
             with self._lock:
-                for job in targets:
-                    if not job.exit_seen and not job.reaped and not job.lost:
+                self._kill_phase = number == signal.SIGKILL
+                for job in targets:  # zombie leaders too: no survivor (RJ1D2-F1)
+                    if not job.reaped and not job.lost:
                         try:
                             self._signal_group_locked(job, number)
                         except (UnverifiedJobProcess, JobSignalDeliveryError):
@@ -496,5 +495,5 @@ class DarwinJobProcessOwner(_OwnedExitTable):
             # No reaper thread: close() drives the same sole reap pass.
             try:
                 self._reap_pass(min(remaining, _REAPER_POLL_S))
-            except Exception:  # noqa: BLE001 - unreaped targets -> reap_timeout
-                return
+            except Exception:  # noqa: BLE001 - retried; unreaped -> reap_timeout
+                time.sleep(min(remaining, _REAPER_POLL_S))
