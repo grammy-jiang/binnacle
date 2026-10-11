@@ -232,6 +232,9 @@ def test_search_text_hit_summaries(tree, kwargs, names_only, limit):
     )
     assert darwin[2].get("note") == linux[2].get("note")
     assert darwin[2]["count"] == linux[2]["count"]
+    if limit == 2:
+        assert darwin[2]["note"].startswith("Showing first 2 of 5 matches; narrow")
+        assert darwin[1].endswith("; showing first 2.")
 
 
 @pytest.mark.parametrize("rel", ["d", "d/escape/secret.txt", "d/five.txt/child"])
