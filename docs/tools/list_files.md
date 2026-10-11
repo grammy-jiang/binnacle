@@ -63,6 +63,8 @@ OpenAI's tool-design guidance, design doc §5.2.)
 
 **Behavior**: resolve `path` via the shared guard (sanitize NUL/`@`, `~`, relative→default root, roots check). Listing mode: `iterdir`, skip hidden unless `include_hidden`, dirs first then alphabetical, `bytes` from `stat` (stat failures skip the entry). Glob mode: `rg --files --sortr=modified --glob {pattern}` in `path` (+`--hidden --glob !**/.git/**` when `include_hidden`), 20 s timeout, exit code 1 = no matches (empty result + note), exit code 2 or a dead binary = `ToolError` carrying stderr and a `run_command ls/find` fallback hint; take `max_results` lines, absolutize.
 
+**Symlinks in listing mode (r5, SD-60; Linux follows the macOS rules)**: an in-root symlink is listed, typed by its target, only when its link text stays inside the configured roots at every component and its target resolves inside the roots; the entry is built from one no-follow metadata read of that resolved target. These links are omitted, with no detail about the target: absolute link text, links to another root, out-and-back link text (for example `../outside/../root/f`), targets outside the roots, dangling links, loops and chains longer than 40 hops, and entries whose metadata cannot be read. macOS also omits links to in-root FIFOs and sockets. Omitted entries do not count toward `count` or `truncated`. Glob mode is unchanged. `read_file` is unchanged: it can still open a path through such a link when the path resolves inside the roots.
+
 **Errors** (all instructions): directory not found → nearby-siblings hint (shared helper); path is a file → "Use read_file to read it."; outside roots → shared guard message; rg failure/timeout → actionable message.
 
 ## 4. Test checklist (tests/unit/tools/test_list_files.py)
