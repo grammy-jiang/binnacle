@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 import socket
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from dataclasses import replace
@@ -369,9 +370,12 @@ def test_listing_never_opens_symlinks_fifos_or_sockets(tree, monkeypatch):
         monkeypatch.setattr(os, "open", guarded)
         for glob in (None, "**/*"):
             entries = files.list_entries(grant, listing(glob=glob)).entries
-            assert {(e.relative_path, e.kind) for e in entries} == {
-                (n, "other") for n in ("link", "fifo", "socket")
-            }
+            assert {(e.relative_path, e.kind) for e in entries} == (
+                {(n, "other") for n in ("link", "fifo", "socket")}
+                if glob is None
+                else set()
+            )
+        monkeypatch.setattr(os, "open", real_open)
         monkeypatch.setattr(os, "open", real_open)
 
 
@@ -442,3 +446,30 @@ def test_surrogate_filename_remapping_without_filesystem_support():
     raw = b'{"type":"begin","data":{"path":{"text":"<stdin>"}}}\n'
     events = search_access._events(raw, os.fsdecode(b"bad-\xff"), False)
     assert events[0]["data"]["path"] == {"bytes": "YmFkLf8="}
+
+
+def test_search_root_swap_at_native_launch_preserves_opened_bytes(tree, monkeypatch):
+    from binnacle.platform.contracts.file_access_contracts import SearchRequest
+    from binnacle.platform.darwin.search_access import DarwinSearchAccess
+
+    root, files, grant = tree
+    search = DarwinSearchAccess(files, rg_bin="rg")
+    (root / "file").write_text("needle owned\n")
+    original_popen = subprocess.Popen
+    seen = []
+
+    def swap(argv, **kwargs):
+        root.rename(root.with_name("moved"))
+        root.mkdir()
+        (root / "file").write_text("needle SECRET\n")
+        seen.append(argv)
+        return original_popen(argv, **kwargs)
+
+    monkeypatch.setattr(search_access.subprocess, "Popen", swap)
+    result = search.search(
+        grant, SearchRequest(".", "needle", False, 0, None, 5, 1000000, 100)
+    )
+    assert "SECRET" not in repr(result.events)
+    assert "owned" in repr(result.events)
+    assert seen[0][-1] == "-"
+    assert not any(str(root) in arg for arg in seen[0])
