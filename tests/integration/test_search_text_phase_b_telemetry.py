@@ -10,6 +10,15 @@ from binnacle.features.search.tools import search_text as st
 from binnacle.mcp.callctx import current_call
 
 
+@pytest.fixture(autouse=True)
+def _tmp_path_is_an_allowed_root(tmp_path_factory, monkeypatch):
+    """Off Linux the pytest tmp base is outside the default roots; allow it."""
+    roots = get_settings().roots
+    base = tmp_path_factory.getbasetemp().resolve()
+    if not any(base.is_relative_to(root) for root in roots.canonical_allowed):
+        monkeypatch.setattr(roots, "extra_roots", (*roots.extra_roots, base))
+
+
 def fields(message: str) -> dict[str, str]:
     return dict(re.findall(r"(\w+)=(\S+)", message))
 

@@ -1,5 +1,7 @@
 """Exact pre-extraction replies, catch boundaries, and wait error telemetry."""
 
+import sys
+
 import pytest
 from fastmcp.exceptions import ToolError
 
@@ -8,7 +10,18 @@ from binnacle.features.commands import command_status, job_owner, jobs
 from binnacle.features.commands.tools import job_status, run_command, stop_job
 from binnacle.mcp.callctx import current_call
 
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason=(
+        "Linux durable job engine characterization (mocks jobs/job_owner); "
+        "Darwin counterpart: tests/platform/darwin/test_foreground_commands.py::"
+        "test_native_normal_exit_cwd_stdin_binary_combined_output; background "
+        "jobs are UNAVAILABLE on Darwin by release scope"
+    ),
+)
 
+
+@LINUX_ONLY
 @pytest.mark.parametrize("code,signal", [(0, None), (7, None), (None, 15)])
 def test_exact_finished_run_reply(tmp_path, monkeypatch, code, signal):
     calls = []
@@ -64,6 +77,7 @@ def test_exact_finished_run_reply(tmp_path, monkeypatch, code, signal):
     )
 
 
+@LINUX_ONLY
 @pytest.mark.parametrize("failure", [OSError("disk"), RuntimeError("owner")])
 def test_run_error_preserves_original_cause(tmp_path, monkeypatch, failure):
     def fail(*args):
@@ -86,6 +100,7 @@ def test_run_error_preserves_original_cause(tmp_path, monkeypatch, failure):
     assert caught.value.__cause__ is failure
 
 
+@LINUX_ONLY
 @pytest.mark.parametrize("failure", [ValueError("bug"), KeyboardInterrupt()])
 def test_unexpected_run_failure_is_not_translated(tmp_path, monkeypatch, failure):
     def fail(*args):
@@ -97,6 +112,7 @@ def test_unexpected_run_failure_is_not_translated(tmp_path, monkeypatch, failure
     assert caught.value is failure
 
 
+@LINUX_ONLY
 @pytest.mark.parametrize(
     "record,summary",
     [
@@ -131,6 +147,7 @@ def test_exact_stop_reply(monkeypatch, record, summary):
     assert result.content[0].text == f"Job fixed {summary}."
 
 
+@LINUX_ONLY
 def test_stop_catch_boundary_and_unknown_cause(monkeypatch):
     failure = RuntimeError("owner")
 
@@ -155,6 +172,7 @@ def test_stop_catch_boundary_and_unknown_cause(monkeypatch):
     assert caught.value.__cause__ is None
 
 
+@LINUX_ONLY
 @pytest.mark.parametrize("failure", [RuntimeError("wait"), KeyboardInterrupt()])
 def test_wait_exception_keeps_exact_timing_and_identity(monkeypatch, caplog, failure):
     ticks = iter(range(10, 18))

@@ -128,9 +128,14 @@ def test_nul_and_at_prefix_sanitized(tmp_path):
     assert read("@" + str(f) + "\0")["path"] == str(f)
 
 
-def test_relative_resolves_against_default_root():
+def test_relative_resolves_against_default_root(tmp_path, monkeypatch):
+    # Self-contained: the default root need not hold a "binnacle" checkout.
+    root = get_settings().roots
+    monkeypatch.setattr(root, "default_root", tmp_path)
+    (tmp_path / "binnacle").mkdir()
+    (tmp_path / "binnacle/README.md").write_text("one\ntwo\nthree\nfour\n")
     p = read("binnacle/README.md", 1, 3)
-    assert p["path"] == str(get_settings().roots.default_root / "binnacle/README.md")
+    assert p["path"] == str(root.default_root / "binnacle/README.md")
 
 
 # -- errors ----------------------------------------------------------------

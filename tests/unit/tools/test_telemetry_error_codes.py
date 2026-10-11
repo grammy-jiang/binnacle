@@ -1,11 +1,13 @@
 """Stable low-cardinality error codes keep user ToolError text unchanged."""
 
 import subprocess
+import sys
 
 import pytest
 from fastmcp.exceptions import ToolError
 
 from binnacle.errors import CodedToolError
+from binnacle.features.commands.command_contracts import RestrictedCommandBackend
 from binnacle.features.commands.tools import run_command as rc
 from binnacle.features.files.tools import list_files as lf
 from binnacle.features.files.tools import read_file as rf
@@ -171,6 +173,16 @@ def test_search_text_context_prefix_and_budget_codes(tmp_path, monkeypatch):
 def test_run_command_workdir_error_code(tmp_path):
     file_path = tmp_path / "not-a-directory.txt"
     file_path.write_text("x")
+    # Off Linux the default backend refuses before the workdir check; hand in an
+    # available one (the check precedes any execution) so the code is exercised.
+    backend = (
+        None
+        if sys.platform == "linux"
+        else RestrictedCommandBackend(
+            foreground_execution=object(),
+            release_states={"run_command": "LIMITED"},
+        )
+    )
     with pytest.raises(ToolError, match="workdir is not a directory") as exc:
-        rc.run_command_impl("true", str(file_path), 5, False, None)
+        rc.run_command_impl("true", str(file_path), 5, False, None, backend=backend)
     assert _code(exc) == "workdir_not_directory"

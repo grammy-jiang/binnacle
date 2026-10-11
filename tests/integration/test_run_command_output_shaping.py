@@ -1,9 +1,20 @@
 import re
+import sys
 
 import pytest
 
 from binnacle.features.commands import jobs
 from tests.integration.job_test_support import run
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason=(
+        "Linux durable job engine / background run_command; Darwin counterpart: "
+        "tests/platform/darwin/test_native_smoke_mcp.py::test_run_command_sd18; "
+        "background jobs are UNAVAILABLE on Darwin by release scope"
+    ),
+)
+
 
 pytestmark = pytest.mark.usefixtures("_short_job_warmup")
 
@@ -22,6 +33,7 @@ def _event_fields(caplog):
     return line, dict(re.findall(r"(\w+)=([^ ]+)", line))
 
 
+@LINUX_ONLY
 def test_tail_only_emits_sparse_shaping_event(caplog):
     with caplog.at_level("INFO", logger="binnacle.run_command"):
         result = run("for i in $(seq 1 50); do echo line$i; done", tail_lines=5)
@@ -34,6 +46,7 @@ def test_tail_only_emits_sparse_shaping_event(caplog):
     assert "line50" not in line
 
 
+@LINUX_ONLY
 def test_char_clip_emits_char_limit_event(caplog):
     with caplog.at_level("INFO", logger="binnacle.run_command"):
         result = run("for i in $(seq 1 6000); do printf '0123456789\\n'; done")
@@ -46,6 +59,7 @@ def test_char_clip_emits_char_limit_event(caplog):
     assert int(fields["omitted_chars"]) > 0
 
 
+@LINUX_ONLY
 def test_unmodified_output_emits_no_shaping_event(caplog):
     with caplog.at_level("INFO", logger="binnacle.run_command"):
         result = run("printf small")

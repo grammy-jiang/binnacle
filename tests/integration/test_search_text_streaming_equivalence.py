@@ -10,6 +10,15 @@ from binnacle.config import get_settings
 from binnacle.features.search.tools import search_text as st
 
 
+@pytest.fixture(autouse=True)
+def _tmp_path_is_an_allowed_root(tmp_path_factory, monkeypatch):
+    """Off Linux the pytest tmp base is outside the default roots; allow it."""
+    roots = get_settings().roots
+    base = tmp_path_factory.getbasetemp().resolve()
+    if not any(base.is_relative_to(root) for root in roots.canonical_allowed):
+        monkeypatch.setattr(roots, "extra_roots", (*roots.extra_roots, base))
+
+
 def run_mode(monkeypatch, mode: str, pattern: str, path: Path, **kwargs):
     settings = kwargs.get("settings", get_settings().search_text).model_copy(
         update={"exact_execution": mode}

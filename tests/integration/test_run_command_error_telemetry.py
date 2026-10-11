@@ -1,9 +1,20 @@
 import asyncio
 import re
+import sys
 
+import pytest
 from fastmcp import Client
 
 from binnacle import server
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason=(
+        "Linux durable job engine / background run_command; Darwin counterpart: "
+        "tests/platform/darwin/test_native_smoke_mcp.py::test_run_command_sd18; "
+        "background jobs are UNAVAILABLE on Darwin by release scope"
+    ),
+)
 
 
 def _fields(line: str) -> dict[str, str]:
@@ -11,6 +22,7 @@ def _fields(line: str) -> dict[str, str]:
     return dict(re.findall(r"(\w+)=(\S+)", head))
 
 
+@LINUX_ONLY
 def test_workdir_not_directory_is_coded_before_dispatch(tmp_path, caplog):
     path = tmp_path / "file.txt"
     path.write_text("x")
