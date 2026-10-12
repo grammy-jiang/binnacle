@@ -43,6 +43,7 @@ __all__ = [
     "bind_struct",
     "declares_hint_field",
     "insert_hint",
+    "struct_carrier",
     "struct_member",
 ]
 
@@ -92,6 +93,11 @@ def struct_member(struct: object, meta: Enum, text: Enum) -> bool:
     return struct is None or (
         type(struct) is type(meta) and struct is not meta and struct is not text
     )
+
+
+def struct_carrier(struct: object, carrier: object) -> bool:
+    """True when ``carrier`` is the bindings' STRUCT member (never for None)."""
+    return struct is not None and carrier is struct
 
 
 def bind_struct(tool: Tool) -> tuple[Schema, Identity]:

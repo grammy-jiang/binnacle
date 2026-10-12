@@ -145,6 +145,15 @@ STRUCT carrier (§9.2 S-1) is not implemented; it waits for CV (c′).
   and require the current carrier to equal the recorded one. A carrier
   reassigned after bind returns the original result, consumes no receipt,
   and the lab resets the reservation (`PENDING`).
+- **TEXTU-G2-01.** A carrier changed while a routed render is in flight is
+  also refused. `_render` pins the bind-approved carrier in a local at entry
+  and uses only that local for the renderer and the META or TEXT insertion.
+  It checks for drift again before it returns, and `adapt_routed` checks
+  again after the worker returns; a drift there resets the job to `PENDING`.
+  The lab emission calls `routed_carrier_holds()` after the adapter returns
+  and inside the commit transaction; a drift there aborts the job
+  (`ABORTED`), as for any other failed final validation. Barrier tests pause
+  the worker after the render entry check in both directions.
 - **TEXTU-02.** The capacity dry run checks the lifecycle of every arm again
   (`arm_failures`). A negative control proves that a bad non-final arm fails.
 - **ADV-TU-02.** The raw-value scan covers the synthetic argument log. A
@@ -170,6 +179,13 @@ is not merged until the Supervisor says so. The feature stays default off.
   binding without the snapshot stays META. A carrier change after bind
   (STRUCT to META or META to STRUCT), a schema, name or version change, or a
   cleared snapshot suppresses.
+- **Pinned per call (TEXTU-G2-01).** `_render` pins the bind-approved
+  carrier, the STRUCT snapshot and the bound schema at entry and reads no
+  mutable adapter state after that. A drift while the render runs, after
+  the worker returns, or before the lab's EMITTED commit suppresses: the
+  original bytes return and the job stays `PENDING` (or is `ABORTED` when
+  the drift follows the adapter). Barrier tests:
+  `test_hint_routed_struct_race.py`.
 - **Render.** The hint is inserted into the private copy of
   `structuredContent`, then re-validated with the metered `Schema`. A field
   that is already present, invalid structured content, or a failed

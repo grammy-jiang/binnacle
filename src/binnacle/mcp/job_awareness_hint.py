@@ -28,6 +28,7 @@ from binnacle.mcp.job_awareness_hint_struct import (
     HINT_FIELD,
     bind_struct,
     insert_hint,
+    struct_carrier,
     struct_member,
 )
 from binnacle.mcp.job_awareness_hint_walk import (
@@ -95,9 +96,7 @@ class HintBindings:
     # and ``candidate_type`` the exact type of the values ``select`` returns.
     route_type: type | None = None
     candidate_type: type | None = None
-    # g6 §9.2 S-1, E2 lab only: the STRUCT carrier member. None (the default)
-    # means no adapter built from these bindings can bind STRUCT.
-    struct: Enum | None = None
+    struct: Enum | None = None  # g6 §9.2 S-1 lab STRUCT member; None = never
 
     def __post_init__(self) -> None:
         funcs = self.check, self.observe, self.select, self.render
@@ -166,7 +165,7 @@ class HintAdapter:
         self.struct_bound = False
         if self.bindings.route_type is not None and self._bind_routed():
             return
-        if self._struct_carrier():
+        if struct_carrier(self.bindings.struct, self.carrier):
             raise ValueError("STRUCT binds only in routed mode")
         try:
             self.schema = Schema(self.tool.output_schema)
@@ -183,7 +182,9 @@ class HintAdapter:
         client drops the extra text block (H-SC). Both fail closed at bind.
         """
         text = self.carrier is self.bindings.text
-        if self._struct_carrier():  # g6 §9.2 S-1: declared field, else fail
+        if struct_carrier(
+            self.bindings.struct, self.carrier
+        ):  # g6 §9.2 S-1: declared field, else fail
             self.schema, self.identity = bind_struct(self.tool)
             self.struct_bound, self.routed_carrier = True, self.carrier
             return True
@@ -199,22 +200,21 @@ class HintAdapter:
         self.routed_carrier = self.carrier
         return False
 
-    def _routed_carrier_holds(self) -> bool:
-        """TEXTU-01: the bind-time carrier rule still holds for this call.
+    def routed_carrier_holds(self) -> bool:
+        """TEXTU-01: the bind-time carrier rule still holds now.
 
         A schema-backed routed binding stays META, a ``NO_STRUCTURE`` binding
         stays TEXT and a STRUCT binding (g6 §9.2 S-1) stays STRUCT. A carrier
-        reassigned after bind suppresses.
+        or STRUCT snapshot changed after bind suppresses. The routed path
+        checks it at admission, at render entry, before the render returns
+        and after the worker returns; the lab emission checks it again before
+        its EMITTED commit (TEXTU-G2-01).
         """
         binding = self.bindings
         expected = binding.text if self.schema is NO_STRUCTURE else binding.meta
         if self.struct_bound:  # None only if the bindings changed after bind
             expected = binding.struct  # type: ignore[assignment]
         return expected is not None and self.carrier is expected is self.routed_carrier
-
-    def _struct_carrier(self) -> bool:
-        struct = self.bindings.struct
-        return struct is not None and self.carrier is struct
 
     def bind_server(self, server: object) -> None:
         """Bind the serverInfo stamp from the server that dispatches the tool.
@@ -283,7 +283,7 @@ class HintAdapter:
             or self.schema is None
             or self.identity is None
             or (unstructured and not routed)
-            or (routed and not self._routed_carrier_holds())
+            or (routed and not self.routed_carrier_holds())
             or (self.struct_bound and not routed)
         ):
             return False
@@ -346,7 +346,7 @@ class HintAdapter:
         result, rendered = await self.workers.run(
             lambda stop: self._render(original, stop, grant, jobs, routed=True), busy
         )
-        if result is original or not rendered:
+        if result is original or not rendered or not self.routed_carrier_holds():
             return unchanged
         return RoutedOutcome(result, rendered)
 
@@ -391,6 +391,16 @@ class HintAdapter:
         binding = self.bindings
         meter = Meter(stop)
         self.last_meter = meter
+        # TEXTU-G2-01: one carrier per call. Routed calls pin the bind-approved
+        # carrier, the STRUCT snapshot and the schema; every later decision
+        # uses only these locals.
+        if routed and not self.routed_carrier_holds():
+            return original, ()
+        carrier = self.routed_carrier if routed else self.carrier
+        struct, schema = self.struct_bound, self.schema
+        if struct and not routed:
+            return original, ()
+        allowed = (binding.struct,) if struct else (binding.meta, binding.text)
         try:
             if type(self.server_info) is not dict:
                 return original, ()
@@ -401,27 +411,21 @@ class HintAdapter:
             original_bytes = meter.bytes - (13 if original.meta is None else 0)
             meter.initial = False
             body = walk(original, meter, copy=True, byte_limit=262144 - overhead)
-            struct = self.struct_bound
-            if (routed and not self._routed_carrier_holds()) or (struct and not routed):
-                return original, ()
-            if self.schema is NO_STRUCTURE:  # TEXT-U: no structure, routed TEXT
+            if schema is NO_STRUCTURE:  # TEXT-U: no structure, routed TEXT
                 if (
                     not routed
-                    or self.carrier is not binding.text
+                    or carrier is not binding.text
                     or body["structuredContent"] is not None
                 ):
                     return original, ()
-            elif not self.schema.valid(body["structuredContent"], meter):
+            elif not schema.valid(body["structuredContent"], meter):
                 return original, ()
             if (
                 type(jobs) is not tuple
                 or not 1 <= len(jobs) <= 8
                 or not isinstance(grant, binding.grant_type)
                 or not all(type(job) is binding.job_type for job in jobs)
-                or not (
-                    struct
-                    or any(self.carrier is c for c in (binding.meta, binding.text))
-                )
+                or not any(carrier is c for c in allowed)
             ):
                 return original, ()
             observations = []
@@ -444,13 +448,13 @@ class HintAdapter:
                 if found is None:
                     return original, ()
                 rendered = found
-            hint = binding.render(candidates, self.carrier)
+            hint = binding.render(candidates, carrier)
             if type(hint) is not binding.hint_type:
                 return original, ()
             data = object.__getattribute__(hint, "__dict__")
             if (
                 not _fields(data, ("carrier", "text", "utf8_bytes"))
-                or data["carrier"] is not self.carrier
+                or data["carrier"] is not carrier
                 or type(data["text"]) is not str
                 or type(data["utf8_bytes"]) is not int
                 or not 1 <= data["utf8_bytes"] <= 512
@@ -461,7 +465,7 @@ class HintAdapter:
             if len(text.encode("utf-8")) != data["utf8_bytes"]:
                 return original, ()
             meter.charge(4096)  # fixed renderer and bounded carrier construction
-            if self.carrier is binding.meta:
+            if carrier is binding.meta:
                 meta = body["_meta"]
                 if meta is None:
                     meta = body["_meta"] = {}
@@ -469,7 +473,7 @@ class HintAdapter:
                     return original, ()
                 meta[META_KEY] = text
             elif struct:
-                if not insert_hint(body, text, self.schema, meter):
+                if not insert_hint(body, text, schema, meter):
                     return original, ()
             else:
                 new = {"type": "text", "text": text, "annotations": None, "_meta": None}
@@ -485,6 +489,8 @@ class HintAdapter:
                 structured_content=body["structuredContent"],
                 meta=body["_meta"],
             )
+            if routed and not self.routed_carrier_holds():
+                return original, ()  # drifted while the render ran
             return result, rendered
         except Exception:  # noqa: BLE001 - all awareness failures preserve the original
             return original, ()

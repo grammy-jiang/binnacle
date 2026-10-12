@@ -7,6 +7,7 @@ its native wire bytes are pinned. Lab-only; no product tool changes.
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -124,3 +125,14 @@ async def test_cprime_tools_list_is_identical_for_both_arms(tmp_path):
         == cp.manifest_sha256(candidate)
         == PINNED["c-prime"]
     )  # nosec B101 - pytest assertion
+
+
+def test_no_production_source_names_the_cprime_fixture():
+    """ADV-TUG2-01: the c' fixture stays in the synthetic lab tests."""
+    root = Path(cp.__file__).resolve().parents[3] / "src" / "binnacle"
+    needles = ("e2_cprime", "cprime", "lab-manifests", "tests.contracts")
+    sources = sorted(root.rglob("*.py"))
+    assert sources  # nosec B101 - pytest assertion
+    for path in sources:
+        text = path.read_text(encoding="utf-8")
+        assert not [n for n in needles if n in text], path  # nosec B101 - pytest assertion

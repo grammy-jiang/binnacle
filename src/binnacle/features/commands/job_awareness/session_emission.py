@@ -65,6 +65,10 @@ class RoutedAdapter(Protocol):
         self, original: Any, *, execution: object, route: SessionRoute
     ) -> RoutedResult: ...
 
+    def routed_carrier_holds(self) -> bool:
+        """The adapter's bind-approved carrier still applies (TEXTU-G2-01)."""
+        ...
+
 
 class _Suppress(Exception):
     pass
@@ -180,13 +184,18 @@ async def _deliver(
         raise _Suppress
     await checkpoint("after_adapt")
     if rendered:
+        if adapter.routed_carrier_holds() is not True:
+            raise _Suppress
         with lab.ledger.read() as tx:
             if not _valid(lab, tx, key, binding, grant, captured):
                 raise _Suppress
     await checkpoint("after_validation")
     await checkpoint("before_commit")
     with lab.ledger.write("commit") as tx:
-        if rendered and not _valid(lab, tx, key, binding, grant, captured):
+        if rendered and (
+            adapter.routed_carrier_holds() is not True
+            or not _valid(lab, tx, key, binding, grant, captured)
+        ):
             raise _Suppress
         for job in reserved:
             sql = EMIT if job in rendered else RESET

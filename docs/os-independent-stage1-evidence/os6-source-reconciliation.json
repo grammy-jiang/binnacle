@@ -91,7 +91,7 @@
     "LINUX": 62
   },
   "coverage_complete": true,
-  "implementation_commit": "fd4d866b00d2877082e479d222a248b09bf995e1",
+  "implementation_commit": "2ad4fcda1e82f281e3134da042d638e6e8971945",
   "production_module_count": 217,
   "rows": [
     {
@@ -4451,7 +4451,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/features/commands/job_awareness/session_emission.py",
       "rationale": "Core durable record, RPC, output cursor or command business logic",
-      "sha256": "a9b66483c9c5593b1ddeaf2aa87758fe197401cfaef37c4aa655938263d344f1",
+      "sha256": "c22d0a189a54a7f77647a399b3dff797d9a569477ac9d0dd15c9fdc83667ba15",
       "stage": "OS6",
       "was_in_baseline": false
     },
@@ -5958,6 +5958,7 @@
         "binnacle.mcp.job_awareness_hint_struct.HINT_FIELD",
         "binnacle.mcp.job_awareness_hint_struct.bind_struct",
         "binnacle.mcp.job_awareness_hint_struct.insert_hint",
+        "binnacle.mcp.job_awareness_hint_struct.struct_carrier",
         "binnacle.mcp.job_awareness_hint_struct.struct_member",
         "binnacle.mcp.job_awareness_hint_walk",
         "binnacle.mcp.job_awareness_hint_walk.Meter",
@@ -5991,7 +5992,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/mcp/job_awareness_hint.py",
       "rationale": "FastMCP-native integration; MCP framework remains solely responsible for Providers and Middleware",
-      "sha256": "dbb6ed72c9cb8a74ecb1142292cc915840149d7d6d8ae971abc9b8559b7e9a2c",
+      "sha256": "09e86c7c97ce5908bf1d180923a21223cec98613a5542b182768854aebe46f66",
       "stage": "OS6",
       "was_in_baseline": false
     },
@@ -6090,7 +6091,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/mcp/job_awareness_hint_struct.py",
       "rationale": "FastMCP-native integration; MCP framework remains solely responsible for Providers and Middleware",
-      "sha256": "1a0abdd29edfd2521b1f9746511cc5204ac244df03404c3902d34c57e3c15fd1",
+      "sha256": "0f9b8c43291d5f9034726ef971bcf96041b4561a00db5174d60176099aa65697",
       "stage": "OS6",
       "was_in_baseline": false
     },

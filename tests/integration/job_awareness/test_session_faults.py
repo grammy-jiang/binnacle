@@ -165,6 +165,9 @@ class _Passthrough:
     async def adapt_routed(self, original, *, execution, route):
         return _Routed(route)
 
+    def routed_carrier_holds(self):
+        return True
+
 
 def _crash_child(phase, point, emit_point):
     armed = {"on": False}
