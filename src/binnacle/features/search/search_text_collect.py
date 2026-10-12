@@ -74,6 +74,15 @@ def matches_glob(
         ) from exc
 
 
+def path_order(file: str, line: int) -> tuple[tuple[bytes, ...], int]:
+    """The order of rg --sort path: sibling names in byte order, depth first.
+
+    Comparing whole paths is not enough: 'a/x' sorts before 'a.txt' because
+    the sibling 'a' sorts before 'a.txt', although '/' follows '.' in bytes.
+    """
+    return tuple(os.fsencode(part) for part in file.split("/")), line
+
+
 class SmallestMatches:
     """The max_results first matches in (file, line) order, whatever the arrival order.
 
@@ -85,20 +94,31 @@ class SmallestMatches:
     def __init__(self, cap: int) -> None:
         self.cap = cap
         self._rows: list[tuple[str, int, str]] = []
-        self._limit: tuple[str, int] | None = None  # largest key kept when full
+        self._limit: tuple[tuple[bytes, ...], int] | None = (
+            None  # largest key kept when full
+        )
+        self._parts: dict[
+            str, tuple[bytes, ...]
+        ] = {}  # one key per file, not per match
+
+    def _key(self, file: str, line: int) -> tuple[tuple[bytes, ...], int]:
+        parts = self._parts.get(file)
+        if parts is None:
+            parts = self._parts[file] = path_order(file, 0)[0]
+        return parts, line
 
     def add(self, file: str, line: int, text: str) -> None:
-        if self._limit is not None and (file, line) >= self._limit:
+        if self._limit is not None and self._key(file, line) >= self._limit:
             return
         self._rows.append((file, line, text))
         if len(self._rows) >= 2 * self.cap:
             self._trim()
 
     def _trim(self) -> None:
-        self._rows.sort(key=lambda row: (row[0], row[1]))
+        self._rows.sort(key=lambda row: self._key(row[0], row[1]))
         del self._rows[self.cap :]
         if len(self._rows) == self.cap:
-            self._limit = (self._rows[-1][0], self._rows[-1][1])
+            self._limit = self._key(self._rows[-1][0], self._rows[-1][1])
 
     def result(self, max_line_chars: int, clip_mark: str) -> list[dict]:
         self._trim()

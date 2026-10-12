@@ -74,7 +74,7 @@ class RgJsonStream:
         return self._proc.pid if self._proc is not None else None
 
     def _command(self) -> list[str]:
-        cmd = [self.rg_bin, NO_CONFIG, "--json", "--smart-case", "--sort", "path"]
+        cmd = [self.rg_bin, NO_CONFIG, "--json", "--smart-case"]
         if self.fixed_strings:
             cmd.append("--fixed-strings")
         if self.context > 0:

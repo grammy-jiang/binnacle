@@ -126,19 +126,40 @@ def test_pattern_failure_keeps_pattern_hint() -> None:
     assert "Fix the pattern" in rejection_message(mixed)
 
 
-def test_rg_runs_with_sort_path(tmp_path: Path) -> None:
-    from binnacle.features.search.search_text_rg import run_rg
+def test_python_order_equals_rg_sort_path_bytes(tmp_path: Path) -> None:
+    import json
+    import subprocess
+
     from binnacle.features.search.search_text_stream import RgJsonStream
 
-    for name in ("c", "a", "b"):
-        (tmp_path / f"{name}.txt").write_text("needle\n")
-    events, _ = run_rg(tmp_path, "needle", False, 0, rg_bin="rg", timeout_s=20)
-    files = [e["data"]["path"]["text"] for e in events if e["type"] == "match"]
-    assert files == sorted(files)
-    assert (
-        "--sort"
-        in RgJsonStream(tmp_path, "n", False, 0, rg_bin="rg", timeout_s=5)._command()
-    )
+    names = [
+        "a.txt", "a/x.txt", "a/B.txt", "B.txt", "b.txt", "Z/y.txt", "z/y.txt",
+        "é.txt", "e.txt", "日本/語.txt", "ä/ö.txt", "a-b/c.txt", "a b.txt",
+        "dir/sub/deep.txt", "dir/sub.txt", "dir.txt", "_u.txt", "~t.txt",
+    ]  # fmt: skip
+    for name in names:
+        target = tmp_path / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("needle\nneedle\n")
+    out = subprocess.run(
+        ["rg", "--no-config", "--json", "--sort", "path", "needle", str(tmp_path)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    events = [json.loads(line) for line in out.splitlines()]
+    matches = [e for e in events if e["type"] == "match"]
+    expected = [(e["data"]["path"]["text"], e["data"]["line_number"]) for e in matches]
+    assert len(expected) == 2 * len(names)
+    for seed in range(4):
+        shuffled = list(matches)
+        random.Random(seed).shuffle(shuffled)
+        for cap in (len(expected), 7):
+            result = _reduce(shuffled, cap)
+            got = [(m["file"], m["line"]) for m in result.matches]
+            assert got == expected[:cap]
+    command = RgJsonStream(tmp_path, "n", False, 0, rg_bin="rg", timeout_s=5)._command()
+    assert "--sort" not in command
 
 
 def test_unreadable_child_is_not_a_pattern_error(tmp_path: Path) -> None:
