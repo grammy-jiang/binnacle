@@ -31,6 +31,7 @@ from binnacle.startup_imports import (
     clear_record,
     import_runtime_modules,
     record_start_failure,
+    serving_entry_marked,
     state_root_of,
 )
 
@@ -51,13 +52,22 @@ logger = logging.getLogger("binnacle.server")
 # before uvicorn binds the port.
 
 
-def _serving_process() -> bool:
-    """True only in the uvicorn process that serves ``binnacle.server:app``
-    (the deployed entry), never in a test, a CLI or any other importer."""
+def _argv_serving_process() -> bool:
+    """True when argv names the uvicorn CLI (the dev unit), which serves
+    ``binnacle.server:app`` but hands binnacle no Server object. Never a test,
+    ``python -c``, ``binnacle`` itself (``binnacle serve`` marks itself instead)
+    or any other importer."""
     entry = Path(sys.argv[0])
     return entry.name == "uvicorn" or (
         entry.name == "__main__.py" and entry.parent.name == "uvicorn"
     )
+
+
+def _serving_process() -> bool:
+    """True only in a process that serves ``binnacle.server:app``: the one
+    ``binnacle serve`` marked (the deployed entry on the Mac and in the Linux
+    prod unit), or one argv names (:func:`_argv_serving_process`)."""
+    return serving_entry_marked() or _argv_serving_process()
 
 
 def _record_import_failure(failure: StartupImportFailed) -> None:
@@ -265,10 +275,14 @@ log_effective_config()
 
 app = mcp.http_app()
 
-# E1-a5: the start-up import record is cleared only after a successful start of
-# the serving process. uvicorn binds right after the ASGI lifespan startup; a
-# bind failure ends the process within START_CONFIRM_S, so the record is
-# cleared only if the process is still alive (serving) that long afterwards.
+# The start-up import record is cleared only after a successful start of the
+# serving process. ``binnacle serve`` (marked) owns its uvicorn server: the
+# record is cleared when the public ``uvicorn.Server.started`` turns True, which
+# uvicorn sets after the lifespan startup AND the bind. The uvicorn CLI (the dev
+# unit) hands binnacle no Server object, so there the record is cleared
+# START_CONFIRM_S after the ASGI lifespan startup if the process is still alive
+# (uvicorn binds right after the lifespan and exits on a bind error). Under
+# ``uvicorn --reload`` the supervisor binds first; this applies to the worker.
 START_CONFIRM_S = 1.0
 
 
@@ -280,7 +294,23 @@ def _clear_record_after_start() -> None:
     clear_record("mcp-server", root)
 
 
-if _serving_process():
+def _clear_record_when_server_started() -> None:
+    """Clear the record once the uvicorn.Server this process runs has started."""
+    import uvicorn
+
+    original = uvicorn.Server.startup
+
+    async def startup(self: Any, *args: Any, **kwargs: Any) -> None:
+        await original(self, *args, **kwargs)
+        if self.started:  # a failed bind exits before this point
+            _clear_record_after_start()
+
+    uvicorn.Server.startup = startup  # type: ignore[method-assign]
+
+
+if serving_entry_marked():
+    _clear_record_when_server_started()
+elif _argv_serving_process():
     _inner_lifespan = app.router.lifespan_context
 
     @asynccontextmanager

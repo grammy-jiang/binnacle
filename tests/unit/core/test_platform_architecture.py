@@ -19,6 +19,8 @@ MODULE_PATHS = {
     "jobs": "features/commands/jobs.py",
     "job_owner": "features/commands/job_owner.py",
     "job_manager": "features/commands/job_manager.py",
+    "startup_imports": "startup_imports.py",
+    "startup_server_modules": "startup_server_modules.py",
 }
 EDGES = {
     "process_contracts": set(),
@@ -55,7 +57,21 @@ EDGES = {
         # E1 eager start-up imports (SD-89: approved architecture edge).
         "startup_imports",
     },
+    # E1 eager start-up imports: no features, no platform modules, no server.
+    "startup_imports": {"provenance", "startup_server_modules"},
+    # SD-90: the generated literal server set imports nothing at all.
+    "startup_server_modules": set(),
 }
+# SD-90: the ONE pinned G3 dynamic-import exemption, keyed on the module.
+DYNAMIC_IMPORT_EXEMPTIONS = {
+    "startup_imports": (
+        "SD-90: importing the pinned start-up module sets is this module's "
+        "purpose (E1); only `import importlib` and "
+        "`importlib.import_module(name)` inside _required_import are allowed"
+    ),
+}
+# The only functions whose names reach _required_import (SD-90 criterion 3).
+STARTUP_NAME_SOURCES = {"runtime_module_names", "manager_module_names"}
 
 MODULE_OWNERS = {
     "binnacle.mcp.callctx": "callctx",
@@ -131,7 +147,12 @@ def violations(source, owner):
         for name, bound in imports:
             aliases[bound] = name
             root = name.split(".")[0]
-            if root in {"fastmcp", "mcp", "importlib"}:
+            exempt = (
+                owner in DYNAMIC_IMPORT_EXEMPTIONS
+                and isinstance(node, ast.Import)
+                and name == bound == "importlib"
+            )
+            if root in {"fastmcp", "mcp", "importlib"} and not exempt:
                 found.append(name)
             dependency = imported_owner(name)
             if dependency is not None and dependency not in EDGES[owner]:
@@ -159,6 +180,8 @@ def violations(source, owner):
             return dotted(node.args[0]) + "." + str(node.args[1].value)
         return ""
 
+    if owner in DYNAMIC_IMPORT_EXEMPTIONS:
+        found += _exempt_dynamic_import_violations(tree)
     for node in ast.walk(tree):
         if isinstance(node, ast.Name) and node.id == "__import__":
             found.append("dynamic import")
@@ -185,6 +208,76 @@ def violations(source, owner):
             }
         ):
             found.append("private jobs storage")
+    return found
+
+
+def _exempt_dynamic_import_violations(tree):
+    """SD-90: `importlib` appears only as `importlib.import_module(name)`
+    inside `_required_import(name)`, whose callers pass pinned-set names."""
+    found = []
+    allowed = set()
+    functions = {
+        node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)
+    }
+    required = functions.get("_required_import")
+    if required is not None:
+        for node in ast.walk(required):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "importlib"
+                and node.func.attr == "import_module"
+                and [type(arg) for arg in node.args] == [ast.Name]
+                and node.args[0].id == required.args.args[0].arg == "name"
+                and not node.keywords
+            ):
+                allowed.add(id(node.func.value))
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Name)
+            and node.id == "importlib"
+            and id(node) not in allowed
+        ):
+            found.append("dynamic import outside _required_import(name)")
+    for function in functions.values():
+        for node in ast.walk(function):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "_required_import"
+            ):
+                continue
+            target = ast.unparse(node.args[0]) if len(node.args) == 1 else ""
+            if (function.name, target) != ("_fail_fast", "name"):
+                found.append(f"dynamic target outside the pinned sets: {target!r}")
+    fail_fast = functions.get("_fail_fast")
+    if fail_fast is not None:
+        loops = [n for n in ast.walk(fail_fast) if isinstance(n, ast.For)]
+        sources = {ast.unparse(loop.iter) for loop in loops}
+        if any(
+            isinstance(n, ast.Call) and ast.unparse(n.func) == "_required_import"
+            for loop in loops
+            for n in ast.walk(loop)
+        ) and sources != {"names"}:
+            found.append("dynamic target outside the pinned sets: loop")
+        assigns = {
+            ast.unparse(n.value)
+            for n in ast.walk(fail_fast)
+            if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == "names"
+        }
+        if assigns != {"names_of(system)"}:
+            found.append("dynamic target outside the pinned sets: names")
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and ast.unparse(node.func) == "_fail_fast"
+            and (
+                len(node.args) < 2
+                or ast.unparse(node.args[1]) not in STARTUP_NAME_SOURCES
+            )
+        ):
+            found.append("dynamic target outside the pinned sets: names_of")
     return found
 
 

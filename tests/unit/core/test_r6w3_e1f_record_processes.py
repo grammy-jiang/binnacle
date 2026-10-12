@@ -5,7 +5,7 @@ config whose ``jobs.dir`` fixes the state root. A planted record must survive a
 mere import, survive a start that fails after the import phase but before the
 bind, and be cleared only once the process has really started. Every process
 is this test's own child; only that exact pid is signalled. Test homes live
-under ~/.local/state/bt/e1a5 (0700, exact-path teardown).
+under ~/.local/state/bt/e1a6 (0700, exact-path teardown).
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from binnacle.startup_imports import (
 from tests.unit.core.test_r6w3_e1b_manager_imports import PROBE, running_manager
 
 REPO = Path(__file__).resolve().parents[3]
-TEST_ROOT = Path.home() / ".local" / "state" / "bt" / "e1a5"
+TEST_ROOT = Path.home() / ".local" / "state" / "bt" / "e1a6"
 FAILURE = StartupImportFailed("binnacle.x", "ImportError", "binnacle/x.py:3")
 IMPORT_ONLY = """
 import json, sys
@@ -111,6 +111,23 @@ def uvicorn(home: Path, port: int, env: dict[str, str]) -> subprocess.Popen:
     return child
 
 
+def binnacle_serve(home: Path, port: int, env: dict[str, str]) -> subprocess.Popen:
+    """The REAL entry the Mac com.binnacle.mcp and the Linux prod unit run:
+    ``binnacle serve`` (argv0 ``<home>/bin/binnacle``), through ``cli.main``."""
+    code = (
+        "import sys\n"
+        f"sys.argv = [{str(home / 'bin' / 'binnacle')!r}, 'serve', "
+        f"'--host', '127.0.0.1', '--port', '{port}']\n"
+        "from binnacle import cli\ncli.main()\n"
+    )
+    log = open(home / "serve.log", "wb")  # noqa: SIM115 - closed right away
+    child = subprocess.Popen(
+        [sys.executable, "-c", code], cwd=REPO, env=env, stdout=log, stderr=log
+    )
+    log.close()
+    return child
+
+
 def test_importing_the_server_leaves_the_record_alone(home):
     before = plant(home, "mcp-server")
     done = subprocess.run(
@@ -146,6 +163,35 @@ def test_a_server_that_cannot_bind_keeps_the_record(home):
         holder.listen(1)
         port = holder.getsockname()[1]
         child = uvicorn(home, port, server_env(home))
+        try:
+            assert wait_for(lambda: child.poll() is not None, 120)
+        finally:
+            stop(child)
+    assert child.returncode != 0
+    assert record_path(home, "mcp-server").read_bytes() == before
+
+
+def test_binnacle_serve_clears_the_record_once_the_server_started(home):
+    before = plant(home, "mcp-server")
+    port = free_port()
+    child = binnacle_serve(home, port, server_env(home))
+    try:
+        assert wait_for(lambda: _listening(port) or child.poll() is not None, 120)
+        log = (home / "serve.log").read_text(errors="replace")
+        assert child.poll() is None, log
+        assert wait_for(lambda: not record_path(home, "mcp-server").exists(), 15), log
+    finally:
+        stop(child)
+    assert before  # the planted record is what was cleared
+
+
+def test_binnacle_serve_that_cannot_bind_keeps_the_record(home):
+    before = plant(home, "mcp-server")
+    with socket.socket() as holder:  # this test's own listener holds the port
+        holder.bind(("127.0.0.1", 0))
+        holder.listen(1)
+        port = holder.getsockname()[1]
+        child = binnacle_serve(home, port, server_env(home))
         try:
             assert wait_for(lambda: child.poll() is not None, 120)
         finally:

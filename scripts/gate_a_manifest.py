@@ -19,7 +19,12 @@ def manifest_groups() -> dict[str, set[str]]:
         return path.relative_to(SRC).as_posix()
 
     return {
-        "root": {"server.py", "application.py", "startup_imports.py"},
+        "root": {
+            "server.py",
+            "application.py",
+            "startup_imports.py",
+            "startup_server_modules.py",
+        },
         "feature_namespace": {"features/__init__.py"},
         "mcp": {
             "mcp/__init__.py",

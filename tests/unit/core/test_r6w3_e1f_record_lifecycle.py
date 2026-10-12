@@ -5,7 +5,7 @@ record. Only the real entry points write it (on a failure) and clear it (after
 a successful start of the same process). The record lives under the configured
 state root, holds no message text, and ``doctor`` marks an older revision's
 record STALE. Identical assertions on both OSes. Test homes live under
-~/.local/state/bt/e1a5 (0700, exact-path teardown).
+~/.local/state/bt/e1a6 (0700, exact-path teardown).
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ from binnacle.startup_imports import (
 )
 
 SRC = Path(startup_imports.__file__).parent
-TEST_ROOT = Path.home() / ".local" / "state" / "bt" / "e1a5"
+TEST_ROOT = Path.home() / ".local" / "state" / "bt" / "e1a6"
 FAILURE = StartupImportFailed("binnacle.x", "ImportError", "binnacle/x.py:3")
 
 

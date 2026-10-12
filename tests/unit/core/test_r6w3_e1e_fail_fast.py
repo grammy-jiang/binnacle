@@ -1,15 +1,16 @@
-"""E1-a4: a required start-up import failure aborts start-up (9 mutants).
+"""E1-a4: a required start-up import failure aborts start-up (12 mutants).
 
 One mutant per class (ImportError, Exception, SystemExit) for the MCP server
-and both job managers. Each runs in a child process that adds a synthetic
+(started as the uvicorn CLI and as the real `binnacle serve` entry) and both
+job managers. Each runs in a child process that adds a synthetic
 required module (``binnacle.e1e_mutant``) whose body raises, then starts the
 real entry. Each asserts: exit ``EX_STARTUP_IMPORT``, no socket bound and no
 lock taken (``socket.bind``/``fcntl.flock`` are recorded), exactly one
 ``event=startup_import_failed`` line naming the module, the exception type and
 the raising frame without the message text, and the durable doctor record.
-E1-a5: the record is written by the real entry point under the configured state
+E1-a5/a6: the record is written by the real entry point under the configured state
 root (the parent of ``jobs.dir``), never under XDG_STATE_HOME or HOME.
-Test homes live under ~/.local/state/bt/e1a5 (0700, exact-path teardown).
+Test homes live under ~/.local/state/bt/e1a6 (0700, exact-path teardown).
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ from binnacle.startup_imports import (
     manager_entry_closure_allowed,
 )
 
-TEST_ROOT = Path.home() / ".local" / "state" / "bt" / "e1a5"
+TEST_ROOT = Path.home() / ".local" / "state" / "bt" / "e1a6"
 SECRET = "e1e-secret-message-text"
 MUTANT = "binnacle.e1e_mutant"
 BODIES = {
@@ -53,6 +54,17 @@ ENTRIES = {
             "sys.argv = [home + '/uvicorn/__main__.py', 'binnacle.server:app',"
             " '--host', '127.0.0.1', '--port', str(PORT), '--log-level', 'warning']\n"
             "runpy.run_module('uvicorn', run_name='__main__')\n"
+        ),
+    ),
+    "binnacle-serve": (
+        "mcp-server",
+        (
+            # What the Mac com.binnacle.mcp and the Linux prod unit run: the REAL
+            # entry (`binnacle serve`), not a uvicorn-CLI emulation (E1-a6, F1).
+            "sys.argv = [home + '/bin/binnacle', 'serve', '--host', '127.0.0.1',"
+            " '--port', str(PORT)]\n"
+            "from binnacle import cli\n"
+            "cli.main()\n"
         ),
     ),
     "linux-manager": (
@@ -181,16 +193,18 @@ def test_required_import_failure_aborts_start_up(home, entry, error_class):
     assert check.status == "fail" and MUTANT in check.detail, check
 
 
-def test_package_init_failure_inside_the_walk_aborts(monkeypatch):
-    # RE1-F1: a package __init__ that raises inside _walk is not skipped.
+def test_package_init_failure_in_the_import_loop_aborts(monkeypatch):
+    # RE1-F1: a package __init__ that raises is not skipped. The server set is a
+    # frozen literal (SD-90) that names the packages, so the loop imports them.
     def boom(name):
         raise SystemExit("walk")
 
     monkeypatch.setattr(startup_imports.importlib, "import_module", boom)
     with pytest.raises(startup_imports.StartupImportFailed) as caught:
-        startup_imports.runtime_module_names()
+        startup_imports.import_runtime_modules()
     assert caught.value.code == EX_STARTUP_IMPORT
     assert caught.value.error_class == "SystemExit"
+    assert caught.value.module == startup_imports.runtime_module_names()[0]
 
 
 def test_optional_allowlist_is_pinned_empty():
@@ -218,3 +232,73 @@ def test_linux_manager_entry_configures_logging_only_in_main():
     ).read_text(encoding="utf-8")
     assert "logging.basicConfig(" not in source
     assert 'process="job-manager",\n        log_format=LOG_FORMAT,' in source
+
+
+AT_CASES = [
+    # (module name, body or None for an absent module, error class, where)
+    ("re1a4_syntax", "x = 1\ndef broken(:\n", "SyntaxError", "re1a4_syntax.py:2"),
+    (
+        "re1a4_nested",
+        "x = 1\nimport re1a4_absent_dep\n",
+        "ModuleNotFoundError",
+        "re1a4_nested.py:2",
+    ),
+    (
+        "re1a4_raises",
+        "raise RuntimeError('secret')\n",
+        "RuntimeError",
+        "re1a4_raises.py:1",
+    ),
+    ("binnacle.re1a4_absent", None, "ModuleNotFoundError", "binnacle.re1a4_absent:0"),
+]
+
+
+@pytest.mark.parametrize(("name", "body", "error_class", "where"), AT_CASES)
+def test_at_names_the_raising_source_never_a_frozen_frame(
+    tmp_path, monkeypatch, name, body, error_class, where
+):
+    # STEER-02: skip importlib/frozen frames and this module's own frame.
+    if body is not None:
+        (tmp_path / f"{name}.py").write_text(body, encoding="utf-8")
+        monkeypatch.syspath_prepend(str(tmp_path))
+    with pytest.raises(startup_imports.StartupImportFailed) as caught:
+        startup_imports._required_import(name)
+    assert caught.value.where == where
+    assert caught.value.error_class == error_class
+    assert "<frozen" not in caught.value.where
+
+
+@pytest.mark.parametrize(("name", "body", "error_class", "where"), AT_CASES[:2])
+def test_a_required_module_that_is_missing_or_unparsable_logs_its_own_location(
+    tmp_path, monkeypatch, caplog, name, body, error_class, where
+):
+    # Through the start-up loop: a REQUIRED module with a SyntaxError, and a
+    # required module whose own import (ModuleNotFoundError) is missing.
+    (tmp_path / f"{name}.py").write_text(body, encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.setattr(
+        startup_imports, "runtime_module_names", lambda _s=None: (name,)
+    )
+    with (
+        caplog.at_level("ERROR", logger="binnacle.startup_imports"),
+        pytest.raises(startup_imports.StartupImportFailed),
+    ):
+        startup_imports.import_runtime_modules()
+    (line,) = [m for m in caplog.messages if "event=startup_import_failed" in m]
+    assert f"module={name} error_class={error_class} at={where} exit=70" in line
+    assert "<frozen" not in line and "importlib" not in line
+
+
+def test_a_missing_required_binnacle_module_is_named_by_its_module(monkeypatch):
+    # No file to open: at= is the module's own name, never an importlib frame.
+    missing = "binnacle.re1a6_never_existed"
+    monkeypatch.setattr(
+        startup_imports, "runtime_module_names", lambda _s=None: (missing,)
+    )
+    with pytest.raises(startup_imports.StartupImportFailed) as caught:
+        startup_imports.import_runtime_modules()
+    assert (caught.value.module, caught.value.error_class) == (
+        missing,
+        "ModuleNotFoundError",
+    )
+    assert caught.value.where == f"{missing}:0"
