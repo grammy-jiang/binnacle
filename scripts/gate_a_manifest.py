@@ -114,6 +114,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "platform/contracts/metric_log_contracts.py",
             "platform/contracts/native_service_contracts.py",
             "platform/contracts/stop_contracts.py",
+            "platform/contracts/special_file_contracts.py",
         },
         "platform_composition": {
             "platform/deployment_platform.py",
