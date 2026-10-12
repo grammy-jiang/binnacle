@@ -56,6 +56,7 @@ Releases = "https://github.com/grammy-jiang/binnacle/releases"
 binnacle = "binnacle.cli:main"
 binnacle-jobs = "binnacle.features.commands.job_manager:main"
 binnacle-watchdog = "binnacle.companions.watchdog.watchdog_cli:main"
+binnacle-service-watchdog = "binnacle.companions.service_watchdog:main"
 binnacle-tunnel = "binnacle.companions.tunnel.tunnel_cli:main"
 
 [tool.setuptools.packages.find]

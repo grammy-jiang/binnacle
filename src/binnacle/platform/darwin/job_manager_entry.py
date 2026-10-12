@@ -11,9 +11,8 @@ stop: the provisioner checks the ping counts, writes the private stop marker
 ``<runtime root>/<socket name>.stop`` holding ``{"owner_instance_id": ...}``
 from that ping, then boots the manager out. Every other stop exits non-zero.
 
-D1: a removed, replaced or stale socket endpoint (or a removed runtime root)
-never ends serving while this incarnation owns jobs: ``serve_endpoint``
-recreates the private 0700 root and publishes a fresh generation.
+D1: lost socket or runtime root does not end serving while jobs are owned;
+``serve_endpoint`` recreates the private root and publishes a new generation.
 """
 
 from __future__ import annotations
@@ -60,6 +59,7 @@ from binnacle.platform.darwin.job_manager_service import (
     list_job_ids,
     read_meta,
 )
+from binnacle.platform.darwin.job_manager_telemetry import configure_job_manager_logging
 from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
 
 log = logging.getLogger("binnacle.job_manager")
@@ -341,7 +341,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return EX_USAGE
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    configure_job_manager_logging()
     if not hasattr(os, "waitid"):  # JCR-F1: refuse before any lease or spawn
         log.error("event=job_manager_refused reason=%s", WAITID_REQUIRED)
         return EX_CONFIG
