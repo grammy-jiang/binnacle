@@ -126,8 +126,22 @@ def _entry_info(
     return follow(name) if stat.S_ISLNK(info.st_mode) else info
 
 
+def _names(alias: Path, held: os.stat_result) -> bool:
+    # Absolute, no '..' (never normalized away), as Darwin's grant (LP-a2).
+    if not alias.is_absolute() or ".." in alias.parts:
+        return False
+    try:
+        return os.path.samestat(os.stat(alias), held)
+    except OSError:
+        return False
+
+
 def _list_mode(
-    root: Path, max_results: int, include_hidden: bool, allowed: tuple[Path, ...]
+    root: Path,
+    max_results: int,
+    include_hidden: bool,
+    allowed: tuple[Path, ...],
+    configured: tuple[tuple[Path, Path], ...] = (),
 ) -> ToolResult:
     # Links resolve inside the innermost root holding root, as Darwin's grant
     # descriptor walk does: '..' into an outer root is omitted (SD-74).
@@ -137,10 +151,12 @@ def _list_mode(
     parts = root.relative_to(top).parts
     listed = []
     with _opened(top, parts, root) as (chain, fd):
+        held = os.fstat(chain[0])  # Configured aliases, re-checked per call (LP).
+        live = [str(a) for a, c in configured if c == top != a and _names(a, held)]
 
         def follow(name: str) -> os.stat_result | None:
             return fd_walk.link_target_info(
-                chain[0], parts, name, str(top), chain=chain
+                chain[0], parts, name, str(top), chain=chain, aliases=live
             )
 
         for name in os.listdir(fd):
@@ -417,8 +433,10 @@ def list_files_impl(
             rg_bin=rg_bin,
             timeout_s=settings.rg_timeout_s,
         )
-    allowed = (get_settings().roots if roots is None else roots).canonical_allowed
-    return _list_mode(resolved, max_results, include_hidden, allowed)
+    roots = get_settings().roots if roots is None else roots
+    allowed = roots.canonical_allowed
+    pairs = tuple(zip([r.expanduser() for r in roots.allowed], allowed, strict=True))
+    return _list_mode(resolved, max_results, include_hidden, allowed, pairs)
 
 
 def register(

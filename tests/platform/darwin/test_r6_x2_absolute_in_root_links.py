@@ -343,13 +343,6 @@ def test_darwin_tmp_root_canonical_text_and_omissions(tmp_alias):
 
 
 @_DARWIN
-@pytest.mark.xfail(
-    strict=True,
-    reason="LIST-FOLLOWUP-alias-root-prefixes: the provider is granted only the "
-    "canonical root (features/files/paths.py _open_grants: "
-    "files.grant(canonical, ...); contract FileAccess.grant), so text under the "
-    "configured /tmp alias is omitted",
-)
 def test_darwin_tmp_root_alias_text_is_listed(tmp_alias):
     work = tmp_alias["work"]
     link(work / "via_alias", tmp_alias["alias_work"] / "f.txt")

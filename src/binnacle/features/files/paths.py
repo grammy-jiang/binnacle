@@ -290,8 +290,12 @@ class FileToolAccess:
                 "native_capability_unavailable", "File provider missing."
             )
         for alias, canonical in self._pairs:
+            # Alias prefixes are configured root strings only (LP, SD-74).
+            aliases = tuple(a for a, c in self._pairs if c == canonical and a != c)
             try:
-                grant = self.files.grant(canonical, generation=generation)
+                grant = self.files.grant(
+                    canonical, generation=generation, aliases=aliases
+                )
             except (NativeCapabilityError, OSError) as exc:
                 if self._factory is None:
                     raise
