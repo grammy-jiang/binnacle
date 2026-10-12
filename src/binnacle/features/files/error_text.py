@@ -190,7 +190,10 @@ def linux_error(
             "path_is_file",
             f"Path is a file, not a directory: {display}. Use read_file to read it.",
         )
-    if tool == "write_file" and any(p.is_file() for p in display.parents):
+    if tool == "write_file" and any(
+        p.is_file() or (p.is_symlink() and not p.exists()) for p in display.parents
+    ):
+        # A file or a link loop where a parent directory should be (Linux mkdir).
         return CodedToolError(
             "write_failed", f"Could not write {display}: File exists."
         )
@@ -199,6 +202,9 @@ def linux_error(
         if tool == "write_file":
             loop = os.strerror(errno.ELOOP)
             return CodedToolError("write_failed", f"Could not write {display}: {loop}.")
+        return _missing(tool, files, grant, rel, display)
+    if tool != "write_file" and not resolved.exists():
+        # Below a file or a loop ("a.txt/x", "loop/x"): Linux finds nothing.
         return _missing(tool, files, grant, rel, display)
     return None
 
@@ -231,20 +237,22 @@ def followed(
     operation: Operation,
     raw: str,
     tool: str,
-    roots: Iterable[Path],
+    roots: Iterable[Path] | Callable[[], Iterable[Path]],
     step: Callable[[RootGrant, str, Path], T],
 ) -> T:
     """step on the request, then once on its in-root link target (R-OS1-F3).
 
     Only one hop: the target is opened without following anything, so a
     second link (a race, or a chain the resolve did not see) is refused.
+    read, list_files and search_text all follow this way (PF-PX1-1); roots
+    may be a callable, read only after a link refusal.
     """
     target = None
     with operation(raw, tool) as (grant, relative, display):
         try:
             return step(grant, relative, display)
         except NativeCapabilityError as exc:
-            target = link_target(exc, display, roots)
+            target = link_target(exc, display, roots() if callable(roots) else roots)
             if target is None:
                 raise
     with operation(str(target), tool) as (grant, relative, display):

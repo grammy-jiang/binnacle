@@ -226,7 +226,11 @@ def test_only_one_hop_is_followed(tree, monkeypatch):
     # no-follow walk refuses it; nothing is followed a second time.
     monkeypatch.setattr(error_text, "link_target", lambda *_args: tree / "rel")
     code, text = outcome(tree, True, read(tree / "chain"))
-    assert (code, text) == ("symlink_or_wrong_path_type", "symlink_or_wrong_path_type.")
+    # The coded path_changed text, never the bare adapter code (r6 W3 PX1b).
+    assert (code, text) == (
+        "path_changed",
+        "File changed while it was opened: <BASE>/root/rel. Read it again.",
+    )
 
 
 def test_only_a_link_refusal_is_followed(tree):

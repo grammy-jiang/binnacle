@@ -7,6 +7,7 @@ import time
 from pathlib import Path, PurePath
 
 from binnacle.errors import CodedToolError
+from binnacle.features.files.error_text import followed
 from binnacle.features.files.paths import full_match
 from binnacle.features.search.rg_env import NO_CONFIG, record_unreadable, rg_env
 from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
@@ -217,13 +218,17 @@ def search_opened(
     line_numbers,
     settings,
 ):
-    """Format authorized adapter events; no filesystem calls or path reopening."""
+    """Format authorized adapter events; no filesystem calls or path reopening.
+
+    The one exception is an in-root symlink: the request is reopened once at
+    its resolved target through the same no-follow grant walk (PF-PX1-1).
+    """
     from fastmcp.tools.base import ToolResult
 
     from binnacle.features.search.search_text_budget import enforce_result_budget
     from binnacle.platform.contracts.file_access_contracts import SearchRequest
 
-    with access.operation(path, "search_text") as (grant, relative, display):
+    def searched(grant, relative, display):
         if access.search is None:
             raise CodedToolError(
                 "native_capability_unavailable", "Search provider missing."
@@ -375,3 +380,9 @@ def search_opened(
             content=summary,
             structured_content=payload,
         )
+
+    # An in-root link is searched as its target, as on Linux (PF-PX1-1).
+    def roots():  # Read only after a link refusal.
+        return dict(access.grants)
+
+    return followed(access.operation, path, "search_text", roots, searched)

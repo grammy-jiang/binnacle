@@ -27,6 +27,7 @@ from binnacle.features.files.error_text import (
     linux_error,
     outside_error,
 )
+from binnacle.features.files.fd_walk import path_changed
 from binnacle.features.files.textio import human_size
 from binnacle.platform.contracts.capability_contracts import (
     Capability,
@@ -249,6 +250,10 @@ class FileToolAccess:
             )
             if mapped is not None:
                 raise mapped from exc
+            if exc.code == "symlink_or_wrong_path_type":
+                # A link met after the one followed hop: the path changed
+                # between the resolve and the walk. Never the bare code (PX1b).
+                raise path_changed(display, tool) from exc
             raise CodedToolError(exc.code, f"{exc.code}.") from exc
 
     def read(self, raw: str, max_bytes: int) -> tuple[Path, int, bytes]:

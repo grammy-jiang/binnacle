@@ -322,9 +322,31 @@ def _not_regular(shown: str) -> CodedToolError:
 
 
 def _changed(shown: str) -> CodedToolError:
-    return CodedToolError(
-        "path_changed", f"File changed while it was opened: {shown}. Read it again."
-    )
+    return path_changed(shown)
+
+
+PATH_CHANGED_CODE = "path_changed"
+# One text per tool for a path swapped between the resolve and the no-follow
+# walk, on both OSes: Linux's walk refusals and Darwin's link refusal after
+# the one followed hop (r6 W3 PX1b; never the bare adapter code).
+PATH_CHANGED_TEXTS = {
+    "list_files": (
+        "Directory changed during the listing: {shown}. "
+        "A path component is no longer a directory; list it again."
+    ),
+    "search_text": (
+        "Directory changed during the search: {shown}. "
+        "A path component was replaced by a link; search it again."
+    ),
+    "write_file": "File changed while it was opened: {shown}. Write it again.",
+}
+PATH_CHANGED_DEFAULT = "File changed while it was opened: {shown}. Read it again."
+
+
+def path_changed(shown: object, tool: str = "read_file") -> CodedToolError:
+    """The coded refusal for a path that changed while it was walked."""
+    text = PATH_CHANGED_TEXTS.get(tool, PATH_CHANGED_DEFAULT)
+    return CodedToolError(PATH_CHANGED_CODE, text.format(shown=shown))
 
 
 def permission_denied(shown: object) -> CodedToolError:
