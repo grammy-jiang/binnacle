@@ -18,6 +18,15 @@ from __future__ import annotations
 
 import errno
 
+# Some kernels refuse the open of a swapped-in socket/device *before* fstat.
+# Classify only the exact descriptor-relative entry, never the absolute path.
+SPECIAL_OPEN_ERRNOS = (
+    errno.ENXIO,
+    errno.ENODEV,
+    errno.EOPNOTSUPP,
+    errno.EACCES,
+    errno.EPERM,
+)
 SPECIAL_FILE_CODE = "special_file_unsupported"
 SPECIAL_FILE_TEXT = (
     f"{SPECIAL_FILE_CODE}: the path is a FIFO, socket or device, not a regular "
@@ -37,3 +46,34 @@ TOO_MANY_OPEN_FILES_TEXT = (
 def too_many_open_files_text(tool: str, task: str, advice: str = "Retry.") -> str:
     """The one descriptor-shortage text, for every tool and both OSes."""
     return TOO_MANY_OPEN_FILES_TEXT.format(tool=tool, task=task, advice=advice)
+
+
+# Shared, stable refusal texts. These constants are intentionally housed with
+# SPECIAL_FILE_TEXT so Linux and Darwin emit byte-identical file refusals.
+PATH_IS_DIRECTORY_CODE = "path_is_directory"
+PATH_IS_DIRECTORY_TEXT = "Path is a directory, not a file: {shown}.{advice}"
+
+
+def path_is_directory_text(shown: object, tool: str = "read_file") -> str:
+    advice = "" if tool == "edit_file" else " Use list_files to browse it."
+    return PATH_IS_DIRECTORY_TEXT.format(shown=shown, advice=advice)
+
+
+PATH_CHANGED_CODE = "path_changed"
+PATH_CHANGED_TEXTS = {
+    "list_files": (
+        "Directory changed during the listing: {shown}. "
+        "A path component is no longer a directory; list it again."
+    ),
+    "search_text": (
+        "Directory changed during the search: {shown}. "
+        "A path component was replaced by a link; search it again."
+    ),
+    "write_file": "File changed while it was opened: {shown}. Write it again.",
+}
+PATH_CHANGED_DEFAULT = "File changed while it was opened: {shown}. Read it again."
+
+
+def path_changed_text(shown: object, tool: str = "read_file") -> str:
+    """Stable file identity-change text for every path-facing MCP tool."""
+    return PATH_CHANGED_TEXTS.get(tool, PATH_CHANGED_DEFAULT).format(shown=shown)

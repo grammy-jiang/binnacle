@@ -25,6 +25,7 @@ from binnacle.config import RootsSettings
 from binnacle.features.files import error_text, fd_walk, paths
 from binnacle.features.files.tools import list_files as lf
 from binnacle.features.search.tools import search_text as st
+from binnacle.platform.contracts import special_file_contracts as refusals
 from binnacle.platform.contracts.capability_contracts import Capability, CapabilityState
 from binnacle.platform.darwin import file_traversal
 from binnacle.platform.darwin.file_access import DarwinFileAccess
@@ -244,16 +245,21 @@ def test_no_model_visible_bare_link_code(tree, darwin, tool):
 
 def swapping(tree: Path, monkeypatch, replacement: Path) -> None:
     """After the resolve picks sub, sub becomes a link to replacement (a race)."""
-    real = error_text.link_target
+    # FDW-B1-a3 moved the first resolution *before* the descriptor open;
+    # inject after that first resolve, not inside the now-unused retry helper.
+    real = error_text._resolve
+    fired = False
 
-    def raced(*args):
-        target = real(*args)
-        if target is not None and target.is_relative_to(tree / "sub"):
+    def raced(path):
+        nonlocal fired
+        target = real(path)
+        if not fired and target.is_relative_to(tree / "sub"):
+            fired = True
             (tree / "sub").rename(tree / "sub_moved")
             (tree / "sub").symlink_to(replacement)
         return target
 
-    monkeypatch.setattr(error_text, "link_target", raced)
+    monkeypatch.setattr(error_text, "_resolve", raced)
 
 
 @EACH_TOOL
@@ -303,11 +309,11 @@ def test_the_linux_read_race_uses_the_shared_template():
         "File changed while it was opened: /r/a.txt. Read it again."
     )
     assert str(fd_walk.path_changed("/r/a.txt")) == (
-        fd_walk.PATH_CHANGED_DEFAULT.format(shown="/r/a.txt")
+        refusals.PATH_CHANGED_DEFAULT.format(shown="/r/a.txt")
     )
-    for tool, text in fd_walk.PATH_CHANGED_TEXTS.items():
+    for tool, text in refusals.PATH_CHANGED_TEXTS.items():
         refused = fd_walk.path_changed("/r/x", tool)
-        assert refused.telemetry_code == fd_walk.PATH_CHANGED_CODE == "path_changed"
+        assert refused.telemetry_code == refusals.PATH_CHANGED_CODE == "path_changed"
         assert str(refused) == text.format(shown="/r/x")
         assert "symlink_or_wrong_path_type" not in str(refused)
 

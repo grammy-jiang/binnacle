@@ -26,10 +26,15 @@ from pathlib import Path
 
 from binnacle.errors import CodedToolError
 from binnacle.platform.contracts.special_file_contracts import (
+    PATH_CHANGED_CODE,
+    PATH_IS_DIRECTORY_CODE,
     SPECIAL_FILE_CODE,
     SPECIAL_FILE_TEXT,
+    SPECIAL_OPEN_ERRNOS,
     TOO_MANY_OPEN_FILES_CODE,
     TOO_MANY_OPEN_FILES_ERRNOS,
+    path_changed_text,
+    path_is_directory_text,
     too_many_open_files_text,
 )
 
@@ -261,6 +266,8 @@ def open_verified(
     try:
         fd = os.open(os.path.basename(shown), READ_FLAGS, dir_fd=parent_fd)
     except OSError as exc:
+        if _failed_open_special(parent_fd, os.path.basename(shown), exc):
+            raise CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT) from exc
         raise _open_refusal(exc, shown, root_paths) from exc
     try:
         real = Path(_opened_path(fd))
@@ -299,13 +306,29 @@ def open_walked(
         raise _outside(shown, root_paths)
     top = max(holders, key=lambda root: len(root.parts))
     parts = path.relative_to(top).parts
-    if not parts:  # A root itself is a directory.
-        raise _not_regular(shown)
+    if not parts:  # A root itself is a directory, not a file.
+        raise CodedToolError(PATH_IS_DIRECTORY_CODE, path_is_directory_text(shown))
     try:
         with open_root(top) as root_fd, directory_at(root_fd, parts[:-1]) as parent:
             return open_verified(path, root_paths, expected, parent_fd=parent)
     except OSError as exc:
         raise _open_refusal(exc, shown, root_paths) from exc
+
+
+def _failed_open_special(parent_fd: int, name: str, exc: OSError) -> bool:
+    """Inspect a failed no-follow open by the *held parent*, not by path.
+
+    Socket and device opens can fail before fstat; an ordinary permission
+    denial remains a permission denial when the entry is still regular.
+    A second rename cannot make this routine open or read the new entry.
+    """
+    if exc.errno not in SPECIAL_OPEN_ERRNOS:
+        return False
+    try:
+        info = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except OSError:
+        return False
+    return stat.S_IFMT(info.st_mode) in SPECIAL_FILE_TYPES
 
 
 def _open_refusal(
@@ -352,10 +375,7 @@ def wrong_type(shown: object, info: os.stat_result) -> CodedToolError:
     if stat.S_IFMT(info.st_mode) in SPECIAL_FILE_TYPES:
         return CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
     if stat.S_ISDIR(info.st_mode):
-        return CodedToolError(
-            "path_is_directory",
-            f"Path is a directory, not a file: {shown}. Use list_files to browse it.",
-        )
+        return CodedToolError(PATH_IS_DIRECTORY_CODE, path_is_directory_text(shown))
     return _not_regular(str(shown))
 
 
@@ -363,28 +383,9 @@ def _changed(shown: str) -> CodedToolError:
     return path_changed(shown)
 
 
-PATH_CHANGED_CODE = "path_changed"
-# One text per tool for a path swapped between the resolve and the no-follow
-# walk, on both OSes: Linux's walk refusals and Darwin's link refusal after
-# the one followed hop (r6 W3 PX1b; never the bare adapter code).
-PATH_CHANGED_TEXTS = {
-    "list_files": (
-        "Directory changed during the listing: {shown}. "
-        "A path component is no longer a directory; list it again."
-    ),
-    "search_text": (
-        "Directory changed during the search: {shown}. "
-        "A path component was replaced by a link; search it again."
-    ),
-    "write_file": "File changed while it was opened: {shown}. Write it again.",
-}
-PATH_CHANGED_DEFAULT = "File changed while it was opened: {shown}. Read it again."
-
-
 def path_changed(shown: object, tool: str = "read_file") -> CodedToolError:
     """The coded refusal for a path that changed while it was walked."""
-    text = PATH_CHANGED_TEXTS.get(tool, PATH_CHANGED_DEFAULT)
-    return CodedToolError(PATH_CHANGED_CODE, text.format(shown=shown))
+    return CodedToolError(PATH_CHANGED_CODE, path_changed_text(shown, tool))
 
 
 def permission_denied(shown: object) -> CodedToolError:

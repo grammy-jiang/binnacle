@@ -22,8 +22,10 @@ from binnacle.features.files import fd_walk
 from binnacle.features.files.paths import FileToolAccess, nearby_hint, resolve_path
 from binnacle.features.files.textio import decode_text, human_size
 from binnacle.platform.contracts.special_file_contracts import (
+    PATH_IS_DIRECTORY_CODE,
     SPECIAL_FILE_CODE,
     SPECIAL_FILE_TEXT,
+    path_is_directory_text,
 )
 
 LINE_CLIP_MARK = "… [line truncated]"
@@ -148,11 +150,7 @@ def _read_legacy(
         if not stat.S_ISREG(opened.st_mode):
             raise fd_walk.wrong_type(resolved, opened)
         if (opened.st_dev, opened.st_ino) != expected:
-            # The same words as fd_walk's path_changed on Linux.
-            raise CodedToolError(
-                "path_changed",
-                f"File changed while it was opened: {resolved}. Read it again.",
-            )
+            raise fd_walk.path_changed(resolved)
         return _read_bounded(fd, settings)
     finally:
         os.close(fd)
@@ -222,8 +220,7 @@ def read_file_impl(
             )
         if resolved.is_dir():
             raise CodedToolError(
-                "path_is_directory",
-                f"Path is a directory, not a file: {resolved}. Use list_files to browse it.",
+                PATH_IS_DIRECTORY_CODE, path_is_directory_text(resolved)
             )
         checked = resolved.stat()
         if not stat.S_ISREG(checked.st_mode):

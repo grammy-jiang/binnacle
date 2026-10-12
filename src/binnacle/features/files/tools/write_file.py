@@ -20,8 +20,10 @@ from binnacle.features.files.error_text import followed
 from binnacle.features.files.paths import FileToolAccess, resolve_path
 from binnacle.platform.contracts.file_access_contracts import RootGrant
 from binnacle.platform.contracts.special_file_contracts import (
+    PATH_IS_DIRECTORY_CODE,
     SPECIAL_FILE_CODE,
     SPECIAL_FILE_TEXT,
+    path_is_directory_text,
 )
 
 OUTPUT_SCHEMA = {
@@ -62,8 +64,8 @@ def write_file_impl(
     else:
         resolved = resolve_path(path, roots=roots)
         if resolved.is_dir():
-            raise ToolError(
-                f"Path is a directory, not a file: {resolved}. Use list_files to browse it."
+            raise CodedToolError(
+                PATH_IS_DIRECTORY_CODE, path_is_directory_text(resolved)
             )
         if resolved.exists() and not resolved.is_file():
             # A FIFO, socket or device: never opened for writing (r6 W3 PX1).

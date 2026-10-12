@@ -19,8 +19,10 @@ from binnacle.config import EditFileSettings, RootsSettings, get_settings
 from binnacle.errors import CodedToolError
 from binnacle.features.files.paths import FileToolAccess, nearby_hint, resolve_path
 from binnacle.platform.contracts.special_file_contracts import (
+    PATH_IS_DIRECTORY_CODE,
     SPECIAL_FILE_CODE,
     SPECIAL_FILE_TEXT,
+    path_is_directory_text,
 )
 
 _BOM_CODECS = (
@@ -143,7 +145,9 @@ def edit_file_impl(
                 f"To create a new file, use write_file."
             )
         if resolved.is_dir():
-            raise ToolError(f"Path is a directory, not a file: {resolved}.")
+            raise CodedToolError(
+                PATH_IS_DIRECTORY_CODE, path_is_directory_text(resolved, "edit_file")
+            )
         if not resolved.is_file():  # Never open a FIFO, socket or device.
             raise CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
     if not old_string:

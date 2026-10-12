@@ -399,7 +399,8 @@ def test_open_walked_opens_nothing_for_a_path_outside_every_root(tree, monkeypat
         assert exc.value.telemetry_code == "path_outside_root"
     with pytest.raises(CodedToolError) as exc:
         fd_walk.open_walked(tree["root"], (tree["root"],), ident(tree["root"]))
-    assert exc.value.telemetry_code == "not_a_regular_file"
+    assert exc.value.telemetry_code == "path_is_directory"
+    assert "Use list_files to browse it." in str(exc.value)
     assert opened == []
 
 

@@ -35,6 +35,7 @@ from binnacle.platform.contracts.special_file_contracts import (
     TOO_MANY_OPEN_FILES_CODE,
     TOO_MANY_OPEN_FILES_ERRNOS,
 )
+from binnacle.platform.darwin.file_io import read_at_most
 from binnacle.platform.darwin.file_traversal import (
     MAX_BYTES,
     READ_FLAGS,
@@ -43,7 +44,6 @@ from binnacle.platform.darwin.file_traversal import (
     directory_at,
     listing_directory,
     native_errors,
-    read_at_most,
     regular_fd,
     require_positive,
     unsafe,

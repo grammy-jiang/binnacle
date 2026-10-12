@@ -23,9 +23,11 @@ from binnacle.platform.contracts.file_access_contracts import (
     RootGrant,
 )
 from binnacle.platform.contracts.special_file_contracts import (
+    PATH_IS_DIRECTORY_CODE,
     SPECIAL_FILE_CODE,
     SPECIAL_FILE_TEXT,
     TOO_MANY_OPEN_FILES_CODE,
+    path_is_directory_text,
     too_many_open_files_text,
 )
 
@@ -186,9 +188,8 @@ def linux_error(
         # The opened file is another regular file than the one stat-ed: the
         # identity step after the type step, Linux's path_changed (FDW-B1-a2).
         return path_changed(display, tool)
-    if code == "path_is_directory":
-        use = "" if tool == "edit_file" else " Use list_files to browse it."
-        return CodedToolError(code, f"Path is a directory, not a file: {display}.{use}")
+    if code == PATH_IS_DIRECTORY_CODE:
+        return CodedToolError(code, path_is_directory_text(display, tool))
     if code != "symlink_or_wrong_path_type":
         return None
     try:
@@ -256,20 +257,43 @@ def followed(
     roots: Iterable[Path] | Callable[[], Iterable[Path]],
     step: Callable[[RootGrant, str, Path], T],
 ) -> T:
-    """step on the request, then once on its in-root link target (R-OS1-F3).
+    """Follow only a link that was present during the *first* resolution.
 
-    Only one hop: the target is opened without following anything, so a
-    second link (a race, or a chain the resolve did not see) is refused.
-    read, list_files and search_text all follow this way (PF-PX1-1); roots
-    may be a callable, read only after a link refusal.
+    The previous retry-on-ELOOP path could follow a link appearing after the
+    initial stat, and read a swapped-in in-root file on Darwin while Linux
+    refused the same race. Resolve only to choose an original in-root target;
+    the target itself is still opened via a new descriptor-verified grant.
+    A newly appearing link is never followed (FDW-B1-a3 F3).
     """
-    target = None
-    with operation(raw, tool) as (grant, relative, display):
-        try:
-            return step(grant, relative, display)
-        except NativeCapabilityError as exc:
-            target = link_target(exc, display, roots() if callable(roots) else roots)
+    target: Path | None = None
+    request_display: Path | None = None
+    initially_linked = False
+    try:
+        with operation(raw, tool) as (grant, relative, display):
+            request_display = display
+            resolved = _resolve(display)
+            initially_linked = resolved != Path(os.path.normpath(display))
+            if initially_linked:
+                allowed = roots() if callable(roots) else roots
+                if any(resolved.is_relative_to(r) for r in allowed):
+                    target = resolved
             if target is None:
-                raise
+                return step(grant, relative, display)
+    except CodedToolError as exc:
+        if (
+            not initially_linked
+            and request_display is not None
+            and exc.telemetry_code == "path_outside_root"
+        ):
+            # The newly swapped-in outside link is named by the *request*,
+            # as Linux's _open_refusal does; static outside-link texts stay
+            # byte-identical to their existing XOS contract.
+            allowed = roots() if callable(roots) else roots
+            raise outside_error(allowed, request_display) from exc
+        raise
+    if target is None:
+        raise path_changed(
+            request_display if request_display is not None else raw, tool
+        )
     with operation(str(target), tool) as (grant, relative, display):
         return step(grant, relative, display)

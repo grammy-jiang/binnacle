@@ -40,6 +40,7 @@ from binnacle.platform.contracts.file_access_contracts import (
     ListRequest,
 )
 from binnacle.platform.contracts.special_file_contracts import SHORTAGE_CODES
+from binnacle.platform.darwin.file_io import failed_open_special, read_at_most
 
 MAX_BYTES = 64 * 1024 * 1024
 MAX_VISITED = 100_000
@@ -160,7 +161,12 @@ def regular_fd(parent: int, name: str, flags: int = READ_FLAGS) -> int:
 
 def checked_open(parent: int, name: str, flags: int, info: os.stat_result) -> int:
     """Bind a no-follow open to the exact entry used for policy decisions."""
-    fd = os.open(name, flags, dir_fd=parent)
+    try:
+        fd = os.open(name, flags, dir_fd=parent)
+    except OSError as exc:
+        if failed_open_special(parent, name, exc):
+            raise unsafe("special_file_unsupported") from exc
+        raise
     try:
         opened = os.fstat(fd)
         if stat.S_ISREG(info.st_mode) and not stat.S_ISREG(opened.st_mode):
@@ -177,18 +183,6 @@ def checked_open(parent: int, name: str, flags: int, info: os.stat_result) -> in
         os.close(fd)
         raise
     return fd
-
-
-def read_at_most(fd: int, maximum: int) -> bytes:
-    chunks: list[bytes] = []
-    remaining = maximum
-    while remaining:
-        chunk = os.read(fd, min(remaining, 65536))
-        if not chunk:
-            break
-        chunks.append(chunk)
-        remaining -= len(chunk)
-    return b"".join(chunks)
 
 
 def _full_match(path: str, pattern: str) -> bool:

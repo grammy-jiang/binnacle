@@ -26,11 +26,17 @@ from pathlib import Path
 import pytest
 from fastmcp.exceptions import ToolError
 
-from binnacle.config import ListFilesSettings, ReadFileSettings, RootsSettings
+from binnacle.config import (
+    ListFilesSettings,
+    ReadFileSettings,
+    RootsSettings,
+    SearchTextSettings,
+)
 from binnacle.errors import CodedToolError
 from binnacle.features.files import fd_walk, paths
 from binnacle.features.files.tools import list_files as lf
 from binnacle.features.files.tools import read_file as rf
+from binnacle.features.search.tools import search_text as st
 from binnacle.platform.contracts.capability_contracts import (
     AuthorityUnknown,
     Capability,
@@ -45,6 +51,7 @@ from binnacle.platform.contracts.special_file_contracts import (
 )
 from binnacle.platform.darwin import file_traversal
 from binnacle.platform.darwin.file_access import DarwinFileAccess
+from binnacle.platform.darwin.search_access import DarwinSearchAccess
 
 PATHS = pytest.mark.parametrize(
     "darwin", [False, True], ids=["linux_path", "darwin_path"]
@@ -91,10 +98,11 @@ def roots_for(top: Path) -> RootsSettings:
 
 
 def access_for(top: Path) -> paths.FileToolAccess:
+    files = DarwinFileAccess()
     return paths.FileToolAccess(
         roots=roots_for(top),
-        files=DarwinFileAccess(),
-        search=None,
+        files=files,
+        search=DarwinSearchAccess(files, rg_bin=shutil.which("rg") or "rg"),
         generation="r6w3-fdwb1",
         capability=Capability(CapabilityState.LIMITED, "test_only", "fdwb1"),
     )
@@ -428,3 +436,50 @@ def test_search_only_ancestors_still_work(base):
         files.close()
     assert [entry.relative_path for entry in listed.entries] == ["f.txt"]
     assert data == b"found\n"
+
+
+@PATHS
+@pytest.mark.parametrize("mode", ["glob", "search"])
+def test_glob_and_search_peaks_depend_on_depth_not_entry_count(
+    base, patch, darwin, mode
+):
+    """FDW-B1-a3 F5: the walk keeps no descriptor per matched entry."""
+    peaks = {}
+    for depth, files in ((3, 2), (3, 90), (7, 2)):
+        top, path = deep_tree(base, depth, files)
+
+        def call(roots, access, *, current=path):
+            if mode == "glob":
+                return lf.list_files_impl(
+                    str(current),
+                    "**/*.txt",
+                    200,
+                    False,
+                    roots=roots,
+                    file_access=access,
+                    settings=ListFilesSettings(),
+                    rg_bin="rg",
+                )
+            return st.search_text_impl(
+                "x",
+                str(current),
+                None,
+                True,
+                0,
+                False,
+                150,
+                True,
+                roots=roots,
+                file_access=access,
+                settings=SearchTextSettings(),
+                rg_bin="rg",
+            )
+
+        with patch.context() as scoped:
+            observed = Descriptors(scoped)
+            code, message = outcome(top, darwin, call)
+        assert code == "ok", message
+        peaks[(depth, files)] = observed.peak
+    # Same depth, 45x entries: no per-entry descriptor accumulation.
+    assert peaks[(3, 90)] <= peaks[(3, 2)] + 3
+    assert peaks[(7, 2)] <= peaks[(3, 2)] + 8

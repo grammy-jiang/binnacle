@@ -1,6 +1,6 @@
 """Cross-OS exec-only fixture, byte for byte (r6 W3 PX1 5/5; was XOS-exec-only-fixture.py).
 
-Builds a NON-secret fixture under /tmp/r6w3-px1-xos-*, whose configured ROOT
+Builds a NON-secret fixture under ~/.local/state/bt/fdwb1a3/x-*, whose configured ROOT
 is execute-only (0o100) and which holds execute-only in-root directories. It
 runs list_files (list and glob), read_file and search_text through the
 production tool implementations, composed as each host's production server
@@ -41,7 +41,6 @@ os.open swaps a file at its final open, or fails an open with EMFILE.
 
 from __future__ import annotations
 
-import errno
 import hashlib
 import json
 import os
@@ -51,7 +50,7 @@ import tempfile
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from binnacle.config import (
     ListFilesSettings,
@@ -69,6 +68,14 @@ from binnacle.platform.composition import (
     create_search_access,
     host_os_family,
 )
+
+# Direct-script execution places tests/contracts (not repo root) on sys.path.
+# Type checking instead resolves the same file through the tests namespace.
+if TYPE_CHECKING:
+    from tests.contracts.r6w3_px1_xos_fdw import FDW_CASES, _fdw_open
+else:
+    from r6w3_px1_xos_fdw import FDW_CASES, _fdw_open
+
 
 SCHEMA = "r6w3-px1-xos/1"
 TIMING_WORDS = ("elapsed", "duration", "latency", "_ms", "seconds", "timing")
@@ -93,21 +100,14 @@ FILES = {
     "fdw/swap_regular.txt": ("swap\n", 5),
     "fdw/swap_fifo.txt": ("swap\n", 5),
     "fdw/swap_dir.txt": ("swap\n", 5),
+    "fdw/swap_socket.txt": ("swap\n", 5),
+    "fdw/swap_symlink_in.txt": ("swap\n", 5),
+    "fdw/swap_symlink_out.txt": ("swap\n", 5),
 }
 # fdw_* case: (tool, path below <ROOT>, os.open name hooked, hook, times).
 # A swap hook replaces the file by another regular file, a FIFO or a
 # directory (check order: type, then identity); "shortage" fails with EMFILE
 # in the read, the listed directory or the link walk (to_fifo opens sub).
-FDW_CASES = {
-    "fdw_read_swap_regular": ("read", "fdw/swap_regular.txt", None, "regular", 1),
-    "fdw_read_swap_fifo": ("read", "fdw/swap_fifo.txt", None, "fifo", 1),
-    "fdw_read_swap_dir": ("read", "fdw/swap_dir.txt", None, "dir", 1),
-    "fdw_read_shortage": ("read", "a.txt", None, "shortage", None),
-    "fdw_list_shortage_once": ("list", "sub", None, "shortage", 1),
-    "fdw_list_shortage_twice": ("list", "sub", None, "shortage", None),
-    "fdw_list_link_walk_shortage_once": ("list", "lnk", "sub", "shortage", 1),
-    "fdw_list_link_walk_shortage_twice": ("list", "lnk", "sub", "shortage", None),
-}
 # In-root links below <ROOT>/lnk (PF-PX1-1); "<ROOT>" and "<BASE>" are
 # filled in by build(). <BASE>/out is outside every root.
 LINKS = {
@@ -195,35 +195,13 @@ def _vanishing(stat_call: Callable[..., Any]) -> Callable[..., Any]:
     return call
 
 
-def _fdw_open(target: Path, name: str, hook: str, times: int | None) -> Any:
-    """os.open that runs hook before opening name relative to a dir_fd."""
-    real_open, fired = os.open, list[str]()
-
-    def call(path: Any, flags: int, *args: Any, **kwargs: Any) -> int:
-        wanted = path == name and kwargs.get("dir_fd") is not None
-        if wanted and (times is None or len(fired) < times):
-            fired.append(path)
-            if hook == "shortage":
-                raise OSError(errno.EMFILE, os.strerror(errno.EMFILE))
-            if hook == "regular":  # os.replace of a file that exists: a new inode.
-                incoming = target.with_name("incoming.txt")
-                incoming.write_text("swapped in\n", encoding="utf-8")
-                os.replace(incoming, target)
-                return real_open(path, flags, *args, **kwargs)
-            target.rename(target.with_name(name + ".kept"))  # Keeps the inode.
-            if hook == "fifo":
-                os.mkfifo(target)
-            else:
-                target.mkdir()
-        return real_open(path, flags, *args, **kwargs)
-
-    return call
-
-
 def document(set_attr: Callable[[Any, str, Any], None]) -> dict:
     """Run every case; set_attr patches (monkeypatch.setattr or setattr)."""
     rg_bin = shutil.which("rg") or "rg"
-    base = Path(tempfile.mkdtemp(prefix="r6w3-px1-xos-", dir="/tmp")).resolve()
+    state = Path.home() / ".local/state/bt/fdwb1a3"
+    state.mkdir(mode=0o700, parents=True, exist_ok=True)
+    state.chmod(0o700)
+    base = Path(tempfile.mkdtemp(prefix="x-", dir=state)).resolve()
     try:
         root = build(base)
         roots = RootsSettings(default_root=root, extra_roots=())
@@ -460,6 +438,9 @@ def test_the_only_os_difference_is_the_tcc_code(monkeypatch):
         "fdw_read_swap_regular": "path_changed",
         "fdw_read_swap_fifo": "special_file_unsupported",
         "fdw_read_swap_dir": "path_is_directory",
+        "fdw_read_swap_socket": "special_file_unsupported",
+        "fdw_read_swap_symlink_in": "path_changed",
+        "fdw_read_swap_symlink_out": "path_outside_root",
         "fdw_read_shortage": "too_many_open_files",
         "fdw_list_shortage_twice": "too_many_open_files",
         "fdw_list_link_walk_shortage_twice": "too_many_open_files",

@@ -197,10 +197,10 @@ looks like image/png) — content not shown.`
    A component swapped for a symlink fails the walk, so nothing outside a
    root is opened. `fd_walk.open_verified` then checks, in this order: the
    kernel path (`/proc/self/fd/N`) is inside SOME configured root, else
-   `path_outside_root`; `(st_dev, st_ino)` equals the pair from the stat in
-   step 2, else `path_changed`; the object is a regular file, else
-   `not_a_regular_file` (a FIFO no longer blocks the call; `read_file`
-   words a FIFO, socket or device as below); `st_nlink > 0`,
+   `path_outside_root`; the opened object's TYPE is checked next (a FIFO,
+   socket or device is `special_file_unsupported`, a directory is
+   `path_is_directory`), then `(st_dev, st_ino)` must equal the pair from
+   step 2, else `path_changed`; `st_nlink > 0` must hold,
    else `path_changed` (a file deleted after the open is not served; a new
    call reports E1). A symlink that the no-follow open refuses is
    `path_outside_root` when its target is outside every root, else
@@ -213,15 +213,21 @@ looks like image/png) — content not shown.`
    what it is." The step-2 stat refuses them before any open; the checks
    below still refuse one that a race brings in after the stat, also when
    the open itself fails (a socket is ENXIO, a disk device EACCES).
+   Darwin follows an in-root link only when the first resolution observed
+   that link. A link appearing after that resolution and before the
+   descriptor-relative open is `path_changed` (in-root), or
+   `path_outside_root` (outside-root), without reading the swapped target.
+   A late outside-link refusal names the original request on both OSes.
    On Darwin, `FileToolAccess.operation` words the adapter's
    `special_file_unsupported` with the same shared text
    (`error_text.linux_error`, r6 W3 PX1), for every file tool, so both OSes
    say the same thing.
-   `read_file` words them: `fd_walk` still raises `not_a_regular_file`,
-   `file_io_failed` or `permission_denied`, and an lstat that shows the
-   checked `(st_dev, st_ino)` with a FIFO, socket or device type turns that
-   into `special_file_unsupported`; `path_outside_root` and `path_changed`
-   are never reworded. A mode-000 regular file stays `permission_denied`
+   `read_file` uses the shared special-file refusal even when `os.open`
+   itself fails for a socket or device: Linux and Darwin inspect the entry
+   relative to the already-open parent descriptor, without following links.
+   A regular-file permission denial remains `permission_denied`, not a
+   special-file refusal; `path_outside_root` and `path_changed` are
+   never reworded. A mode-000 regular file stays `permission_denied`
    on Linux: Darwin's `permission_denied_tcc_possible` carries a macOS TCC
    hint that does not apply on Linux, so this code differs between the OSes
    by design. The content
@@ -238,9 +244,9 @@ looks like image/png) — content not shown.`
    never calls `open_verified`. A call without a file-access adapter on
    another OS (tests and direct `read_file_impl` calls; production Darwin
    uses `DarwinFileAccess`) opens the path with `fd_walk.READ_FLAGS`
-   (`O_NONBLOCK`, so a FIFO never blocks the open), checks that
-   `(st_dev, st_ino)` is the stat's pair (else `path_changed`) and that the
-   object is a regular file, and reads at most `READ_MAX_FILE_BYTES` + 1
+   (`O_NONBLOCK`, so a FIFO never blocks the open), checks the type of
+   the opened object before comparing `(st_dev, st_ino)` with the earlier
+   stat (else `path_changed`), and reads at most `READ_MAX_FILE_BYTES` + 1
    bytes with the same `os.read` loop (r6 W3 RF1, SRC-W2-10). `open_verified` requires a descriptor-walked
    parent (`parent_fd`, SRC-W2-03); there is no by-path mode.
    **Execute-only directories on Darwin (r6 W3 OS1)**: the Darwin walk opens
