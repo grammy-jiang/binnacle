@@ -90,7 +90,7 @@
     "LINUX": 62
   },
   "coverage_complete": true,
-  "implementation_commit": "7a5d94a4f30c79587c65765a1e41e605626cb9fc",
+  "implementation_commit": "58ec09bb7af809c36dbb805f6db0b63428ac2d54",
   "production_module_count": 216,
   "rows": [
     {
@@ -5985,7 +5985,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/mcp/job_awareness_hint.py",
       "rationale": "FastMCP-native integration; MCP framework remains solely responsible for Providers and Middleware",
-      "sha256": "4da67eff5c614db50591549a31121edf911eded4e1be07d23dcd3e1fdf5954b0",
+      "sha256": "ebdde8977fc74175a6fb2c31f2648e4a76ada169a4c0c45698ef5925eea6047d",
       "stage": "OS6",
       "was_in_baseline": false
     },

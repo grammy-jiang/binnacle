@@ -134,6 +134,9 @@ class HintAdapter:
     carrier: Enum | None = None
     exclusive: bool = False
     last_meter: Meter | None = field(default=None, init=False)
+    # TEXTU-01: the carrier that the routed bind rules accepted; None when the
+    # bindings are not routed. Every routed call re-checks it.
+    routed_carrier: Enum | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         if type(self.bindings) is not HintBindings:
@@ -169,10 +172,22 @@ class HintAdapter:
                 raise ValueError("NO_STRUCTURE tools bind only the TEXT carrier")
             self.schema = NO_STRUCTURE
             self.identity = producer_identity(self.tool, unstructured=True)
+            self.routed_carrier = self.carrier
             return True
         if text:
             raise ValueError("routed TEXT needs a tool without an output schema")
+        self.routed_carrier = self.carrier
         return False
+
+    def _routed_carrier_holds(self) -> bool:
+        """TEXTU-01: the bind-time carrier rule still holds for this call.
+
+        A schema-backed routed binding stays META and a ``NO_STRUCTURE``
+        binding stays TEXT. A carrier reassigned after bind suppresses.
+        """
+        binding = self.bindings
+        expected = binding.text if self.schema is NO_STRUCTURE else binding.meta
+        return self.carrier is expected and self.routed_carrier is expected
 
     def bind_server(self, server: object) -> None:
         """Bind the serverInfo stamp from the server that dispatches the tool.
@@ -241,6 +256,7 @@ class HintAdapter:
             or self.schema is None
             or self.identity is None
             or (unstructured and not routed)
+            or (routed and not self._routed_carrier_holds())
         ):
             return False
         tool = claim(execution, original)
@@ -357,6 +373,8 @@ class HintAdapter:
             original_bytes = meter.bytes - (13 if original.meta is None else 0)
             meter.initial = False
             body = walk(original, meter, copy=True, byte_limit=262144 - overhead)
+            if routed and not self._routed_carrier_holds():
+                return original, ()
             if self.schema is NO_STRUCTURE:  # TEXT-U: no structure, routed TEXT
                 if (
                     not routed
