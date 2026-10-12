@@ -24,6 +24,12 @@ from binnacle.mcp.job_awareness_hint_identity import (
     witnessed_tool,
 )
 from binnacle.mcp.job_awareness_hint_schema import Schema, equal
+from binnacle.mcp.job_awareness_hint_struct import (
+    HINT_FIELD,
+    bind_struct,
+    insert_hint,
+    struct_member,
+)
 from binnacle.mcp.job_awareness_hint_walk import (
     Meter,
     Unsupported,
@@ -33,6 +39,7 @@ from binnacle.mcp.job_awareness_hint_walk import (
 )
 
 __all__ = [
+    "HINT_FIELD",
     "MAX_RENDERED",
     "META_KEY",
     "NATIVE_TOOL_TYPES",
@@ -88,6 +95,9 @@ class HintBindings:
     # and ``candidate_type`` the exact type of the values ``select`` returns.
     route_type: type | None = None
     candidate_type: type | None = None
+    # g6 §9.2 S-1, E2 lab only: the STRUCT carrier member. None (the default)
+    # means no adapter built from these bindings can bind STRUCT.
+    struct: Enum | None = None
 
     def __post_init__(self) -> None:
         funcs = self.check, self.observe, self.select, self.render
@@ -103,6 +113,7 @@ class HintBindings:
             or not all(isinstance(e, Enum) for e in enums)
             or type(self.meta) is not type(self.text)
             or self.meta is self.text
+            or not struct_member(self.struct, self.meta, self.text)
         ):
             raise ValueError("invalid hint bindings")
 
@@ -137,6 +148,8 @@ class HintAdapter:
     # TEXTU-01: the carrier that the routed bind rules accepted; None when the
     # bindings are not routed. Every routed call re-checks it.
     routed_carrier: Enum | None = field(default=None, init=False)
+    #: Bind-time snapshot: True only for a routed STRUCT binding (g6 §9.2 S-1).
+    struct_bound: bool = field(default=False, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if type(self.bindings) is not HintBindings:
@@ -150,8 +163,11 @@ class HintAdapter:
             raise ValueError("explicit native tool binding required")
         self.bound_tool = self.tool  # provenance snapshot of the registration
         self.carrier = self.bindings.meta if self.carrier is None else self.carrier
+        self.struct_bound = False
         if self.bindings.route_type is not None and self._bind_routed():
             return
+        if self._struct_carrier():
+            raise ValueError("STRUCT binds only in routed mode")
         try:
             self.schema = Schema(self.tool.output_schema)
         except (ValueError, TypeError, RecursionError):
@@ -167,6 +183,10 @@ class HintAdapter:
         client drops the extra text block (H-SC). Both fail closed at bind.
         """
         text = self.carrier is self.bindings.text
+        if self._struct_carrier():  # g6 §9.2 S-1: declared field, else fail
+            self.schema, self.identity = bind_struct(self.tool)
+            self.struct_bound, self.routed_carrier = True, self.carrier
+            return True
         if self.tool.output_schema is None:
             if not text:
                 raise ValueError("NO_STRUCTURE tools bind only the TEXT carrier")
@@ -182,12 +202,19 @@ class HintAdapter:
     def _routed_carrier_holds(self) -> bool:
         """TEXTU-01: the bind-time carrier rule still holds for this call.
 
-        A schema-backed routed binding stays META and a ``NO_STRUCTURE``
-        binding stays TEXT. A carrier reassigned after bind suppresses.
+        A schema-backed routed binding stays META, a ``NO_STRUCTURE`` binding
+        stays TEXT and a STRUCT binding (g6 §9.2 S-1) stays STRUCT. A carrier
+        reassigned after bind suppresses.
         """
         binding = self.bindings
         expected = binding.text if self.schema is NO_STRUCTURE else binding.meta
-        return self.carrier is expected and self.routed_carrier is expected
+        if self.struct_bound:  # None only if the bindings changed after bind
+            expected = binding.struct  # type: ignore[assignment]
+        return expected is not None and self.carrier is expected is self.routed_carrier
+
+    def _struct_carrier(self) -> bool:
+        struct = self.bindings.struct
+        return struct is not None and self.carrier is struct
 
     def bind_server(self, server: object) -> None:
         """Bind the serverInfo stamp from the server that dispatches the tool.
@@ -257,6 +284,7 @@ class HintAdapter:
             or self.identity is None
             or (unstructured and not routed)
             or (routed and not self._routed_carrier_holds())
+            or (self.struct_bound and not routed)
         ):
             return False
         tool = claim(execution, original)
@@ -373,7 +401,8 @@ class HintAdapter:
             original_bytes = meter.bytes - (13 if original.meta is None else 0)
             meter.initial = False
             body = walk(original, meter, copy=True, byte_limit=262144 - overhead)
-            if routed and not self._routed_carrier_holds():
+            struct = self.struct_bound
+            if (routed and not self._routed_carrier_holds()) or (struct and not routed):
                 return original, ()
             if self.schema is NO_STRUCTURE:  # TEXT-U: no structure, routed TEXT
                 if (
@@ -389,7 +418,10 @@ class HintAdapter:
                 or not 1 <= len(jobs) <= 8
                 or not isinstance(grant, binding.grant_type)
                 or not all(type(job) is binding.job_type for job in jobs)
-                or not any(self.carrier is c for c in (binding.meta, binding.text))
+                or not (
+                    struct
+                    or any(self.carrier is c for c in (binding.meta, binding.text))
+                )
             ):
                 return original, ()
             observations = []
@@ -436,6 +468,9 @@ class HintAdapter:
                 if META_KEY in meta:
                     return original, ()
                 meta[META_KEY] = text
+            elif struct:
+                if not insert_hint(body, text, self.schema, meter):
+                    return original, ()
             else:
                 new = {"type": "text", "text": text, "annotations": None, "_meta": None}
                 body["content"].append(new)

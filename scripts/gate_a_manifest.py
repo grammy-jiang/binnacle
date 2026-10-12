@@ -105,6 +105,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "mcp/job_awareness_hint_schema.py",
             "mcp/job_awareness_hint_walk.py",
             "mcp/job_awareness_hint_identity.py",
+            "mcp/job_awareness_hint_struct.py",
         },
         # E2 lab-only MCP session extraction (default off); mirrors
         # job-awareness-lab-session-not-in-production.

@@ -70,6 +70,9 @@ class CandidateCategory(str, Enum):
 class HintCarrier(str, Enum):
     META = "META"
     TEXT = "TEXT"
+    #: E2 lab only (design g6 §9.2 S-1): the routed adapter inserts the hint
+    #: into a declared optional ``structuredContent`` field. Default off.
+    STRUCT = "STRUCT"
 
 
 class ErrorCode(str, Enum):

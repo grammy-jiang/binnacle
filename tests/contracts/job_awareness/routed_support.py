@@ -20,6 +20,7 @@ from fastmcp.tools.base import Tool, ToolResult
 from mcp.types import Implementation, TextContent
 
 from binnacle.features.commands.job_awareness.models import (
+    HintCarrier,
     JobRef,
     Observation,
     ObservationState,
@@ -104,6 +105,7 @@ class RoutedLab(Lab):
             synthetic.bindings,
             route_type=SessionRoute,
             candidate_type=ReminderCandidate,
+            struct=HintCarrier.STRUCT,
         )
         return HintAdapter(
             bindings=bindings,

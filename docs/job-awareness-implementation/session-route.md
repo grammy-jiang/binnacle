@@ -151,6 +151,49 @@ STRUCT carrier (§9.2 S-1) is not implemented; it waits for CV (c′).
   negative control plants a raw-looking value in a tool argument and the
   scan reports it.
 
+## Speculative D1-S: the STRUCT carrier (g6 §9.2 S-1)
+
+This section describes the branch `impl/job-awareness-e2-struct-20261012`.
+It is speculative: the CV-F decision (W4) is still pending, and the branch
+is not merged until the Supervisor says so. The feature stays default off.
+
+- **Carrier.** `HintCarrier.STRUCT` and `HintBindings.struct` (default
+  `None`). Only routed bindings can bind STRUCT; a non-routed STRUCT bind
+  raises `ValueError`.
+- **Bind rule** (`job_awareness_hint_struct.bind_struct`). The bound tool's
+  closed output schema (`type` `"object"`, `additionalProperties` `false`)
+  must declare `job_awareness_hint` exactly as
+  `{"type": "string", "maxLength": 512}`: not required, no description, no
+  other keyword. Anything else fails the bind. The binding is snapshotted
+  (`struct_bound`, and `routed_carrier` = STRUCT). The TEXTU-01 per-call
+  rule extends to STRUCT: a STRUCT binding stays STRUCT, and a schema-backed
+  binding without the snapshot stays META. A carrier change after bind
+  (STRUCT to META or META to STRUCT), a schema, name or version change, or a
+  cleared snapshot suppresses.
+- **Render.** The hint is inserted into the private copy of
+  `structuredContent`, then re-validated with the metered `Schema`. A field
+  that is already present, invalid structured content, or a failed
+  re-validation suppresses.
+- **Mirror rule.** Text blocks are classified against the original
+  structured content. An exact JSON mirror (`json.dumps` defaults, or compact
+  with non-ASCII kept) is re-serialized in its own format. Two mirrors, or a
+  JSON object text equal to the structured content in another format,
+  suppress. Plain tool text is never rewritten.
+- **Caps.** The hint is at most 512 UTF-8 bytes. Growth (field plus mirror)
+  is at most 1024 bytes. The wire byte limit is unchanged.
+- **Unchanged.** `adapt()` never hints a STRUCT binding. META, TEXT-U, off
+  and `adapt()` golden bytes are unchanged; their tests run with bindings
+  that name the STRUCT member.
+- **Lab tool v2-S** (`e2_cprime.v2s_server`). It is the c′ tool with the
+  routed STRUCT carrier. Its `tools/list` equals the frozen c′ manifest
+  (`a995405136191de89fb9657ecccf8de14ae9ee011d98eddce365845481627828`) for
+  both arms. Its routed legacy wire bytes equal the frozen c′ hinted bytes.
+  No product tool declares the field.
+- **Evidence (in process).** TC-1 to TC-5 pass on v2-S, alone and in one
+  shared phase. The capacity dry run covers all 72 frozen slots on v2-S. The
+  hint never reaches another chat. The canonical key reads for its owner
+  only. Raw-value scans find no raw platform value.
+
 ## What is NOT claimed
 
 - No authentication, no authenticated per-chat authorization and no replay

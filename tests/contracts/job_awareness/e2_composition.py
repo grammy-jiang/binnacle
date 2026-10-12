@@ -59,6 +59,7 @@ from binnacle.features.commands.job_awareness.session_route import (
 )
 from binnacle.features.commands.job_awareness.session_snapshot import FrozenTemplate
 from binnacle.mcp.job_awareness_hint import (
+    HINT_FIELD,
     META_KEY,
     HintAdapter,
     HintBindings,
@@ -117,8 +118,10 @@ def chat(name: str, subject: str = "owner") -> Chat:
 
 
 def hinted_keys(result: dict[str, Any]) -> list[str]:
-    """Canonical JobRef keys carried by a META or TEXT hint of one result."""
+    """Canonical JobRef keys carried by a META, TEXT or STRUCT hint of one
+    result. A STRUCT JSON mirror (``content[0]``) is not counted twice."""
     texts = [(result.get("_meta") or {}).get(META_KEY) or ""]
+    texts += [(result.get("structuredContent") or {}).get(HINT_FIELD) or ""]
     texts += [c.get("text", "") for c in result.get("content", [])[1:]]
     return [
         k for t in texts if t.startswith(HINT_PREFIX) for k in _CANONICAL.findall(t)
@@ -311,6 +314,7 @@ class E2Server:
             text=HintCarrier.TEXT,
             route_type=SessionRoute,
             candidate_type=ReminderCandidate,
+            struct=HintCarrier.STRUCT,
         )
         return HintAdapter(
             bindings=bindings,
@@ -327,6 +331,7 @@ class E2Server:
     def handles(self, result: ToolResult) -> list[str]:
         meta = result.meta or {}
         texts = [meta.get(META_KEY) or ""]
+        texts += [(result.structured_content or {}).get(HINT_FIELD) or ""]
         texts += [getattr(block, "text", "") for block in result.content[1:]]
         keys = [k for t in texts for k in _CANONICAL.findall(t)]
         return ["j_" + key.split(":")[1] for key in keys]

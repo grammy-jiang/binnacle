@@ -2,8 +2,9 @@
 
 Lab-only, never product. (c′) is the STRUCT *shape* with the hint field
 declared in the advertised output schema of ``fixture_unrelated_read``. The
-STRUCT carrier itself is not implemented (§9.2 S-1); the CV lab moves the
-routed hint into this shape. The schema and the result rule below mirror the
+CV lab moves the routed hint into this shape. The speculative STRUCT branch
+(§9.2 S-1, D1-S) adds ``v2s_server``: the same tool with the routed STRUCT
+carrier, so v2-S has the c′ ``tools/list``. The schema and the result rule below mirror the
 E2-RUN lab CV variant ``e``: a closed object, ``note`` required, an optional
 undescribed ``job_awareness_hint`` string of at most 512 characters, and one
 text block that is the ``json.dumps`` of the structured content.
@@ -23,6 +24,7 @@ from typing import Any
 from fastmcp.tools.base import ToolResult
 from mcp.types import TextContent
 
+from binnacle.features.commands.job_awareness.models import HintCarrier
 from tests.contracts.job_awareness.e2_composition import _HTTP, E2Server, running
 
 FIXTURE = Path(__file__).parent / "fixtures" / "e2_cv" / "lab-manifests.json"
@@ -61,6 +63,25 @@ def cprime_server(path: Path, hint: str | None = None) -> E2Server:
         note_result=partial(cprime_result, hint=hint),
     )
     server.adapter = server.build_adapter(enabled=False)
+    return server
+
+
+def v2s_server(path: Path, *, enabled: bool = True, **options: Any) -> E2Server:
+    """Lab tool v2-S (g6 §9.2 S-1): the c′ tool and the routed STRUCT carrier.
+
+    The tool returns the unhinted c′ result; only the adapter inserts the
+    hint (field plus the one JSON mirror). ``tools/list`` is the c′ manifest,
+    identical for the control (``enabled=False``) and candidate arms.
+    """
+    server = E2Server(
+        path,
+        carrier=HintCarrier.STRUCT,
+        note_schema=CPRIME_SCHEMA,
+        note_result=cprime_result,
+        **options,
+    )
+    if not enabled:
+        server.adapter = server.build_adapter(enabled=False)
     return server
 
 
