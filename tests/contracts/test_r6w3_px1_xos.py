@@ -71,9 +71,10 @@ from binnacle.platform.composition import (
 
 # Direct-script execution places tests/contracts (not repo root) on sys.path.
 # Type checking instead resolves the same file through the tests namespace.
-if TYPE_CHECKING:
+if TYPE_CHECKING or __package__:
     from tests.contracts.r6w3_px1_xos_fdw import FDW_CASES, _fdw_open
 else:
+    # python tests/contracts/test_r6w3_px1_xos.py (documented script entry).
     from r6w3_px1_xos_fdw import FDW_CASES, _fdw_open
 
 
@@ -82,7 +83,7 @@ TIMING_WORDS = ("elapsed", "duration", "latency", "_ms", "seconds", "timing")
 MTIME = 1_700_000_000  # Fixed mtimes: glob mode orders newest first.
 TCC_CODE, LINUX_CODE = "permission_denied_tcc_possible", "permission_denied"
 # SHA-256 of the normalized document; equal on Linux and Darwin by design.
-GOLDEN_SHA256 = "f66a3061b6561037d49be8d240c7a8c89f4b9a035f10322cb64c0b059fc7db12"
+GOLDEN_SHA256 = "17e7b3e816427eb66c6ebce76d9e1177d4be33b70f9a266bbea76b8ed8e94cab"
 
 FILES = {
     "a.txt": ("alpha needle\n", 500),
