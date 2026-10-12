@@ -165,6 +165,12 @@ STRUCT carrier (§9.2 S-1) is not implemented; it waits for CV (c′).
   is trusted in-process code and out of the threat model, as before. The
   per-call carrier checks stay as defence in depth. Non-routed adapters and
   `adapt()` are unchanged.
+- **TEXTU-G4-01.** The in-process lab router captures the adapter of a call
+  at dispatch, before it awaits the tool, and uses only that object for the
+  call. An arm switch while a call is in flight changes later calls only.
+  The routed freeze is shallow: the server stamp is a private deep copy, the
+  tool identity is re-checked on every call, and the bound Tool, schema and
+  callbacks must not change while the adapter lives.
 - **TEXTU-02.** The capacity dry run checks the lifecycle of every arm again
   (`arm_failures`). A negative control proves that a bad non-final arm fails.
 - **ADV-TU-02.** The raw-value scan covers the synthetic argument log. A

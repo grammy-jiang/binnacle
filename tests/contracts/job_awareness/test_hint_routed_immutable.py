@@ -17,15 +17,23 @@ from dataclasses import replace
 from threading import Event
 
 import pytest
+from fastmcp.tools.base import ToolResult
+from mcp.types import TextContent
 
 from binnacle.features.commands.job_awareness import session_emission
 from binnacle.features.commands.job_awareness.models import HintCarrier
 from binnacle.features.commands.job_awareness.session_emission import emit_hint
 from binnacle.mcp.job_awareness_hint import META_KEY, HintAdapter
-from tests.contracts.job_awareness.e2_composition import E2Server, chat, running
+from tests.contracts.job_awareness.e2_composition import (
+    NOTE,
+    E2Server,
+    chat,
+    running,
+)
 from tests.contracts.job_awareness.e2_scoring import ledger_rows
 from tests.contracts.job_awareness.routed_support import RoutedLab
 from tests.contracts.job_awareness.synthetic_app import in_loop
+from tests.contracts.job_awareness.test_e2_wire_handoff import PLAIN
 from tests.contracts.job_awareness.test_hint_routed_emission import note
 from tests.contracts.job_awareness.test_hint_schema_support import executed
 
@@ -163,8 +171,10 @@ async def test_in_flight_changes_inside_the_final_commit_cannot_be_made(
 
 @in_loop
 async def test_arm_switch_is_a_new_adapter_and_calls_keep_their_snapshot(tmp_path):
-    """Bounded snapshot: an admitted call finishes on its own adapter; the
-    next call uses the new arm. The controller switches arms between calls."""
+    """Bounded snapshot, worker side: the call pauses in ``check`` after its
+    adapter was selected; it finishes on that adapter and the next call uses
+    the new arm. The dispatch-side bridge is in
+    ``test_arm_is_captured_at_dispatch_before_the_tool_body``."""
     server = E2Server(tmp_path / "phase")
     candidate = server.build_adapter(enabled=True)
     control = server.build_adapter(enabled=False)
@@ -195,3 +205,76 @@ async def test_arm_switch_is_a_new_adapter_and_calls_keep_their_snapshot(tmp_pat
     assert not after.hints and after.row["ja_hint"] == "0"  # nosec B101 - pytest assertion
     states = sorted(str(s) for (s,) in ledger_rows(server, "SELECT state FROM emit"))
     assert states == ["EMITTED", "PENDING"]  # nosec B101 - pytest assertion
+
+
+def test_routed_server_stamp_is_a_private_snapshot():
+    """ADV-TUG4-01/02: the stamp is fixed at construction; the source dict
+    can change without changing what the adapter reserves for."""
+    with RoutedLab(1) as lab:
+        stamp = {"name": "I2-2 synthetic only", "version": "synthetic"}
+        adapter = replace(lab.routed(enabled=True), server_info=stamp)
+        assert adapter.server_info == stamp and adapter.server_info is not stamp  # nosec B101 - pytest assertion
+        stamp["version"] = "changed"
+        assert adapter.server_info["version"] == "synthetic"  # nosec B101 - pytest assertion
+        plain = lab.adapter(enabled=True)
+        assert plain.server_info is plain.server_info  # nosec B101 - pytest assertion - non-routed: no copy
+
+
+def paused_note():
+    """A legitimate note body that pauses until released (then never again)."""
+    entered, release = Event(), Event()
+
+    def result(note: str) -> ToolResult:
+        entered.set()
+        release.wait(WAIT_S)
+        return ToolResult(
+            content=[TextContent(type="text", text=note)],
+            structured_content={"note": note},
+        )
+
+    return result, entered, release
+
+
+@pytest.mark.parametrize(
+    "first",
+    ["CONTROL", "CANDIDATE"],
+    ids=["CONTROL-to-CANDIDATE", "CANDIDATE-to-CONTROL"],
+)
+@in_loop
+async def test_arm_is_captured_at_dispatch_before_the_tool_body(tmp_path, first):
+    """Review TEXTU-G4-01: the arm switches while the tool body is paused,
+    before ``witnessed_call`` returns. The call keeps the arm of its dispatch;
+    the next call uses the new arm."""
+    body, entered, release = paused_note()
+    server = E2Server(tmp_path / "phase", note_result=body)
+    arms = {
+        "CONTROL": server.build_adapter(enabled=False),
+        "CANDIDATE": server.build_adapter(enabled=True),
+    }
+    second = "CANDIDATE" if first == "CONTROL" else "CONTROL"
+    server.adapter = arms[first]
+    who = chat("dispatch")
+    async with running(server) as wire:
+        one = await wire.call(who, "fixture_start", {"slot": "R3-SYN-JOB-01"})
+        two = await wire.call(who, "fixture_start", {"slot": "R3-SYN-JOB-02"})
+        await server.seal(who, str(one.data["job"]))
+        task = asyncio.ensure_future(wire.call(who, "fixture_unrelated_read"))
+        assert await asyncio.to_thread(entered.wait, WAIT_S)  # nosec B101 - pytest assertion
+        server.adapter = arms[second]  # switch arms while the body is paused
+        release.set()
+        in_flight = await task
+        states_after_first = emit_states(server)
+        await server.seal(who, str(two.data["job"]))
+        later = await wire.call(who, "fixture_unrelated_read")
+    final = sorted(str(s) for (s,) in ledger_rows(server, "SELECT state FROM emit"))
+    if first == "CONTROL":
+        assert in_flight.raw.decode() == PLAIN and in_flight.row["ja_hint"] == "0"  # nosec B101 - pytest assertion
+        assert states_after_first == {"PENDING"}  # nosec B101 - pytest assertion
+        assert later.hints and later.row["ja_hint"] == "1"  # nosec B101 - pytest assertion
+        assert final == ["EMITTED", "EMITTED"]  # nosec B101 - pytest assertion
+    else:
+        assert in_flight.hints and in_flight.row["ja_hint"] == "1"  # nosec B101 - pytest assertion
+        assert states_after_first == {"EMITTED", "PENDING"}  # nosec B101 - pytest assertion
+        assert later.raw.decode() == PLAIN and later.row["ja_hint"] == "0"  # nosec B101 - pytest assertion
+        assert final == ["EMITTED", "PENDING"]  # nosec B101 - pytest assertion
+    assert NOTE in in_flight.raw.decode()  # nosec B101 - pytest assertion

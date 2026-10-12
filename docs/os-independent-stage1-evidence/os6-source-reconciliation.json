@@ -90,7 +90,7 @@
     "LINUX": 62
   },
   "coverage_complete": true,
-  "implementation_commit": "e24984fdfd1d4b5645a352c019300119eda6d6fd",
+  "implementation_commit": "299dc96d818eec75a0bbd06ab3a4b33f719bb4db",
   "production_module_count": 216,
   "rows": [
     {
@@ -5961,6 +5961,7 @@
         "binnacle.mcp.job_awareness_hint_walk.walk",
         "collections.abc",
         "collections.abc.Callable",
+        "copy",
         "dataclasses",
         "dataclasses.dataclass",
         "dataclasses.field",
@@ -5985,7 +5986,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/mcp/job_awareness_hint.py",
       "rationale": "FastMCP-native integration; MCP framework remains solely responsible for Providers and Middleware",
-      "sha256": "44713f031137e3748d313cbceb2fe03e13ed81310773dac3e67c1180e40dc473",
+      "sha256": "f40d26d3976f4f0ca291751ea07af3119992e4261efb7f5f43f78797e9fdc022",
       "stage": "OS6",
       "was_in_baseline": false
     },

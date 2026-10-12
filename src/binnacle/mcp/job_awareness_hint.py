@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -126,6 +127,9 @@ class HintAdapter:
     (``dataclasses.replace``); a call keeps the adapter it was dispatched
     with. ``object.__setattr__`` bypasses this; in-process code is trusted
     (see job_awareness_hint_identity). Non-routed adapters stay mutable.
+    The freeze is shallow: the server stamp is a private deep copy, the tool
+    identity is re-checked on every call, and the bound Tool, schema and
+    callbacks must stay unchanged for the adapter's lifetime (ADV-TUG4-01).
     """
 
     bindings: HintBindings
@@ -168,6 +172,8 @@ class HintAdapter:
             self.identity = (
                 None if self.schema is None else producer_identity(self.tool)
             )
+        if routed:  # a private stamp copy that no caller can change in place
+            self.server_info = copy.deepcopy(self.server_info)
         object.__setattr__(self, "_sealed", routed)
 
     def __setattr__(self, name: str, value: object) -> None:
