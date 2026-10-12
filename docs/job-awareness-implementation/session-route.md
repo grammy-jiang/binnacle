@@ -5,6 +5,11 @@ Status: E2 S1-S5 implemented on a lab branch (2026-10-12). Default off.
 Design: E2-DESIGN-20261012 revision g4 (review g4 PASS). Code baseline:
 `32cbe56`.
 
+Production use (2026-10-12, default off): the reviewed route parser, fence,
+extraction and STRUCT carrier are composed into the production server behind
+`[job_awareness] hints_enabled`; see `production-enable.md`. Everything below
+remains the lab design.
+
 ## What it is
 
 The E2 lab routes a synthetic job-completion hint to the chat that started
