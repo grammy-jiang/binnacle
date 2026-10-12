@@ -359,6 +359,7 @@ def main(argv: list[str] | None = None) -> int:
     from binnacle.platform.composition import host_os_family
 
     host = host_os_family()
+    lockfd: int | None = None
     try:
         policy = Policy(interval_s=args.interval)
         # The lock prevents two running companions from fighting over a
@@ -370,11 +371,15 @@ def main(argv: list[str] | None = None) -> int:
             fcntl.flock(lockfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             log.error("event=service_watchdog_duplicate_process")
+            os.close(lockfd)
             return 2
         attempts = _load_attempts(args.state_file)
     except (OSError, ValueError, RuntimeError) as exc:
+        if lockfd is not None:
+            os.close(lockfd)
         log.error("event=service_watchdog_start_refused reason=%s", type(exc).__name__)
         return 2
+    assert lockfd is not None
     try:
         watchdog = Watchdog(
             Supervisor(host),
