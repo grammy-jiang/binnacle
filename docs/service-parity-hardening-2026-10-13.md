@@ -92,7 +92,11 @@ with mode 0600 **before** the new launchd job is bootstrapped.
 4. Updating service-watchdog to its stronger safety policy may restart
    **only the watchdog service**, with exact config backup/hash verification.
    Preserve a concurrent operator's `--restart-enabled` choice; do not
-   reconfigure anyone else's settings.
+   reconfigure anyone else's settings. On sextant, create a version-frozen
+   `git archive` of the merged `src/binnacle` under a private per-commit
+   release directory and use `linux_user_unit(..., module_root=<release>/src)`.
+   The separate watchdog imports the entire matched source snapshot; never
+   copy only `service_watchdog.py` with mismatched companion modules.
 5. Do not pull to the original Pi's or sextant's live development checkout;
    Pi uvicorn `--reload` would make that an unplanned MCP restart.
 6. When Job Manager and MCP sessions are truly idle in a separate maintenance
