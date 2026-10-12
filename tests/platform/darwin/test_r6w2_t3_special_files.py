@@ -4,7 +4,7 @@ tests/unit/tools/test_r6w2_x3b3_special_files.py runs the Linux read path
 beside the Darwin one on Linux. This module is its native Darwin half: a
 FIFO, a unix socket, a character device and a block device are refused by
 the production Darwin path (FileToolAccess over DarwinFileAccess) with the
-code special_file_unsupported and the text Linux uses, "special_file_unsupported.".
+code special_file_unsupported and the shared text Linux uses (SPECIAL_FILE_TEXT).
 A mode-000 regular file differs by design: Darwin says
 permission_denied_tcc_possible, Linux permission_denied.
 """
@@ -26,11 +26,12 @@ from binnacle.errors import CodedToolError
 from binnacle.features.files import paths
 from binnacle.features.files.tools import read_file as rf
 from binnacle.platform.contracts.capability_contracts import Capability, CapabilityState
+from binnacle.platform.contracts.special_file_contracts import SPECIAL_FILE_TEXT
 from binnacle.platform.darwin.file_access import DarwinFileAccess
 
 NATIVE = pytest.mark.skipif(sys.platform != "darwin", reason="Darwin file access")
 CODE = "special_file_unsupported"
-LINUX_TEXT = f"{CODE}."  # test_r6w2_x3b3_special_files.py, the Linux read path.
+LINUX_TEXT = SPECIAL_FILE_TEXT  # r6 W3 RF1: the shared text on both OSes.
 
 
 @pytest.fixture
