@@ -24,6 +24,7 @@ from binnacle.mcp.callctx import current_call
 from binnacle.platform.contracts.process_contracts import JobSignalDeliveryError
 from binnacle.platform.job_platform import create_process_backend
 from binnacle.provenance import runtime_provenance
+from binnacle.startup_imports import import_runtime_modules
 
 logging.basicConfig(
     level=logging.INFO,
@@ -266,6 +267,8 @@ class JobManager:
 
 
 def main() -> None:
+    # E1: never first-import binnacle source a later deploy synced.
+    import_runtime_modules()
     settings = get_settings()
     if settings.jobs.socket_path is None:
         raise RuntimeError("host composition did not resolve the jobs socket")

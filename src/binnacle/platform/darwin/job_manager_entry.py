@@ -58,6 +58,7 @@ from binnacle.platform.darwin.job_manager_service import (
     DarwinJobManager,
 )
 from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
+from binnacle.startup_imports import import_runtime_modules
 
 log = logging.getLogger("binnacle.job_manager")
 EX_FAILED, EX_USAGE, EX_TEMPFAIL, EX_CONFIG = 1, 64, 75, 78  # sysexits.h
@@ -256,6 +257,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return EX_USAGE
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    import_runtime_modules()  # E1: never first-import a later deploy's source
     if not hasattr(os, "waitid"):  # JCR-F1: refuse before any lease or spawn
         log.error("event=job_manager_refused reason=%s", WAITID_REQUIRED)
         return EX_CONFIG
