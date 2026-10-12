@@ -10,9 +10,10 @@ fits. The bind check reads only the walked plain copy of the schema.
 Text blocks are classified against the ORIGINAL structured content before
 any change:
 
-- an exact JSON mirror is a text block equal to one of ``MIRROR_FORMATS``
-  of the structured content. Exactly one mirror is re-serialized in its own
-  format after the insertion; two or more mirrors suppress;
+- an exact JSON mirror is a text block equal to exactly one of
+  ``MIRROR_FORMATS`` of the structured content. Exactly one mirror is
+  re-serialized in its own format after the insertion; two or more mirrors,
+  or a text that matches more than one format, suppress;
 - a text block that is a JSON object equal to the structured content in any
   other format is an ambiguous mirror and suppresses (it could not be kept
   equal to the new structured content);
@@ -124,13 +125,22 @@ def _mirror(
 ) -> Callable[[Any], str] | None:
     """The mirror format of one text block, None for plain tool text.
 
-    Raises ``Unsupported`` for an ambiguous mirror: a JSON object text equal
-    to the structured content in a format that cannot be reproduced.
+    Raises ``Unsupported`` for an ambiguous mirror: a text that matches more
+    than one pinned format (for example ``{}``, which both formats render
+    alike, so its serializer cannot be determined; review STRUCT-01), or a
+    JSON object text equal to the structured content in a format that cannot
+    be reproduced.
     """
     meter.charge(len(text) + 1)
-    for render, out in zip(MIRROR_FORMATS, rendered, strict=True):
-        if text == out:
-            return render
+    matches = [
+        render
+        for render, out in zip(MIRROR_FORMATS, rendered, strict=True)
+        if text == out
+    ]
+    if len(matches) > 1:
+        raise Unsupported
+    if matches:
+        return matches[0]
     if text.lstrip(" \t\n\r")[:1] != "{":
         return None
     meter.charge(len(text) + 1)

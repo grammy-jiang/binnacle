@@ -221,9 +221,12 @@ is not merged until the Supervisor says so. The feature stays default off.
   re-validation suppresses.
 - **Mirror rule.** Text blocks are classified against the original
   structured content. An exact JSON mirror (`json.dumps` defaults, or compact
-  with non-ASCII kept) is re-serialized in its own format. Two mirrors, or a
-  JSON object text equal to the structured content in another format,
-  suppress. Plain tool text is never rewritten.
+  with non-ASCII kept) is re-serialized in its own format. Two mirrors, a
+  text that matches both pinned formats (for example `{}` with empty
+  structured content; review STRUCT-01), or a JSON object text equal to the
+  structured content in another format, suppress the whole hint. Plain tool
+  text is never rewritten. The lab key extractors count a key once per
+  result, whatever the mirror position (ADV-STRUCT-01).
 - **Caps.** The hint is at most 512 UTF-8 bytes. Growth (field plus mirror)
   is at most 1024 bytes. The wire byte limit is unchanged.
 - **Unchanged.** `adapt()` never hints a STRUCT binding. META, TEXT-U, off

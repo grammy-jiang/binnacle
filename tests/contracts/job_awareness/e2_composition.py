@@ -117,15 +117,24 @@ def chat(name: str, subject: str = "owner") -> Chat:
     )
 
 
+def _hint_keys(meta: Any, structured: Any, texts: list[str]) -> list[str]:
+    """Keys of the hint carriers only: the META value, the STRUCT field and
+    TEXT blocks that start with the reminder prefix. A STRUCT JSON mirror at
+    any content position starts with ``{`` and is never counted (ADV-STRUCT-01);
+    a key is listed once per result."""
+    found = [(meta or {}).get(META_KEY) or "", (structured or {}).get(HINT_FIELD) or ""]
+    found += texts
+    keys = [
+        k for t in found if t.startswith(HINT_PREFIX) for k in _CANONICAL.findall(t)
+    ]
+    return list(dict.fromkeys(keys))
+
+
 def hinted_keys(result: dict[str, Any]) -> list[str]:
     """Canonical JobRef keys carried by a META, TEXT or STRUCT hint of one
-    result. A STRUCT JSON mirror (``content[0]``) is not counted twice."""
-    texts = [(result.get("_meta") or {}).get(META_KEY) or ""]
-    texts += [(result.get("structuredContent") or {}).get(HINT_FIELD) or ""]
-    texts += [c.get("text", "") for c in result.get("content", [])[1:]]
-    return [
-        k for t in texts if t.startswith(HINT_PREFIX) for k in _CANONICAL.findall(t)
-    ]
+    wire result."""
+    texts = [c.get("text", "") for c in result.get("content", [])[1:]]
+    return _hint_keys(result.get("_meta"), result.get("structuredContent"), texts)
 
 
 @dataclass
@@ -333,11 +342,8 @@ class E2Server:
         )
 
     def handles(self, result: ToolResult) -> list[str]:
-        meta = result.meta or {}
-        texts = [meta.get(META_KEY) or ""]
-        texts += [(result.structured_content or {}).get(HINT_FIELD) or ""]
-        texts += [getattr(block, "text", "") for block in result.content[1:]]
-        keys = [k for t in texts for k in _CANONICAL.findall(t)]
+        texts = [getattr(block, "text", "") for block in result.content[1:]]
+        keys = _hint_keys(result.meta, result.structured_content, texts)
         return ["j_" + key.split(":")[1] for key in keys]
 
     def outcome(self, who: Chat) -> RouteOutcome:
