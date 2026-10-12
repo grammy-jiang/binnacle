@@ -19,6 +19,7 @@ from binnacle.config import CONFIG_FILE_ENV, DEFAULT_CONFIG_FILE, get_settings
 from binnacle.deployment import units
 from binnacle.diagnostics import doctor_common as _doctor_common
 from binnacle.diagnostics import doctor_jobs as _doctor_jobs
+from binnacle.diagnostics.doctor_config_keys import check_config_keys
 from binnacle.diagnostics.doctor_connectivity import _tail_lines, check_endpoint
 from binnacle.diagnostics.doctor_provenance import (
     check_provenance,
@@ -250,6 +251,7 @@ def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list
     checks += check_provenance(provenance)
     checks += check_startup_imports()  # E1-a4: last start-up import failure
     checks += check_config()
+    checks += check_config_keys()
     checks += check_rg_version(s.rg_bin)
     checks += check_token(dep.token_file)
     unit_checks, active = check_units(dep.server_unit, inspector=services)
