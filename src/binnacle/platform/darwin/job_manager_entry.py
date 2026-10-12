@@ -257,7 +257,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return EX_USAGE
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    import_manager_modules()  # E1: never first-import a later deploy's source
+    # E1: never first-import a later deploy's source. E1-a4: a required import
+    # failure raises StartupImportFailed (exit EX_STARTUP_IMPORT, 70) before
+    # the lease and the socket.
+    import_manager_modules()
     if not hasattr(os, "waitid"):  # JCR-F1: refuse before any lease or spawn
         log.error("event=job_manager_refused reason=%s", WAITID_REQUIRED)
         return EX_CONFIG

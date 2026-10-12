@@ -17,18 +17,46 @@ the entry's start-up closure plus every binnacle module it imports lazily while
 serving, pinned per OS (derived with an import tracer over the manager suites,
 both entries) and held to that by the E1-a3 test, which fails on any binnacle
 module a serving manager loads outside the list.
+
+Policy (E1-a4, Supervisor ruling on R-E1 point 5): a REQUIRED module that
+raises anything while importing (ImportError, any Exception, SystemExit or
+another BaseException, including a package ``__init__`` that raises inside the
+name walk) ABORTS start-up. A half-started process that silently lacks a
+module fails later, far from the cause. The failing process logs ONE line
+(``event=startup_import_failed``: module, exception type and the raising
+frame's package-relative file:line, never the message text), writes a durable
+record that ``binnacle doctor`` reports, and exits with ``EX_STARTUP_IMPORT``
+before it binds a port, takes the jobs lock or binds the jobs socket. A clean
+start removes that process's record. ``OPTIONAL_MODULES`` is the pinned
+allowlist of modules that may fail and report themselves unavailable at call
+time instead; no such module exists today, so it is empty. E1 covers binnacle.*
+only: third-party and stdlib lazy imports still come from the shared venv, and
+the deploy restarts on pyproject/uv.lock changes.
 """
 
 from __future__ import annotations
 
 import importlib
+import json
 import logging
+import os
 import pkgutil
 import platform
+import sys
+import time
+import traceback
+from collections.abc import Callable
+from pathlib import Path
+from types import ModuleType
 
 import binnacle
 
 log = logging.getLogger("binnacle.startup_imports")
+
+# EX_SOFTWARE (sysexits.h): distinct from the Darwin manager's 1/64/75/78.
+EX_STARTUP_IMPORT = 70
+OPTIONAL_MODULES: tuple[str, ...] = ()  # pinned; empty (no optional module)
+RECORD_DIR_NAME = "startup-import"
 
 _ALWAYS_EXCLUDED = (
     "binnacle.server",  # builds and starts the ASGI application on import
@@ -64,6 +92,13 @@ MANAGER_EXCLUDED = (
     *_ALWAYS_EXCLUDED,
 )
 MANAGER_ENTRY_CLOSURE_ALLOWED = ("binnacle.mcp", "binnacle.mcp.callctx")
+
+
+def manager_entry_closure_allowed(system: str) -> tuple[str, ...]:
+    """RE1-F4: the closure exception holds for the Linux entry only."""
+    return MANAGER_ENTRY_CLOSURE_ALLOWED if system == "Linux" else ()
+
+
 _MANAGER_COMMON = (
     "binnacle",
     "binnacle.platform",
@@ -150,7 +185,7 @@ def _walk(path: list[str], prefix: str, prefixes: tuple[str, ...]) -> list[str]:
             continue
         names.append(info.name)
         if info.ispkg:
-            package = importlib.import_module(info.name)
+            package = _required_import(info.name)
             names += _walk(list(package.__path__), info.name + ".", prefixes)
     return names
 
@@ -168,30 +203,125 @@ def manager_module_names(system: str | None = None) -> tuple[str, ...]:
     return MANAGER_MODULES.get(platform.system() if system is None else system, ())
 
 
-def import_runtime_modules(system: str | None = None) -> tuple[str, ...]:
-    """Import the runtime tree; return the modules that failed to import.
+class StartupImportFailed(SystemExit):
+    """A required module failed to import; start-up is aborted."""
 
-    A failure never stops the process (its module stays lazy, as before) and
-    is logged once; the start-up import tests require an empty result.
-    """
-    return _import_all(runtime_module_names(system))
-
-
-def import_manager_modules(system: str | None = None) -> tuple[str, ...]:
-    """Import the job manager's pinned set; failures as ``import_runtime_modules``."""
-    return _import_all(manager_module_names(system))
+    def __init__(self, module: str, error_class: str, where: str) -> None:
+        super().__init__(EX_STARTUP_IMPORT)
+        self.module, self.error_class, self.where = module, error_class, where
 
 
-def _import_all(names: tuple[str, ...]) -> tuple[str, ...]:
-    failed = []
-    for name in names:
+def record_dir() -> Path:
+    """Where a failing process leaves its durable record for ``doctor``."""
+    state = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+    return Path(state) / "binnacle" / RECORD_DIR_NAME
+
+
+def _raising_frame(exc: BaseException) -> str:
+    frames = traceback.extract_tb(exc.__traceback__)
+    if not frames:
+        return "unknown:0"
+    frame = frames[-1]
+    path = Path(frame.filename)
+    package_root = Path(binnacle.__file__).resolve().parent.parent
+    roots = [package_root, *(Path(p) for p in sys.path if p.endswith("site-packages"))]
+    for root in roots:
         try:
-            importlib.import_module(name)
-        except Exception as exc:  # noqa: BLE001 - logged and reported
-            failed.append(name)
-            log.warning(
-                "event=startup_import_error module=%s error_class=%s",
-                name,
-                type(exc).__name__,
-            )
-    return tuple(failed)
+            return f"{path.resolve().relative_to(root.resolve())}:{frame.lineno}"
+        except (OSError, ValueError):
+            continue
+    return f"{path.name}:{frame.lineno}"
+
+
+def _required_import(name: str) -> ModuleType:
+    try:
+        return importlib.import_module(name)
+    except BaseException as exc:
+        if isinstance(exc, (KeyboardInterrupt, StartupImportFailed)):
+            raise
+        raise StartupImportFailed(
+            name, type(exc).__name__, _raising_frame(exc)
+        ) from None
+
+
+def _write_record(process: str, failure: StartupImportFailed) -> None:
+    record = {
+        "process": process,
+        "pid": os.getpid(),
+        "module": failure.module,
+        "error_class": failure.error_class,
+        "where": failure.where,
+        "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "exit_code": EX_STARTUP_IMPORT,
+    }
+    try:
+        directory = record_dir()
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        target = directory / f"{process}.json"
+        tmp = target.with_suffix(".tmp")
+        tmp.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+        os.replace(tmp, target)
+    except OSError:
+        log.error("event=startup_import_record_error process=%s", process)
+
+
+def _clear_record(process: str) -> None:
+    try:
+        (record_dir() / f"{process}.json").unlink(missing_ok=True)
+    except OSError:
+        log.warning("event=startup_import_record_error process=%s", process)
+
+
+def _fail_fast(
+    process: str,
+    names_of: Callable[[str | None], tuple[str, ...]],
+    system: str | None,
+) -> tuple[str, ...]:
+    try:
+        names = names_of(system)
+        for name in names:
+            if name in OPTIONAL_MODULES:
+                continue
+            _required_import(name)
+    except StartupImportFailed as failure:
+        log.error(
+            "event=startup_import_failed process=%s module=%s error_class=%s at=%s "
+            "exit=%d",
+            process,
+            failure.module,
+            failure.error_class,
+            failure.where,
+            EX_STARTUP_IMPORT,
+        )
+        _write_record(process, failure)
+        raise
+    _clear_record(process)
+    return ()
+
+
+def import_runtime_modules(
+    system: str | None = None, process: str = "mcp-server"
+) -> tuple[str, ...]:
+    """Import the runtime tree or abort start-up (``StartupImportFailed``).
+
+    Returns the failed modules, which is always empty: a required failure
+    raises ``StartupImportFailed`` (exit ``EX_STARTUP_IMPORT``) instead.
+    """
+    return _fail_fast(process, runtime_module_names, system)
+
+
+def import_manager_modules(
+    system: str | None = None,
+    process: str = "job-manager",
+    log_format: str | None = None,
+) -> tuple[str, ...]:
+    """Import the job manager's pinned set; aborts as ``import_runtime_modules``.
+
+    ``log_format`` configures root logging first, for an entry that must not
+    configure it at import time (RE1-F5: the server imports the Linux entry).
+    """
+    if log_format is not None:
+        logging.basicConfig(
+            level=logging.INFO, format=log_format, datefmt="%Y-%m-%dT%H:%M:%S"
+        )
+    return _fail_fast(process, manager_module_names, system)

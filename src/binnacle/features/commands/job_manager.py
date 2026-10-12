@@ -26,11 +26,9 @@ from binnacle.platform.job_platform import create_process_backend
 from binnacle.provenance import runtime_provenance
 from binnacle.startup_imports import import_manager_modules
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S",
-)
+# RE1-F5: root logging is configured in main(), not on import: the Linux MCP
+# server imports this module eagerly and must keep its own configuration.
+LOG_FORMAT = "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s"
 log = logging.getLogger("binnacle.job_manager")
 
 
@@ -267,8 +265,9 @@ class JobManager:
 
 
 def main() -> None:
-    # E1: never first-import binnacle source a later deploy synced.
-    import_manager_modules()
+    # E1: never first-import binnacle source a later deploy synced. E1-a4: a
+    # required import failure exits EX_STARTUP_IMPORT before the socket.
+    import_manager_modules(process="job-manager", log_format=LOG_FORMAT)
     settings = get_settings()
     if settings.jobs.socket_path is None:
         raise RuntimeError("host composition did not resolve the jobs socket")

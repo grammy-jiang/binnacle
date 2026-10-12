@@ -1,11 +1,20 @@
-"""Runtime provenance and ripgrep pin checks for binnacle doctor."""
+"""Runtime provenance, ripgrep pin and start-up import checks for binnacle doctor.
 
+E1-a4: a server or job manager whose required module fails to import exits
+``EX_STARTUP_IMPORT`` and leaves a durable record (``binnacle.startup_imports``);
+a clean start removes it. Under systemd ``Restart=`` or launchd ``KeepAlive``
+such a process crash-loops; ``check_startup_imports`` keeps the cause visible.
+"""
+
+import json
 import re
 import shutil
 import subprocess
+from pathlib import Path
 
-from binnacle.doctor_contracts import Check, ok, warn
+from binnacle.doctor_contracts import Check, fail, ok, warn
 from binnacle.provenance import Provenance, runtime_provenance
+from binnacle.startup_imports import record_dir
 
 
 def check_provenance(value: Provenance | None = None) -> list[Check]:
@@ -62,3 +71,29 @@ def check_rg_version(rg_bin: str, pinned: str = PINNED_RG_VERSION) -> list[Check
             )
         ]
     return [ok("ripgrep", detail)]
+
+
+def check_startup_imports(directory: Path | None = None) -> list[Check]:
+    root = record_dir() if directory is None else directory
+    records = sorted(root.glob("*.json")) if root.is_dir() else []
+    if not records:
+        return [ok("startup", "no start-up import failure recorded")]
+    checks = []
+    for path in records:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            detail = (
+                f"{data['process']} failed to import {data['module']} "
+                f"({data['error_class']} at {data['where']}) at {data['time']} "
+                f"pid={data['pid']} exit={data['exit_code']}"
+            )
+        except (OSError, ValueError, KeyError, TypeError):
+            detail = f"unreadable start-up import record {path.name}"
+        checks.append(
+            fail(
+                "startup",
+                detail,
+                "fix the module and restart; a clean start clears this record",
+            )
+        )
+    return checks

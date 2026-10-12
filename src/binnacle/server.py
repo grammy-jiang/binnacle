@@ -35,6 +35,8 @@ logger = logging.getLogger("binnacle.server")
 
 # E1: import the whole runtime tree now, after logging is configured, so this
 # process never first-imports binnacle source that a later deploy synced.
+# E1-a4: a required import failure raises StartupImportFailed (exit 70) here,
+# before uvicorn binds the port.
 import_runtime_modules()
 
 TOKEN_FILE = get_settings().auth.token_file
