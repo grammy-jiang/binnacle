@@ -7,9 +7,11 @@ from ``job_manager_service`` (MS1); behavior unchanged. RL1 adds the bounded
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import json
 import os
+import sys
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -51,8 +53,12 @@ def _flock_bounded(path: Path, wait_s: float) -> Iterator[int]:
     attempts = 0
     try:
         while True:
+            if attempts and time.monotonic() >= deadline:
+                raise BlockingIOError(errno.EAGAIN, "jobs lock deadline exceeded")
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                if attempts and time.monotonic() > deadline:
+                    raise BlockingIOError(errno.EAGAIN, "jobs lock acquired too late")
                 break
             except BlockingIOError:
                 if time.monotonic() >= deadline:
@@ -70,16 +76,18 @@ def _flock_bounded(path: Path, wait_s: float) -> Iterator[int]:
         os.close(fd)
 
 
-def queued_exit_metrics(
+def manager_ping_metadata(
     queued_since: dict[str, float], now: float
-) -> dict[str, int | float | None]:
-    """Advisory ping telemetry, never interpreted as process authority."""
+) -> dict[str, int | float | str | bool | None]:
+    """Advisory exit telemetry plus this manager's own runtime capabilities."""
     oldest = min(queued_since.values(), default=None)
     return {
         "unrecorded_exits": len(queued_since),
         "oldest_unrecorded_age_s": (
             max(0.0, now - oldest) if oldest is not None else None
         ),
+        "manager_python_version": f"{sys.version_info.major}.{sys.version_info.minor}",
+        "manager_waitid_available": hasattr(os, "waitid"),
     }
 
 

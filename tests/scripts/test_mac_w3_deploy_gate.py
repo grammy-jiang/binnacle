@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import importlib.util
 import json
+import os
+import py_compile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -28,6 +32,8 @@ def _base_gate(doctor: dict | str, *, smoke: bool = True):
 
         def run(self, argv, timeout, cwd):
             self.seen.append((argv, timeout, cwd))
+            if isinstance(doctor, tuple):
+                return doctor
             return (0, json.dumps(doctor)) if isinstance(doctor, dict) else (70, doctor)
 
         def step(self, name, decision, **data):
@@ -102,3 +108,35 @@ def test_base_verification_rejects_any_unreviewed_gate(tmp_path):
         assert "hash mismatch" in str(exc)
     else:
         raise AssertionError("modified gate executed without an exact SHA pin")
+
+
+def test_doctor_abnormal_exit_or_logged_startup_failure_is_never_green():
+    good = json.dumps(OK)
+    scenarios = [
+        ((70, good), "startup_doctor_exit_70"),
+        ((0, good + "\nERROR event=startup_import_failed"), "startup_failure_logged"),
+        ((9, good), "startup_doctor_exit_9"),
+    ]
+    for doctor, reason in scenarios:
+        gate = _base_gate(doctor)
+        assert not gate.step_smoke("7_live_smoke", "f" * 40)
+        assert gate.seen[-1][2]["reason"] == reason
+
+
+def test_verified_source_loader_ignores_a_same_timestamp_malicious_pyc(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "gate.py"
+    malicious = b"marker = 'malicious'\n"
+    approved = b"marker = 'reviewed!'\n"
+    assert len(approved) == len(malicious)
+    path.write_bytes(malicious)
+    stat_before = path.stat()
+    py_compile.compile(str(path), doraise=True)
+    cache_path = importlib.util.cache_from_source(str(path))
+    assert os.path.isfile(cache_path)
+    path.write_bytes(approved)
+    os.utime(path, ns=(stat_before.st_atime_ns, stat_before.st_mtime_ns))
+    monkeypatch.setattr(w3, "BASE_SHA256", hashlib.sha256(approved).hexdigest())
+    module = w3.verified_gate(path)
+    assert module.marker == "reviewed!"

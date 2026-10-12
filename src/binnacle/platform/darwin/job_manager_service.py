@@ -34,7 +34,7 @@ from binnacle.platform.darwin.job_manager_records import (
     _flock,
     _flock_bounded,
     list_job_ids,
-    queued_exit_metrics,
+    manager_ping_metadata,
     read_meta,
 )
 from binnacle.platform.darwin.job_manager_stopping import (
@@ -167,7 +167,7 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
             reply["running_jobs"], reply["unknown_jobs"] = self.job_counts()
             with self._queue_lock:
                 reply.update(
-                    queued_exit_metrics(self._unrecorded_since, time.monotonic())
+                    manager_ping_metadata(self._unrecorded_since, time.monotonic())
                 )
             held = {"jobs_dir": self.held_jobs_dir} if self.held_jobs_dir else {}
             return {**reply, **held, "revision": self.provenance.revision}

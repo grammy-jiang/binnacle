@@ -48,8 +48,15 @@ def check_job_manager(
         checks.append(ok("jobs-service", f"{unit} has not crash-restarted"))
 
     try:
+        if ping is job_client.ping:
+            # The Linux client sends a plaintext line. Darwin's A3 manager
+            # requires a generation-pinned authenticated channel instead.
+            from binnacle.platform.composition import create_job_client, host_os_family
+
+            if host_os_family() == "darwin":
+                ping = create_job_client().ping
         response = ping(socket_path)
-    except (job_client.JobManagerError, OSError) as exc:
+    except (job_client.JobManagerError, OSError, RuntimeError) as exc:
         checks.append(
             fail(
                 "jobs-service",
@@ -65,6 +72,33 @@ def check_job_manager(
             "manager socket responds "
             f"(owner={owner} package={package} revision={revision})"
         )
+        manager_python = response.get("manager_python_version")
+        waitid = response.get("manager_waitid_available")
+        if manager_python is not None or waitid is not None:
+            # The manager's authenticated runtime, not the frontend Python.
+            try:
+                parts = str(manager_python).split(".")
+                if len(parts) != 2 or type(waitid) is not bool:
+                    raise ValueError("malformed manager capability")
+                version = (int(parts[0]), int(parts[1]))
+            except (ValueError, TypeError):
+                version = (0, 0)
+            if version < (3, 13) or waitid is not True:
+                checks.append(
+                    fail(
+                        "jobs-python",
+                        f"manager reports Python {manager_python}, waitid={waitid}; "
+                        "Darwin manager requires Python >= 3.13 with os.waitid",
+                        "review the live manager plist and interpreter before deploying",
+                    )
+                )
+            else:
+                checks.append(
+                    ok(
+                        "jobs-python",
+                        f"manager reports Python {manager_python} and os.waitid",
+                    )
+                )
         pending = response.get("unrecorded_exits")
         age = response.get("oldest_unrecorded_age_s")
         if isinstance(pending, int) and pending > 0:

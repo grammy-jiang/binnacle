@@ -119,3 +119,93 @@ def test_legacy_module_identity_and_ping_default():
 
     assert importlib.import_module("binnacle.diagnostics.job_manager_doctor") is owned
     assert owned.check_job_manager.__defaults__[1] is job_client.ping
+
+
+def test_darwin_doctor_uses_authenticated_platform_client(monkeypatch, tmp_path):
+    from binnacle.platform import composition
+
+    calls = []
+
+    class Authenticated:
+        def ping(self, path):
+            calls.append(path)
+            return {
+                "owner_instance_id": "verified-owner",
+                "package_version": "1.0.1",
+                "revision": "r6w3",
+                "unrecorded_exits": 3,
+                "oldest_unrecorded_age_s": 8.5,
+            }
+
+    monkeypatch.setattr(composition, "host_os_family", lambda: "darwin")
+    monkeypatch.setattr(composition, "create_job_client", Authenticated)
+    sock = tmp_path / "manager.sock"
+    checks, active = check_job_manager(
+        "jobs.service",
+        sock,
+        inspector=inspector("active"),
+        expected_revision="r6w3",
+    )
+    assert active == "jobs.service"
+    assert calls == [sock]
+    queued = [c for c in checks if "queued but not yet durable" in c.detail]
+    assert len(queued) == 1 and queued[0].status == "warn"
+
+
+def test_darwin_authenticated_ping_failure_returns_a_failing_check(
+    monkeypatch, tmp_path
+):
+    from binnacle.platform import composition
+    from binnacle.platform.darwin.job_manager_client import DarwinJobManagerError
+
+    class Authenticated:
+        def ping(self, path):
+            raise DarwinJobManagerError("authentication failed")
+
+    monkeypatch.setattr(composition, "host_os_family", lambda: "darwin")
+    monkeypatch.setattr(composition, "create_job_client", Authenticated)
+    checks, active = check_job_manager(
+        "jobs.service",
+        tmp_path / "manager.sock",
+        inspector=inspector("active"),
+    )
+    assert active == "jobs.service"
+    assert checks[-1].status == "fail"
+    assert "not responding" in checks[-1].detail
+
+
+def test_manager_reported_python_is_checked_even_with_healthy_frontend(tmp_path):
+    checks, _ = check_job_manager(
+        "jobs.service",
+        tmp_path / "socket",
+        inspector=inspector("active"),
+        ping=lambda path: {
+            "owner_instance_id": "owner",
+            "package_version": "1.0.1",
+            "revision": "abc",
+            "manager_python_version": "3.12",
+            "manager_waitid_available": False,
+        },
+        expected_revision="abc",
+    )
+    owner_python = [c for c in checks if c.group == "jobs-python"]
+    assert len(owner_python) == 1 and owner_python[0].status == "fail"
+    assert "3.12" in owner_python[0].detail
+
+
+def test_manager_reported_supported_python_is_verified(tmp_path):
+    checks, _ = check_job_manager(
+        "jobs.service",
+        tmp_path / "socket",
+        inspector=inspector("active"),
+        ping=lambda path: {
+            "owner_instance_id": "owner",
+            "package_version": "1.0.1",
+            "revision": "abc",
+            "manager_python_version": "3.13",
+            "manager_waitid_available": True,
+        },
+        expected_revision="abc",
+    )
+    owner_python = [c for c in checks if c.group == "jobs-python"]
+    assert len(owner_python) == 1 and owner_python[0].status == "ok"

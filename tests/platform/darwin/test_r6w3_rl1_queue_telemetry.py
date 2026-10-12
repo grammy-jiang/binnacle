@@ -20,6 +20,8 @@ def test_pending_queue_ages_once_and_does_not_count_a_reregistered_exit(tmp_path
         manager._queue(exited)
         seen = manager.handle({"version": 1, "op": "ping"})
         assert seen["unrecorded_exits"] == 1
+        assert isinstance(seen["manager_python_version"], str)
+        assert type(seen["manager_waitid_available"]) is bool
         assert isinstance(seen["oldest_unrecorded_age_s"], float)
         started = manager._unrecorded_since["a"]
         manager._queue(exited)
@@ -121,3 +123,47 @@ def test_bounded_lock_backoff_never_waits_past_deadline(tmp_path, monkeypatch):
     assert max(sleeps) > records.LOCK_POLL_S
     assert sum(sleeps) <= 0.101
     assert ticks[0] <= 0.101
+
+
+def test_lock_refuses_a_retry_after_sleeping_past_deadline(tmp_path, monkeypatch):
+    ticks, calls = [0.0], [0]
+
+    def flock(_fd, _op):
+        calls[0] += 1
+        if calls[0] == 1:
+            raise BlockingIOError(11, "busy")
+
+    def nap(seconds):
+        ticks[0] += seconds + 0.2
+
+    monkeypatch.setattr(records.time, "monotonic", lambda: ticks[0])
+    monkeypatch.setattr(records.time, "sleep", nap)
+    monkeypatch.setattr(records.fcntl, "flock", flock)
+    with (
+        pytest.raises(BlockingIOError),
+        records._flock_bounded(tmp_path / "late", 0.01),
+    ):
+        pytest.fail("past-deadline acquire returned success")
+    assert calls == [1]
+
+
+def test_lock_rechecks_a_delayed_success(tmp_path, monkeypatch):
+    ticks, calls = [0.0], [0]
+
+    def flock(_fd, _op):
+        calls[0] += 1
+        if calls[0] == 1:
+            raise BlockingIOError(11, "busy")
+        ticks[0] = 0.2  # lock grant occurred after the caller's deadline
+
+    monkeypatch.setattr(records.time, "monotonic", lambda: ticks[0])
+    monkeypatch.setattr(
+        records.time, "sleep", lambda seconds: ticks.__setitem__(0, ticks[0] + seconds)
+    )
+    monkeypatch.setattr(records.fcntl, "flock", flock)
+    with (
+        pytest.raises(BlockingIOError),
+        records._flock_bounded(tmp_path / "late-success", 0.02),
+    ):
+        pytest.fail("late lock success became a durable record")
+    assert calls == [2]

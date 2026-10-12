@@ -14,8 +14,9 @@ import hashlib
 import importlib.util
 import json
 import sys
+from importlib.machinery import SourceFileLoader
 from pathlib import Path
-from types import ModuleType
+from types import CodeType, ModuleType
 from typing import Any
 
 BASE_SHA256 = "cad6ac5aa4a4ed65ad54e6c34b2a82867d7208f8f2591aaf167551cd83fca343"
@@ -26,23 +27,38 @@ BASE_RELATIVE = (
 DOCTOR_TIMEOUT_SECONDS = 45.0
 
 
+class VerifiedGateLoader(SourceFileLoader):
+    """Compile the exact verified source bytes, never a cached .pyc."""
+
+    def __init__(self, name: str, path: str, source: bytes) -> None:
+        super().__init__(name, path)
+        self._verified_source = source
+
+    def get_code(self, fullname: str) -> CodeType:
+        return compile(self._verified_source, self.path, "exec")
+
+
 def verified_gate(path: Path) -> ModuleType:
-    """Only the reviewed, pinned gate is eligible to make production changes."""
+    """Only the reviewed, pinned gate bytes may execute, including with caches."""
     raw = path.read_bytes()
     actual = hashlib.sha256(raw).hexdigest()
     if actual != BASE_SHA256:
         raise ValueError("J7m-W3 base deployment gate hash mismatch; refusing")
-    spec = importlib.util.spec_from_file_location("_binnacle_mac_j7m_a5", path)
-    if spec is None or spec.loader is None:
+    name = "_binnacle_mac_j7m_a5"
+    loader = VerifiedGateLoader(name, str(path), raw)
+    spec = importlib.util.spec_from_loader(name, loader)
+    if spec is None:
         raise ValueError("cannot load verified base deployment gate")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    loader.exec_module(module)
     return module
 
 
 def parse_startup_doctor(text: str) -> tuple[bool, str, list[str]]:
     """Ignore unrelated doctor status; fail CLOSED if startup status is absent."""
     try:
+        if "event=startup_import_failed" in text:
+            return False, "startup_failure_logged", []
         # The reviewed base runner combines stdout and stderr. Doctor JSON
         # is emitted on stdout first; harmless stderr diagnostics may follow.
         # Only accept a complete JSON object starting at the first byte.
@@ -103,8 +119,10 @@ def add_w3_checks(gate_module: Any) -> None:
             cwd=str(self.a.checkout),
         )
         clean, reason, failures = parse_startup_doctor(body)
-        # Doctor may fail unrelated systemd/unit checks; the existing gate's
-        # authenticated live smoke owns endpoint/manager safety.
+        # Doctor may return 1 for unrelated ordinary checks; 70 means a
+        # required module never loaded. Any other abnormal rc is a hard STOP.
+        if rc not in (0, 1):
+            clean, reason = False, f"startup_doctor_exit_{rc}"
         result: bool = self.step(
             "7a_startup_doctor",
             clean,

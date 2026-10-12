@@ -32,7 +32,7 @@ from binnacle.platform.darwin.generation_runtime import (
 )
 
 NATIVE = pytest.mark.skipif(
-    sys.platform != "darwin" or not hasattr(os, "waitid"), reason="Darwin A3 IPC"
+    sys.platform != "darwin", reason="Darwin A3 IPC (reference owner uses waitpid)"
 )
 LABEL = "com.binnacle.r4test.jobs"
 SRC = Path(__file__).resolve().parents[3] / "src/binnacle/features/commands"
@@ -205,6 +205,8 @@ def test_dispatch_objects_equal_linux_manager_text(tmp_path, jobs_dir, live):
         "unknown_jobs",
         "unrecorded_exits",
         "oldest_unrecorded_age_s",
+        "manager_python_version",
+        "manager_waitid_available",
     }
     version = manager.handle({"version": 2, "op": "ping"})["error"]
     assert version == "unsupported job-manager protocol version"

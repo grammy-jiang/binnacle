@@ -67,6 +67,11 @@ its jobs-python check is FAIL if the manager lacks this capability, OK
 when CPython 3.13+ exposes os.waitid. Never silently substitute a lower
 interpreter or switch to an embedded process owner.
 
+Authenticated manager ping also reports the manager's own Python version
+and os.waitid capability. The doctor checks those values independently of
+the frontend interpreter, which might be a different executable. The final
+deployment still verifies the actual launchd plist and running revision.
+
 The real-manager-only test nodes in tests/platform/darwin use a per-test
 platform/capability skip on Darwin without os.waitid. Unit-level negative
 tests that simulate the missing call remain enabled, as do all Linux tests.

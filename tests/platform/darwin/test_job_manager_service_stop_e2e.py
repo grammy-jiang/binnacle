@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 
 import pytest
@@ -19,8 +18,8 @@ from tests.platform.darwin.test_job_manager_service import (
 )
 
 NATIVE = pytest.mark.skipif(
-    sys.platform != "darwin" or not hasattr(os, "waitid"),
-    reason="Darwin A3 IPC; SD-97 requires waitid",
+    sys.platform != "darwin",
+    reason="Darwin A3 IPC; reference owner uses waitpid",
 )
 
 
