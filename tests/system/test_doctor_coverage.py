@@ -112,6 +112,7 @@ def test_run_all_composes_every_active_core_check(tmp_path, monkeypatch, probe):
     monkeypatch.setattr(doctor, "runtime_provenance", lambda: expected)
     monkeypatch.setattr(doctor, "check_provenance", mark("version"))
     monkeypatch.setattr(doctor, "check_config", mark("config"))
+    monkeypatch.setattr(doctor, "check_rg_version", mark("ripgrep"))
     monkeypatch.setattr(doctor, "check_token", mark("token"))
     monkeypatch.setattr(
         doctor, "check_startup_imports", lambda *a, **k: []
@@ -134,6 +135,7 @@ def test_run_all_composes_every_active_core_check(tmp_path, monkeypatch, probe):
     assert [c.group for c in checks] == [
         "version",
         "config",
+        "ripgrep",
         "token",
         "units",
         "units",
@@ -169,6 +171,8 @@ def test_run_all_skips_optional_checks_when_inactive_and_local_only(
     expected = SimpleNamespace(package_version="1.0.0", revision="abc123def456")
     monkeypatch.setattr(doctor, "runtime_provenance", lambda: expected)
     monkeypatch.setattr(doctor, "check_provenance", lambda value: [])
+    # The ripgrep pin check (RG1) runs the host rg; never depend on it here.
+    monkeypatch.setattr(doctor, "check_rg_version", lambda *a, **k: [])
     monkeypatch.setattr(doctor, "check_config", list)
     monkeypatch.setattr(doctor, "check_token", lambda *a: [])
     monkeypatch.setattr(

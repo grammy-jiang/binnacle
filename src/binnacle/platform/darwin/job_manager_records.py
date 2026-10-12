@@ -1,7 +1,8 @@
 """Durable job-record primitives of the Darwin job manager.
 
 The jobs-dir flocks, the ``meta.json`` reader and the exit-record merge. Split
-from ``job_manager_service`` (MS1); behavior unchanged.
+from ``job_manager_service`` (MS1); behavior unchanged. RL1 adds the bounded
+``.lock`` acquire of the reaper's record path (``_flock_bounded``).
 """
 
 from __future__ import annotations
@@ -18,19 +19,44 @@ from typing import Any
 from binnacle.platform.contracts.process_contracts import OwnedJobExit
 
 META_REQUIRED = ("command", "workdir", "pid", "started_at")
+LOCK_POLL_S = 0.005  # RL1: the bounded acquire re-tries LOCK_NB this often
+
+
+def _lock_fd(path: Path) -> int:
+    """CLOEXEC so spawned jobs never inherit (and pin) a manager lock."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC
+    return os.open(path, flags, 0o600)
 
 
 @contextmanager
 def _flock(path: Path, operation: int, busy: str = "") -> Iterator[int]:
-    """CLOEXEC so spawned jobs never inherit (and pin) a manager lock (yields it)."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC
-    fd = os.open(path, flags, 0o600)
+    """``fcntl.flock`` on a ``_lock_fd`` for the block (yields the fd)."""
+    fd = _lock_fd(path)
     try:
         try:
             fcntl.flock(fd, operation)
         except BlockingIOError as exc:
             raise RuntimeError(busy) from exc
+        yield fd
+    finally:
+        os.close(fd)
+
+
+@contextmanager
+def _flock_bounded(path: Path, wait_s: float) -> Iterator[int]:
+    """RL1: LOCK_EX within ``wait_s``, else BlockingIOError (an OSError)."""
+    deadline = time.monotonic() + wait_s
+    fd = _lock_fd(path)
+    try:
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(LOCK_POLL_S)
         yield fd
     finally:
         os.close(fd)

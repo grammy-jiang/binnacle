@@ -4,6 +4,7 @@ import hashlib
 import logging
 import subprocess as _subprocess
 import time
+from dataclasses import replace
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -55,6 +56,7 @@ from binnacle.features.search.search_text_telemetry import (
     timed_attach_context as _timed_attach_context_impl,
 )
 from binnacle.features.search.search_text_verify import (
+    candidate_files,
     verify_adaptive,
     verify_exact_scan,
 )
@@ -347,6 +349,8 @@ def _search_exact_impl(
             metrics.adaptive_budget_trimmed = adaptive.budget_trimmed
             metrics.result_bytes = adaptive.result_bytes
             payload = verify_adaptive(adaptive.payload, resolved)
+            total = payload.get("count", total)
+            adaptive = replace(adaptive, candidate_files=candidate_files(payload))
             log_adaptive_result(
                 log,
                 call=current_call.get(),

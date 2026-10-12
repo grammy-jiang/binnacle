@@ -7,6 +7,8 @@ JCRP-F3: owner-proven losses become durable authority UNKNOWN (D-1).
 JCRP-F6: the additive read-only ``processes`` op (Linux: running jobs only).
 R-M1-N1: ``hold_jobs_dir``, the jobs dir whose writer lock this manager holds;
 R-M1a2-F1: after the proof all record I/O and the ``.lock`` use that held dir.
+RL1: the reaper's ``persist_lost`` acquire is bounded; a busy lock keeps the
+loss pending for its next pass instead of blocking the reaper.
 """
 
 from __future__ import annotations
@@ -46,8 +48,9 @@ class _ManagerStopping:
     stopping: threading.Event
     jobs_dir: Path
     held_jobs_dir: str | None
+    _lost_pending: list[str]
 
-    def _transaction(self) -> AbstractContextManager[None]:
+    def _transaction(self, wait_s: float | None = None) -> AbstractContextManager[None]:
         raise NotImplementedError
 
     def _meta(self, job_id: str) -> dict[str, Any] | None:
@@ -164,13 +167,18 @@ class _ManagerStopping:
             "processes": listing(job_id, max_cmd_chars),
         }
 
-    def persist_lost(self) -> int:
-        """JCRP-F3: owner-proven losses -> durable authority UNKNOWN (D-1)."""
+    def persist_lost(self, wait_s: float | None = None) -> int:
+        """JCRP-F3: owner-proven losses -> durable authority UNKNOWN (D-1).
+
+        RL1: a lock busy past ``wait_s`` keeps this and the later losses
+        pending (retried first on the next call); returns the newly taken count.
+        """
         take = getattr(self.owner, "take_lost", None)
         lost = list(take()) if take is not None else []
-        for job_id in lost:
+        pending, self._lost_pending = [*self._lost_pending, *lost], []
+        for index, job_id in enumerate(pending):
             try:
-                with self._transaction():
+                with self._transaction(wait_s):
                     meta = self._meta(job_id)
                     if (
                         meta is None
@@ -179,6 +187,10 @@ class _ManagerStopping:
                         continue
                     if not _terminal(meta):
                         self._mark_unknown(job_id, meta, "owner_restart")
+            except BlockingIOError:
+                self._lost_pending = pending[index:]
+                log.warning("event=job_lost_pending job_id=%s retry=queued", job_id)
+                break
             except OSError:
                 log.warning("event=job_lost_unrecorded job_id=%s", job_id)
                 continue  # close() still marks it UNKNOWN
