@@ -9,10 +9,14 @@ tried it fails. Read-only commands (nmcli show/status, ip route show, iw
 link, systemctl is-active, `sudo -n true`) still run.
 """
 
+import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
+from binnacle import startup_imports
+from binnacle.diagnostics import doctor_provenance
 from tests._jobs_socket_fixture import ensure_test_jobs_socket
 
 # Must run before anything composes settings (test modules import the jobs
@@ -33,6 +37,53 @@ _NMCLI_MUTATING = (
     "radio wifi off",
     "networking",
 )
+
+
+# E1-a5: the real start-up import records are production state on a deployed
+# host. XDG_STATE_HOME points at a scratch dir for the whole session, any
+# in-process path to the real record directory raises, and the real directory
+# is compared before and after the session (a child process cannot be patched).
+_REAL_RECORDS = startup_imports.record_dir(
+    Path.home() / ".local" / "state" / "binnacle"
+).resolve()
+
+
+def _snapshot(root: Path) -> dict[str, tuple[int, int]]:
+    try:
+        return {
+            entry.name: (entry.stat().st_size, entry.stat().st_mtime_ns)
+            for entry in root.iterdir()
+        }
+    except OSError:
+        return {}
+
+
+@pytest.fixture(autouse=True, scope="session")
+def isolated_state_home(tmp_path_factory):
+    before = _snapshot(_REAL_RECORDS)
+    saved = os.environ.get("XDG_STATE_HOME")
+    os.environ["XDG_STATE_HOME"] = str(tmp_path_factory.mktemp("xdg-state"))
+    yield
+    if saved is None:
+        os.environ.pop("XDG_STATE_HOME", None)
+    else:
+        os.environ["XDG_STATE_HOME"] = saved
+    after = _snapshot(_REAL_RECORDS)
+    assert after == before, f"the suite touched {_REAL_RECORDS}: {before} -> {after}"
+
+
+@pytest.fixture(autouse=True)
+def no_real_startup_record(monkeypatch):
+    original = startup_imports.record_dir
+
+    def guarded(state_root):
+        path = original(state_root)
+        if path.resolve() == _REAL_RECORDS:
+            raise AssertionError(f"a test reached the real {_REAL_RECORDS}")
+        return path
+
+    monkeypatch.setattr(startup_imports, "record_dir", guarded)
+    monkeypatch.setattr(doctor_provenance, "record_dir", guarded)
 
 
 def _is_mutating(argv: list[str]) -> bool:

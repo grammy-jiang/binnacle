@@ -5,8 +5,14 @@ Their adapters and shared helpers live in binnacle.features.
 Tool contracts are documented in docs/tools/ and docs/agent-toolset-design.md.
 """
 
+import asyncio
 import logging
 import os
+import sys
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
 
 from fastmcp import FastMCP
 
@@ -20,7 +26,13 @@ from binnacle.features.commands.run_command_telemetry import (
 from binnacle.features.files.files_server import create_files_server
 from binnacle.features.search.search_server import create_search_server
 from binnacle.provenance import runtime_provenance
-from binnacle.startup_imports import import_runtime_modules
+from binnacle.startup_imports import (
+    StartupImportFailed,
+    clear_record,
+    import_runtime_modules,
+    record_start_failure,
+    state_root_of,
+)
 
 # binnacle's own lines (event=tool_call/tool_result/job_*/config) go through
 # the root handler as single lines with a millisecond local timestamp, so
@@ -37,7 +49,30 @@ logger = logging.getLogger("binnacle.server")
 # process never first-imports binnacle source that a later deploy synced.
 # E1-a4: a required import failure raises StartupImportFailed (exit 70) here,
 # before uvicorn binds the port.
-import_runtime_modules()
+
+
+def _serving_process() -> bool:
+    """True only in the uvicorn process that serves ``binnacle.server:app``
+    (the deployed entry), never in a test, a CLI or any other importer."""
+    entry = Path(sys.argv[0])
+    return entry.name == "uvicorn" or (
+        entry.name == "__main__.py" and entry.parent.name == "uvicorn"
+    )
+
+
+def _record_import_failure(failure: StartupImportFailed) -> None:
+    """E1-a5: the serving process's own record write (never an importer's)."""
+    if not _serving_process():
+        return
+    try:
+        root = state_root_of(get_settings().jobs.dir)
+    except Exception:  # noqa: BLE001 - no configured root: the log line remains
+        logger.error("event=startup_import_record_error process=mcp-server")
+        return
+    record_start_failure("mcp-server", failure, root)
+
+
+import_runtime_modules(on_failure=_record_import_failure)
 
 TOKEN_FILE = get_settings().auth.token_file
 
@@ -229,6 +264,34 @@ mcp = create_server()
 log_effective_config()
 
 app = mcp.http_app()
+
+# E1-a5: the start-up import record is cleared only after a successful start of
+# the serving process. uvicorn binds right after the ASGI lifespan startup; a
+# bind failure ends the process within START_CONFIRM_S, so the record is
+# cleared only if the process is still alive (serving) that long afterwards.
+START_CONFIRM_S = 1.0
+
+
+def _clear_record_after_start() -> None:
+    try:
+        root = state_root_of(get_settings().jobs.dir)
+    except Exception:  # noqa: BLE001 - no configured root: nothing to clear
+        return
+    clear_record("mcp-server", root)
+
+
+if _serving_process():
+    _inner_lifespan = app.router.lifespan_context
+
+    @asynccontextmanager
+    async def _lifespan(application: Any) -> AsyncIterator[Any]:
+        async with _inner_lifespan(application) as state:
+            asyncio.get_running_loop().call_later(
+                START_CONFIRM_S, _clear_record_after_start
+            )
+            yield state
+
+    app.router.lifespan_context = _lifespan
 
 
 if __name__ == "__main__":

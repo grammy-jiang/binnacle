@@ -4,17 +4,22 @@ E1-a4: a server or job manager whose required module fails to import exits
 ``EX_STARTUP_IMPORT`` and leaves a durable record (``binnacle.startup_imports``);
 a clean start removes it. Under systemd ``Restart=`` or launchd ``KeepAlive``
 such a process crash-loops; ``check_startup_imports`` keeps the cause visible.
+E1-a5: it shows the record's age and revision. A record of an older revision
+than the running checkout is STALE (WARN); one for the current revision is FAIL.
 """
 
+import calendar
 import json
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
+from binnacle.config import get_settings
 from binnacle.doctor_contracts import Check, fail, ok, warn
 from binnacle.provenance import Provenance, runtime_provenance
-from binnacle.startup_imports import record_dir
+from binnacle.startup_imports import record_dir, state_root_of
 
 
 def check_provenance(value: Provenance | None = None) -> list[Check]:
@@ -73,27 +78,66 @@ def check_rg_version(rg_bin: str, pinned: str = PINNED_RG_VERSION) -> list[Check
     return [ok("ripgrep", detail)]
 
 
-def check_startup_imports(directory: Path | None = None) -> list[Check]:
-    root = record_dir() if directory is None else directory
+def _age(stamp: str, now: float) -> str:
+    try:
+        seconds = max(
+            0, int(now - calendar.timegm(time.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ")))
+        )
+    except (ValueError, OverflowError):
+        return "age=?"
+    return f"age={seconds}s"
+
+
+def check_startup_imports(
+    directory: Path | None = None,
+    *,
+    revision: str | None = None,
+    now: float | None = None,
+) -> list[Check]:
+    """FAIL per record of the running revision; WARN (STALE) for an older one."""
+    root = (
+        record_dir(state_root_of(get_settings().jobs.dir))
+        if directory is None
+        else directory
+    )
     records = sorted(root.glob("*.json")) if root.is_dir() else []
     if not records:
         return [ok("startup", "no start-up import failure recorded")]
+    current = runtime_provenance().revision if revision is None else revision
+    seen_at = time.time() if now is None else now
     checks = []
     for path in records:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
+            recorded = data.get("revision")
             detail = (
                 f"{data['process']} failed to import {data['module']} "
                 f"({data['error_class']} at {data['where']}) at {data['time']} "
-                f"pid={data['pid']} exit={data['exit_code']}"
+                f"{_age(data['time'], seen_at)} revision={recorded or '?'}"
             )
-        except (OSError, ValueError, KeyError, TypeError):
-            detail = f"unreadable start-up import record {path.name}"
-        checks.append(
-            fail(
-                "startup",
-                detail,
-                "fix the module and restart; a clean start clears this record",
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            checks.append(
+                fail(
+                    "startup",
+                    f"unreadable start-up import record {path.name}",
+                    "fix the module and restart; a clean start clears this record",
+                )
             )
-        )
+            continue
+        if recorded is not None and recorded != current:
+            checks.append(
+                warn(
+                    "startup",
+                    f"STALE: {detail} (running revision={current})",
+                    "a record from an older revision; a clean start clears it",
+                )
+            )
+        else:
+            checks.append(
+                fail(
+                    "startup",
+                    detail,
+                    "fix the module and restart; a clean start clears this record",
+                )
+            )
     return checks

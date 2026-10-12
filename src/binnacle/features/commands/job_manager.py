@@ -14,6 +14,7 @@ import socketserver
 import subprocess
 import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
@@ -24,7 +25,13 @@ from binnacle.mcp.callctx import current_call
 from binnacle.platform.contracts.process_contracts import JobSignalDeliveryError
 from binnacle.platform.job_platform import create_process_backend
 from binnacle.provenance import runtime_provenance
-from binnacle.startup_imports import import_manager_modules
+from binnacle.startup_imports import (
+    StartupImportFailed,
+    clear_record,
+    import_manager_modules,
+    record_start_failure,
+    state_root_of,
+)
 
 # RE1-F5: root logging is configured in main(), not on import: the Linux MCP
 # server imports this module eagerly and must keep its own configuration.
@@ -233,13 +240,15 @@ class JobManager:
                 raise RuntimeError(f"job manager already answers at {self.socket_path}")
         return job_owner.recover_previous_owner(self.owner_instance_id, self.boot_id)
 
-    def serve_forever(self) -> None:
+    def serve_forever(self, on_started: Callable[[], None] | None = None) -> None:
         recovered = self.prepare()
         server = _ThreadingUnixServer(str(self.socket_path), _Handler)
         server.manager = self  # type: ignore[attr-defined]
         self.server = server
         os.chmod(self.socket_path, 0o600)
         _notify_systemd_ready()
+        if on_started is not None:  # E1-a5: the socket is bound and announced
+            on_started()
         log.info(
             "event=job_manager_start pid=%d owner=%s boot=%s recovered=%d "
             "protocol=%d package_version=%s revision=%s socket=%s",
@@ -264,14 +273,33 @@ class JobManager:
             self.server.shutdown()
 
 
+def _record_import_failure(failure: StartupImportFailed) -> None:
+    """E1-a5: this entry's own record write; the config may be what failed."""
+    try:
+        root = state_root_of(get_settings().jobs.dir)
+    except Exception:  # noqa: BLE001 - no configured root: the log line remains
+        log.error("event=startup_import_record_error process=job-manager")
+        return
+    record_start_failure("job-manager", failure, root)
+
+
 def main() -> None:
     # E1: never first-import binnacle source a later deploy synced. E1-a4: a
     # required import failure exits EX_STARTUP_IMPORT before the socket.
-    import_manager_modules(process="job-manager", log_format=LOG_FORMAT)
+    # E1-a5: the record is written here (on_failure) and cleared after bind.
+    import_manager_modules(
+        process="job-manager",
+        log_format=LOG_FORMAT,
+        on_failure=_record_import_failure,
+    )
     settings = get_settings()
     if settings.jobs.socket_path is None:
         raise RuntimeError("host composition did not resolve the jobs socket")
-    JobManager(settings.jobs.socket_path).serve_forever()
+
+    def started() -> None:
+        clear_record("job-manager", state_root_of(settings.jobs.dir))
+
+    JobManager(settings.jobs.socket_path).serve_forever(on_started=started)
 
 
 if __name__ == "__main__":

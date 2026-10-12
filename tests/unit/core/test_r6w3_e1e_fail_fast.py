@@ -7,7 +7,9 @@ real entry. Each asserts: exit ``EX_STARTUP_IMPORT``, no socket bound and no
 lock taken (``socket.bind``/``fcntl.flock`` are recorded), exactly one
 ``event=startup_import_failed`` line naming the module, the exception type and
 the raising frame without the message text, and the durable doctor record.
-Test homes live under ~/.local/state/bt/e1a4 (0700, exact-path teardown).
+E1-a5: the record is written by the real entry point under the configured state
+root (the parent of ``jobs.dir``), never under XDG_STATE_HOME or HOME.
+Test homes live under ~/.local/state/bt/e1a5 (0700, exact-path teardown).
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ import pytest
 
 from binnacle import startup_imports
 from binnacle.diagnostics.doctor_provenance import check_startup_imports
+from binnacle.provenance import runtime_provenance
 from binnacle.startup_imports import (
     EX_STARTUP_IMPORT,
     MANAGER_MODULES,
@@ -33,7 +36,7 @@ from binnacle.startup_imports import (
     manager_entry_closure_allowed,
 )
 
-TEST_ROOT = Path.home() / ".local" / "state" / "bt" / "e1a4"
+TEST_ROOT = Path.home() / ".local" / "state" / "bt" / "e1a5"
 SECRET = "e1e-secret-message-text"
 MUTANT = "binnacle.e1e_mutant"
 BODIES = {
@@ -45,9 +48,11 @@ ENTRIES = {
     "server": (
         "mcp-server",
         (
-            "import uvicorn\n"
-            "uvicorn.run('binnacle.server:app', host='127.0.0.1', port=PORT,"
-            " log_level='warning')\n"
+            # What `python -m uvicorn binnacle.server:app` runs: the serving process.
+            "import runpy\n"
+            "sys.argv = [home + '/uvicorn/__main__.py', 'binnacle.server:app',"
+            " '--host', '127.0.0.1', '--port', str(PORT), '--log-level', 'warning']\n"
+            "runpy.run_module('uvicorn', run_name='__main__')\n"
         ),
     ),
     "linux-manager": (
@@ -117,7 +122,22 @@ def test_required_import_failure_aborts_start_up(home, entry, error_class):
     driver = home / "driver.py"
     driver.write_text(DRIVER + start, encoding="utf-8")
     port = _free_port()
-    env = {**os.environ, "XDG_STATE_HOME": str(home / "state")}
+    config = home / "config.toml"  # the configured state root is home/state
+    config.write_text(
+        f'[jobs]\ndir = "{home / "state" / "jobs"}"\nowner = "embedded"\n'
+        f'socket_path = "{home / "j.sock"}"\n',
+        encoding="utf-8",
+    )
+    token = home / "token"
+    token.write_text("Bearer e1e\n", encoding="utf-8")
+    token.chmod(0o600)
+    config.write_text(
+        config.read_text(encoding="utf-8") + f'[auth]\ntoken_file = "{token}"\n',
+        encoding="utf-8",
+    )
+    decoy = home / "xdg"  # XDG_STATE_HOME is not the record's root any more
+    env = {k: v for k, v in os.environ.items() if not k.startswith("BINNACLE_")}
+    env.update(BINNACLE_CONFIG_FILE=str(config), XDG_STATE_HOME=str(decoy))
     env.pop("PYTHONSTARTUP", None)
     result = subprocess.run(
         [sys.executable, str(driver), str(home), str(mutant), str(port)],
@@ -142,24 +162,23 @@ def test_required_import_failure_aborts_start_up(home, entry, error_class):
     assert "bind" not in marks and "flock" not in marks, marks
     with socket.socket() as probe:  # the server port was never bound
         assert probe.connect_ex(("127.0.0.1", port)) != 0
-    record_dir = home / "state" / "binnacle" / "startup-import"
+    record_dir = home / "state" / "startup-import"
     record = json.loads((record_dir / f"{process}.json").read_text(encoding="utf-8"))
+    assert set(record) == {
+        "process",
+        "time",
+        "revision",
+        "module",
+        "error_class",
+        "where",
+    }, record
     assert record["module"] == MUTANT and record["error_class"] == error_class
-    assert record["exit_code"] == EX_STARTUP_IMPORT and record["process"] == process
+    assert record["process"] == process
+    assert record["revision"] == runtime_provenance().revision
     assert SECRET not in json.dumps(record)
+    assert not decoy.exists(), "the record followed XDG_STATE_HOME"
     (check,) = check_startup_imports(record_dir)
     assert check.status == "fail" and MUTANT in check.detail, check
-
-
-def test_clean_start_clears_the_record_and_doctor_is_ok(home, monkeypatch):
-    monkeypatch.setenv("XDG_STATE_HOME", str(home / "state"))
-    directory = startup_imports.record_dir()
-    directory.mkdir(parents=True)
-    (directory / "job-manager.json").write_text("{}", encoding="utf-8")
-    assert check_startup_imports(directory)[0].status == "fail"
-    monkeypatch.setattr(startup_imports, "manager_module_names", lambda _s=None: ())
-    assert startup_imports.import_manager_modules() == ()
-    assert [c.status for c in check_startup_imports(directory)] == ["ok"]
 
 
 def test_package_init_failure_inside_the_walk_aborts(monkeypatch):
@@ -198,6 +217,4 @@ def test_linux_manager_entry_configures_logging_only_in_main():
         Path(startup_imports.__file__).parent / "features/commands/job_manager.py"
     ).read_text(encoding="utf-8")
     assert "logging.basicConfig(" not in source
-    assert (
-        'import_manager_modules(process="job-manager", log_format=LOG_FORMAT)' in source
-    )
+    assert 'process="job-manager",\n        log_format=LOG_FORMAT,' in source

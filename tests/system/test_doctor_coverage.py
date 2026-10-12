@@ -114,6 +114,9 @@ def test_run_all_composes_every_active_core_check(tmp_path, monkeypatch, probe):
     monkeypatch.setattr(doctor, "check_config", mark("config"))
     monkeypatch.setattr(doctor, "check_token", mark("token"))
     monkeypatch.setattr(
+        doctor, "check_startup_imports", lambda *a, **k: []
+    )  # never the host records
+    monkeypatch.setattr(
         doctor,
         "check_units",
         lambda *a, **k: ([doctor.ok("units", "ok")], "prod"),
@@ -168,6 +171,9 @@ def test_run_all_skips_optional_checks_when_inactive_and_local_only(
     monkeypatch.setattr(doctor, "check_provenance", lambda value: [])
     monkeypatch.setattr(doctor, "check_config", list)
     monkeypatch.setattr(doctor, "check_token", lambda *a: [])
+    monkeypatch.setattr(
+        doctor, "check_startup_imports", lambda *a, **k: []
+    )  # never the host records
     monkeypatch.setattr(doctor, "check_units", lambda *a, **k: ([], None))
     monkeypatch.setattr(doctor, "check_endpoint", lambda *a: [])
     monkeypatch.setattr(doctor, "check_boot", list)

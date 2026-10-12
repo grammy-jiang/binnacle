@@ -20,9 +20,9 @@ import pytest
 
 from binnacle.startup_imports import (
     _EXCLUDED_BY_OS,
-    MANAGER_ENTRY_CLOSURE_ALLOWED,
     MANAGER_EXCLUDED,
     MANAGER_MODULES,
+    manager_entry_closure_allowed,
     manager_module_names,
     runtime_module_names,
 )
@@ -47,7 +47,7 @@ def test_manager_set_leaves_out_the_mcp_tree_and_the_other_os(system):
     assert not [name for name in names if "tools" in name.split(".")]
     assert not [name for name in names if _under(name, _EXCLUDED_BY_OS[system])]
     excluded = [name for name in names if _under(name, MANAGER_EXCLUDED)]
-    assert set(excluded) <= set(MANAGER_ENTRY_CLOSURE_ALLOWED), excluded
+    assert set(excluded) <= set(manager_entry_closure_allowed(system)), excluded
     # The one allowed exception is imported by the Linux entry module itself.
     entry = (SRC / "features/commands/job_manager.py").read_text(encoding="utf-8")
     assert "\nfrom binnacle.mcp.callctx import current_call\n" in entry

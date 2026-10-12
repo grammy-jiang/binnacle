@@ -26,12 +26,22 @@ module fails later, far from the cause. The failing process logs ONE line
 (``event=startup_import_failed``: module, exception type and the raising
 frame's package-relative file:line, never the message text), writes a durable
 record that ``binnacle doctor`` reports, and exits with ``EX_STARTUP_IMPORT``
-before it binds a port, takes the jobs lock or binds the jobs socket. A clean
-start removes that process's record. ``OPTIONAL_MODULES`` is the pinned
-allowlist of modules that may fail and report themselves unavailable at call
-time instead; no such module exists today, so it is empty. E1 covers binnacle.*
-only: third-party and stdlib lazy imports still come from the shared venv, and
-the deploy restarts on pyproject/uv.lock changes.
+before it binds a port, takes the jobs lock or binds the jobs socket.
+``OPTIONAL_MODULES`` is the pinned allowlist of modules that may fail and
+report themselves unavailable at call time instead; no such module exists
+today, so it is empty. E1 covers binnacle.* only: third-party and stdlib lazy
+imports still come from the shared venv, and the deploy restarts on
+pyproject/uv.lock changes.
+
+The durable start-up import record (E1-a5, SD-84): importing this module or
+calling ``import_runtime_modules`` / ``import_manager_modules`` never touches
+it. Only the real entry points (the serving MCP process, the Linux manager
+``main`` and the Darwin manager ``main``) write it, from the ``on_failure``
+callback or the failure handler they supply, and clear it only AFTER a
+successful start of that same process (the port or socket is bound). The
+record lives under the instance's configured state root, which the entry point
+passes in (``state_root_of(settings.jobs.dir)``); this library has no HOME
+default. It holds no message text.
 """
 
 from __future__ import annotations
@@ -50,6 +60,7 @@ from pathlib import Path
 from types import ModuleType
 
 import binnacle
+from binnacle.provenance import runtime_provenance
 
 log = logging.getLogger("binnacle.startup_imports")
 
@@ -211,10 +222,19 @@ class StartupImportFailed(SystemExit):
         self.module, self.error_class, self.where = module, error_class, where
 
 
-def record_dir() -> Path:
-    """Where a failing process leaves its durable record for ``doctor``."""
-    state = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
-    return Path(state) / "binnacle" / RECORD_DIR_NAME
+def state_root_of(jobs_dir: Path) -> Path:
+    """The instance's state root: the parent of its configured ``jobs.dir``."""
+    return jobs_dir.parent
+
+
+def record_dir(state_root: Path) -> Path:
+    """Where ``doctor`` looks for a failing process's durable record."""
+    return state_root / RECORD_DIR_NAME
+
+
+def record_path(state_root: Path, process: str) -> Path:
+    """The one place a record path is formed (the test suite guards it)."""
+    return record_dir(state_root) / f"{process}.json"
 
 
 def _raising_frame(exc: BaseException) -> str:
@@ -244,30 +264,38 @@ def _required_import(name: str) -> ModuleType:
         ) from None
 
 
-def _write_record(process: str, failure: StartupImportFailed) -> None:
+def record_start_failure(
+    process: str, failure: StartupImportFailed, state_root: Path
+) -> bool:
+    """Entry points only: leave the durable record of a failed start.
+
+    Fields: process, UTC time, revision, module, exception type and raising
+    file:line. Never the exception message. Returns whether it was written.
+    """
     record = {
         "process": process,
-        "pid": os.getpid(),
+        "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "revision": runtime_provenance().revision,
         "module": failure.module,
         "error_class": failure.error_class,
         "where": failure.where,
-        "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "exit_code": EX_STARTUP_IMPORT,
     }
     try:
-        directory = record_dir()
-        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-        target = directory / f"{process}.json"
+        target = record_path(state_root, process)
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         tmp = target.with_suffix(".tmp")
         tmp.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
         os.replace(tmp, target)
     except OSError:
         log.error("event=startup_import_record_error process=%s", process)
+        return False
+    return True
 
 
-def _clear_record(process: str) -> None:
+def clear_record(process: str, state_root: Path) -> None:
+    """Entry points only, AFTER a successful start (bound port or socket)."""
     try:
-        (record_dir() / f"{process}.json").unlink(missing_ok=True)
+        record_path(state_root, process).unlink(missing_ok=True)
     except OSError:
         log.warning("event=startup_import_record_error process=%s", process)
 
@@ -276,6 +304,7 @@ def _fail_fast(
     process: str,
     names_of: Callable[[str | None], tuple[str, ...]],
     system: str | None,
+    on_failure: Callable[[StartupImportFailed], None] | None,
 ) -> tuple[str, ...]:
     try:
         names = names_of(system)
@@ -293,27 +322,32 @@ def _fail_fast(
             failure.where,
             EX_STARTUP_IMPORT,
         )
-        _write_record(process, failure)
+        if on_failure is not None:  # the entry point's record write
+            on_failure(failure)
         raise
-    _clear_record(process)
     return ()
 
 
 def import_runtime_modules(
-    system: str | None = None, process: str = "mcp-server"
+    system: str | None = None,
+    process: str = "mcp-server",
+    on_failure: Callable[[StartupImportFailed], None] | None = None,
 ) -> tuple[str, ...]:
     """Import the runtime tree or abort start-up (``StartupImportFailed``).
+
+    No record side effect: ``on_failure`` is the entry point's own callback.
 
     Returns the failed modules, which is always empty: a required failure
     raises ``StartupImportFailed`` (exit ``EX_STARTUP_IMPORT``) instead.
     """
-    return _fail_fast(process, runtime_module_names, system)
+    return _fail_fast(process, runtime_module_names, system, on_failure)
 
 
 def import_manager_modules(
     system: str | None = None,
     process: str = "job-manager",
     log_format: str | None = None,
+    on_failure: Callable[[StartupImportFailed], None] | None = None,
 ) -> tuple[str, ...]:
     """Import the job manager's pinned set; aborts as ``import_runtime_modules``.
 
@@ -324,4 +358,4 @@ def import_manager_modules(
         logging.basicConfig(
             level=logging.INFO, format=log_format, datefmt="%Y-%m-%dT%H:%M:%S"
         )
-    return _fail_fast(process, manager_module_names, system)
+    return _fail_fast(process, manager_module_names, system, on_failure)
