@@ -16,3 +16,19 @@ CONFIG_ENV = "RIPGREP_CONFIG_PATH"
 def rg_env() -> dict[str, str]:
     """The current environment without RIPGREP_CONFIG_PATH."""
     return {k: v for k, v in os.environ.items() if k != CONFIG_ENV}
+
+
+PATTERN_HINT = "Fix the pattern, or use fixed_strings for literal text."
+
+
+def rejection_message(stderr: str) -> str:
+    """The rg_rejected text; a permission-only failure is not a pattern problem."""
+    lines = [line for line in stderr.splitlines() if line.strip()]
+    if lines and all(
+        "permission denied" in line.lower() or "os error 13" in line for line in lines
+    ):
+        return (
+            f"ripgrep could not read part of the search path: {stderr.strip()[-300:]}. "
+            "Check the permissions of the path, or search a narrower path."
+        )
+    return f"ripgrep rejected the search: {stderr.strip()[-300:]}. {PATTERN_HINT}"

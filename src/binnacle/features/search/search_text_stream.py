@@ -19,7 +19,7 @@ from typing import BinaryIO
 import orjson
 
 from binnacle.errors import CodedToolError
-from binnacle.features.search.rg_env import NO_CONFIG, rg_env
+from binnacle.features.search.rg_env import NO_CONFIG, rejection_message, rg_env
 
 
 @dataclass
@@ -183,8 +183,7 @@ class RgJsonStream:
         if returncode == 2 or (returncode not in (0, 1) and stderr):
             raise CodedToolError(
                 "rg_rejected",
-                f"ripgrep rejected the search: {stderr or 'unknown error'}. "
-                "Fix the pattern, or use fixed_strings for literal text.",
+                rejection_message(stderr or "unknown error"),
             )
 
     def _abort(self) -> None:

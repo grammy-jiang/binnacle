@@ -115,7 +115,12 @@ def verify_exact_scan(scan: ExactScanResult, base: Path) -> ExactScanResult:
 
 
 def verify_adaptive(payload: dict, base: Path) -> dict:
-    """Drop the adaptive entries of every file that fails."""
+    """Drop the adaptive entries of every file that fails.
+
+    Like the exact path, the dropped matches leave the payload count. Every
+    entry of a file carries that file's match count, so one entry per
+    dropped file is subtracted.
+    """
     entries = payload.get("entries", [])
     files = list(
         dict.fromkeys(
@@ -125,7 +130,32 @@ def verify_adaptive(payload: dict, base: Path) -> dict:
     good = checked_files(files, base)
     if len(good) == len(files):
         return payload
-    return {
+    counted: dict[str, int] = {}
+    for entry in entries:
+        file = entry.get("file")
+        if isinstance(file, str) and file not in good and file not in counted:
+            counted[file] = entry.get("count", 0)
+    dropped = sum(counted.values())
+    adjusted = {
         **payload,
         "entries": [entry for entry in entries if entry.get("file") in good],
     }
+    if isinstance(payload.get("count"), int):
+        adjusted["count"] = payload["count"] - dropped
+        note = payload.get("note")
+        if isinstance(note, str):
+            adjusted["note"] = note.replace(
+                f"for {payload['count']} matches", f"for {adjusted['count']} matches", 1
+            )
+    return adjusted
+
+
+def candidate_files(payload: dict) -> int:
+    """The distinct files left in an adaptive payload."""
+    return len(
+        {
+            entry.get("file")
+            for entry in payload.get("entries", [])
+            if isinstance(entry, dict) and isinstance(entry.get("file"), str)
+        }
+    )

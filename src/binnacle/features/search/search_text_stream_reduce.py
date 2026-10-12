@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from binnacle.features.search.search_text_collect import clip
+from binnacle.features.search.search_text_collect import SmallestMatches
 
 MatchGlob = Callable[[str, Path, str | None], bool]
 
@@ -49,11 +49,10 @@ class ExactStreamReducer:
         self.max_line_chars = max_line_chars
         self.clip_mark = clip_mark
         self.matches_glob = matches_glob
-        self.matches: list[dict] = []
+        self.kept = SmallestMatches(max_results)
         self.line_map: dict[str, dict[int, str]] = {}
         self.accepted_match_events: list[dict] = []
         self.total = 0
-        self.truncated = False
         self.event_candidates = 0
         self.glob_cache: dict[str, bool] = {}
         self.glob_cache_hits = 0
@@ -103,22 +102,13 @@ class ExactStreamReducer:
 
         self.total += 1
         self.accepted_match_events.append(event)
-        if len(self.matches) < self.max_results:
-            self.matches.append(
-                {
-                    "file": file,
-                    "line": line_no,
-                    "text": clip(text, self.max_line_chars, self.clip_mark),
-                }
-            )
-        else:
-            self.truncated = True
+        self.kept.add(file, line_no, text)
 
     def result(self) -> StreamScanResult:
         return StreamScanResult(
-            matches=self.matches,
+            matches=self.kept.result(self.max_line_chars, self.clip_mark),
             line_map=self.line_map,
             total=self.total,
-            truncated=self.truncated,
+            truncated=self.total > self.max_results,
             accepted_match_events=self.accepted_match_events,
         )
