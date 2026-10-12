@@ -30,6 +30,10 @@ class Adapter:
     def __init__(self, render=None, pause=None, raises=None, lie=None):
         self.render, self.pause, self.raises, self.lie = render, pause, raises, lie
         self.routes = []
+        self.carrier_holds = True
+
+    def routed_carrier_holds(self):
+        return self.carrier_holds
 
     async def adapt_routed(self, original, *, execution, route):
         self.routes.append(route)

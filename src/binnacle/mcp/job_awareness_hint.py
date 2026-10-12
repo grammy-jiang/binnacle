@@ -179,11 +179,14 @@ class HintAdapter:
         self.routed_carrier = self.carrier
         return False
 
-    def _routed_carrier_holds(self) -> bool:
-        """TEXTU-01: the bind-time carrier rule still holds for this call.
+    def routed_carrier_holds(self) -> bool:
+        """TEXTU-01: the bind-time carrier rule still holds now.
 
         A schema-backed routed binding stays META and a ``NO_STRUCTURE``
-        binding stays TEXT. A carrier reassigned after bind suppresses.
+        binding stays TEXT. A carrier reassigned after bind suppresses. The
+        routed path checks it at admission, at render entry, before the
+        render returns and after the worker returns; the lab emission checks
+        it again before its EMITTED commit (TEXTU-G2-01).
         """
         binding = self.bindings
         expected = binding.text if self.schema is NO_STRUCTURE else binding.meta
@@ -256,7 +259,7 @@ class HintAdapter:
             or self.schema is None
             or self.identity is None
             or (unstructured and not routed)
-            or (routed and not self._routed_carrier_holds())
+            or (routed and not self.routed_carrier_holds())
         ):
             return False
         tool = claim(execution, original)
@@ -318,7 +321,7 @@ class HintAdapter:
         result, rendered = await self.workers.run(
             lambda stop: self._render(original, stop, grant, jobs, routed=True), busy
         )
-        if result is original or not rendered:
+        if result is original or not rendered or not self.routed_carrier_holds():
             return unchanged
         return RoutedOutcome(result, rendered)
 
@@ -363,6 +366,11 @@ class HintAdapter:
         binding = self.bindings
         meter = Meter(stop)
         self.last_meter = meter
+        # TEXTU-G2-01: one carrier per call. Routed calls pin the bind-approved
+        # carrier; every later decision uses only this local.
+        if routed and not self.routed_carrier_holds():
+            return original, ()
+        carrier = self.routed_carrier if routed else self.carrier
         try:
             if type(self.server_info) is not dict:
                 return original, ()
@@ -373,12 +381,10 @@ class HintAdapter:
             original_bytes = meter.bytes - (13 if original.meta is None else 0)
             meter.initial = False
             body = walk(original, meter, copy=True, byte_limit=262144 - overhead)
-            if routed and not self._routed_carrier_holds():
-                return original, ()
             if self.schema is NO_STRUCTURE:  # TEXT-U: no structure, routed TEXT
                 if (
                     not routed
-                    or self.carrier is not binding.text
+                    or carrier is not binding.text
                     or body["structuredContent"] is not None
                 ):
                     return original, ()
@@ -389,7 +395,7 @@ class HintAdapter:
                 or not 1 <= len(jobs) <= 8
                 or not isinstance(grant, binding.grant_type)
                 or not all(type(job) is binding.job_type for job in jobs)
-                or not any(self.carrier is c for c in (binding.meta, binding.text))
+                or not any(carrier is c for c in (binding.meta, binding.text))
             ):
                 return original, ()
             observations = []
@@ -412,13 +418,13 @@ class HintAdapter:
                 if found is None:
                     return original, ()
                 rendered = found
-            hint = binding.render(candidates, self.carrier)
+            hint = binding.render(candidates, carrier)
             if type(hint) is not binding.hint_type:
                 return original, ()
             data = object.__getattribute__(hint, "__dict__")
             if (
                 not _fields(data, ("carrier", "text", "utf8_bytes"))
-                or data["carrier"] is not self.carrier
+                or data["carrier"] is not carrier
                 or type(data["text"]) is not str
                 or type(data["utf8_bytes"]) is not int
                 or not 1 <= data["utf8_bytes"] <= 512
@@ -429,7 +435,7 @@ class HintAdapter:
             if len(text.encode("utf-8")) != data["utf8_bytes"]:
                 return original, ()
             meter.charge(4096)  # fixed renderer and bounded carrier construction
-            if self.carrier is binding.meta:
+            if carrier is binding.meta:
                 meta = body["_meta"]
                 if meta is None:
                     meta = body["_meta"] = {}
@@ -450,6 +456,8 @@ class HintAdapter:
                 structured_content=body["structuredContent"],
                 meta=body["_meta"],
             )
+            if routed and not self.routed_carrier_holds():
+                return original, ()  # drifted while the render ran
             return result, rendered
         except Exception:  # noqa: BLE001 - all awareness failures preserve the original
             return original, ()

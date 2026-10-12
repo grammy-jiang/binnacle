@@ -145,6 +145,15 @@ STRUCT carrier (§9.2 S-1) is not implemented; it waits for CV (c′).
   and require the current carrier to equal the recorded one. A carrier
   reassigned after bind returns the original result, consumes no receipt,
   and the lab resets the reservation (`PENDING`).
+- **TEXTU-G2-01.** A carrier changed while a routed render is in flight is
+  also refused. `_render` pins the bind-approved carrier in a local at entry
+  and uses only that local for the renderer and the META or TEXT insertion.
+  It checks for drift again before it returns, and `adapt_routed` checks
+  again after the worker returns; a drift there resets the job to `PENDING`.
+  The lab emission calls `routed_carrier_holds()` after the adapter returns
+  and inside the commit transaction; a drift there aborts the job
+  (`ABORTED`), as for any other failed final validation. Barrier tests pause
+  the worker after the render entry check in both directions.
 - **TEXTU-02.** The capacity dry run checks the lifecycle of every arm again
   (`arm_failures`). A negative control proves that a bad non-final arm fails.
 - **ADV-TU-02.** The raw-value scan covers the synthetic argument log. A
