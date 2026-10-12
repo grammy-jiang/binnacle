@@ -108,3 +108,54 @@ def test_descriptor_shortage_is_coded_error(
     with pytest.raises(CodedToolError) as info:
         verify.checked_files([str(f)], tmp_path)
     assert info.value.telemetry_code == "too_many_open_files"
+
+
+def test_permission_only_failure_has_no_pattern_hint() -> None:
+    from binnacle.features.search.rg_env import rejection_message
+
+    text = rejection_message("rg: /x/secret: Permission denied (os error 13)")
+    assert "Fix the pattern" not in text
+    assert "permissions" in text
+
+
+def test_pattern_failure_keeps_pattern_hint() -> None:
+    from binnacle.features.search.rg_env import rejection_message
+
+    assert "Fix the pattern" in rejection_message("regex parse error: unclosed group")
+    mixed = "rg: a: Permission denied (os error 13)\nregex parse error"
+    assert "Fix the pattern" in rejection_message(mixed)
+
+
+def test_rg_runs_with_sort_path(tmp_path: Path) -> None:
+    from binnacle.features.search.search_text_rg import run_rg
+    from binnacle.features.search.search_text_stream import RgJsonStream
+
+    for name in ("c", "a", "b"):
+        (tmp_path / f"{name}.txt").write_text("needle\n")
+    events, _ = run_rg(tmp_path, "needle", False, 0, rg_bin="rg", timeout_s=20)
+    files = [e["data"]["path"]["text"] for e in events if e["type"] == "match"]
+    assert files == sorted(files)
+    assert (
+        "--sort"
+        in RgJsonStream(tmp_path, "n", False, 0, rg_bin="rg", timeout_s=5)._command()
+    )
+
+
+def test_unreadable_child_is_not_a_pattern_error(tmp_path: Path) -> None:
+    import os
+
+    from binnacle.features.search.search_text_rg import run_rg
+
+    (tmp_path / "ok.txt").write_text("needle\n")
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    (locked / "f.txt").write_text("needle\n")
+    locked.chmod(0)
+    try:
+        if os.access(locked, os.R_OK):  # root: permissions not enforced
+            return
+        with pytest.raises(CodedToolError) as info:
+            run_rg(tmp_path, "needle", False, 0, rg_bin="rg", timeout_s=20)
+        assert "Fix the pattern" not in str(info.value)
+    finally:
+        locked.chmod(0o700)

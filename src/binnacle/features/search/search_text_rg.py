@@ -7,7 +7,7 @@ from pathlib import Path
 import orjson
 
 from binnacle.errors import CodedToolError
-from binnacle.features.search.rg_env import NO_CONFIG, rg_env
+from binnacle.features.search.rg_env import NO_CONFIG, rejection_message, rg_env
 from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
 
 
@@ -21,7 +21,7 @@ def run_rg(
     timeout_s: int,
     metrics: ExactSearchMetrics | None = None,
 ) -> tuple[list[dict], bool]:
-    cmd = [rg_bin, NO_CONFIG, "--json", "--smart-case"]
+    cmd = [rg_bin, NO_CONFIG, "--json", "--smart-case", "--sort", "path"]
     if fixed_strings:
         cmd.append("--fixed-strings")
     if context > 0:
@@ -57,8 +57,7 @@ def run_rg(
     if proc.returncode == 2 or (proc.returncode not in (0, 1) and proc.stderr):
         raise CodedToolError(
             "rg_rejected",
-            f"ripgrep rejected the search: {proc.stderr.strip()[-300:]}. "
-            "Fix the pattern, or use fixed_strings for literal text.",
+            rejection_message(proc.stderr),
         )
 
     if metrics is not None:
