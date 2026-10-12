@@ -19,6 +19,7 @@ from typing import BinaryIO
 import orjson
 
 from binnacle.errors import CodedToolError
+from binnacle.features.search.rg_env import NO_CONFIG, rg_env
 
 
 @dataclass
@@ -73,7 +74,7 @@ class RgJsonStream:
         return self._proc.pid if self._proc is not None else None
 
     def _command(self) -> list[str]:
-        cmd = [self.rg_bin, "--json", "--smart-case"]
+        cmd = [self.rg_bin, NO_CONFIG, "--json", "--smart-case"]
         if self.fixed_strings:
             cmd.append("--fixed-strings")
         if self.context > 0:
@@ -91,6 +92,7 @@ class RgJsonStream:
                 stdout=subprocess.PIPE,
                 stderr=self._stderr,
                 text=False,
+                env=rg_env(),
             )
         except FileNotFoundError:
             self._stderr.close()

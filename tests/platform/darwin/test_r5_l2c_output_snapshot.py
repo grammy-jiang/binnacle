@@ -18,6 +18,11 @@ from pathlib import Path
 import pytest
 
 from binnacle.config import RunCommandSettings
+from binnacle.features.commands.command_contracts import (
+    read_log_range_snapshot,
+    read_log_snapshot,
+    snapshot_size,
+)
 from binnacle.features.commands.tools import job_status as js
 from binnacle.features.commands.tools import run_command as rc
 from binnacle.mcp.callctx import current_client
@@ -142,22 +147,29 @@ def _spool_job(backend, job_id, text):
     return directory / "out.log"
 
 
-def test_log_reads_return_the_prefix_their_state_measured(tmp_path):
-    """The pairing itself, on every OS: the next read of that job is pinned."""
+def test_log_reads_return_the_prefix_their_size_measured(tmp_path):
+    """The pairing itself, on every OS: the size is a value, never a pin.
+
+    r6 W2 X1e (SD-74): the tools pass a state's log_bytes to the read; the
+    Darwin backend keeps no per-thread or per-instance size (SR6-N2).
+    """
     _, _, backend = _manager(tmp_path)
     log = _spool_job(backend, "aaaaaaaaaaaa", b"m1\n")
     _spool_job(backend, "bbbbbbbbbbbb", b"b\n")
-    assert backend.job_state("aaaaaaaaaaaa")["log_bytes"] == 3
+    size = snapshot_size(backend.job_state("aaaaaaaaaaaa"))
+    assert size == 3
     with log.open("ab") as out:
         out.write(b"m2\n")  # a burst lands between the state and the read
-    assert backend.read_log("aaaaaaaaaaaa") == b"m1\n"
-    assert backend.read_log("aaaaaaaaaaaa") == b"m1\nm2\n"  # consumed: unpaired
-    backend.job_state("aaaaaaaaaaaa")
+    assert read_log_snapshot(backend, "aaaaaaaaaaaa", size) == b"m1\n"
+    assert backend.read_log("aaaaaaaaaaaa") == b"m1\nm2\n"  # no size kept
+    size = snapshot_size(backend.job_state("aaaaaaaaaaaa"))
     with log.open("ab") as out:
         out.write(b"m3\n")
-    assert backend.read_log_range("aaaaaaaaaaaa", 3, 100) == (b"m2\n", 6)
-    backend.job_state("bbbbbbbbbbbb")  # another job's state never pins this one
+    snapshot = read_log_range_snapshot(backend, "aaaaaaaaaaaa", 3, 100, size)
+    assert snapshot == (b"m2\n", 6)
+    backend.job_state("bbbbbbbbbbbb")  # another job's state never sizes this one
     assert backend.read_log_range("aaaaaaaaaaaa", 0, 100) == (b"m1\nm2\nm3\n", 9)
-    backend.job_state("aaaaaaaaaaaa")
+    size = snapshot_size(backend.job_state("aaaaaaaaaaaa"))
     log.write_bytes(b"")  # not append-only any more: never invent a prefix
-    assert backend.read_log_range("aaaaaaaaaaaa", 0, 100) == (b"", 0)
+    snapshot = read_log_range_snapshot(backend, "aaaaaaaaaaaa", 0, 100, size)
+    assert snapshot == (b"", 0)

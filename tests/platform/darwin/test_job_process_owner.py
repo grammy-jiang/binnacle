@@ -232,17 +232,24 @@ def test_exit_before_registration_is_pending_not_lost(spool, monkeypatch):
 
 @native
 def test_stop_signals_only_owned_group_and_records_stop_requested(owner, spool):
+    from tests.platform.darwin.test_job_manager_resilience import wait_for
+
     started = _spawn(owner, "job-s", "sleep 30 & sleep 30; wait", spool)
-    time.sleep(0.2)
-    members = job_process_owner._process_records(2, started.pid)
-    assert len(members) >= 2
+
+    def forked():  # live group members other than the leader
+        records = job_process_owner._process_records(2, started.pid)
+        return [m for m in records if m.pid != started.pid and m.state != 5]
+
+    assert wait_for(lambda: len(forked()) >= 2, timeout=10)  # no fixed sleep
+    members = forked()
     assert owner.authority("job-s").authority == "OWNED"
     owner.signal_owned_group("job-s", "terminate")
     result = owner.wait("job-s", 5)
     assert result is not None
     assert result.signal == signal.SIGTERM
     assert result.termination_reason == "stop_requested"
-    assert all(not _alive(m.pid) for m in members if m.pid != started.pid)
+    # Orphaned members exit after the leader is reaped (launchd reaps them).
+    assert wait_for(lambda: not any(_alive(m.pid) for m in members), timeout=10)
 
 
 @native

@@ -6,9 +6,12 @@ gitignore respected. Uses the system ripgrep on purpose: bundled
 jemalloc builds abort on this Pi's 16 KB kernel pages (Copilot lesson).
 """
 
+import errno
 import os
 import stat
 import subprocess
+from collections.abc import Callable, Iterator
+from contextlib import ExitStack, contextmanager
 from pathlib import Path, PurePath
 from typing import Annotated
 
@@ -18,12 +21,15 @@ from pydantic import Field
 
 from binnacle.config import ListFilesSettings, RootsSettings, get_settings
 from binnacle.errors import CodedToolError
+from binnacle.features.files import fd_walk
 from binnacle.features.files.paths import (
     FileToolAccess,
     full_match,
     nearby_hint,
     resolve_path,
 )
+from binnacle.features.search.fd_chain import DirectoryChain
+from binnacle.features.search.rg_env import NO_CONFIG, rg_env
 from binnacle.platform.contracts.file_access_contracts import ListRequest
 
 OUTPUT_SCHEMA = {
@@ -61,81 +67,109 @@ def _file_entry(p: Path) -> dict | None:
         return None
 
 
-MAX_LINK_HOPS = 40  # Darwin platform/darwin/file_access.py MAX_LINK_HOPS.
+# The r5/r6 names stay importable here; fd_walk holds the shared walk.
+MAX_LINK_HOPS = fd_walk.MAX_LINK_HOPS
+_absolute_in_root = fd_walk.absolute_in_root
 
 
-def _inside(path: Path, allowed: tuple[Path, ...]) -> bool:
-    return any(path.is_relative_to(root) for root in allowed)
+@contextmanager
+def _opened(
+    top: Path, parts: tuple[str, ...], shown: Path
+) -> Iterator[tuple[list[int], int]]:
+    """The descriptor chain from the root being listed, and the listed fd.
+
+    Every component is opened no-follow, one at a time (SD-74): a component
+    swapped for a symlink or a file after resolve_path fails here instead of
+    being followed out of the root. The chain only traverses (O_PATH on
+    Linux); the listed directory alone is opened O_RDONLY to be read.
+    """
+    with ExitStack() as opened:
+        try:
+            # Only the listed directory itself is opened readable.
+            readable = fd_walk.DIRECTORY_FLAGS
+            root_fd = opened.enter_context(
+                fd_walk.open_root(top) if parts else fd_walk.open_root(top, readable)
+            )
+            chain = opened.enter_context(
+                fd_walk.directory_chain(root_fd, parts, readable)
+            )
+        except FileNotFoundError as exc:
+            raise CodedToolError(
+                "directory_not_found", f"Directory not found: {shown}."
+            ) from exc
+        except NotADirectoryError as exc:
+            raise CodedToolError(
+                "path_changed",
+                f"Directory changed during the listing: {shown}. "
+                f"A path component is no longer a directory; list it again.",
+            ) from exc
+        except PermissionError as exc:
+            raise fd_walk.permission_denied(shown) from exc
+        # Links resolve through the open chain; the listed fd ends it (F3).
+        yield chain, chain[-1]
 
 
-def _link_target(link: Path, allowed: tuple[Path, ...]) -> Path | None:
-    """Walk a link's text as Darwin's link_target_info does; None = omit.
+def _entry_info(
+    fd: int, name: str, follow: Callable[[str], os.stat_result | None]
+) -> os.stat_result | None:
+    """ONE no-follow read of name, or of its contained target if it is a link.
 
-    Every component is checked with lstat and must stay inside a root, so
-    an absolute target, any step out of the roots (also out-and-back),
-    more than MAX_LINK_HOPS links, a dangling link or a loop yields None.
+    The entry never re-follows the link: any lstat failure (Darwin
+    file_traversal.py walk: EACCES/ENOENT entries are omitted) or a link
+    whose target does not resolve inside the root being listed omits the
+    entry before it is counted (SD-60).
     """
     try:
-        pending = os.readlink(link).split("/")
-        if pending[0] == "":
-            return None  # Absolute target: omitted, as on Darwin.
-        current, hops = link.parent, 1
-        while pending:
-            part = pending.pop(0)
-            if part in ("", "."):
-                continue
-            current = current.parent if part == ".." else current / part
-            if not _inside(current, allowed):
-                return None
-            info = os.lstat(current)
-            if stat.S_ISLNK(info.st_mode):
-                hops += 1
-                target = os.readlink(current)
-                if hops > MAX_LINK_HOPS or target.startswith("/"):
-                    return None
-                pending[:0] = target.split("/")
-                current = current.parent
-            elif pending and not stat.S_ISDIR(info.st_mode):
-                return None
+        info = os.lstat(name, dir_fd=fd)
     except OSError:
         return None
-    return current
+    return follow(name) if stat.S_ISLNK(info.st_mode) else info
 
 
-def _list_entry(p: Path, allowed: tuple[Path, ...]) -> dict | None:
-    """Type p from ONE lstat of its contained target (p itself if not a link).
-
-    The entry never re-follows the link: a target that is a link by now, or
-    any lstat failure (Darwin file_traversal.py walk: EACCES/ENOENT entries
-    are omitted), omits the entry before it is counted (SD-60).
-    """
+def _names(alias: Path, held: os.stat_result) -> bool:
+    # Absolute, no '..' (never normalized away), as Darwin's grant (LP-a2).
+    if not alias.is_absolute() or ".." in alias.parts:
+        return False
     try:
-        info = os.lstat(p)
-        if stat.S_ISLNK(info.st_mode):
-            target = _link_target(p, allowed)
-            if target is None or not _inside(target, allowed):
-                return None
-            info = os.lstat(target)
-            if stat.S_ISLNK(info.st_mode):
-                return None
+        return os.path.samestat(os.stat(alias), held)
     except OSError:
-        return None
-    if stat.S_ISDIR(info.st_mode):
-        return {"path": str(p), "type": "dir"}
-    return {"path": str(p), "type": "file", "bytes": info.st_size}
+        return False
 
 
 def _list_mode(
-    root: Path, max_results: int, include_hidden: bool, allowed: tuple[Path, ...]
+    root: Path,
+    max_results: int,
+    include_hidden: bool,
+    allowed: tuple[Path, ...],
+    configured: tuple[tuple[Path, Path], ...] = (),
 ) -> ToolResult:
-    listed = [
-        (p, e)
-        for p in root.iterdir()
-        if p.name != ".git"
-        and (include_hidden or not p.name.startswith("."))
-        and (e := _list_entry(p, allowed)) is not None
-    ]
-    listed.sort(key=lambda pe: (0 if pe[1]["type"] == "dir" else 1, pe[0].name.lower()))
+    # Links resolve inside the innermost root holding root, as Darwin's grant
+    # descriptor walk does: '..' into an outer root is omitted (SD-74).
+    top = max(
+        (r for r in allowed if root.is_relative_to(r)), key=lambda r: len(r.parts)
+    )
+    parts = root.relative_to(top).parts
+    listed = []
+    with _opened(top, parts, root) as (chain, fd):
+        held = os.fstat(chain[0])  # Configured aliases, re-checked per call (LP).
+        live = [str(a) for a, c in configured if c == top != a and _names(a, held)]
+
+        def follow(name: str) -> os.stat_result | None:
+            return fd_walk.link_target_info(
+                chain[0], parts, name, str(top), chain=chain, aliases=live
+            )
+
+        for name in os.listdir(fd):
+            if name == ".git" or (not include_hidden and name.startswith(".")):
+                continue
+            info = _entry_info(fd, name, follow)
+            if info is None:
+                continue
+            entry: dict = {"path": str(root / name), "type": "dir"}
+            if not stat.S_ISDIR(info.st_mode):
+                entry.update(type="file", bytes=info.st_size)
+            listed.append((name, entry))
+    listed.sort(key=lambda ne: (0 if ne[1]["type"] == "dir" else 1, ne[0].lower()))
     truncated = len(listed) > max_results
     entries = [e for _, e in listed[:max_results]]
     payload = {
@@ -156,6 +190,45 @@ def _list_mode(
     return ToolResult(content=summary, structured_content=payload)
 
 
+def _glob_entries(root: Path, lines: list[str]) -> list[dict]:
+    """Size each listed file by ONE no-follow lstat (r6 W2 X3c-a3, SD-78).
+
+    rg lists by path string and never lists a symlink. A line that is
+    absolute or has a '..' component is rejected: rg --files below root
+    prints neither. Every component from '/' to the file's directory is
+    opened no-follow (O_PATH on Linux); only the chain of the current path
+    is open (fd_chain, a stack bounded by the path depth). The file is
+    lstat-ed relative to that descriptor. A path whose directory is no
+    longer a directory (swapped for a symlink or a file) or whose final
+    component is now a symlink is omitted: no outside object is typed or
+    sized. Any other failure, including a descriptor shortage, keeps the
+    entry without bytes, as r6 did when p.stat() failed.
+    """
+    entries: list[dict] = []
+    # Plain string splitting: PurePath costs more than the walk itself. The
+    # components and the reported path equal those of root / line.
+    top = [part for part in str(root).split("/") if part]
+    with DirectoryChain() as chain:
+        for line in lines:
+            below = [part for part in line.split("/") if part not in ("", ".")]
+            if line.startswith("/") or ".." in below or not below:
+                continue
+            parts = top + below
+            entry: dict = {"path": "/" + "/".join(parts), "type": "file"}
+            try:
+                info = os.lstat(below[-1], dir_fd=chain.directory(tuple(parts[:-1])))
+            except OSError as exc:
+                if exc.errno in (errno.ENOTDIR, errno.ELOOP):
+                    continue
+                entries.append(entry)
+                continue
+            if stat.S_ISLNK(info.st_mode):
+                continue
+            entry["bytes"] = info.st_size
+            entries.append(entry)
+    return entries
+
+
 def _glob_mode(
     root: Path,
     glob: str,
@@ -173,7 +246,7 @@ def _glob_mode(
     # Python: rg's --glob "always overrides any other ignore logic", so a
     # positive --glob would whitelist gitignored files (found by the gate).
     pattern = glob if "/" in glob else f"**/{glob}"
-    cmd = [rg_bin, "--files", "--sortr", "modified"]
+    cmd = [rg_bin, NO_CONFIG, "--files", "--sortr", "modified"]
     if include_hidden:
         cmd += ["--hidden", "--glob", "!**/.git/**"]
     try:
@@ -184,6 +257,7 @@ def _glob_mode(
             text=True,
             timeout=timeout_s,
             check=False,
+            env=rg_env(),
         )
     except FileNotFoundError as exc:
         raise CodedToolError(
@@ -216,13 +290,7 @@ def _glob_mode(
             "invalid_glob", f"Invalid glob pattern {glob!r}: {e}"
         ) from e
     truncated = len(lines) > max_results
-    entries = []
-    for line in lines[:max_results]:
-        p = root / line
-        try:
-            entries.append({"path": str(p), "type": "file", "bytes": p.stat().st_size})
-        except OSError:
-            entries.append({"path": str(p), "type": "file"})
+    entries = _glob_entries(root, lines[:max_results])
     payload = {
         "path": str(root),
         "mode": "glob",
@@ -365,8 +433,10 @@ def list_files_impl(
             rg_bin=rg_bin,
             timeout_s=settings.rg_timeout_s,
         )
-    allowed = (get_settings().roots if roots is None else roots).canonical_allowed
-    return _list_mode(resolved, max_results, include_hidden, allowed)
+    roots = get_settings().roots if roots is None else roots
+    allowed = roots.canonical_allowed
+    pairs = tuple(zip([r.expanduser() for r in roots.allowed], allowed, strict=True))
+    return _list_mode(resolved, max_results, include_hidden, allowed, pairs)
 
 
 def register(

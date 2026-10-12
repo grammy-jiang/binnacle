@@ -4,6 +4,7 @@ A Mac run that skips a whole platform looks green while proving nothing. The
 AST scanner finds every pytest skip site in ``tests/`` (marks, aliases,
 ``pytestmark``, ``pytest.skip``/``importorskip``, ``xfail(run=False)``, conftest
 ``collect_ignore*``); ``ALLOWED_PLATFORM_SKIPS`` pins a site count per row.
+An explicit ``xfail(strict=False)`` is rejected: its XPASS would stay green.
 """
 
 import ast
@@ -30,6 +31,7 @@ OWNER_REASON = re.compile(r"^(A\d|B0|E0|T0|baseline): \S.*")
 # A condition naming an imported flag or helper the scanner cannot read
 # (``from x import ON_MAC``) carries this token: it needs a row like sys.platform.
 UNRESOLVED = "<unresolved-flag>"
+LOOSE_XFAIL = "xfail(strict=False) is forbidden; an XPASS must fail"
 PLATFORM_PATTERN = re.compile(
     r"sys\.platform|platform\.|os\.name|os\.uname|\bdarwin\b|\blinux\b"
     r"|\bmacos\b|" + re.escape(UNRESOLVED),
@@ -71,6 +73,7 @@ class _Scanner:
         self.values: dict[str, ast.expr] = {}
         self.aliases: dict[str, list[_Mark]] = {}
         self.sites: dict[int, SkipSite] = {}
+        self.loose_xfails: list[int] = []
         self._collect_imports(tree)
         self._collect_module_names(tree)
         for node in ast.walk(tree):
@@ -86,6 +89,8 @@ class _Scanner:
                         self._record_mark(mark, module=False)
             if isinstance(node, ast.Call) and self._is_skip_mark(node):
                 self._record_mark(node, module=False)
+            if isinstance(node, ast.Call) and self._xfail_false(node, "strict"):
+                self.loose_xfails.append(node.lineno)
         self._visit_calls(tree.body, [], in_scope=False, autouse=False)
         if conftest:
             self._scan_conftest(tree.body, [])
@@ -135,15 +140,20 @@ class _Scanner:
 
     def _is_skip_mark(self, node: ast.AST) -> bool:
         """A skip/skipif mark, or an xfail that never runs the test."""
-        func = node.func if isinstance(node, ast.Call) else node
-        kind = self._mark_kind(func)
-        if kind != "xfail":
-            return bool(kind)
-        return isinstance(node, ast.Call) and any(
-            kw.arg == "run"
-            and isinstance(kw.value, ast.Constant)
-            and kw.value.value is False
-            for kw in node.keywords
+        kind = self._mark_kind(node.func if isinstance(node, ast.Call) else node)
+        return bool(kind) and (kind != "xfail" or self._xfail_false(node, "run"))
+
+    def _xfail_false(self, node: ast.AST, name: str) -> bool:
+        """An xfail mark call that passes ``name=False`` explicitly."""
+        return (
+            isinstance(node, ast.Call)
+            and self._mark_kind(node.func) == "xfail"
+            and any(
+                kw.arg == name
+                and isinstance(kw.value, ast.Constant)
+                and kw.value.value is False
+                for kw in node.keywords
+            )
         )
 
     def _marks(self, expr: ast.AST) -> list[_Mark]:
@@ -370,7 +380,11 @@ def check_skip_policy(
         if not present and not rel.startswith(DARWIN_DIR):
             problems.append(f"{rel}: table row names a missing file")
     for rel, source in sorted(sources.items()):
-        sites = scan_skips(source, conftest=rel.rsplit("/", 1)[-1] == "conftest.py")
+        # One parse and one scan per module: loose_xfails does not depend on conftest.
+        tree = ast.parse(source)
+        scanner = _Scanner(tree, conftest=rel.rsplit("/", 1)[-1] == "conftest.py")
+        sites = sorted(scanner.sites.values(), key=lambda s: (s.line, s.kind))
+        problems.extend(f"{rel}:{line}: {LOOSE_XFAIL}" for line in scanner.loose_xfails)
         platform_sites = 0
         for site in sites:
             where = f"{rel}:{site.line}"
@@ -399,7 +413,7 @@ def check_skip_policy(
                 )
             platform_sites += site.platform
         if alias_uses and rel in alias_uses:
-            names = (n for n in ast.walk(ast.parse(source)) if isinstance(n, ast.Name))
+            names = (n for n in ast.walk(tree) if isinstance(n, ast.Name))
             used = sum(
                 n.id == "LINUX_ONLY" and isinstance(n.ctx, ast.Load) for n in names
             )
@@ -458,6 +472,20 @@ def test_parse_summary_counts():
 
 def test_repository_skips_satisfy_the_allowed_platform_skip_table():
     assert check_skip_policy(_repo_sources(), counts=PLATFORM_SITE_COUNTS) == []
+
+
+def test_an_explicit_non_strict_xfail_is_rejected(tmp_path):
+    violator = tmp_path / "test_synthetic_violator.py"
+    violator.write_text(
+        'import pytest\n@pytest.mark.xfail(strict=False, reason="r")\ndef test_x(): 0\n'
+    )
+    rel, source = "tests/unit/test_synthetic_violator.py", violator.read_text()
+    assert check_skip_policy({rel: source}, {}) == [f"{rel}:2: {LOOSE_XFAIL}"]
+    assert check_skip_policy({rel: source.replace("=False", "=True")}, {}) == []
+
+
+def test_the_repository_has_no_explicit_non_strict_xfail():
+    assert [p for p in check_skip_policy(_repo_sources()) if LOOSE_XFAIL in p] == []
 
 
 def test_every_table_row_pins_a_platform_site_count():

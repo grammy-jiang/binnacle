@@ -44,22 +44,56 @@ from binnacle.platform.darwin.file_traversal import (
 MAX_LINK_HOPS = 40
 
 
+def absolute_in_root(text: str, root: str) -> list[str] | None:
+    """Lexical gate for absolute link text (r6 X2; Linux list_files.py twin).
+
+    The components of text below root, or None: any ``..`` component, or text
+    outside root. Only empty and ``.`` components are dropped; the filesystem
+    is never consulted, so text that steps out and back is no existence oracle.
+    A trailing ``/`` or ``/.`` keeps one empty marker, so the walk requires a
+    directory there, as it does for relative text (RX2-F2).
+    """
+    raw = text.split("/")
+    parts = [part for part in raw if part not in ("", ".")]
+    base = [part for part in root.split("/") if part]
+    if ".." in parts or parts[: len(base)] != base:
+        return None
+    below = parts[len(base) :]
+    return [*below, ""] if raw[-1] in ("", ".") else below
+
+
 def link_target_info(
-    root_fd: int, directory: tuple[str, ...], name: str
+    root_fd: int,
+    directory: tuple[str, ...],
+    name: str,
+    root_path: str | None,
+    aliases: Sequence[str] = (),
 ) -> os.stat_result | None:
     """Stat a symlink's target only if it resolves inside the opened root.
 
     Every component is examined with no-follow descriptor calls starting at the
-    root descriptor. Absolute targets, ``..`` above the root, dangling links,
-    loops and non-file/non-directory targets yield None; the root is never
-    widened and no path string is followed.
+    root descriptor. Absolute link text is walked from the root descriptor only
+    when ``absolute_in_root`` accepts it for ``root_path``, the granted root,
+    or for one of ``aliases`` (configured alias strings of that root whose
+    identity was re-checked for this call; LP, SD-74);
+    absolute intermediate links, ``..`` above the root, dangling links, loops
+    and non-file/non-directory targets yield None; the root is never widened
+    and no path string is followed.
     """
     stack = list(directory)
     try:
         with directory_at(root_fd, directory) as start:
-            pending = os.readlink(name, dir_fd=start).split("/")
+            text = os.readlink(name, dir_fd=start)
+        pending = text.split("/")
         if pending[0] == "":
-            return None  # Absolute target: the root path is not known here.
+            below = None
+            for prefix in () if root_path is None else (root_path, *aliases):
+                below = absolute_in_root(text, prefix)
+                if below is not None:
+                    break
+            if below is None:
+                return None  # '..', another root or an unknown root path.
+            stack, pending = [], below
         hops = 1
         info: os.stat_result | None = None
         while pending:
@@ -98,10 +132,33 @@ def link_target_info(
 
 
 class _RootGrant:
-    def __init__(self, fd: int, generation: str) -> None:
+    def __init__(
+        self, fd: int, generation: str, path: str, aliases: tuple[str, ...] = ()
+    ) -> None:
         self.fd = fd
         self._generation = generation
+        self.path = path  # The granted canonical root, for absolute link text.
+        self.aliases = aliases  # Configured alias strings, realpath == path.
         self.lock = RLock()
+
+    def live_aliases(self, root_fd: int) -> tuple[str, ...]:
+        """The aliases that still name this root: one stat each, per call.
+
+        An alias retargeted after the grant no longer matches the opened
+        root's (st_dev, st_ino), so its prefix is ignored for this call.
+        """
+        if not self.aliases:
+            return ()
+        opened = os.fstat(root_fd)
+        live = []
+        for alias in self.aliases:
+            try:
+                info = os.stat(alias)
+            except OSError:
+                continue
+            if (info.st_dev, info.st_ino) == (opened.st_dev, opened.st_ino):
+                live.append(alias)
+        return tuple(live)
 
     @property
     def generation(self) -> str:
@@ -235,10 +292,22 @@ class DarwinFileAccess:
         if self._closed:
             raise unsafe("file_access_closed")
 
-    def grant(self, root: Path, *, generation: str) -> RootGrant:
+    def grant(
+        self, root: Path, *, generation: str, aliases: Sequence[Path] = ()
+    ) -> RootGrant:
         if not root.is_absolute() or not generation:
             raise unsafe("invalid_root_grant")
         parts = validate_relative_path(str(root)[1:])
+        # Only configured alias strings, never inferred: absolute, no '..',
+        # and realpath equal to the canonical root now (LP, SD-74).
+        accepted = tuple(
+            str(alias)
+            for alias in aliases
+            if alias.is_absolute()
+            and ".." not in alias.parts
+            and alias != root
+            and os.path.realpath(alias) == str(root)
+        )
         with self._lock, native_errors():
             self._check()
             # Composition supplies canonical roots; even root capture refuses
@@ -246,7 +315,9 @@ class DarwinFileAccess:
             fd = os.open("/", DIRECTORY_FLAGS)
             try:
                 with directory_at(fd, parts) as directory:
-                    grant = _RootGrant(os.dup(directory), generation)
+                    grant = _RootGrant(
+                        os.dup(directory), generation, str(root), accepted
+                    )
             finally:
                 os.close(fd)
             self._grants.add(grant)
@@ -292,7 +363,13 @@ class DarwinFileAccess:
             self._root(grant) as root,
             listing_directory(root, parts, listing) as directory,
         ):
-            listing.resolve_link = lambda name: link_target_info(root, parts, name)
+            top: str | None = None
+            aliases: tuple[str, ...] = ()
+            if isinstance(grant, _RootGrant):
+                top, aliases = grant.path, grant.live_aliases(root)
+            listing.resolve_link = lambda name: link_target_info(
+                root, parts, name, top, aliases
+            )
             listing.walk(directory)
         return listing.result(parts)
 

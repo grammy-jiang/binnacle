@@ -251,7 +251,7 @@ class Lab:
 def app_for(adapter, result=None, *, error=None, schema=SCHEMA):
     """The only registration point. No public Binnacle app is imported."""
     app = FastMCP("I2-2 synthetic only", version="synthetic")
-    adapter.server_info = app._mcp_server.server_info_stamp
+    adapter.bind_server(app)
     seen = []
 
     def synthetic() -> ToolResult:
@@ -415,7 +415,7 @@ async def check_explicit_bindings():
         ):
             adapter, result = lab.adapter(enabled=True), original()
             setattr(adapter, name, value)
-            assert await adapter.adapt(result) is result  # nosec B101 - pytest assertion
+            assert await adapter.adapt_bound(result) is result  # nosec B101 - pytest assertion
             assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion
         foreign_job = replace(lab.job, job_id="f" * 12)
         foreign = Observation(
@@ -427,7 +427,7 @@ async def check_explicit_bindings():
         for response in (None, object(), Success(object()), Success(foreign)):
             result = original()
             with patch.object(lab, "observe", return_value=response):
-                assert await lab.adapter(enabled=True).adapt(result) is result  # nosec B101 - pytest assertion
+                assert await lab.adapter(enabled=True).adapt_bound(result) is result  # nosec B101 - pytest assertion
             assert lab.queries == lab.payload.reads == 0  # nosec B101 - pytest assertion
         # Both jobs are authorized, but the observer must match the requested job.
         broad = lab.consumer("9" * 32, jobs=(lab.job, foreign_job))
@@ -437,5 +437,5 @@ async def check_explicit_bindings():
             adapter.bindings, observe=lambda grant, job: lab.observe(grant, foreign_job)
         )
         result = original()
-        assert await adapter.adapt(result) is result  # nosec B101 - pytest assertion
+        assert await adapter.adapt_bound(result) is result  # nosec B101 - pytest assertion
         assert lab.queries == 0  # nosec B101 - pytest assertion

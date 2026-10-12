@@ -74,6 +74,7 @@ platform/darwin/test_job_process_owner.py | A2: per-test Darwin posix_spawn/kque
 platform/darwin/test_ipc_generation.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID contract
 platform/darwin/test_job_manager_service.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID job-manager IPC (R4 J2, A3 successor)
 platform/darwin/test_job_manager_entry.py | A3: per-test Darwin com.binnacle.jobs entry point, J1 owner and job-manager IPC (R4 J2r, A3 successor)
+platform/darwin/test_job_manager_entry_owner.py | A3: per-test Darwin J1 owner behind the com.binnacle.jobs manager: J1r handoff and J1g repairs (r6 T1, split from test_job_manager_entry.py)
 platform/darwin/test_durable_jobs_e2e.py | A3: per-test Darwin kqueue/getpeereid job-manager E2E over the real J1 owner and J2 manager (R4 J5)
 platform/darwin/test_j1g_leader_fence.py | A2: per-test Darwin waitid(WNOWAIT)/KERN_PROC_PGRP leader-exit fence, stopping event and killpg guard (R4 J1g, SD-43)
 platform/darwin/test_j1g_e2e_survival.py | B0: per-test Darwin real com.binnacle.jobs background-member survival E2E (R4 J1g, SD-43 JCRP-F1)
@@ -83,6 +84,16 @@ platform/darwin/test_durable_manager_e2e.py | B0: per-test Darwin real com.binna
 platform/darwin/test_r5_l2_parity.py | B0: per-test Darwin manager composition and caller_form workdir on the real macOS filesystem (r5 L2, SD-50; STEER-01); the Linux-host cases run everywhere
 platform/darwin/test_r5_l2b_strict_client.py | B0: per-test Darwin KERN_PROC_PGRP group_listing through the strict in-memory client (r5 L2b, SD-61 STEER-02b)
 platform/darwin/test_r5_l2c_output_snapshot.py | B0: per-test Darwin real com.binnacle.jobs burst-writer output/output_bytes one-snapshot repro (r5 L2c); the pairing unit test runs everywhere
+platform/darwin/test_r6_d2_stop_marker_start.py | B0: per-test Darwin real com.binnacle.jobs entry start refusal under its own quiet-window stop marker (r6 D2); the in-process and marker-reader tests run everywhere
+platform/darwin/test_r6_d1_runtime_rebind.py | B0: per-test Darwin real com.binnacle.jobs endpoint rebind after socket/runtime-root removal, foreign debris and sun_path overflow (r6 D1); the sun_path and rebind-policy unit tests run everywhere
+platform/darwin/test_r6w2_m1_runtime_root.py | B0: per-test Darwin real com.binnacle.jobs entry on the moved Application Support runtime root, legacy marker and live legacy writer (r6 W2 M1, SD-68); the root-resolution and no-fallback unit tests run everywhere
+platform/darwin/test_r6w2_m1_ping_jobs_dir.py | B0: per-test Darwin real com.binnacle.jobs entry ping jobs_dir = the held realpath across a config edit (r6 W2 M1, SD-74 STEER-01); the unlocked in-process ping test runs everywhere
+platform/darwin/test_r6w2_m1_d3_minors.py | B0: per-test Darwin real KERN_PROC_PGRP listing after a transient size race (r6 W2 M1 D3, PRE-J1g-F5); both tests import the Darwin process_authority decoder
+platform/darwin/test_r6w2_m1_a2_followups.py | B0: per-test Darwin real com.binnacle.jobs entry rebind after the test HOME's default Application Support root is removed, and the held jobs-dir refusal after a symlink retarget (r6 W2 M1-a2, R-M1-N1/N5); the lock-inode and socket-path reason unit tests run everywhere
+platform/darwin/test_r6w2_m1_a3_proof_order.py | B0: Darwin entry proof before recover
+platform/darwin/test_r6w2_m1_a3_held_dir_io.py | B0: Darwin entry held-dir I/O (F1)
+platform/darwin/test_r6_x2_absolute_in_root_links.py | B0: per-test Darwin /tmp -> /private/tmp configured-root alias (r6 X2, SD-67 STEER-01 item 3); the Darwin/Linux probe parity cases run everywhere
+platform/darwin/test_r6w2_lp_tmp_alias.py | B0: per-test Darwin /tmp -> /private/tmp configured-root alias listing (r6 W2 LP, SD-74); the alias-prefix parity cases in tests/unit/tools/test_r6w2_lp_alias_prefixes.py run everywhere
 platform/darwin/test_ipc_launchd.py | A3: per-test opt-in real launchd bootstrap (BINNACLE_A3_LAUNCHD=1)
 platform/darwin/test_search_parity.py | A4: in-body skip when APFS rejects a non-UTF-8 filename
 platform/darwin/test_package_install.py | A6: per-test Apple-silicon (arm64) native package install
@@ -98,6 +109,12 @@ integration/test_search_settings.py | T0: Search child over Linux pathname Core 
 integration/test_setup_units.py | B0: systemd unit inspector; Darwin launchd inspector is follow-up DARWIN-FOLLOWUP-service-inspector (per-test LINUX_ONLY on the 6 binnacle mode tests that build it; R4 J4, Supervisor ruling A, PO-J4-3)
 contracts/test_darwin_interface.py | B0: Darwin root-grant lifecycle tests need native descriptors (R2D-T0A6-01 fix ecf6aea)
 platform/darwin/test_missing_roots.py | B0: Darwin missing-root lifespan tests need native descriptors (SD-24 fix 8132d8d)
+unit/tools/test_r6w2_x3a2_permissions.py | T0: R6W2-T3 per-test Linux fd_walk mechanism, open_verified (Linux-only, RX3a2-N4) and the O_PATH traverse flags (r6 W2 X3a-a2); the list permission and link-walk tests run everywhere
+unit/tools/test_r6w2_x3a2_guards.py | T0: R6W2-T3 per-test Linux fd_walk.open_verified component checks (RX3a2-N3, Linux-only RX3a2-N4); the list link-walk swap test runs everywhere
+unit/tools/test_r6w2_x3b_read_verify.py | T0: R6W2-T3 per-test Linux read path, read_file_impl without file_access over fd_walk.open_walked (r6 W2 X3b); Darwin reads through DarwinFileAccess; the unraced, nested-root and Darwin-dispatch tests run everywhere
+unit/tools/test_r6w2_x3b2_read_bounds.py | T0: R6W2-T3 per-test Linux read path over fd_walk.open_walked identity and bounded read (r6 W2 X3b-a2); the leak, at-limit and within-limit reads run everywhere
+unit/tools/test_r6w2_x3b3_special_files.py | T0: R6W2-T3 per-test Linux read path beside the Darwin path on one host (r6 W2 X3b-a3); native Darwin counterpart tests/platform/darwin/test_r6w2_t3_special_files.py
+platform/darwin/test_r6w2_t3_special_files.py | B0: R6W2-T3 per-test Darwin read_file special files and mode 000 through DarwinFileAccess (r6 W2 T3 item 3)
 """
 ALLOWED_PLATFORM_SKIPS = {
     **{
@@ -124,6 +141,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_ipc_generation.py": 1,
     "tests/platform/darwin/test_job_manager_service.py": 1,
     "tests/platform/darwin/test_job_manager_entry.py": 1,
+    "tests/platform/darwin/test_job_manager_entry_owner.py": 1,
     "tests/platform/darwin/test_durable_jobs_e2e.py": 1,
     "tests/platform/darwin/test_j1g_leader_fence.py": 1,
     "tests/platform/darwin/test_j1g_e2e_survival.py": 1,
@@ -133,6 +151,16 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_r5_l2_parity.py": 1,
     "tests/platform/darwin/test_r5_l2b_strict_client.py": 1,
     "tests/platform/darwin/test_r5_l2c_output_snapshot.py": 1,
+    "tests/platform/darwin/test_r6_d2_stop_marker_start.py": 1,
+    "tests/platform/darwin/test_r6_d1_runtime_rebind.py": 1,
+    "tests/platform/darwin/test_r6w2_m1_runtime_root.py": 1,
+    "tests/platform/darwin/test_r6w2_m1_ping_jobs_dir.py": 1,
+    "tests/platform/darwin/test_r6w2_m1_d3_minors.py": 1,
+    "tests/platform/darwin/test_r6w2_m1_a2_followups.py": 1,
+    "tests/platform/darwin/test_r6w2_m1_a3_proof_order.py": 1,
+    "tests/platform/darwin/test_r6w2_m1_a3_held_dir_io.py": 1,
+    "tests/platform/darwin/test_r6_x2_absolute_in_root_links.py": 1,
+    "tests/platform/darwin/test_r6w2_lp_tmp_alias.py": 1,
     "tests/platform/darwin/test_ipc_launchd.py": 3,
     "tests/platform/darwin/test_search_parity.py": 1,
     "tests/platform/darwin/test_package_install.py": 1,
@@ -140,6 +168,12 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_composition_contract.py": 3,
     "tests/contracts/test_darwin_interface.py": 1,
     "tests/platform/darwin/test_missing_roots.py": 1,
+    "tests/unit/tools/test_r6w2_x3a2_permissions.py": 1,
+    "tests/unit/tools/test_r6w2_x3a2_guards.py": 1,
+    "tests/unit/tools/test_r6w2_x3b_read_verify.py": 2,
+    "tests/unit/tools/test_r6w2_x3b2_read_bounds.py": 1,
+    "tests/unit/tools/test_r6w2_x3b3_special_files.py": 1,
+    "tests/platform/darwin/test_r6w2_t3_special_files.py": 1,
     "tests/unit/tools/test_command_characterization.py": 1,
     "tests/unit/tools/test_stop_job_edges.py": 1,
     "tests/integration/test_files_settings.py": 1,

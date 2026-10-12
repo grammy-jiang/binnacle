@@ -3,6 +3,7 @@
 import hashlib
 import sqlite3
 import unittest
+from contextlib import closing
 from dataclasses import replace
 from unittest.mock import patch
 
@@ -98,7 +99,7 @@ class ReplayTests(LabFixture, unittest.TestCase):
         self.assertIs(result.state, ReceiptState.COMPLETE)
         self.assertEqual(result.commit_version, 2)
         self.assertEqual(self.counts(), (2, 1, 2))
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(
                 db.execute("SELECT sum(consumed) FROM proofs").fetchone()[0], 2
             )
@@ -108,7 +109,7 @@ class ReplayTests(LabFixture, unittest.TestCase):
         fresh = self.ok(self.proofs.issue(self.handle, self.snapshot, 0))
         self.assertNotEqual(first.proof, fresh.proof)
         self.assertEqual(self.ok(self.ack(first.proof, fresh.proof)), receipt)
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(
                 db.execute("SELECT sum(consumed) FROM proofs").fetchone()[0], 2
             )
@@ -220,7 +221,7 @@ class ReplayTests(LabFixture, unittest.TestCase):
         """A consumed flag alone must not create or return missing coverage."""
         self.read_ack_only()
         page, _ = self.confirm()
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("DELETE FROM pages")
         before = self.path.read_bytes()
         self.denied(self.ack(page.proof))

@@ -7,6 +7,7 @@ from pathlib import Path
 import orjson
 
 from binnacle.errors import CodedToolError
+from binnacle.features.search.rg_env import NO_CONFIG, rg_env
 from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
 
 
@@ -20,7 +21,7 @@ def run_rg(
     timeout_s: int,
     metrics: ExactSearchMetrics | None = None,
 ) -> tuple[list[dict], bool]:
-    cmd = [rg_bin, "--json", "--smart-case"]
+    cmd = [rg_bin, NO_CONFIG, "--json", "--smart-case"]
     if fixed_strings:
         cmd.append("--fixed-strings")
     if context > 0:
@@ -31,7 +32,12 @@ def run_rg(
     started_ns = time.perf_counter_ns()
     try:
         proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout_s, check=False
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            check=False,
+            env=rg_env(),
         )
     except FileNotFoundError as exc:
         raise CodedToolError(

@@ -9,8 +9,6 @@ import binnacle.mcp.job_awareness_hint as adapter
 from binnacle.mcp import job_awareness_hint_identity as identity
 from binnacle.mcp.job_awareness_hint import HintAdapter
 
-_BOUND = object()
-
 
 def executed(result: object, tool: object) -> identity.Execution:
     """Test fixture: register a receipt for ``result`` naming ``tool``.
@@ -27,17 +25,22 @@ def executed(result: object, tool: object) -> identity.Execution:
 
 
 class SyntheticHintAdapter(HintAdapter):
-    """Direct calls model a receipt for the bound Tool object.
+    """Direct calls model a receipt for the Tool the caller names.
 
     Server-composed tests call HintAdapter.adapt through ExecutionCarrier with
     the receipt witnessed_call issues; only direct calls use this shim.
+    ADV-G4-05: ``adapt`` has no default producer. A test that wants the bound
+    Tool says so with ``adapt_bound``; ``tool=None`` models a missing producer.
     """
 
     async def adapt(  # type: ignore[override]
-        self, original: ToolResult, *, tool: object = _BOUND
+        self, original: ToolResult, *, tool: object
     ) -> ToolResult:
-        producer = self.tool if tool is _BOUND else tool
-        return await super().adapt(original, execution=executed(original, producer))
+        return await super().adapt(original, execution=executed(original, tool))
+
+    async def adapt_bound(self, original: ToolResult) -> ToolResult:
+        """Explicitly name the registered (bound) Tool as the producer."""
+        return await self.adapt(original, tool=self.tool)
 
 
 def assert_adapter_import_topology():
