@@ -20,6 +20,7 @@ from binnacle.features.commands.run_command_telemetry import (
 from binnacle.features.files.files_server import create_files_server
 from binnacle.features.search.search_server import create_search_server
 from binnacle.provenance import runtime_provenance
+from binnacle.startup_imports import import_runtime_modules
 
 # binnacle's own lines (event=tool_call/tool_result/job_*/config) go through
 # the root handler as single lines with a millisecond local timestamp, so
@@ -31,6 +32,10 @@ logging.basicConfig(
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
 logger = logging.getLogger("binnacle.server")
+
+# E1: import the whole runtime tree now, after logging is configured, so this
+# process never first-imports binnacle source that a later deploy synced.
+import_runtime_modules()
 
 TOKEN_FILE = get_settings().auth.token_file
 
