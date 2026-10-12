@@ -411,6 +411,28 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     continue
                 attempted = True
+                # Between cycle observation and the action, a daemon may have
+                # recovered or been intentionally stopped. Re-probe and require
+                # a durable proof that no other developer's job is active.
+                from binnacle.companions.service_watchdog_safety import (
+                    recovery_allowed,
+                )
+                from binnacle.config import get_settings
+
+                fresh = watchdog.observe(service)
+                allowed, reason = recovery_allowed(
+                    root=get_settings().jobs.dir,
+                    fresh_running=fresh.running,
+                    fresh_responsive=fresh.responsive,
+                    host=host,
+                )
+                if not allowed:
+                    log.info(
+                        "event=service_watchdog_restart_deferred service=%s reason=%s",
+                        service,
+                        reason,
+                    )
+                    continue
                 now = time.time()
                 watchdog.state.last_attempt[service] = now
                 try:

@@ -245,6 +245,13 @@ def test_max_one_recovery_action_per_cycle(tmp_path, monkeypatch):
         "restart",
         lambda self, service: invoked.append(service) or True,
     )
+    from binnacle.companions import service_watchdog_safety
+
+    monkeypatch.setattr(
+        service_watchdog_safety,
+        "recovery_allowed",
+        lambda **kwargs: (True, "verified"),
+    )
     assert (
         wd.main(
             [
@@ -270,3 +277,54 @@ def test_os_specific_tunnel_health_locations(monkeypatch, tmp_path):
     assert wd._default_health_file("linux") == (
         tmp_path / ".local/state/tunnel-client/health/binnacle.url"
     )
+
+
+@pytest.mark.parametrize(
+    "fresh,job_count,reason",
+    [
+        (wd.Observation(True, False), 1, "jobs_active"),
+        (wd.Observation(True, False), None, "jobs_state_unknown"),
+        (wd.Observation(False, None), 0, "service_not_confirmed_running"),
+        (wd.Observation(True, True), 0, "endpoint_not_confirmed_unresponsive"),
+    ],
+)
+def test_main_rechecks_before_any_restart(
+    tmp_path,
+    monkeypatch,
+    caplog,
+    fresh,
+    job_count,
+    reason,
+):
+    """Even a forged restart-due cycle cannot bypass the last-moment gate."""
+    from binnacle.companions import service_watchdog_safety
+
+    monkeypatch.setattr(wd.Watchdog, "cycle", lambda self, **kw: {"mcp": "restart_due"})
+    monkeypatch.setattr(wd.Watchdog, "observe", lambda self, service: fresh)
+    monkeypatch.setattr(
+        service_watchdog_safety,
+        "current_job_activity",
+        lambda root, **kw: job_count,
+    )
+    restarted = []
+    monkeypatch.setattr(
+        wd.Supervisor, "restart", lambda self, service: restarted.append(service)
+    )
+    state_file = tmp_path / "monitor.json"
+    with caplog.at_level(logging.INFO, logger="binnacle.service_watchdog"):
+        assert (
+            wd.main(
+                [
+                    "--once",
+                    "--restart-enabled",
+                    "--state-file",
+                    str(state_file),
+                    "--pause-file",
+                    str(tmp_path / "missing"),
+                ]
+            )
+            == 0
+        )
+    assert restarted == []
+    assert not state_file.exists()
+    assert f"reason={reason}" in caplog.text
