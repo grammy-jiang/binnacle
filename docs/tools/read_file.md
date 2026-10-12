@@ -213,9 +213,10 @@ looks like image/png) — content not shown.`
    what it is." The step-2 stat refuses them before any open; the checks
    below still refuse one that a race brings in after the stat, also when
    the open itself fails (a socket is ENXIO, a disk device EACCES).
-   On Darwin, `read_file` rewords the adapter's `special_file_unsupported.`
-   with the same shared text, so both OSes say the same thing; the Darwin
-   call site moves to the constant in r6 W3 wave B.
+   On Darwin, `FileToolAccess.operation` words the adapter's
+   `special_file_unsupported` with the same shared text
+   (`error_text.linux_error`, r6 W3 PX1), for every file tool, so both OSes
+   say the same thing.
    `read_file` words them: `fd_walk` still raises `not_a_regular_file`,
    `file_io_failed` or `permission_denied`, and an lstat that shows the
    checked `(st_dev, st_ino)` with a FIFO, socket or device type turns that
@@ -248,6 +249,19 @@ looks like image/png) — content not shown.`
    execute-only directory on the way is traversed, as on Linux. A file
    below such a directory is readable; the `O_SEARCH` descriptor itself
    cannot be listed or read.
+   **In-root symlinks on Darwin (r6 W3 PX1, R-OS1-F3)**: the Darwin walk
+   never follows a link; a final link is `symlink_or_wrong_path_type`, not
+   a special file. `FileToolAccess` then resolves the request once, as
+   Linux's `resolve_path` does, and, when that names a path inside a
+   configured root, opens it with the same no-follow descriptor walk from
+   its grant (`error_text.followed`). So a relative, absolute or chained
+   in-root link, or a link to an in-root directory on the way, reads its
+   target, and the reported path is the target, as on Linux. A target
+   outside every root is `path_outside_root`; a link to a FIFO, socket or
+   device is `special_file_unsupported` with the shared text; a dangling
+   in-root link names its missing target (`file_not_found`); a link loop is
+   `file_not_found`. Only one hop is followed: a target that is a link
+   again (a race) is refused by the second no-follow walk.
 3. **Sniff**: extension in the known-text allowlist → text; else read the
    first 8 KB — NUL byte present → `kind: "binary"` result (message names
    the size and a MIME guess; not an error).

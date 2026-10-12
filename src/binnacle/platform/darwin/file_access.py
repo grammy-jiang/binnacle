@@ -14,8 +14,10 @@ import secrets
 import stat
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
+from typing import Literal
 
 from binnacle.platform.contracts.capability_contracts import UnsafePath
 from binnacle.platform.contracts.file_access_contracts import (
@@ -129,6 +131,40 @@ def link_target_info(
     except (OSError, UnsafePath):
         return None
     return None
+
+
+@dataclass(frozen=True)
+class UnreadableListing(FileListing):
+    """A listing plus the directories a recursive walk could not open (F1).
+
+    Relative to the root, like the entries. The features layer reads it by
+    attribute; FileListing itself (contracts) is unchanged.
+    """
+
+    unreadable: tuple[str, ...] = ()
+
+
+class _Listing(Listing):
+    """Listing that remembers the directories a recursive walk skipped.
+
+    Listing.walk adds a directory in a recursive walk only when it could not
+    open or scan it (EACCES/EPERM); the glob filter then drops the entry.
+    """
+
+    def __init__(self, request: ListRequest) -> None:
+        super().__init__(request)
+        self.unreadable: list[str] = []
+
+    def add(
+        self,
+        path: str,
+        kind: Literal["file", "directory", "other"],
+        info: os.stat_result,
+        target: os.stat_result | None = None,
+    ) -> None:
+        if self.request.glob is not None and kind == "directory":
+            self.unreadable.append(self.base + path)
+        super().add(path, kind, info, target)
 
 
 class _RootGrant:
@@ -358,7 +394,7 @@ class DarwinFileAccess:
 
     def list_entries(self, grant: RootGrant, request: ListRequest) -> FileListing:
         parts = validate_relative_path(request.relative_path)
-        listing = Listing(request)
+        listing = _Listing(request)
         with (
             self._root(grant) as root,
             listing_directory(root, parts, listing) as directory,
@@ -371,7 +407,10 @@ class DarwinFileAccess:
                 root, parts, name, top, aliases
             )
             listing.walk(directory)
-        return listing.result(parts)
+        result = listing.result(parts)
+        return UnreadableListing(
+            result.entries, result.truncated, tuple(sorted(listing.unreadable))
+        )
 
     def nearby_hint(
         self, grant: RootGrant, relative_path: str, *, max_entries: int

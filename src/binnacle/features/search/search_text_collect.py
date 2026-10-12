@@ -7,8 +7,9 @@ import time
 from pathlib import Path, PurePath
 
 from binnacle.errors import CodedToolError
+from binnacle.features.files.error_text import followed
 from binnacle.features.files.paths import full_match
-from binnacle.features.search.rg_env import NO_CONFIG, rg_env
+from binnacle.features.search.rg_env import NO_CONFIG, record_unreadable, rg_env
 from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 
@@ -150,7 +151,9 @@ def collect(
             if metrics is not None:
                 metrics.collect_event_candidates += 1
             data = event["data"]
-            file = data["path"]["text"]
+            file = data["path"].get("text")
+            if file is None:  # rg's {"bytes": ...}: not UTF-8 (R-PX1-3).
+                continue
             if glob is not None and metrics is not None:
                 metrics.collect_glob_checks += 1
             if not matches_glob(file, root, glob):
@@ -217,13 +220,17 @@ def search_opened(
     line_numbers,
     settings,
 ):
-    """Format authorized adapter events; no filesystem calls or path reopening."""
+    """Format authorized adapter events; no filesystem calls or path reopening.
+
+    The one exception is an in-root symlink: the request is reopened once at
+    its resolved target through the same no-follow grant walk (PF-PX1-1).
+    """
     from fastmcp.tools.base import ToolResult
 
     from binnacle.features.search.search_text_budget import enforce_result_budget
     from binnacle.platform.contracts.file_access_contracts import SearchRequest
 
-    with access.operation(path, "search_text") as (grant, relative, display):
+    def searched(grant, relative, display):
         if access.search is None:
             raise CodedToolError(
                 "native_capability_unavailable", "Search provider missing."
@@ -255,6 +262,10 @@ def search_opened(
             root_label = root_label.parent
         events = []
         for event in batch.events:
+            if event.get("type") == "summary":
+                # What the adapter could not read: the Linux note (R-OS1-F1).
+                unread = event["data"]["stats"].get("unreadable_paths", ())
+                record_unreadable(str(root_label / name) for name in unread)
             mapped = dict(event)
             if mapped.get("type") in ("match", "context"):
                 data = dict(mapped["data"])
@@ -352,6 +363,7 @@ def search_opened(
                     f"{key}={value}"
                     for key, value in stats.items()
                     if (key.endswith("_skipped") or key.startswith("skipped_"))
+                    and key != "unreadable_files_skipped"  # In the note (F1).
                     and value
                 ]
                 if skipped:
@@ -370,3 +382,9 @@ def search_opened(
             content=summary,
             structured_content=payload,
         )
+
+    # An in-root link is searched as its target, as on Linux (PF-PX1-1).
+    def roots():  # Read only after a link refusal.
+        return dict(access.grants)
+
+    return followed(access.operation, path, "search_text", roots, searched)

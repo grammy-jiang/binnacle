@@ -87,7 +87,9 @@ class ExactStreamReducer:
             return
         self.event_candidates += 1
         data = event["data"]
-        file = data["path"]["text"]
+        file = data["path"].get("text")
+        if file is None:  # rg's {"bytes": ...}: a name that is not UTF-8 (R-PX1-3).
+            return
         if not self._accept_file(file):
             self.glob_rejected_events += 1
             self._glob_rejected_files.add(file)

@@ -100,10 +100,12 @@ def test_a_directory_swapped_for_a_file_is_omitted(tree):
     assert sizes(glob(tree, rg)) == {"a.txt": 10}
 
 
-def test_a_file_removed_after_listing_keeps_its_entry_without_bytes(tree):
+def test_a_file_removed_after_listing_is_omitted(tree):
+    # PF-SP1-2 (r6 W3 PX1): a vanished file is omitted, as the Darwin walk
+    # omits it; r6 kept its entry without bytes.
     root = tree["root"]
     rg = wrapper(tree["tmp"], f'rm "{root}/a.txt"')
-    assert sizes(glob(tree, rg)) == {"a.txt": None, "d/b.txt": 20}
+    assert sizes(glob(tree, rg)) == {"d/b.txt": 20}
 
 
 def test_an_execute_only_ancestor_still_sizes(tmp_path):

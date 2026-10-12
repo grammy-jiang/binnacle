@@ -22,12 +22,18 @@ from pydantic import Field
 from binnacle.config import ListFilesSettings, RootsSettings, get_settings
 from binnacle.errors import CodedToolError
 from binnacle.features.files import fd_walk, list_files_glob
+from binnacle.features.files.error_text import followed
 from binnacle.features.files.paths import (
     FileToolAccess,
     nearby_hint,
     resolve_path,
 )
-from binnacle.platform.contracts.file_access_contracts import ListRequest
+from binnacle.features.search.rg_env import noting_unreadable, record_unreadable
+from binnacle.platform.contracts.file_access_contracts import ListRequest, RootGrant
+from binnacle.platform.contracts.special_file_contracts import (
+    SPECIAL_FILE_CODE,
+    SPECIAL_FILE_TEXT,
+)
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -73,11 +79,8 @@ _glob_mode = list_files_glob.glob_mode
 
 
 def _changed(shown: Path) -> CodedToolError:
-    return CodedToolError(
-        "path_changed",
-        f"Directory changed during the listing: {shown}. "
-        f"A path component is no longer a directory; list it again.",
-    )
+    # The shared text; Darwin's link refusal after the followed hop uses it too.
+    return fd_walk.path_changed(shown, "list_files")
 
 
 def _refusal(exc: OSError, shown: Path) -> CodedToolError:
@@ -191,8 +194,10 @@ def _list_mode(
             if name == ".git" or (not include_hidden and name.startswith(".")):
                 continue
             info = _entry_info(fd, name, follow)
-            if info is None:
-                continue
+            if info is None or not (
+                stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)
+            ):
+                continue  # A FIFO, socket or device is omitted, as on Darwin.
             entry: dict = {"path": str(root / name), "type": "dir"}
             if not stat.S_ISDIR(info.st_mode):
                 entry.update(type="file", bytes=info.st_size)
@@ -218,6 +223,7 @@ def _list_mode(
     return ToolResult(content=summary, structured_content=payload)
 
 
+@noting_unreadable  # Partial result plus one note (R-OS1-F1).
 def list_files_impl(
     path: str,
     glob: str | None,
@@ -235,7 +241,8 @@ def list_files_impl(
         rg_bin = defaults.rg_bin if rg_bin is None else rg_bin
     if file_access is not None:
         file_access.require("list_files")
-        with file_access.operation(path, "list_files") as (grant, relative, display):
+
+        def listed(grant: RootGrant, relative: str, display: Path) -> ToolResult:
             cap = settings.max_results_cap
             wanted = max(1, min(max_results, cap))
             # Ask for the full cap so the total behind a "showing first N of M"
@@ -255,6 +262,10 @@ def list_files_impl(
             root_label = display
             for _ in PurePath(relative).parts:
                 root_label = root_label.parent
+            # Directories the walk could not open (FileListing.unreadable,
+            # Darwin only): the same note as Linux rg's (R-OS1-F1).
+            unreadable = getattr(listing, "unreadable", ())
+            record_unreadable(str(root_label / path) for path in unreadable)
             for entry in listing.entries:
                 # A symlink is typed by its in-root target; any other entry the
                 # provider could not type (unresolved link, fifo, socket) is omitted.
@@ -310,12 +321,23 @@ def list_files_impl(
                 )
                 summary = f"Listed first {len(shown)} of {total} entries in {display}."
             return ToolResult(content=summary, structured_content=payload)
+
+        # An in-root link is listed as its target, as on Linux (PF-PX1-1).
+        return followed(
+            file_access.operation,
+            path,
+            "list_files",
+            lambda: dict(file_access.grants),
+            listed,
+        )
     resolved = resolve_path(path, roots=roots)
     if not resolved.exists():
         raise CodedToolError(
             "directory_not_found",
             f"Directory not found: {resolved}.{nearby_hint(resolved.parent, roots=roots)}",
         )
+    if not resolved.is_dir() and not resolved.is_file():
+        raise CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
     if not resolved.is_dir():
         raise CodedToolError(
             "path_is_file",

@@ -19,7 +19,16 @@ from binnacle.config import get_settings
 from binnacle.errors import CodedToolError
 from binnacle.features.files.paths import full_match
 from binnacle.features.search.fd_chain import EXHAUSTED, DirectoryChain
-from binnacle.features.search.rg_env import NO_CONFIG, rg_env
+from binnacle.features.search.rg_env import NO_CONFIG, accept_denied, rg_env, shown
+from binnacle.platform.contracts.special_file_contracts import (
+    TOO_MANY_OPEN_FILES_CODE,
+    too_many_open_files_text,
+)
+
+# lstat failures that omit an entry, as the Darwin walk omits ENOENT, EACCES
+# and EPERM (PF-SP1-2): a vanished file is not listed; ENOTDIR/ELOOP: a
+# swapped directory component (X3c-a3).
+OMITTED = (errno.ENOTDIR, errno.ELOOP, errno.ENOENT, errno.EACCES, errno.EPERM)
 
 
 def is_shortage(exc: OSError) -> bool:
@@ -32,10 +41,10 @@ def descriptor_shortage(task: str, advice: str) -> CodedToolError:
 
     One policy with search_text (SRC-W2-04, SD-79): a descriptor shortage
     is not evidence about a path, so nothing is omitted or kept unchecked.
+    The text is the shared template (special_file_contracts, r6 W3 PX1).
     """
     return CodedToolError(
-        "too_many_open_files",
-        f"list_files could not {task}: the server has too many open files. {advice}",
+        TOO_MANY_OPEN_FILES_CODE, too_many_open_files_text("list_files", task, advice)
     )
 
 
@@ -54,8 +63,10 @@ def glob_entries(root: Path, lines: list[str]) -> list[dict]:
     non-regular object is omitted too: an entry typed 'file' is a regular
     file, as in search_text_verify.is_regular (SRC-W2-12). A descriptor
     shortage that survives DirectoryChain's one retry is the
-    too_many_open_files refusal, as in search_text (SRC-W2-04). Any other
-    failure keeps the entry without bytes, as r6 did when p.stat() failed.
+    too_many_open_files refusal, as in search_text (SRC-W2-04). A file that
+    vanished after the listing (ENOENT) or cannot be stat-ed (EACCES, EPERM)
+    is omitted, as the Darwin walk omits it (PF-SP1-2). Any other failure
+    keeps the entry without bytes, as r6 did when p.stat() failed.
     """
     entries: list[dict] = []
     # Plain string splitting: PurePath costs more than the walk itself. The
@@ -75,7 +86,7 @@ def glob_entries(root: Path, lines: list[str]) -> list[dict]:
                     raise descriptor_shortage(
                         "check the listed files", "Retry, or narrow the glob."
                     ) from exc
-                if exc.errno in (errno.ENOTDIR, errno.ELOOP):
+                if exc.errno in OMITTED:
                     continue
                 entries.append(entry)
                 continue
@@ -112,6 +123,8 @@ def glob_mode(
             cwd=root,
             capture_output=True,
             text=True,
+            # Names are bytes: decoded as os.fsdecode does, never strictly (R-PX1-3).
+            errors="surrogateescape",
             timeout=timeout_s,
             check=False,
             env=rg_env(),
@@ -128,8 +141,9 @@ def glob_mode(
             f"Glob search timed out after {timeout_s} s in {root}. "
             f"Narrow the glob or point path at a subdirectory.",
         ) from exc
-    if proc.returncode not in (0, 1):
-        stderr = proc.stderr.strip()[-300:]
+    # A permission-only failure below root keeps the readable part (R-OS1-F1).
+    if proc.returncode not in (0, 1) and not accept_denied(proc.stderr, root):
+        stderr = shown(proc.stderr.strip()[-300:])
         raise CodedToolError(
             "rg_failed",
             f"ripgrep failed in {root}: {stderr or 'unknown error'}. "
@@ -137,10 +151,12 @@ def glob_mode(
         )
 
     try:
+        # A name that is not UTF-8 cannot be reported in a UTF-8 JSON
+        # result: it is omitted, as search_text omits it (R-PX1-3).
         lines = [
             line
             for line in proc.stdout.splitlines()
-            if line and full_match(line, pattern)
+            if line and shown(line) == line and full_match(line, pattern)
         ]
     except ValueError as e:
         raise CodedToolError(

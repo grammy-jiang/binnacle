@@ -85,9 +85,7 @@ def special_file_unsupported() -> CodedToolError:
     Code and text come from platform/contracts/special_file_contracts.py,
     the one source for both OSes. Darwin raises the same code in
     platform/darwin/file_traversal.py, which FileToolAccess.operation words
-    as f"{code}."; until that call site uses the shared text (r6 W3 wave B),
-    read_file_impl rewords the Darwin refusal with this helper, so read_file
-    says the same thing on both OSes.
+    with the same constants (error_text.linux_error, r6 W3 PX1).
     """
     return CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
 
@@ -211,13 +209,9 @@ def read_file_impl(
     settings = get_settings().read_file if settings is None else settings
     if file_access is not None:
         file_access.require("read_file")
-        try:
-            resolved, size, data = file_access.read(path, settings.max_file_bytes)
-        except CodedToolError as exc:
-            # Darwin words this code as f"{code}." until wave B (r6 W3 RF1).
-            if exc.telemetry_code == SPECIAL_FILE_CODE:
-                raise special_file_unsupported() from exc
-            raise
+        # Darwin words special_file_unsupported with the shared text in
+        # error_text.linux_error (r6 W3 PX1), as for every file tool.
+        resolved, size, data = file_access.read(path, settings.max_file_bytes)
     else:
         resolved = resolve_path(path, roots=roots)
         if not resolved.exists():

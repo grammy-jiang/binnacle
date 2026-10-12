@@ -6,6 +6,7 @@ reported loudly (action + previous_bytes) and gated by ChatGPT's own
 per-write confirmation.
 """
 
+from pathlib import Path
 from typing import Annotated
 
 from fastmcp import FastMCP
@@ -14,7 +15,14 @@ from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
 from binnacle.config import RootsSettings, get_settings
+from binnacle.errors import CodedToolError
+from binnacle.features.files.error_text import followed
 from binnacle.features.files.paths import FileToolAccess, resolve_path
+from binnacle.platform.contracts.file_access_contracts import RootGrant
+from binnacle.platform.contracts.special_file_contracts import (
+    SPECIAL_FILE_CODE,
+    SPECIAL_FILE_TEXT,
+)
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -37,18 +45,29 @@ def write_file_impl(
 ) -> ToolResult:
     if file_access is not None:
         file_access.require("write_file")
-        with file_access.operation(path) as (grant, relative, resolved):
-            data = content.encode("utf-8")
+        data = content.encode("utf-8")
+
+        def step(
+            grant: RootGrant, relative: str, display: Path
+        ) -> tuple[Path, int | None]:
             receipt = file_access.provider.write_bytes(
                 grant, relative, data, create_parents=True
             )
-            previous_bytes = receipt.previous_bytes
+            return display, receipt.previous_bytes
+
+        # An in-root symlink writes its target, as on Linux (R-OS1-F3).
+        resolved, previous_bytes = followed(
+            file_access.operation, path, "write_file", dict(file_access.grants), step
+        )
     else:
         resolved = resolve_path(path, roots=roots)
         if resolved.is_dir():
             raise ToolError(
                 f"Path is a directory, not a file: {resolved}. Use list_files to browse it."
             )
+        if resolved.exists() and not resolved.is_file():
+            # A FIFO, socket or device: never opened for writing (r6 W3 PX1).
+            raise CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
         previous_bytes = resolved.stat().st_size if resolved.exists() else None
         data = content.encode("utf-8")
         try:

@@ -39,6 +39,7 @@ from binnacle.platform.contracts.file_access_contracts import (
     FileListing,
     ListRequest,
 )
+from binnacle.platform.contracts.special_file_contracts import SHORTAGE_CODES
 
 MAX_BYTES = 64 * 1024 * 1024
 MAX_VISITED = 100_000
@@ -88,7 +89,7 @@ def native_errors() -> Iterator[None]:
             raise unsafe("symlink_or_wrong_path_type") from None
         if exc.errno == errno.ENOENT:
             raise unsafe("path_not_found") from None
-        code = "file_io_failed"
+        code = SHORTAGE_CODES.get(exc.errno or 0, "file_io_failed")
         raise AuthorityUnknown(code, capability(code)) from None
 
 
@@ -150,6 +151,8 @@ def regular_fd(parent: int, name: str, flags: int = READ_FLAGS) -> int:
     info = os.stat(name, dir_fd=parent, follow_symlinks=False)
     if stat.S_ISDIR(info.st_mode):
         raise unsafe("path_is_directory")
+    if stat.S_ISLNK(info.st_mode):  # FileToolAccess follows an in-root link (F3).
+        raise unsafe("symlink_or_wrong_path_type")
     if not stat.S_ISREG(info.st_mode):
         raise unsafe("special_file_unsupported")
     return checked_open(parent, name, flags, info)
