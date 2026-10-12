@@ -19,7 +19,7 @@ from binnacle.features.files.paths import (
     full_match,
     resolve_path,
 )
-from binnacle.features.search.rg_env import noting_unreadable
+from binnacle.features.files.rg_env import noting_unreadable
 from binnacle.features.search.search_text_adaptive import (
     build_adaptive_result,
     log_adaptive_result,

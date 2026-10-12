@@ -28,7 +28,7 @@ from binnacle.features.files.paths import (
     nearby_hint,
     resolve_path,
 )
-from binnacle.features.search.rg_env import noting_unreadable, record_unreadable
+from binnacle.features.files.rg_env import noting_unreadable, record_unreadable
 from binnacle.platform.contracts.file_access_contracts import ListRequest, RootGrant
 from binnacle.platform.contracts.special_file_contracts import (
     SPECIAL_FILE_CODE,

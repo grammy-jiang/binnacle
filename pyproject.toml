@@ -262,6 +262,20 @@ modules = [
 ]
 
 [[tool.importlinter.contracts]]
+id = "files-feature-independent-of-search"
+name = "The files feature does not depend on the search feature"
+type = "forbidden"
+source_modules = ["binnacle.features.files"]
+forbidden_modules = ["binnacle.features.search"]
+
+[[tool.importlinter.contracts]]
+id = "files-search-features-acyclic"
+name = "features.files and features.search stay acyclic siblings"
+type = "acyclic_siblings"
+ancestors = ["binnacle.features"]
+depth = 1
+
+[[tool.importlinter.contracts]]
 id = "watchdog-isolated"
 name = "Watchdog internals are isolated from Binnacle core"
 type = "protected"

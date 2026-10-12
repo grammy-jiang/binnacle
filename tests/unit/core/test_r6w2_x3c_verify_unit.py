@@ -7,8 +7,8 @@ remain are the base prefix and the no-follow walk to a regular file.
 import os
 from pathlib import Path
 
+from binnacle.features.files.fd_chain import DirectoryChain
 from binnacle.features.search import search_text_verify as verify
-from binnacle.features.search.fd_chain import DirectoryChain
 
 
 def check_one(path: str) -> bool:
