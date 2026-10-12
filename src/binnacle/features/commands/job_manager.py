@@ -37,6 +37,8 @@ from binnacle.startup_imports import (
 # server imports this module eagerly and must keep its own configuration.
 LOG_FORMAT = "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s"
 log = logging.getLogger("binnacle.job_manager")
+# E1-a5: set by main() for the serving process only; run once the socket is bound.
+_on_started: Callable[[], None] | None = None
 
 
 def _notify_systemd_ready() -> None:
@@ -240,15 +242,15 @@ class JobManager:
                 raise RuntimeError(f"job manager already answers at {self.socket_path}")
         return job_owner.recover_previous_owner(self.owner_instance_id, self.boot_id)
 
-    def serve_forever(self, on_started: Callable[[], None] | None = None) -> None:
+    def serve_forever(self) -> None:
         recovered = self.prepare()
         server = _ThreadingUnixServer(str(self.socket_path), _Handler)
         server.manager = self  # type: ignore[attr-defined]
         self.server = server
         os.chmod(self.socket_path, 0o600)
         _notify_systemd_ready()
-        if on_started is not None:  # E1-a5: the socket is bound and announced
-            on_started()
+        if _on_started is not None:  # E1-a5: the socket is bound and announced
+            _on_started()
         log.info(
             "event=job_manager_start pid=%d owner=%s boot=%s recovered=%d "
             "protocol=%d package_version=%s revision=%s socket=%s",
@@ -299,7 +301,12 @@ def main() -> None:
     def started() -> None:
         clear_record("job-manager", state_root_of(settings.jobs.dir))
 
-    JobManager(settings.jobs.socket_path).serve_forever(on_started=started)
+    global _on_started
+    _on_started = started
+    try:
+        JobManager(settings.jobs.socket_path).serve_forever()
+    finally:
+        _on_started = None
 
 
 if __name__ == "__main__":

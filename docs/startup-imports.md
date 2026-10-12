@@ -43,14 +43,45 @@ today; the list is empty and a test pins it.
 
 ## Durable record and doctor check
 
-Before it exits, the failing process writes
-`$XDG_STATE_HOME/binnacle/startup-import/<process>.json` (default
-`~/.local/state/binnacle/startup-import/`, directory mode 0700): process, pid,
-module, error class, raising frame, UTC time and exit code. A clean start of
-that process removes its record.
+The record is owned by the real entry points, never by an import (E1-a5,
+SD-84). Importing `binnacle.server`, or calling `import_runtime_modules` /
+`import_manager_modules` in any process (a test, a CLI, a REPL), neither
+writes nor clears it.
 
-`binnacle doctor` reports each record as a `startup` FAIL (exit 1), and
-`startup ok` when none exists. Under systemd `Restart=` or launchd `KeepAlive`
-a failing process crash-loops; the record keeps the cause visible on every
-restart, and the deploy smoke (`scripts/deploy_smoke.py`) treats the failing
-doctor as an ALERT, so a gated deploy rolls back.
+| Entry point | Writes on a failure | Clears after a successful start |
+| --- | --- | --- |
+| MCP server (the `uvicorn binnacle.server:app` process) | in `server.py`, via `on_failure` | `START_CONFIRM_S` (1 s) after the ASGI lifespan startup, if the process is still alive: uvicorn binds right after the lifespan and exits on a bind error |
+| Linux manager `main()` | via `on_failure` | after the jobs socket is bound and announced (`serve_forever`) |
+| Darwin manager `main()` | in the `except StartupImportFailed` handler | once the endpoint this process published appears (the `.auth` file carries this pid and lease generation) |
+
+A start that fails after the import phase but before the bind or publish (a
+bad socket path, a lock or config error, a port in use) keeps the record.
+`python -m binnacle.server` and `fastmcp` runs are not the serving entry: they
+neither write nor clear it (the failure is still the single log line and
+exit 70).
+
+Location: `<state root>/startup-import/<process>.json` (directory mode 0700),
+where the state root is the parent of the instance's configured `jobs.dir`
+(default `~/.local/state/binnacle`). `binnacle.startup_imports` has no HOME or
+`XDG_STATE_HOME` default; the entry point passes the resolved root and
+`doctor` resolves it the same way. Fields: `process`, UTC `time`, `revision`,
+`module`, `error_class`, `where` (raising file:line). Never the exception
+message.
+
+`binnacle doctor` reports every record as `startup` with its age and
+revision. A record whose revision equals the running checkout's is a FAIL
+(exit 1). A record of an older revision is `STALE` (WARN): it predates the
+current revision's start and a clean start clears it. `startup ok` when none
+exists. Under systemd `Restart=` or launchd `KeepAlive` a failing process
+crash-loops; the record keeps the cause visible on every restart, and the
+deploy smoke (`scripts/deploy_smoke.py`) treats the failing doctor as an
+ALERT, so a gated deploy rolls back.
+
+## Test hygiene
+
+`tests/conftest.py` points `XDG_STATE_HOME` at a scratch directory for the
+whole session, makes any in-process path to the real
+`~/.local/state/binnacle/startup-import` raise, and compares that directory
+before and after the session (a child process cannot be patched). It does not
+snapshot the rest of `~/.local/state/binnacle`: production jobs state there
+changes legitimately while a suite runs.
