@@ -18,8 +18,25 @@ from fastmcp.tools.base import ToolResult
 from binnacle.config import get_settings
 from binnacle.errors import CodedToolError
 from binnacle.features.files.paths import full_match
-from binnacle.features.search.fd_chain import DirectoryChain
+from binnacle.features.search.fd_chain import EXHAUSTED, DirectoryChain
 from binnacle.features.search.rg_env import NO_CONFIG, rg_env
+
+
+def is_shortage(exc: OSError) -> bool:
+    """EMFILE or ENFILE: search_text's descriptor-shortage set (fd_chain)."""
+    return exc.errno in EXHAUSTED
+
+
+def descriptor_shortage(task: str, advice: str) -> CodedToolError:
+    """search_text's refusal for EMFILE/ENFILE, worded for list_files.
+
+    One policy with search_text (SRC-W2-04, SD-79): a descriptor shortage
+    is not evidence about a path, so nothing is omitted or kept unchecked.
+    """
+    return CodedToolError(
+        "too_many_open_files",
+        f"list_files could not {task}: the server has too many open files. {advice}",
+    )
 
 
 def glob_entries(root: Path, lines: list[str]) -> list[dict]:

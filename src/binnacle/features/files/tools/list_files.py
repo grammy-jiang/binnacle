@@ -6,6 +6,7 @@ gitignore respected. Glob mode lives in features/files/list_files_glob.py
 (split behavior-neutrally, r6 W3 SP1); it uses the system ripgrep on purpose.
 """
 
+import errno
 import os
 import stat
 import subprocess  # noqa: F401 - tests patch lf.subprocess.run (glob mode moved)
@@ -71,9 +72,30 @@ _glob_entries = list_files_glob.glob_entries
 _glob_mode = list_files_glob.glob_mode
 
 
+def _changed(shown: Path) -> CodedToolError:
+    return CodedToolError(
+        "path_changed",
+        f"Directory changed during the listing: {shown}. "
+        f"A path component is no longer a directory; list it again.",
+    )
+
+
+def _refusal(exc: OSError, shown: Path) -> CodedToolError:
+    """The coded refusal for any other walk or read failure (SRC-W2-06)."""
+    if exc.errno == errno.ELOOP:
+        # O_NOFOLLOW met a symlink: the listed directory was swapped.
+        return _changed(shown)
+    if list_files_glob.is_shortage(exc):
+        return list_files_glob.descriptor_shortage(f"open {shown}", "Retry.")
+    return CodedToolError("file_io_failed", f"Cannot list {shown}: {exc.strerror}.")
+
+
 @contextmanager
 def _opened(
-    top: Path, parts: tuple[str, ...], shown: Path
+    top: Path,
+    parts: tuple[str, ...],
+    shown: Path,
+    roots: RootsSettings | None = None,
 ) -> Iterator[tuple[list[int], int]]:
     """The descriptor chain from the root being listed, and the listed fd.
 
@@ -81,6 +103,8 @@ def _opened(
     swapped for a symlink or a file after resolve_path fails here instead of
     being followed out of the root. The chain only traverses (O_PATH on
     Linux); the listed directory alone is opened O_RDONLY to be read.
+    Every failure is a coded refusal; a race directory_not_found carries
+    the nearby hint, as the path check before the walk does (SRC-W2-06).
     """
     with ExitStack() as opened:
         try:
@@ -93,17 +117,16 @@ def _opened(
                 fd_walk.directory_chain(root_fd, parts, readable)
             )
         except FileNotFoundError as exc:
+            hint = nearby_hint(shown.parent, roots=roots)
             raise CodedToolError(
-                "directory_not_found", f"Directory not found: {shown}."
+                "directory_not_found", f"Directory not found: {shown}.{hint}"
             ) from exc
         except NotADirectoryError as exc:
-            raise CodedToolError(
-                "path_changed",
-                f"Directory changed during the listing: {shown}. "
-                f"A path component is no longer a directory; list it again.",
-            ) from exc
+            raise _changed(shown) from exc
         except PermissionError as exc:
             raise fd_walk.permission_denied(shown) from exc
+        except OSError as exc:
+            raise _refusal(exc, shown) from exc
         # Links resolve through the open chain; the listed fd ends it (F3).
         yield chain, chain[-1]
 
@@ -141,6 +164,8 @@ def _list_mode(
     include_hidden: bool,
     allowed: tuple[Path, ...],
     configured: tuple[tuple[Path, Path], ...] = (),
+    *,
+    roots: RootsSettings | None = None,
 ) -> ToolResult:
     # Links resolve inside the innermost root holding root, as Darwin's grant
     # descriptor walk does: '..' into an outer root is omitted (SD-74).
@@ -149,7 +174,7 @@ def _list_mode(
     )
     parts = root.relative_to(top).parts
     listed = []
-    with _opened(top, parts, root) as (chain, fd):
+    with _opened(top, parts, root, roots) as (chain, fd):
         held = os.fstat(chain[0])  # Configured aliases, re-checked per call (LP).
         live = [str(a) for a, c in configured if c == top != a and _names(a, held)]
 
@@ -158,7 +183,11 @@ def _list_mode(
                 chain[0], parts, name, str(top), chain=chain, aliases=live
             )
 
-        for name in os.listdir(fd):
+        try:
+            names = os.listdir(fd)  # dup(2): EMFILE is possible here too.
+        except OSError as exc:
+            raise _refusal(exc, root) from exc
+        for name in names:
             if name == ".git" or (not include_hidden and name.startswith(".")):
                 continue
             info = _entry_info(fd, name, follow)
@@ -305,7 +334,9 @@ def list_files_impl(
     roots = get_settings().roots if roots is None else roots
     allowed = roots.canonical_allowed
     pairs = tuple(zip([r.expanduser() for r in roots.allowed], allowed, strict=True))
-    return _list_mode(resolved, max_results, include_hidden, allowed, pairs)
+    return _list_mode(
+        resolved, max_results, include_hidden, allowed, pairs, roots=roots
+    )
 
 
 def register(
