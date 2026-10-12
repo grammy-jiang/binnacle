@@ -52,9 +52,10 @@ def glob_entries(root: Path, lines: list[str]) -> list[dict]:
     component is now a symlink is omitted: no outside object is typed or
     sized. A final component that is now a directory, a FIFO or any other
     non-regular object is omitted too: an entry typed 'file' is a regular
-    file, as in search_text_verify.is_regular (SRC-W2-12). Any other
-    failure, including a descriptor shortage, keeps the entry without
-    bytes, as r6 did when p.stat() failed.
+    file, as in search_text_verify.is_regular (SRC-W2-12). A descriptor
+    shortage that survives DirectoryChain's one retry is the
+    too_many_open_files refusal, as in search_text (SRC-W2-04). Any other
+    failure keeps the entry without bytes, as r6 did when p.stat() failed.
     """
     entries: list[dict] = []
     # Plain string splitting: PurePath costs more than the walk itself. The
@@ -70,6 +71,10 @@ def glob_entries(root: Path, lines: list[str]) -> list[dict]:
             try:
                 info = os.lstat(below[-1], dir_fd=chain.directory(tuple(parts[:-1])))
             except OSError as exc:
+                if is_shortage(exc):
+                    raise descriptor_shortage(
+                        "check the listed files", "Retry, or narrow the glob."
+                    ) from exc
                 if exc.errno in (errno.ENOTDIR, errno.ELOOP):
                     continue
                 entries.append(entry)
