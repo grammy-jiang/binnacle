@@ -39,6 +39,7 @@ not amend sudoers for this companion.
 
 The same FastMCP middleware emits requests and tools on both platforms.
 Darwin's stable manager separately emits job events. Changes:
+
 - add Linux-equivalent correlation/outcome fields to Darwin job start/exit events;
 - make repeated terminal recording produce one `job_exit` event;
 - emit millisecond ISO timestamps from the Darwin manager;

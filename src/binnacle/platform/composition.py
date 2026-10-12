@@ -460,11 +460,7 @@ def create_foreground_execution(
 @contextmanager
 def native_service_output():
     """Route A6 service stdout/stderr and root logging through A5's sole writer."""
-    import io
-    import logging
     import os
-    from contextlib import redirect_stderr, redirect_stdout
-    from threading import RLock
 
     root = os.environ.get("BINNACLE_RUNTIME_DIR")
     role = os.environ.get("BINNACLE_SERVICE_ROLE")
@@ -474,48 +470,10 @@ def native_service_output():
     generation = os.environ.get("BINNACLE_SERVICE_GENERATION")
     if role not in ("frontend", "probe", "manager") or not generation:
         raise UnsupportedHostOS("Native service log generation/role missing")
+    from binnacle.platform.native_output import redirect_private_output
+
     writer = create_service_log_writer(
         root=Path(root), generation=generation, service=role
     )
-    lock = RLock()
-
-    class Output(io.TextIOBase):
-        def __init__(self):
-            self.pending = ""
-            self.overflow = False
-
-        def write(self, text):
-            with lock:
-                for piece in text.splitlines(keepends=True):
-                    self.pending += piece
-                    if len(self.pending) > 65536:
-                        self.pending, self.overflow = "", True
-                    if piece.endswith("\n"):
-                        writer.write(
-                            "[oversized record omitted]"
-                            if self.overflow
-                            else self.pending
-                        )
-                        self.pending, self.overflow = "", False
-            return len(text)
-
-        def flush(self):
-            # Do not persist fragments: a credential may span separate writes.
-            with lock:
-                writer.sync()
-
-    writer.start()
-    output = Output()
-    logger = logging.getLogger()
-    old_handlers = logger.handlers[:]
-    handler = logging.StreamHandler(output)
-    logger.handlers = [handler]
-    try:
-        with redirect_stdout(output), redirect_stderr(output):
-            yield
-    finally:
-        logger.handlers = old_handlers
-        with lock:
-            if output.pending or output.overflow:
-                writer.write("[unterminated record omitted]")
-            writer.close()
+    with redirect_private_output(writer):
+        yield

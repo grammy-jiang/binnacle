@@ -120,6 +120,8 @@ def manifest_groups() -> dict[str, set[str]]:
             "platform/job_platform.py",
             "platform/composition.py",
         },
+        # Neutral, writer-injected runtime helper, not another OS selector.
+        "platform_service_output": {"platform/native_output.py"},
         "platform_linux": {
             "platform/linux/__init__.py",
             "platform/linux/job_process.py",
@@ -142,6 +144,8 @@ def manifest_groups() -> dict[str, set[str]]:
             "platform/darwin/job_manager_client.py",
             "platform/darwin/job_manager_entry.py",
             "platform/darwin/job_manager_service.py",
+            "platform/darwin/job_manager_telemetry.py",
+            "platform/darwin/daemon_logstats.py",
             "platform/darwin/job_manager_stopping.py",
             "platform/darwin/job_process_owner.py",
             "platform/darwin/log_cursor.py",
@@ -203,6 +207,8 @@ def manifest_groups() -> dict[str, set[str]]:
             "companions/tunnel/tunnel_unit.py",
         },
         "watchdog": {
+            "companions/service_watchdog.py",
+            "companions/service_watchdog_deploy.py",
             "companions/watchdog/__init__.py",
             "companions/watchdog/watchdog.py",
             "companions/watchdog/watchdog_cli.py",

@@ -1,10 +1,7 @@
-"""Darwin stable Job Manager: unchanged RPC v1 objects over A3 authenticated IPC.
+"""Darwin durable Job Manager (RPC v1 over authenticated A3 IPC).
 
-Sole writer for jobs its ``DarwinJobOwner`` spawned; nothing from disk, a peer or
-ps is adopted. D-1: other incarnations' unfinished records become UNKNOWN.
-Layering forbids Commands imports: ``job_store``/``job_stop`` values are restated
-and pinned to the Linux source by tests. A3's cooperative-UID boundary applies.
-Serving lives in ``job_manager_entry``; the client in ``job_manager_client``.
+Only owned jobs are written; previous incarnations' unfinished jobs are UNKNOWN.
+No Commands imports; Linux-compatible constants remain pinned by tests.
 """
 
 from __future__ import annotations
@@ -32,6 +29,7 @@ from binnacle.platform.darwin.job_manager_stopping import (
     _ManagerStopping,
     _terminal,
 )
+from binnacle.platform.darwin.job_manager_telemetry import log_job_exit, log_job_start
 from binnacle.provenance import runtime_provenance
 
 log = logging.getLogger("binnacle.job_manager")
@@ -284,17 +282,7 @@ class DarwinJobManager(_ManagerStopping):
             except OSError:
                 self._kill_quietly(job_id)
                 raise
-            log.info(
-                "event=job_start job_id=%s pid=%s workdir=%s call=%s "
-                "owner=manager owner_instance=%s command_hash=%s command_chars=%s",
-                job_id,
-                process.pid,
-                shown,
-                call_id,
-                self.owner_instance_id[:12],
-                meta["command_hash"],
-                len(command),
-            )
+            log_job_start(log, job_id, meta)
             return job_id
 
     def _kill_quietly(self, job_id: str) -> None:
@@ -357,11 +345,9 @@ class DarwinJobManager(_ManagerStopping):
         return states.count("running"), states.count("unknown")
 
     def record_exit(self, exited: OwnedJobExit) -> bool:
-        """Idempotent terminal write for this incarnation's own records only.
+        """Commit a terminal state for our incarnation, idempotently.
 
-        An I/O failure (including the jobs-dir lock open) keeps the exit queued
-        for the reaper's retry; the record stays non-terminal, so ``state`` says
-        ``unknown`` (the owner no longer reports OWNED), never ``exited``.
+        I/O failure queues retry; nonterminal records remain UNKNOWN.
         """
         recorded: dict[str, Any] | None = None
         try:
@@ -385,29 +371,7 @@ class DarwinJobManager(_ManagerStopping):
         # A repeated reaper/close notification is idempotent: do not emit a
         # second terminal event, otherwise logstats overcounts real job exits.
         if recorded is not None:
-            try:
-                log_bytes = (self.jobs_dir / exited.job_id / "out.log").stat().st_size
-            except OSError:
-                log_bytes = 0
-            started = recorded.get("started_at")
-            ended = recorded["ended_at"]
-            duration = (
-                round(ended - started, 3) if isinstance(started, (int, float)) else "-"
-            )
-            log.info(
-                "event=job_exit job_id=%s exit_code=%s signal=%s reason=%s "
-                "runtime_s=%s log_bytes=%d call=%s owner=manager "
-                "owner_instance=%s command_hash=%s",
-                exited.job_id,
-                recorded.get("exit_code"),
-                recorded.get("signal"),
-                recorded["termination_reason"],
-                duration,
-                log_bytes,
-                recorded.get("call_id", "-"),
-                self.owner_instance_id[:12],
-                recorded.get("command_hash", "-"),
-            )
+            log_job_exit(log, exited.job_id, recorded, self.jobs_dir / exited.job_id)
         return True
 
     def _release(self, job_id: str) -> None:
@@ -474,11 +438,9 @@ class DarwinJobManager(_ManagerStopping):
                 shutil.rmtree(stale, ignore_errors=True)
 
     def reap_forever(self, stop: threading.Event) -> None:
-        """Drive the owner's sole reaper and persist every exit it reports.
+        """Reap and persist exits; retry failed writes without losing records.
 
-        One failed record never ends this loop: the exit is queued and retried.
-        A lost owner, or ``REAP_FAILURE_LIMIT`` consecutive reap failures, ends
-        it instead: serving then stops, launchd restarts and D-1 applies.
+        Owner loss or repeated reap failure ends serving for launchd recovery.
         """
         retry_at, failures = 0.0, 0
         while not stop.is_set():
