@@ -26,6 +26,8 @@ from pathlib import Path
 
 from binnacle.errors import CodedToolError
 from binnacle.platform.contracts.special_file_contracts import (
+    SPECIAL_FILE_CODE,
+    SPECIAL_FILE_TEXT,
     TOO_MANY_OPEN_FILES_CODE,
     TOO_MANY_OPEN_FILES_ERRNOS,
     too_many_open_files_text,
@@ -45,6 +47,8 @@ else:  # Darwin; platform/darwin/file_traversal.py TRAVERSE_FLAGS twin.
     _O_SEARCH: int = getattr(os, "O_SEARCH", 0x40000000 | os.O_DIRECTORY)
     TRAVERSE_FLAGS = _O_SEARCH | DIRECTORY_FLAGS  # O_RDONLY is 0.
 READ_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC | os.O_NOCTTY
+# A FIFO, socket or device: special_file_unsupported on both OSes.
+SPECIAL_FILE_TYPES = (stat.S_IFIFO, stat.S_IFSOCK, stat.S_IFCHR, stat.S_IFBLK)
 
 
 def absolute_in_root(text: str, root: str) -> list[str] | None:
@@ -240,12 +244,17 @@ def open_verified(
     ``parent_fd``, a descriptor-walked parent (open_walked). There is no
     by-path mode, which would follow intermediate symlinks (SRC-W2-03). The
     descriptor is returned only when its kernel path is inside
-    SOME configured root (any one, not only the innermost), its (st_dev,
-    st_ino) equals ``expected`` from the caller's containment check, it is
-    a regular file and it still has a link (st_nlink > 0: a file deleted
-    after the open is path_changed). The checks run in that order
-    (RX3a2-N2), so an outside object is always path_outside_root. Otherwise
-    the descriptor is closed and a coded refusal is raised.
+    SOME configured root (any one, not only the innermost), it is a regular
+    file, its (st_dev, st_ino) equals ``expected`` from the caller's
+    containment check and it still has a link (st_nlink > 0: a file deleted
+    after the open is path_changed). The checks run in that order: the root
+    check first (RX3a2-N2), so an outside object is always
+    path_outside_root; then the one order both OSes use (FDW-B1-a2 R1,
+    Darwin file_traversal.checked_open): the TYPE of the opened object (a
+    FIFO, socket or device is special_file_unsupported, a directory
+    path_is_directory, never read), then its IDENTITY (another regular file
+    is path_changed). Otherwise the descriptor is closed and a coded
+    refusal is raised.
     """
     _require_linux()
     shown = os.fspath(path)
@@ -258,10 +267,10 @@ def open_verified(
         if not any(real.is_relative_to(root) for root in root_paths):
             raise _outside(shown, root_paths)
         info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise wrong_type(shown, info)
         if (info.st_dev, info.st_ino) != expected:
             raise _changed(shown)
-        if not stat.S_ISREG(info.st_mode):
-            raise _not_regular(shown)
         if info.st_nlink == 0:
             raise _changed(shown)
     except BaseException as exc:
@@ -333,6 +342,21 @@ def _not_regular(shown: str) -> CodedToolError:
         "not_a_regular_file",
         f"Not a regular file: {shown}. read_file reads regular files only.",
     )
+
+
+def wrong_type(shown: object, info: os.stat_result) -> CodedToolError:
+    """The refusal for an opened object that is not a regular file.
+
+    Its type decides before its identity, on both OSes (FDW-B1-a2 R1).
+    """
+    if stat.S_IFMT(info.st_mode) in SPECIAL_FILE_TYPES:
+        return CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
+    if stat.S_ISDIR(info.st_mode):
+        return CodedToolError(
+            "path_is_directory",
+            f"Path is a directory, not a file: {shown}. Use list_files to browse it.",
+        )
+    return _not_regular(str(shown))
 
 
 def _changed(shown: str) -> CodedToolError:

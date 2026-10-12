@@ -28,9 +28,9 @@ from binnacle.platform.contracts.special_file_contracts import (
 
 LINE_CLIP_MARK = "… [line truncated]"
 # A FIFO, socket or device: Darwin's file_traversal.regular_fd refuses these.
-SPECIAL_FILE_TYPES = (stat.S_IFIFO, stat.S_IFSOCK, stat.S_IFCHR, stat.S_IFBLK)
-# fd_walk's refusals for such an object: the type check after the open (a
-# FIFO or device), ENXIO (a socket) and EACCES (a disk device) at the open.
+SPECIAL_FILE_TYPES = fd_walk.SPECIAL_FILE_TYPES
+# fd_walk's refusals for such an object at the open: ENXIO (a socket) and
+# EACCES (a disk device); the type check after the open words it already.
 SPECIAL_FILE_REFUSALS = ("not_a_regular_file", "file_io_failed", "permission_denied")
 
 
@@ -144,14 +144,15 @@ def _read_legacy(
     fd = os.open(resolved, fd_walk.READ_FLAGS)
     try:
         opened = os.fstat(fd)
+        # Type, then identity: the order of both OSes (FDW-B1-a2 R1).
+        if not stat.S_ISREG(opened.st_mode):
+            raise fd_walk.wrong_type(resolved, opened)
         if (opened.st_dev, opened.st_ino) != expected:
             # The same words as fd_walk's path_changed on Linux.
             raise CodedToolError(
                 "path_changed",
                 f"File changed while it was opened: {resolved}. Read it again.",
             )
-        if not stat.S_ISREG(opened.st_mode):
-            raise special_file_unsupported()
         return _read_bounded(fd, settings)
     finally:
         os.close(fd)

@@ -33,6 +33,7 @@ from binnacle.platform.contracts.file_access_contracts import ListRequest, RootG
 from binnacle.platform.contracts.special_file_contracts import (
     SPECIAL_FILE_CODE,
     SPECIAL_FILE_TEXT,
+    TOO_MANY_OPEN_FILES_CODE,
 )
 
 OUTPUT_SCHEMA = {
@@ -175,6 +176,48 @@ def _list_mode(
     top = max(
         (r for r in allowed if root.is_relative_to(r)), key=lambda r: len(r.parts)
     )
+    try:
+        listed = _listed(top, root, include_hidden, configured, roots)
+    except CodedToolError as exc:
+        # One retry on a descriptor shortage, after every descriptor of the
+        # first walk is closed, as DarwinFileAccess.list_entries does: this
+        # call's own descriptors never cause the refusal. A second shortage
+        # is too_many_open_files (FDW-B1-a2 R2).
+        if exc.telemetry_code != TOO_MANY_OPEN_FILES_CODE:
+            raise
+        listed = _listed(top, root, include_hidden, configured, roots)
+    listed.sort(key=lambda ne: (0 if ne[1]["type"] == "dir" else 1, ne[0].lower()))
+    truncated = len(listed) > max_results
+    entries = [e for _, e in listed[:max_results]]
+    payload = {
+        "path": str(root),
+        "mode": "list",
+        "entries": entries,
+        "count": len(entries),
+        "truncated": truncated,
+    }
+    summary = f"Listed {len(entries)} entries in {root}."
+    if truncated:
+        note = (
+            f"Showing first {max_results} of {len(listed)} entries; "
+            f"raise max_results or use a glob."
+        )
+        payload["note"] = note
+        summary = f"Listed first {len(entries)} of {len(listed)} entries in {root}."
+    return ToolResult(content=summary, structured_content=payload)
+
+
+def _listed(
+    top: Path,
+    root: Path,
+    include_hidden: bool,
+    configured: tuple[tuple[Path, Path], ...],
+    roots: RootsSettings | None,
+) -> list[tuple[str, dict]]:
+    """One walk of root below top: (name, entry) for each listed entry.
+
+    Every descriptor it opens is closed when it returns or raises.
+    """
     parts = root.relative_to(top).parts
     listed = []
     with _opened(top, parts, root, roots) as (chain, fd):
@@ -205,25 +248,7 @@ def _list_mode(
             if not stat.S_ISDIR(info.st_mode):
                 entry.update(type="file", bytes=info.st_size)
             listed.append((name, entry))
-    listed.sort(key=lambda ne: (0 if ne[1]["type"] == "dir" else 1, ne[0].lower()))
-    truncated = len(listed) > max_results
-    entries = [e for _, e in listed[:max_results]]
-    payload = {
-        "path": str(root),
-        "mode": "list",
-        "entries": entries,
-        "count": len(entries),
-        "truncated": truncated,
-    }
-    summary = f"Listed {len(entries)} entries in {root}."
-    if truncated:
-        note = (
-            f"Showing first {max_results} of {len(listed)} entries; "
-            f"raise max_results or use a glob."
-        )
-        payload["note"] = note
-        summary = f"Listed first {len(entries)} of {len(listed)} entries in {root}."
-    return ToolResult(content=summary, structured_content=payload)
+    return listed
 
 
 @noting_unreadable  # Partial result plus one note (R-OS1-F1).
