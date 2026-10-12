@@ -199,7 +199,13 @@ def test_dispatch_objects_equal_linux_manager_text(tmp_path, jobs_dir, live):
     assert all(text in linux for text in TEXTS.split("|"))
     pong = manager.handle({"version": 1, "op": "ping"})
     keys = {"ok", "version", "owner_instance_id", "boot_id", "pid", "revision"}
-    assert set(pong) == keys | {"package_version", "running_jobs", "unknown_jobs"}
+    assert set(pong) == keys | {
+        "package_version",
+        "running_jobs",
+        "unknown_jobs",
+        "unrecorded_exits",
+        "oldest_unrecorded_age_s",
+    }
     version = manager.handle({"version": 2, "op": "ping"})["error"]
     assert version == "unsupported job-manager protocol version"
     unknown = manager.handle({"version": 1, "op": "x"})["error"]

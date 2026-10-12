@@ -65,6 +65,19 @@ def check_job_manager(
             "manager socket responds "
             f"(owner={owner} package={package} revision={revision})"
         )
+        pending = response.get("unrecorded_exits")
+        age = response.get("oldest_unrecorded_age_s")
+        if isinstance(pending, int) and pending > 0:
+            checks.append(
+                warn(
+                    "jobs-service",
+                    f"{pending} job exit(s) queued but not yet durable "
+                    f"(oldest age {age}s)"
+                    if isinstance(age, (int, float))
+                    else f"{pending} job exit(s) queued but not yet durable",
+                    "inspect event=job_exit_unrecorded; do not restart while pending",
+                )
+            )
         unknown = {"", "?", "unknown"}
         expected_known = expected_revision not in (None, *unknown, "installed")
         revision_known = revision not in unknown
