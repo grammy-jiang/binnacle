@@ -164,7 +164,16 @@ def test_reaper_survives_lock_open_oserror_and_retries(tmp_path, jobs_dir, monke
             reaper.start()
             assert wait_for(lambda: first not in owner.live)  # leader reaped
             assert wait_for(lambda: first in manager._unrecorded)
-            second = manager.handle(req(tmp_path, "exit 4"))["job_id"]
+            # The child exits only after handle() returned, so only the reaper
+            # ("rp", where the lock open fails) can see this exit; a fast exit
+            # could otherwise be recorded by the handler thread (gate flake).
+            # Bounded: without the go file the child gives up after ~30 s (97).
+            gated = (
+                "i=0; while [ ! -e go-second ] && [ $i -lt 3000 ]; do sleep 0.01; "
+                "i=$((i+1)); done; [ -e go-second ] && exit 4; exit 97"
+            )
+            second = manager.handle(req(tmp_path, gated))["job_id"]
+            (tmp_path / "go-second").touch()
             assert wait_for(lambda: second in manager._unrecorded)
             failed = len(hits)
             assert wait_for(lambda: len(hits) >= failed + 4)  # retries keep failing
