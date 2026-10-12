@@ -25,6 +25,8 @@ from binnacle.platform.contracts.file_access_contracts import (
 from binnacle.platform.contracts.special_file_contracts import (
     SPECIAL_FILE_CODE,
     SPECIAL_FILE_TEXT,
+    TOO_MANY_OPEN_FILES_CODE,
+    too_many_open_files_text,
 )
 
 # Tool named by the last access.require() in this call context.
@@ -162,6 +164,9 @@ def linux_error(
     if code == SPECIAL_FILE_CODE:
         # The shared text for every tool on both OSes (r6 W3 PX1).
         return CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
+    if code == TOO_MANY_OPEN_FILES_CODE:
+        # Darwin EMFILE/ENFILE: Linux list mode's sentence (PF-SP1-1).
+        return CodedToolError(code, too_many_open_files_text(tool, f"open {display}"))
     if code == "permission_denied_tcc_possible":
         # Darwin keeps its code (SD-77) and says Linux's sentence (R-OS1-F4).
         return CodedToolError(code, str(permission_denied(display)))

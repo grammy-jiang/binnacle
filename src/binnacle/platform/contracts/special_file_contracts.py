@@ -10,11 +10,13 @@ finds it, and it tells the model what the path is and what to do instead.
 
 TOO_MANY_OPEN_FILES_*: the refusal for a descriptor shortage (EMFILE/ENFILE),
 which is never evidence about a path (SRC-W2-04, SD-79). One template for
-list_files (list and glob), search_text and the Darwin adapters; only the tool,
-the task and the advice are filled in (r6 W3 PX1).
+list_files (list and glob), search_text and the Darwin adapters (PF-SP1-1);
+only the tool, the task and the advice are filled in (r6 W3 PX1).
 """
 
 from __future__ import annotations
+
+import errno
 
 SPECIAL_FILE_CODE = "special_file_unsupported"
 SPECIAL_FILE_TEXT = (
@@ -24,6 +26,9 @@ SPECIAL_FILE_TEXT = (
 )
 
 TOO_MANY_OPEN_FILES_CODE = "too_many_open_files"
+TOO_MANY_OPEN_FILES_ERRNOS = (errno.EMFILE, errno.ENFILE)
+# The adapters' errno -> code table (Darwin file_traversal.native_errors).
+SHORTAGE_CODES = dict.fromkeys(TOO_MANY_OPEN_FILES_ERRNOS, TOO_MANY_OPEN_FILES_CODE)
 TOO_MANY_OPEN_FILES_TEXT = (
     "{tool} could not {task}: the server has too many open files. {advice}"
 )

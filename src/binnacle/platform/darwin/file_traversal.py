@@ -39,6 +39,7 @@ from binnacle.platform.contracts.file_access_contracts import (
     FileListing,
     ListRequest,
 )
+from binnacle.platform.contracts.special_file_contracts import SHORTAGE_CODES
 
 MAX_BYTES = 64 * 1024 * 1024
 MAX_VISITED = 100_000
@@ -88,7 +89,7 @@ def native_errors() -> Iterator[None]:
             raise unsafe("symlink_or_wrong_path_type") from None
         if exc.errno == errno.ENOENT:
             raise unsafe("path_not_found") from None
-        code = "file_io_failed"
+        code = SHORTAGE_CODES.get(exc.errno or 0, "file_io_failed")
         raise AuthorityUnknown(code, capability(code)) from None
 
 

@@ -10,14 +10,16 @@ cache of every directory exhausted RLIMIT_NOFILE). rg emits the files of
 one directory together, so most of the reuse remains.
 """
 
-import errno
 import os
 from types import TracebackType
 
 from binnacle.features.files import fd_walk
+from binnacle.platform.contracts.special_file_contracts import (
+    TOO_MANY_OPEN_FILES_ERRNOS,
+)
 
 # A descriptor shortage is not evidence that a path failed the walk.
-EXHAUSTED = (errno.EMFILE, errno.ENFILE)
+EXHAUSTED = TOO_MANY_OPEN_FILES_ERRNOS
 
 
 class DirectoryChain:

@@ -25,6 +25,11 @@ from binnacle.platform.contracts.special_file_contracts import (
     too_many_open_files_text,
 )
 
+# lstat failures that omit an entry, as the Darwin walk omits ENOENT, EACCES
+# and EPERM (PF-SP1-2): a vanished file is not listed; ENOTDIR/ELOOP: a
+# swapped directory component (X3c-a3).
+OMITTED = (errno.ENOTDIR, errno.ELOOP, errno.ENOENT, errno.EACCES, errno.EPERM)
+
 
 def is_shortage(exc: OSError) -> bool:
     """EMFILE or ENFILE: search_text's descriptor-shortage set (fd_chain)."""
@@ -58,8 +63,10 @@ def glob_entries(root: Path, lines: list[str]) -> list[dict]:
     non-regular object is omitted too: an entry typed 'file' is a regular
     file, as in search_text_verify.is_regular (SRC-W2-12). A descriptor
     shortage that survives DirectoryChain's one retry is the
-    too_many_open_files refusal, as in search_text (SRC-W2-04). Any other
-    failure keeps the entry without bytes, as r6 did when p.stat() failed.
+    too_many_open_files refusal, as in search_text (SRC-W2-04). A file that
+    vanished after the listing (ENOENT) or cannot be stat-ed (EACCES, EPERM)
+    is omitted, as the Darwin walk omits it (PF-SP1-2). Any other failure
+    keeps the entry without bytes, as r6 did when p.stat() failed.
     """
     entries: list[dict] = []
     # Plain string splitting: PurePath costs more than the walk itself. The
@@ -79,7 +86,7 @@ def glob_entries(root: Path, lines: list[str]) -> list[dict]:
                     raise descriptor_shortage(
                         "check the listed files", "Retry, or narrow the glob."
                     ) from exc
-                if exc.errno in (errno.ENOTDIR, errno.ELOOP):
+                if exc.errno in OMITTED:
                     continue
                 entries.append(entry)
                 continue
