@@ -207,8 +207,11 @@ def manifest_groups() -> dict[str, set[str]]:
             "companions/tunnel/tunnel_unit.py",
         },
         "watchdog": {
+            "companions/darwin_log_privacy.py",
+            "companions/resource_monitor_darwin.py",
             "companions/service_watchdog.py",
             "companions/service_watchdog_deploy.py",
+            "companions/service_watchdog_safety.py",
             "companions/watchdog/__init__.py",
             "companions/watchdog/watchdog.py",
             "companions/watchdog/watchdog_cli.py",
