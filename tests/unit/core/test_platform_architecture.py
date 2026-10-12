@@ -52,6 +52,8 @@ EDGES = {
         "process_contracts",
         "composition",
         "provenance",
+        # E1 eager start-up imports (SD-89: approved architecture edge).
+        "startup_imports",
     },
 }
 
