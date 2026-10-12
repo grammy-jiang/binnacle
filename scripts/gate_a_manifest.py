@@ -35,6 +35,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "features/files/tools/__init__.py",
             "features/files/tools/read_file.py",
             "features/files/tools/list_files.py",
+            "features/files/list_files_glob.py",
             "features/files/tools/edit_file.py",
             "features/files/tools/write_file.py",
             "features/files/paths.py",
