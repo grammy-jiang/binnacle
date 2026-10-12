@@ -151,5 +151,6 @@ def test_serving_manager_loads_only_its_pinned_set(private_home):  # noqa: F811
     assert "event=startup_import_error" not in log, log[-4000:]
     # A module outside the list (a new closure module, or a lazy import the
     # list misses) fails here: either it is loaded at serve time or late.
-    assert served == list(manager_module_names()), log[-4000:]
-    assert late == [], log[-4000:]
+    pinned = list(manager_module_names())
+    assert served == pinned, (sorted(set(served) ^ set(pinned)), log[-2000:])
+    assert late == [], (late, log[-2000:])
