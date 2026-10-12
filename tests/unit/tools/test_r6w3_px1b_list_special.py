@@ -27,10 +27,17 @@ PATHS = pytest.mark.parametrize(
 )
 
 
+# Test sockets live only under the test-state root, never /tmp or ~/Projects
+# (both are MCP roots); 0700, removed by exact path (W3 rule). Short enough
+# for the 104-byte AF_UNIX path limit on Darwin.
+STATE_ROOT = Path("~/.local/state/bt/px1b").expanduser()
+
+
 @pytest.fixture
 def root() -> Iterator[Path]:
-    # A short /tmp path: an AF_UNIX socket path is limited to 104 bytes on Darwin.
-    base = Path(tempfile.mkdtemp(prefix="px1b-sp-", dir="/tmp")).resolve()
+    STATE_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
+    STATE_ROOT.chmod(0o700)
+    base = Path(tempfile.mkdtemp(prefix="sp-", dir=STATE_ROOT)).resolve()
     (base / "sub").mkdir()
     (base / "a.txt").write_text("alpha\n")
     os.mkfifo(base / "fifo")
@@ -43,6 +50,10 @@ def root() -> Iterator[Path]:
     finally:
         server.close()
         shutil.rmtree(base)
+        try:
+            STATE_ROOT.rmdir()  # Only when no other test still uses it.
+        except OSError:
+            pass
 
 
 def listed(root: Path, darwin: bool, include_hidden: bool = False) -> dict:

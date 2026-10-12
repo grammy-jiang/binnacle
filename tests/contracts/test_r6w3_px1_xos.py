@@ -27,6 +27,13 @@ Cases added by PX1: in-root links (R-OS1-F3, read_link_*), unreadable
 children (F1/F4, glob/search_mix_*), the shared special-file text
 (*_fifo), and a glob entry that vanished before its stat (PF-SP1-2,
 glob_vanished_entry).
+
+Cases added by PX1b (PF-PX1-1, R-PX1-4): list_files (list and glob) and
+search_text on a path that is, or passes through, an in-root symlink, in
+<ROOT>/lnk: relative, absolute and chained link text, a link on the way
+(ancestor), absolute and root-relative requests, an outside target, a
+dangling link and a loop (lnk_*); and a listing that omits a link to a FIFO
+and the dangling, looping and outside links (list_lnk).
 """
 
 from __future__ import annotations
@@ -38,6 +45,7 @@ import shutil
 import sys
 import tempfile
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -63,7 +71,7 @@ TIMING_WORDS = ("elapsed", "duration", "latency", "_ms", "seconds", "timing")
 MTIME = 1_700_000_000  # Fixed mtimes: glob mode orders newest first.
 TCC_CODE, LINUX_CODE = "permission_denied_tcc_possible", "permission_denied"
 # SHA-256 of the normalized document; equal on Linux and Darwin by design.
-GOLDEN_SHA256 = "bfe548aaea0bdfc7359358aeb4416d5a2c02cd34b0ef67161502ebcb71f5c31e"
+GOLDEN_SHA256 = "c9bb5ab14d09ef7b592795cc90115d1297b047f0b9142933323041279312a266"
 
 FILES = {
     "a.txt": ("alpha needle\n", 500),
@@ -76,6 +84,19 @@ FILES = {
     "mix/x2/y2/k.txt": ("kappa needle\n", 50),
     "van/keep.txt": ("keep needle\n", 40),
     "van/gone.txt": ("gone needle\n", 30),
+    "lnk/t/f.txt": ("link needle\n", 20),
+    "lnk/t/u/v.txt": ("deep link needle\n", 10),
+}
+# In-root links below <ROOT>/lnk (PF-PX1-1); "<ROOT>" and "<BASE>" are
+# filled in by build(). <BASE>/out is outside every root.
+LINKS = {
+    "lnk/dir_rel": "t",
+    "lnk/dir_abs": "<ROOT>/lnk/t",
+    "lnk/chain": "dir_rel",
+    "lnk/out": "<BASE>/out",
+    "lnk/dangling": "nope",
+    "lnk/loop": "loop",
+    "lnk/to_fifo": "../sub/fifo",
 }
 # In-root x/ and mix/x2/ first, then the ROOT itself (""); mix/ stays readable.
 EXEC_ONLY = ("x", "mix/x2", "")
@@ -96,6 +117,11 @@ def build(base: Path) -> Path:
     (root / "link_b").symlink_to("sub/b.txt")
     (root / "link_g").symlink_to("x/y/g.txt")
     os.mkfifo(root / "sub" / "fifo")
+    (base / "out").mkdir()
+    (base / "out" / "o.txt").write_text("outside needle\n", encoding="utf-8")
+    for rel, text in LINKS.items():
+        target = text.replace("<ROOT>", str(root)).replace("<BASE>", str(base))
+        (root / rel).symlink_to(target)
     for rel in EXEC_ONLY:
         (root / rel).chmod(0o100) if rel else root.chmod(0o100)
     return root
@@ -265,7 +291,31 @@ def document(set_attr: Callable[[Any, str, Any], None]) -> dict:
             ("glob_fifo", lambda: lst(f"{r}/sub/fifo", "*")),
             ("search_fifo", lambda: search(f"{r}/sub/fifo")),
             ("glob_vanished_entry", vanished),
+            ("list_lnk", lambda: lst(f"{r}/lnk")),
         ]
+        # PF-PX1-1: each request through a link, for all three modes.
+        through_links = {
+            "dir_rel": f"{r}/lnk/dir_rel",
+            "dir_abs": f"{r}/lnk/dir_abs",
+            "chain": f"{r}/lnk/chain",
+            "ancestor": f"{r}/lnk/dir_rel/u",
+            "ancestor_chain": f"{r}/lnk/chain/u",
+            "relative_request": "lnk/dir_rel",
+            "relative_ancestor": "lnk/chain/u",
+            "file_through_link": f"{r}/lnk/dir_abs/f.txt",
+            "outside": f"{r}/lnk/out",
+            "outside_below": f"{r}/lnk/out/o.txt",
+            "dangling": f"{r}/lnk/dangling",
+            "dangling_below": f"{r}/lnk/dangling/x",
+            "loop": f"{r}/lnk/loop",
+            "loop_below": f"{r}/lnk/loop/x",
+        }
+        for label, path in through_links.items():
+            cases += [
+                (f"lnk_list_{label}", partial(lst, path)),
+                (f"lnk_glob_{label}", partial(lst, path, "**/*.txt")),
+                (f"lnk_search_{label}", partial(search, path)),
+            ]
         dropped: set[str] = set()
         try:
             results = {
@@ -278,7 +328,11 @@ def document(set_attr: Callable[[Any, str, Any], None]) -> dict:
             "fixture": {
                 "exec_only": ["<ROOT>/x", "<ROOT>/mix/x2", "<ROOT>"],
                 "files": {k: v[0] for k, v in FILES.items()},
-                "links": {"link_b": "sub/b.txt", "link_g": "x/y/g.txt"},
+                "links": {
+                    "link_b": "sub/b.txt",
+                    "link_g": "x/y/g.txt",
+                    **{f"<ROOT>/{k}": v for k, v in LINKS.items()},
+                },
                 "fifo": "<ROOT>/sub/fifo",
                 "vanished": f"<ROOT>/van/{VANISHED}",
             },
@@ -337,6 +391,11 @@ def test_the_only_os_difference_is_the_tcc_code(monkeypatch):
         if "error" in outcome
     }
     denied = LINUX_CODE if host_os_family() == "linux" else TCC_CODE
+    missing = {
+        "list": "directory_not_found",
+        "glob": "directory_not_found",
+        "search": "path_not_found",
+    }
     assert errors == {
         "glob_fifo": "special_file_unsupported",
         "glob_root_exec_only": denied,
@@ -347,6 +406,21 @@ def test_the_only_os_difference_is_the_tcc_code(monkeypatch):
         "read_missing": "file_not_found",
         "search_fifo": "special_file_unsupported",
         "search_root_exec_only": denied,
+        # PF-PX1-1: the same code on both OSes through an in-root link.
+        **{
+            f"lnk_{mode}_{case}": code
+            for mode in ("list", "glob", "search")
+            for case, code in (
+                ("dangling", missing[mode]),
+                ("dangling_below", missing[mode]),
+                ("loop", missing[mode]),
+                ("loop_below", missing[mode]),
+                ("outside", "path_outside_root"),
+                ("outside_below", "path_outside_root"),
+            )
+        },
+        "lnk_glob_file_through_link": "path_is_file",
+        "lnk_list_file_through_link": "path_is_file",
     }
 
 
