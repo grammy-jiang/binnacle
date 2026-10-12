@@ -29,15 +29,18 @@ PATHS = pytest.mark.parametrize(
 
 # Test sockets live only under the test-state root, never /tmp or ~/Projects
 # (both are MCP roots); 0700, removed by exact path (W3 rule). Short enough
-# for the 104-byte AF_UNIX path limit on Darwin.
-STATE_ROOT = Path("~/.local/state/bt/px1b").expanduser()
+# for the 104-byte AF_UNIX path limit on Darwin. Every test gets its OWN
+# directory under the shared parent and removes only that directory: the
+# parent is never rmdir'ed here, so no worker can race another's mkdtemp
+# (R-PX1b-F4, pytest -n).
+STATE_PARENT = Path("~/.local/state/bt/px1c").expanduser()
 
 
 @pytest.fixture
 def root() -> Iterator[Path]:
-    STATE_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
-    STATE_ROOT.chmod(0o700)
-    base = Path(tempfile.mkdtemp(prefix="sp-", dir=STATE_ROOT)).resolve()
+    STATE_PARENT.mkdir(mode=0o700, parents=True, exist_ok=True)
+    base = Path(tempfile.mkdtemp(prefix="sp-", dir=STATE_PARENT)).resolve()
+    assert base.parent == STATE_PARENT.resolve() and base.is_absolute()
     (base / "sub").mkdir()
     (base / "a.txt").write_text("alpha\n")
     os.mkfifo(base / "fifo")
@@ -50,10 +53,6 @@ def root() -> Iterator[Path]:
     finally:
         server.close()
         shutil.rmtree(base)
-        try:
-            STATE_ROOT.rmdir()  # Only when no other test still uses it.
-        except OSError:
-            pass
 
 
 def listed(root: Path, darwin: bool, include_hidden: bool = False) -> dict:

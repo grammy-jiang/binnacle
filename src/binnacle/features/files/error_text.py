@@ -52,6 +52,16 @@ def outside_error(allowed: Iterable[Path], display: Path) -> CodedToolError:
     )
 
 
+def _resolve(path: Path) -> Path:
+    """Path.resolve() as Python 3.13+ does it, on every supported version.
+
+    Before 3.13, Path.resolve() raises RuntimeError for a symlink loop; 3.13+
+    is os.path.realpath(strict=False), which leaves the looping tail in place.
+    The display and link-target logic below needs the 3.13 answer (r6 W3 PX1c).
+    """
+    return Path(os.path.realpath(path))
+
+
 def caller_form(requested: Path, resolved: Path, roots: Iterable[Path]) -> Path:
     """`resolved` spelled the way the caller and the configuration spelled it.
 
@@ -75,7 +85,7 @@ def caller_form(requested: Path, resolved: Path, roots: Iterable[Path]) -> Path:
                 shown = shown.parent
                 continue
             step = shown / part
-            here = shown.resolve()
+            here = _resolve(shown)
             if any(here.is_relative_to(r) for r in canonical) and step.is_symlink():
                 links += 1
                 if links > _MAX_LINKS:
@@ -86,7 +96,7 @@ def caller_form(requested: Path, resolved: Path, roots: Iterable[Path]) -> Path:
                 pending[:0] = target.parts[1:] if target.is_absolute() else target.parts
                 continue
             shown = step
-        same = shown.resolve() == resolved
+        same = _resolve(shown) == resolved
     except (RuntimeError, OSError, ValueError):
         return resolved
     return shown if same else resolved
@@ -176,8 +186,8 @@ def linux_error(
     if code != "symlink_or_wrong_path_type":
         return None
     try:
-        resolved = display.resolve()
-        canonical = [r.resolve() for r in grants]
+        resolved = _resolve(display)
+        canonical = [_resolve(r) for r in grants]
         if not any(resolved.is_relative_to(r) for r in canonical):
             return outside_error(allowed, caller_form(display, resolved, canonical))
     except (RuntimeError, OSError):
@@ -225,7 +235,7 @@ def link_target(
     if exc.code != "symlink_or_wrong_path_type":
         return None
     try:
-        target = display.resolve()
+        target = _resolve(display)
     except (RuntimeError, OSError):
         return None
     if target == Path(os.path.normpath(display)):
