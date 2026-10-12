@@ -196,8 +196,10 @@ def _list_mode(
             if name == ".git" or (not include_hidden and name.startswith(".")):
                 continue
             info = _entry_info(fd, name, follow)
-            if info is None:
-                continue
+            if info is None or not (
+                stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)
+            ):
+                continue  # A FIFO, socket or device is omitted, as on Darwin.
             entry: dict = {"path": str(root / name), "type": "dir"}
             if not stat.S_ISDIR(info.st_mode):
                 entry.update(type="file", bytes=info.st_size)
