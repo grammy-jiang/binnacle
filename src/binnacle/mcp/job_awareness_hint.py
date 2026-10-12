@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -22,6 +23,11 @@ from binnacle.mcp.job_awareness_hint_identity import (
     producer_identity,
     witnessed_call,
     witnessed_tool,
+)
+from binnacle.mcp.job_awareness_hint_routed import (
+    MAX_RENDERED,
+    rendered_jobs,
+    route_fields,
 )
 from binnacle.mcp.job_awareness_hint_schema import Schema, equal
 from binnacle.mcp.job_awareness_hint_struct import (
@@ -64,8 +70,6 @@ __all__ = [
 ]
 
 META_KEY = "binnacle/job-awareness/synthetic-v1"
-#: Mirrors hint_policy/hint_render MAX_HINT_JOBS; the adapter may not import them.
-MAX_RENDERED = 2
 T = TypeVar("T")
 
 
@@ -129,6 +133,19 @@ class RoutedOutcome:
 
 @dataclass
 class HintAdapter:
+    """Routed adapters (``bindings.route_type`` set) are immutable after
+    construction (TEXTU-G3): assigning or deleting any field (the STRUCT
+    snapshot ``struct_bound`` included) except
+    ``last_meter`` raises, so an admitted call can never observe another
+    carrier, flag, binding, tool or server stamp. A new arm is a new adapter
+    (``dataclasses.replace``); a call keeps the adapter it was dispatched
+    with. ``object.__setattr__`` bypasses this; in-process code is trusted
+    (see job_awareness_hint_identity). Non-routed adapters stay mutable.
+    The freeze is shallow: the server stamp is a private deep copy, the tool
+    identity is re-checked on every call, and the bound Tool, schema and
+    callbacks must stay unchanged for the adapter's lifetime (ADV-TUG4-01).
+    """
+
     bindings: HintBindings
     grant: object
     jobs: tuple[object, ...]
@@ -162,16 +179,30 @@ class HintAdapter:
             raise ValueError("explicit native tool binding required")
         self.bound_tool = self.tool  # provenance snapshot of the registration
         self.carrier = self.bindings.meta if self.carrier is None else self.carrier
-        self.struct_bound = False
-        if self.bindings.route_type is not None and self._bind_routed():
-            return
-        if struct_carrier(self.bindings.struct, self.carrier):
+        routed = self.bindings.route_type is not None
+        if not routed and struct_carrier(self.bindings.struct, self.carrier):
             raise ValueError("STRUCT binds only in routed mode")
-        try:
-            self.schema = Schema(self.tool.output_schema)
-        except (ValueError, TypeError, RecursionError):
-            self.schema = None
-        self.identity = None if self.schema is None else producer_identity(self.tool)
+        if not (routed and self._bind_routed()):
+            try:
+                self.schema = Schema(self.tool.output_schema)
+            except (ValueError, TypeError, RecursionError):
+                self.schema = None
+            self.identity = (
+                None if self.schema is None else producer_identity(self.tool)
+            )
+        if routed:  # a private stamp copy that no caller can change in place
+            self.server_info = copy.deepcopy(self.server_info)
+        object.__setattr__(self, "_sealed", routed)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name != "last_meter" and self.__dict__.get("_sealed") is True:
+            raise AttributeError(f"routed HintAdapter.{name} is immutable")
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if self.__dict__.get("_sealed") is True:
+            raise AttributeError(f"routed HintAdapter.{name} is immutable")
+        object.__delattr__(self, name)
 
     def _bind_routed(self) -> bool:
         """g5 §9.2 S-2 bind rules for routed (E2) mode; True when bound here.
@@ -224,6 +255,7 @@ class HintAdapter:
         hint. A production composition must call this with the same server that
         registers the bound tool, after the server name and version are final.
         A server without a dict stamp binds None, which suppresses every hint.
+        A routed adapter is immutable: give it ``server_info`` at construction.
         """
         stamp = getattr(getattr(server, "_mcp_server", None), "server_info_stamp", None)
         self.server_info = stamp if type(stamp) is dict else None
@@ -320,26 +352,10 @@ class HintAdapter:
         unchanged and does not consult routes.
         """
         unchanged = RoutedOutcome(original, ())
-        binding = self.bindings
-        if (
-            binding.route_type is None
-            or binding.candidate_type is None
-            or type(route) is not binding.route_type
-        ):
+        fields = route_fields(self.bindings, route)
+        if fields is None:
             return unchanged
-        try:  # the backing map of the exact type; no descriptor or hook runs
-            data = object.__getattribute__(route, "__dict__")
-        except AttributeError:  # a slotted route type has no backing map
-            return unchanged
-        if type(data) is not dict or "grant" not in data or "jobs" not in data:
-            return unchanged
-        grant, jobs = data["grant"], data["jobs"]
-        if (
-            type(jobs) is not tuple
-            or not 1 <= len(jobs) <= MAX_RENDERED
-            or not all(type(job) is binding.job_type for job in jobs)
-        ):
-            return unchanged
+        grant, jobs = fields
         if not self._admitted(original, execution, routed=True):
             return unchanged
         busy: tuple[ToolResult, tuple[object, ...]] = (original, ())
@@ -356,28 +372,7 @@ class HintAdapter:
     def _rendered(
         self, candidates: object, jobs: tuple[object, ...]
     ) -> tuple[object, ...] | None:
-        """Jobs of the exact candidate tuple handed to the renderer, or None.
-
-        Exact types run before any field access: a candidate must be exactly
-        ``candidate_type`` and carry a ``job`` of exactly ``job_type`` that is
-        one of the route jobs, with no repeats. ``rendered`` is therefore a
-        subset of the reserved jobs by construction.
-        """
-        binding = self.bindings
-        if type(candidates) is not tuple or not 1 <= len(candidates) <= MAX_RENDERED:
-            return None
-        rendered: list[object] = []
-        for candidate in candidates:
-            if type(candidate) is not binding.candidate_type:
-                return None
-            data = object.__getattribute__(candidate, "__dict__")
-            if type(data) is not dict or "job" not in data:
-                return None
-            job = data["job"]
-            if type(job) is not binding.job_type or job in rendered or job not in jobs:
-                return None
-            rendered.append(job)
-        return tuple(rendered)
+        return rendered_jobs(self.bindings, candidates, jobs)
 
     def _render(
         self,

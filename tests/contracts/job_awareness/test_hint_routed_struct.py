@@ -34,6 +34,7 @@ from binnacle.mcp.job_awareness_hint import (
 from binnacle.mcp.job_awareness_hint_struct import MIRROR_FORMATS
 from tests.contracts.job_awareness.routed_support import RoutedLab
 from tests.contracts.job_awareness.synthetic_app import SCHEMA, in_loop, original
+from tests.contracts.job_awareness.test_hint_routed_struct_drift import bypass
 from tests.contracts.job_awareness.test_hint_schema_support import executed
 
 FIELD = {"type": "string", "maxLength": 512}
@@ -386,13 +387,13 @@ async def test_changes_after_bind_suppress():
     with RoutedLab(1) as lab:
         cases = []
         adapter = struct(lab)
-        adapter.carrier = HintCarrier.META  # STRUCT-bound, now META
+        bypass(adapter, "carrier", HintCarrier.META)  # STRUCT-bound, now META
         cases.append(adapter)
         adapter = struct(lab, carrier=HintCarrier.META)
-        adapter.carrier = HintCarrier.STRUCT  # META-bound, now STRUCT
+        bypass(adapter, "carrier", HintCarrier.STRUCT)  # META-bound, now STRUCT
         cases.append(adapter)
         adapter = struct(lab)
-        adapter.struct_bound = False  # snapshot cleared
+        bypass(adapter, "struct_bound", False)  # snapshot cleared
         cases.append(adapter)
         adapter = struct(lab)
         object.__setattr__(adapter.bound_tool, "output_schema", SCHEMA)

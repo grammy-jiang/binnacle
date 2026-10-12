@@ -30,6 +30,7 @@ from binnacle.mcp.job_awareness_hint import (
     HintBindings,
     RoutedOutcome,
 )
+from binnacle.mcp.job_awareness_hint_routed import route_fields
 from tests.contracts.job_awareness.routed_support import (
     RoutedLab,
     key_digest,
@@ -103,10 +104,13 @@ async def test_only_selected_candidates_are_rendered():
     with RoutedLab(2) as lab:
         adapter = lab.routed(enabled=True)
         select = adapter.bindings.select
-        adapter.bindings = replace(
-            adapter.bindings,
-            select=lambda grant, observed: tuple(
-                c for c in select(grant, observed) if c.job != lab.jobs[0]
+        adapter = replace(  # routed adapters are immutable: a new one
+            adapter,
+            bindings=replace(
+                adapter.bindings,
+                select=lambda grant, observed: tuple(
+                    c for c in select(grant, observed) if c.job != lab.jobs[0]
+                ),
             ),
         )
         _, outcome = await lab.call(adapter, lab.route(*lab.jobs))
@@ -184,7 +188,8 @@ async def test_unsafe_candidates_or_render_suppress(case):
             return None if case == "render_none" else real_render(candidates, carrier)
 
         real_render = adapter.bindings.render
-        adapter.bindings = replace(adapter.bindings, select=hostile, render=render)
+        bindings = replace(adapter.bindings, select=hostile, render=render)
+        adapter = replace(adapter, bindings=bindings)
         value, outcome = await lab.call(adapter, lab.route(*lab.jobs[:2]))
         assert outcome == unchanged(value) and outcome.result is value  # nosec B101 - pytest assertion
         # The guard, not an exception, suppressed: select returned, and only
@@ -237,7 +242,8 @@ async def test_invalid_route_reads_and_consumes_nothing(case):
             del route.__dict__["jobs"]
         if case.startswith("no_") and case != "no_jobs_field":
             name = case.removeprefix("no_")
-            adapter.bindings = replace(adapter.bindings, **{name: None})
+            bindings = replace(adapter.bindings, **{name: None})
+            adapter = replace(adapter, bindings=bindings)
         value = original()
         receipt = executed(value, adapter.bound_tool)
         outcome = await adapter.adapt_routed(value, execution=receipt, route=route)
@@ -260,7 +266,9 @@ async def test_slotted_route_type_suppresses():
             jobs: tuple
 
         adapter = lab.routed(enabled=True)
-        adapter.bindings = replace(adapter.bindings, route_type=Slotted)
+        adapter = replace(
+            adapter, bindings=replace(adapter.bindings, route_type=Slotted)
+        )
         value = original()
         receipt = executed(value, adapter.bound_tool)
         route = Slotted(lab.handle, lab.jobs)
@@ -284,7 +292,7 @@ async def test_route_grant_must_authorize_every_route_job():
 async def test_routed_path_ignores_and_never_stores_adapter_jobs():
     with RoutedLab(3) as lab:
         adapter = lab.routed(enabled=True)
-        adapter.grant, adapter.jobs = object(), ()
+        adapter = replace(adapter, grant=object(), jobs=())
         before = {k: v for k, v in vars(adapter).items() if k != "last_meter"}
         _, outcome = await lab.call(adapter, lab.route(lab.jobs[2]))
         assert outcome.rendered == (lab.jobs[2],)  # nosec B101 - pytest assertion
@@ -353,5 +361,7 @@ async def test_busy_failing_or_error_results_return_original():
 
 def test_route_key_is_never_read():
     """Only grant and jobs leave the route; the digest key stays behind."""
-    names = HintAdapter.adapt_routed.__code__.co_consts
+    names = route_fields.__code__.co_consts  # adapt_routed reads the route here
     assert "grant" in names and "jobs" in names and "key" not in names  # nosec B101 - pytest assertion
+    assert "key" not in HintAdapter.adapt_routed.__code__.co_consts  # nosec B101 - pytest assertion
+    assert "route_fields" in HintAdapter.adapt_routed.__code__.co_names  # nosec B101 - pytest assertion

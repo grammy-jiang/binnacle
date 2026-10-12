@@ -1,7 +1,10 @@
 """Review TEXTU-01: the routed carrier rule holds on every call, not only at bind.
 
 A schema-backed routed binding stays META, and a ``NO_STRUCTURE`` binding
-stays TEXT. A carrier reassigned after bind returns the original object with
+stays TEXT. Routed adapters are immutable (plain assignment raises, see
+``test_hint_routed_immutable``); these tests use the trusted-code bypass
+``object.__setattr__`` (out of model) to prove the per-call checks as
+defence in depth. A carrier changed after bind returns the original object with
 no rendered job, consumes no receipt, reads no observation state, and on the
 real lab ledger resets the reservation so the job stays ``PENDING``.
 """
@@ -25,6 +28,11 @@ DRIFT = [(META, TEXT, True), (TEXT, META, False)]
 IDS = ["schema-META-to-TEXT", "TEXT-U-to-META"]
 
 
+def force(adapter, name: str, value: object) -> None:
+    """Trusted in-process bypass of the routed immutability (out of model)."""
+    object.__setattr__(adapter, name, value)
+
+
 def bound(lab: RoutedLab, carrier: HintCarrier, structured: bool):
     adapter = lab.routed(structured=structured, enabled=True, carrier=carrier)
     assert adapter.routed_carrier is carrier  # nosec B101 - pytest assertion
@@ -42,7 +50,7 @@ async def test_carrier_reassigned_after_bind_is_refused_at_admission(
 ):
     with RoutedLab(2) as lab:
         adapter = bound(lab, carrier, structured)
-        adapter.carrier = drift
+        force(adapter, "carrier", drift)
         value = value_for(structured)
         receipt = executed(value, adapter.bound_tool)
         outcome = await adapter.adapt_routed(
@@ -51,7 +59,7 @@ async def test_carrier_reassigned_after_bind_is_refused_at_admission(
         assert outcome.result is value and outcome.rendered == ()  # nosec B101 - pytest assertion
         assert lab.catalog_reads == lab.queries == 0  # nosec B101 - pytest assertion
         assert issued(receipt)  # nosec B101 - pytest assertion
-        adapter.carrier = carrier  # restored: the same binding hints again
+        force(adapter, "carrier", carrier)  # restored: the same binding hints again
         _, again = await lab.call(adapter, lab.route(*lab.jobs), value_for(structured))
         assert again.rendered  # nosec B101 - pytest assertion
 
@@ -66,13 +74,13 @@ def test_render_core_rechecks_the_carrier(carrier, drift, structured):
             value, Event(), lab.handle, (lab.job,), routed=True
         )
         assert hinted is not value and rendered == (lab.job,)  # nosec B101 - pytest assertion
-        adapter.carrier = drift
+        force(adapter, "carrier", drift)
         assert adapter._render(value, Event(), lab.handle, (lab.job,), routed=True) == (  # nosec B101 - pytest assertion
             value,
             (),
         )
-        adapter.carrier = carrier
-        object.__setattr__(adapter, "routed_carrier", drift)
+        force(adapter, "carrier", carrier)
+        force(adapter, "routed_carrier", drift)
         assert adapter._render(value, Event(), lab.handle, (lab.job,), routed=True) == (  # nosec B101 - pytest assertion
             value,
             (),
@@ -97,10 +105,10 @@ async def test_drift_on_the_wire_returns_original_bytes_and_resets(
     async with running(server) as wire:
         start = await wire.call(who, "fixture_start", {"slot": "R3-SYN-JOB-01"})
         await server.seal(who, str(start.data["job"]))
-        server.adapter.carrier = drift
+        force(server.adapter, "carrier", drift)
         drifted = await wire.call(who, "fixture_unrelated_read")
         states = {str(s) for (s,) in ledger_rows(server, "SELECT state FROM emit")}
-        server.adapter.carrier = carrier
+        force(server.adapter, "carrier", carrier)
         restored = await wire.call(who, "fixture_unrelated_read")
     assert drifted.raw.decode() == plain and drifted.row["ja_hint"] == "0"  # nosec B101 - pytest assertion
     assert states == {"PENDING"}  # nosec B101 - pytest assertion

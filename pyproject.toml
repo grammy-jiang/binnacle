@@ -485,6 +485,7 @@ source_modules = [
     "binnacle.mcp.job_awareness_hint_walk",
     "binnacle.mcp.job_awareness_hint_identity",
     "binnacle.mcp.job_awareness_hint_struct",
+    "binnacle.mcp.job_awareness_hint_routed",
 ]
 forbidden_modules = [
     "binnacle.features",
@@ -509,6 +510,7 @@ forbidden_modules = [
     "binnacle.mcp.job_awareness_session",
     "binnacle.mcp.job_awareness_hint",
     "binnacle.mcp.job_awareness_hint_struct",
+    "binnacle.mcp.job_awareness_hint_routed",
     "binnacle.features.commands.job_awareness.session_binding",
     "binnacle.features.commands.job_awareness.session_emission",
     "binnacle.features.commands.job_awareness.session_fence",

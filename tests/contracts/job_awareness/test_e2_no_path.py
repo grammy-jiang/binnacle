@@ -33,6 +33,7 @@ LAB_MODULES = [
     "binnacle.mcp.job_awareness_session",
     "binnacle.mcp.job_awareness_hint",
     "binnacle.mcp.job_awareness_hint_struct",
+    "binnacle.mcp.job_awareness_hint_routed",
     *(
         f"binnacle.features.commands.job_awareness.session_{name}"
         for name in (

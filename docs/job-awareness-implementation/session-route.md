@@ -154,6 +154,23 @@ STRUCT carrier (§9.2 S-1) is not implemented; it waits for CV (c′).
   and inside the commit transaction; a drift there aborts the job
   (`ABORTED`), as for any other failed final validation. Barrier tests pause
   the worker after the render entry check in both directions.
+- **TEXTU-G3-01/02.** A routed adapter is immutable after construction.
+  Assigning or deleting any field except the diagnostic `last_meter`
+  raises, so an admitted call cannot observe another carrier, `enabled`,
+  `exclusive`, bindings, tool or server stamp, and the reviewer's in-flight
+  and late-commit changes cannot be made. A new arm is a new adapter
+  (`dataclasses.replace` or `E2Server.build_adapter`). A call keeps the
+  adapter it was dispatched with (bounded snapshot), so the arm controller
+  switches arms only between calls. `object.__setattr__` bypasses this; it
+  is trusted in-process code and out of the threat model, as before. The
+  per-call carrier checks stay as defence in depth. Non-routed adapters and
+  `adapt()` are unchanged.
+- **TEXTU-G4-01.** The in-process lab router captures the adapter of a call
+  at dispatch, before it awaits the tool, and uses only that object for the
+  call. An arm switch while a call is in flight changes later calls only.
+  The routed freeze is shallow: the server stamp is a private deep copy, the
+  tool identity is re-checked on every call, and the bound Tool, schema and
+  callbacks must not change while the adapter lives.
 - **TEXTU-02.** The capacity dry run checks the lifecycle of every arm again
   (`arm_failures`). A negative control proves that a bad non-final arm fails.
 - **ADV-TU-02.** The raw-value scan covers the synthetic argument log. A
@@ -186,6 +203,18 @@ is not merged until the Supervisor says so. The feature stays default off.
   original bytes return and the job stays `PENDING` (or is `ABORTED` when
   the drift follows the adapter). Barrier tests:
   `test_hint_routed_struct_race.py`.
+- **Immutable configuration (TEXTU-G3/G4).** The STRUCT binding is part of
+  the immutable routed configuration: `struct_bound`, the STRUCT
+  `routed_carrier`, the bindings (with `struct`) and the bound schema cannot
+  be assigned or deleted after construction. A new arm is a new adapter, and
+  the E2 Router captures the adapter at dispatch, so a v2-S call in flight
+  keeps its arm (`test_hint_routed_struct_immutable.py`). The drift and race
+  tests first assert that plain assignment raises, then use the trusted
+  `object.__setattr__` bypass to keep the per-call checks covered.
+- **Module split.** The request-local route and candidate checks
+  (`route_fields`, `rendered_jobs`, `MAX_RENDERED`) moved unchanged to
+  `mcp/job_awareness_hint_routed.py`, so `job_awareness_hint.py` stays under
+  500 lines.
 - **Render.** The hint is inserted into the private copy of
   `structuredContent`, then re-validated with the metered `Schema`. A field
   that is already present, invalid structured content, or a failed

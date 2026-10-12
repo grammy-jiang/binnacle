@@ -170,7 +170,6 @@ def routed_app(
     ``schema=None`` registers the tool without an output schema (TEXT-U).
     """
     app = FastMCP("I2-2 synthetic only", version="synthetic")
-    adapter.server_info = app._mcp_server.server_info_stamp
 
     def synthetic() -> ToolResult:
         return result if result is not None else original()
@@ -179,7 +178,8 @@ def routed_app(
         witnessed_tool(synthetic, name="synthetic", output_schema=schema)
     )
     assert isinstance(tool, Tool)  # nosec B101 - pytest assertion
-    bound = replace(adapter, tool=tool)
+    # Routed adapters are immutable: the stamp is bound by a new adapter.
+    bound = replace(adapter, tool=tool, server_info=app._mcp_server.server_info_stamp)
     outcomes: list[object] = []
     app.add_middleware(Carrier(bound, route, outcomes))
     return app, outcomes

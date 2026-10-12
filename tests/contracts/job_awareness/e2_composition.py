@@ -162,6 +162,10 @@ class Router(Middleware):
 
     async def on_call_tool(self, context: Any, call_next: Any) -> Any:
         server, lab = self.server, self.server.lab
+        # TEXTU-G4-01: the arm of a call is the immutable adapter selected at
+        # dispatch, captured before any await and never looked up again in
+        # this call path, so an arm switch affects later calls only.
+        adapter = server.adapter
         outcome = lab.bind(route_call(partial(route, lab.keyer)))
         request = get_http_request()
         marker = request.headers.get(MARKER_HEADER)
@@ -173,7 +177,7 @@ class Router(Middleware):
             if context.message.name == "fixture_unrelated_read":
                 value, execution = await witnessed_call(call_next, context)
                 result = await emit_hint(
-                    lab, outcome, value, execution=execution, adapter=server.adapter
+                    lab, outcome, value, execution=execution, adapter=adapter
                 )
                 if result is not value:
                     rendered = tuple(server.handles(result))
