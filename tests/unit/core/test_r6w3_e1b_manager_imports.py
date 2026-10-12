@@ -2,9 +2,10 @@
 
 E1 (51d7918) closed OPS-FOLLOWUP-shared-venv-lazy-import / R-M1-X1 for the MCP
 server. Both job manager entries (Linux ``job_manager.main``, Darwin
-``job_manager_entry.main``) make the same eager import before serving. Each
+``job_manager_entry.main``) make an eager import before serving: since E1-a3
+the manager-scoped set (``import_manager_modules``), not the whole tree. Each
 host runs its own manager entry here: identical assertions on both OSes. The
-test home (config, jobs, socket) lives under ~/.local/state/bt/e1b (0700).
+test home (config, jobs, socket) lives under ~/.local/state/bt/e1d (0700).
 """
 
 import ast
@@ -23,11 +24,11 @@ from pathlib import Path
 import pytest
 
 from binnacle.platform.darwin import job_manager_entry
-from binnacle.startup_imports import runtime_module_names
+from binnacle.startup_imports import manager_module_names
 
 REPO = Path(__file__).resolve().parents[3]
 SRC = REPO / "src" / "binnacle"
-TEST_ROOT = Path.home() / ".local" / "state" / "bt" / "e1b"
+TEST_ROOT = Path.home() / ".local" / "state" / "bt" / "e1d"
 
 # Runs the host's manager entry as launchd/systemd do; a watcher thread
 # snapshots sys.modules once the socket exists and again after the exercise.
@@ -178,7 +179,7 @@ def test_manager_first_imports_no_binnacle_module_after_serving(private_home):
     assert calls["status"]["owner_instance_id"] == pong["owner_instance_id"]
     log = (private_home / "manager.log").read_text(errors="replace")
     assert "event=startup_import_error" not in log, log[-4000:]
-    assert set(runtime_module_names()) <= set(served)  # eager, before serving
+    assert set(manager_module_names()) <= set(served)  # eager, before serving
     assert late == [], log[-4000:]
 
 
@@ -209,12 +210,13 @@ def _main_calls(path: Path) -> list[str]:
         ),
     ],
 )
-def test_both_manager_entries_import_the_runtime_tree_before_serving(
+def test_both_manager_entries_import_the_manager_set_before_serving(
     entry, first, serving
 ):
     calls = _main_calls(SRC / entry)
-    assert calls.count("import_runtime_modules") == 1, calls
-    where = calls.index("import_runtime_modules")
+    assert calls.count("import_manager_modules") == 1, calls
+    assert "import_runtime_modules" not in calls, calls  # the server's full tree
+    where = calls.index("import_manager_modules")
     assert where < calls.index(serving), calls
     if first == "logging.basicConfig":  # right after logging is configured
         assert calls[where - 1] == first, calls
@@ -226,7 +228,7 @@ def test_darwin_entry_imports_right_after_logging_on_every_host(monkeypatch):
     order = []
     monkeypatch.setattr(logging, "basicConfig", lambda **_: order.append("logging"))
     monkeypatch.setattr(
-        job_manager_entry, "import_runtime_modules", lambda: order.append("import")
+        job_manager_entry, "import_manager_modules", lambda: order.append("import")
     )
     monkeypatch.setattr(
         job_manager_entry, "inherited_fds_cloexec", lambda: order.append("cloexec")
