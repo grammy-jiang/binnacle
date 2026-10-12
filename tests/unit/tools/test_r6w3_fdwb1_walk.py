@@ -363,8 +363,29 @@ def test_a_file_swapped_for_a_directory_is_path_is_directory(root, patch):
     assert caught.value.code == "path_is_directory"
 
 
+def replace_after_stat(patch, target: Path) -> None:
+    """After the pre-open stat, os.replace puts a DIFFERENT regular file there.
+
+    The new file exists before the replace, so its inode differs from the
+    checked one on every filesystem (an unlink-then-create can reuse the
+    freed inode number on ext4: FDW-B1-a2 STEER-01).
+    """
+    incoming = target.with_name("incoming.txt")
+    incoming.write_text("new")
+    real_stat = os.stat
+
+    def swapping(path, *args, **kwargs):
+        info = real_stat(path, *args, **kwargs)
+        here = path == target.name and kwargs.get("dir_fd") is not None
+        if here and incoming.exists():
+            os.replace(incoming, target)
+        return info
+
+    patch.setattr(os, "stat", swapping)
+
+
 def test_a_same_type_swap_is_still_entry_changed(root, patch):
-    swap_after_stat(patch, root / "a.txt", lambda path: path.write_text("new"))
+    replace_after_stat(patch, root / "a.txt")
     files, grant = darwin_grant(root)
     try:
         with pytest.raises(UnsafePath) as caught:

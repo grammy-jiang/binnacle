@@ -158,8 +158,17 @@ def listing(path: Path) -> Callable:
 
 
 def regular(path: Path) -> None:
-    path.rename(path.with_name("kept.txt"))  # Keep the inode: no number reuse.
-    path.write_text("swapped in\n")
+    # os.replace of a DIFFERENT file that exists first: a new inode on every
+    # filesystem (unlink-then-create can reuse the number on ext4, STEER-01).
+    incoming = path.with_name("incoming.txt")
+    incoming.write_text("swapped in\n")
+    os.replace(incoming, path)
+
+
+def rewrite_in_place(path: Path) -> None:
+    with path.open("r+b") as same:  # The same inode, new bytes.
+        same.truncate(0)
+        same.write(b"rewritten\n")
 
 
 def fifo_swap(path: Path) -> None:
@@ -233,6 +242,35 @@ def test_a_swap_between_the_stat_and_the_open_is_refused_alike(
     assert outcome(root, darwin, reading(target)) == expected(kind, target)
     assert fired == ["a.txt"]
     assert reads == []  # Never read: not the swapped-in object, not the old one.
+
+
+@PATHS
+def test_an_in_place_rewrite_of_the_same_inode_is_read(root, patch, darwin):
+    # Identity is (st_dev, st_ino): a rewrite keeps it, so the open is the
+    # checked file and its current bytes are read, on both OSes.
+    target = root / "a.txt"
+    if not darwin:
+        linux_read_path(patch)
+    fired = swap_at_open(patch, target, rewrite_in_place)
+    assert outcome(root, darwin, reading(target)) == (
+        "ok",
+        f"Read all 1 lines from {target}.",
+    )
+    assert fired == ["a.txt"]
+    assert target.read_text() == "rewritten\n"
+
+
+def test_darwin_checked_open_allows_an_in_place_rewrite(root):
+    checked = os.lstat(root / "a.txt")
+    rewrite_in_place(root / "a.txt")
+    parent = os.open(root, file_traversal.TRAVERSE_FLAGS)
+    try:
+        fd = file_traversal.checked_open(
+            parent, "a.txt", file_traversal.READ_FLAGS, checked
+        )
+        os.close(fd)
+    finally:
+        os.close(parent)
 
 
 @PATHS

@@ -205,10 +205,13 @@ def _fdw_open(target: Path, name: str, hook: str, times: int | None) -> Any:
             fired.append(path)
             if hook == "shortage":
                 raise OSError(errno.EMFILE, os.strerror(errno.EMFILE))
+            if hook == "regular":  # os.replace of a file that exists: a new inode.
+                incoming = target.with_name("incoming.txt")
+                incoming.write_text("swapped in\n", encoding="utf-8")
+                os.replace(incoming, target)
+                return real_open(path, flags, *args, **kwargs)
             target.rename(target.with_name(name + ".kept"))  # Keeps the inode.
-            if hook == "regular":
-                target.write_text("swapped in\n", encoding="utf-8")
-            elif hook == "fifo":
+            if hook == "fifo":
                 os.mkfifo(target)
             else:
                 target.mkdir()
