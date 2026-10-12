@@ -17,7 +17,7 @@ from fastmcp import Client, FastMCP
 from fastmcp.client.transports import StreamableHttpTransport
 from fastmcp.server.middleware import Middleware
 from fastmcp.tools.base import Tool, ToolResult
-from mcp.types import Implementation
+from mcp.types import Implementation, TextContent
 
 from binnacle.features.commands.job_awareness.models import (
     JobRef,
@@ -44,8 +44,17 @@ __all__ = [
     "RoutedLab",
     "key_digest",
     "routed_app",
+    "text_only",
     "wire_call",
 ]
+
+
+def text_only() -> ToolResult:
+    """The TEXT-U result shape (g5 §9.2 S-2): one text block, no structure."""
+    return ToolResult(
+        content=[TextContent(type="text", text="Synthetic result")],
+        meta={"existing": "kept"},
+    )
 
 
 def key_digest(seed: str = "a") -> KeyDigest:
@@ -81,9 +90,16 @@ class RoutedLab(Lab):
             )
         self.handle = self.consumer("c" * 32, jobs=self.jobs)
 
-    def routed(self, **options: object) -> HintAdapter:
-        """A plain HintAdapter whose bindings name the candidate type."""
+    def routed(self, *, structured: bool = True, **options: object) -> HintAdapter:
+        """A plain HintAdapter whose bindings name the candidate type.
+
+        ``structured=False`` binds a native tool without an output schema
+        (TEXT-U, g5 §9.2 S-2).
+        """
         synthetic = self.adapter(**options)
+        tool = synthetic.tool
+        if not structured:
+            tool = Tool(name="synthetic", parameters={}, output_schema=None)
         bindings = replace(
             synthetic.bindings,
             route_type=SessionRoute,
@@ -93,7 +109,7 @@ class RoutedLab(Lab):
             bindings=bindings,
             grant=synthetic.grant,
             jobs=synthetic.jobs,
-            tool=synthetic.tool,
+            tool=tool,
             workers=synthetic.workers,
             server_info=synthetic.server_info,
             enabled=synthetic.enabled,
@@ -145,9 +161,12 @@ def routed_app(
     result: ToolResult | None = None,
     *,
     route: Callable[[], object] | None = None,
-    schema: dict[str, object] = SCHEMA,
+    schema: dict[str, object] | None = SCHEMA,
 ) -> tuple[FastMCP, list[object]]:
-    """One witnessed synthetic tool; the carrier is the only adapter caller."""
+    """One witnessed synthetic tool; the carrier is the only adapter caller.
+
+    ``schema=None`` registers the tool without an output schema (TEXT-U).
+    """
     app = FastMCP("I2-2 synthetic only", version="synthetic")
     adapter.server_info = app._mcp_server.server_info_stamp
 

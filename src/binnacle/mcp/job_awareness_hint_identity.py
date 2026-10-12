@@ -48,6 +48,7 @@ from binnacle.mcp.job_awareness_hint_walk import Meter, walk
 
 __all__ = [
     "NATIVE_TOOL_TYPES",
+    "NO_STRUCTURE",
     "Execution",
     "Identity",
     "canonical_schema",
@@ -59,6 +60,9 @@ __all__ = [
 ]
 
 Identity = tuple[str, str | None, str]
+#: g5 §9.2 S-2: the schema part of a routed TEXT-U identity (no output schema).
+#: Canonical JSON of an object always starts with "{", so it never collides.
+NO_STRUCTURE = "NO_STRUCTURE"
 _FIELDS = ("name", "version", "output_schema")
 # Reviewed directly registered FastMCP 4.1.0 classes. Wrappers (TransformedTool,
 # FastMCPProviderTool, ProxyTool, OpenAPITool) and every subclass are excluded.
@@ -89,9 +93,13 @@ def canonical_schema(schema: Any) -> str:
 
 
 def producer_identity(
-    tool: object, expected: Identity | None = None
+    tool: object, expected: Identity | None = None, *, unstructured: bool = False
 ) -> Identity | None:
     """Return (name, version, canonical schema) of a native Tool, else None.
+
+    With ``unstructured`` (routed TEXT-U only), a tool whose output schema is
+    exactly None has the schema part ``NO_STRUCTURE``. Without it, a missing
+    schema stays unknown, as before g5.
 
     None means unknown: the caller must suppress. The exact-type check runs
     before any attribute, key lookup or equality, so a subclass (hostile or
@@ -119,11 +127,13 @@ def producer_identity(
             or not 1 <= len(name) <= 128
             or (version is not None and type(version) is not str)
             or (version is not None and len(version) > 128)
-            or type(schema) is not dict
+            or not (type(schema) is dict or (unstructured and schema is None))
         ):
             return None
         if expected is not None and (name, version) != expected[:2]:
             return None
+        if schema is None:
+            return name, version, NO_STRUCTURE
         return name, version, canonical_schema(schema)
     except Exception:  # noqa: BLE001 - unknown producer identity suppresses
         return None

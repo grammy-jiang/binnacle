@@ -4,7 +4,9 @@ Owner scope is a hard gate before any global lookup (A2-01): a selector is
 resolved only inside the caller key's own in-memory allocations. A selector
 that fails the gate reads no ledger, catalog, snapshot or grant state.
 Foreign, missing, malformed, retired and route-failure selectors all return
-the same ``DENIED``. Serving then needs all three: lab ``alloc.state=LIVE`` in
+the same ``DENIED``. Three disjoint grammars exist: the handle, the slot and
+(g5 §9.2) the canonical key that the reminder prints; the canonical key is an
+exact match inside the caller's own allocations. Serving then needs all three: lab ``alloc.state=LIVE`` in
 the current epoch, an AUTHORIZED grant, and the unchanged in-memory entry.
 """
 
@@ -36,12 +38,15 @@ from binnacle.features.commands.job_awareness.session_snapshot import (
 )
 
 _HANDLE = re.compile(r"j_[0-9a-f]{12}")
+_CANONICAL = re.compile(r"ja1_[0-9a-f]{32}:[0-9a-f]{12}:g1_[0-9a-f]{32}")
+_CANONICAL_LENGTH = 85
 _READ = frozenset({Scope.READ})
 Owned = tuple[KeyDigest, KeyBinding, AllocationEntry]
 
 
 def owned(lab: SessionLab, outcome: RouteOutcome, selector: object) -> Owned | LabError:
-    """Resolve a handle or slot within the caller key's allocations only."""
+    """Resolve a handle, slot or canonical key within the caller key's
+    allocations only."""
     key = lab.keyed(outcome)
     binding = None if key is None else lab.table.get(key.kd)
     if key is None or binding is None or binding.suspended or type(selector) is not str:
@@ -49,6 +54,11 @@ def owned(lab: SessionLab, outcome: RouteOutcome, selector: object) -> Owned | L
     entries = tuple(binding.jobs.values())
     if len(selector) == 14 and _HANDLE.fullmatch(selector) is not None:
         matches = [entry for entry in entries if entry.handle == selector]
+    elif (
+        len(selector) == _CANONICAL_LENGTH
+        and _CANONICAL.fullmatch(selector) is not None
+    ):
+        matches = [entry for entry in entries if entry.job.canonical_key == selector]
     elif valid_slot(selector):
         matches = [entry for entry in entries if entry.slot == selector]
         if len(matches) > 1:

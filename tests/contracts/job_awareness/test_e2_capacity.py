@@ -5,6 +5,10 @@
 When the frozen run directory exists on this host, a test re-derives the copy
 from it. One carrier = one phase with its own ledger pair and epoch. STRUCT is
 ``NOT_RUN`` in E2, so its arms run the lifecycle with the adapter off.
+
+g5 §9.2 S-2: routed TEXT runs only on the v2-U lab tool (no output schema),
+so the TEXT block runs TEXT-U. The META and STRUCT blocks also run once more
+relabeled to TEXT-U, so all 72 frozen slots pass the TEXT-U lab tool.
 """
 
 import hashlib
@@ -19,7 +23,12 @@ from binnacle.features.commands.job_awareness.models import HintCarrier
 from binnacle.features.commands.job_awareness.receipt_schema import Limits
 from binnacle.features.commands.job_awareness.session_lab import LabConfig
 from binnacle.features.commands.job_awareness.session_snapshot import FrozenTemplate
-from tests.contracts.job_awareness.e2_composition import E2Server, chat, running
+from tests.contracts.job_awareness.e2_composition import (
+    E2Server,
+    chat,
+    hinted_keys,
+    running,
+)
 from tests.contracts.job_awareness.e2_scoring import (
     emitted_handles,
     exports,
@@ -128,31 +137,49 @@ async def run_arm(server, wire, arm, *, adapter_on):
     }
 
 
+#: (frozen block, lab mode). OFF = adapter off for every arm (STRUCT NOT_RUN).
+BLOCKS = [
+    ("META", "META"),
+    ("TEXT", "TEXT-U"),
+    ("STRUCT", "OFF"),
+    ("META", "TEXT-U"),
+    ("STRUCT", "TEXT-U"),
+]
+
+
 @pytest.mark.timeout(600)
-@pytest.mark.parametrize("carrier", ["META", "TEXT", "STRUCT"])
+@pytest.mark.parametrize(("carrier", "mode"), BLOCKS)
 @in_loop
-async def test_capacity_dry_run_all_arms_of_one_carrier_phase(tmp_path, carrier):
+async def test_capacity_dry_run_all_arms_of_one_carrier_phase(tmp_path, carrier, mode):
     arms = sorted(
         (a for a in SLOTS["arms"] if a["carrier"] == carrier),
         key=lambda a: (a["execution_rank_within_carrier"], a["arm"] != "CONTROL"),
     )
+    text_u = mode == "TEXT-U"
     server = E2Server(
         tmp_path / carrier,
         templates=templates(),
         config=LabConfig(ttl_ms=1800000, deferred_seal=True),
-        carrier=HintCarrier.TEXT if carrier == "TEXT" else HintCarrier.META,
+        carrier=HintCarrier.TEXT if text_u else HintCarrier.META,
+        structured=not text_u,
     )
     results = []
     async with running(server) as wire:
         for arm in arms:
-            on = carrier != "STRUCT" and arm["arm"] == "CANDIDATE"
+            on = mode != "OFF" and arm["arm"] == "CANDIDATE"
             results.append((arm, await run_arm(server, wire, arm, adapter_on=on)))
+        notes = [c for c in wire.calls if c.tool == "fixture_unrelated_read"]
     for arm, result in results:
         assert result["errors"] == [] and result["route"] == "BOUND"  # nosec B101 - pytest assertion
         assert result["values"] == arm["expected_values"]  # nosec B101 - pytest assertion
         assert result["echo"] == {"ok": True}  # nosec B101 - pytest assertion
-        hinted = carrier != "STRUCT" and arm["arm"] == "CANDIDATE"
+        hinted = mode != "OFF" and arm["arm"] == "CANDIDATE"
         assert (result["hint"] == result["handle"]) is hinted  # nosec B101 - pytest assertion
+    assert len(notes) == 24  # nosec B101 - pytest assertion
+    for call in notes:
+        assert ("structuredContent" in call.result) is not text_u  # nosec B101 - pytest assertion
+        blocks = len(call.result["content"])
+        assert blocks == (1 + len(call.hints) if text_u else 1)  # nosec B101 - pytest assertion
         assert result["live"] == 1 and result["retired"] == 1  # nosec B101 - pytest assertion
         assert result["grant_after_close"] is None and int(result["remaining"]) > 0  # nosec B101 - pytest assertion
     keys = ledger_rows(server, "SELECT kd,ns FROM keys")
@@ -168,7 +195,9 @@ async def test_capacity_dry_run_all_arms_of_one_carrier_phase(tmp_path, carrier)
     assert grants[0] == grants[1] == 24 <= limits.grants  # nosec B101 - pytest assertion
     assert snapshots == 24 <= limits.snapshots and epochs <= limits.epochs  # nosec B101 - pytest assertion
     assert not any("QUOTA_EXCEEDED" in repr(e) for e in server.events)  # nosec B101 - pytest assertion
-    assert len(emitted_handles(server)) == (0 if carrier == "STRUCT" else 12)  # nosec B101 - pytest assertion
+    assert len(emitted_handles(server)) == (0 if mode == "OFF" else 12)  # nosec B101 - pytest assertion
+    hints = [key for call in notes for key in hinted_keys(call.result)]
+    assert len(hints) == len(set(hints)) == (0 if mode == "OFF" else 12)  # nosec B101 - pytest assertion
 
 
 @pytest.mark.timeout(600)

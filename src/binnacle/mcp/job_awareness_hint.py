@@ -13,6 +13,7 @@ from mcp.types import ContentBlock, TextContent
 
 from binnacle.mcp.job_awareness_hint_identity import (
     NATIVE_TOOL_TYPES,
+    NO_STRUCTURE,
     Execution,
     Identity,
     canonical_schema,
@@ -35,6 +36,7 @@ __all__ = [
     "MAX_RENDERED",
     "META_KEY",
     "NATIVE_TOOL_TYPES",
+    "NO_STRUCTURE",
     "Execution",
     "HintAdapter",
     "HintBindings",
@@ -145,11 +147,32 @@ class HintAdapter:
             raise ValueError("explicit native tool binding required")
         self.bound_tool = self.tool  # provenance snapshot of the registration
         self.carrier = self.bindings.meta if self.carrier is None else self.carrier
+        if self.bindings.route_type is not None and self._bind_routed():
+            return
         try:
             self.schema = Schema(self.tool.output_schema)
         except (ValueError, TypeError, RecursionError):
             self.schema = None
         self.identity = None if self.schema is None else producer_identity(self.tool)
+
+    def _bind_routed(self) -> bool:
+        """g5 §9.2 S-2 bind rules for routed (E2) mode; True when bound here.
+
+        A tool without an output schema binds the ``NO_STRUCTURE`` sentinel
+        and only the TEXT carrier (TEXT-U). TEXT on a tool that declares an
+        output schema is rejected: with ``structuredContent`` present the
+        client drops the extra text block (H-SC). Both fail closed at bind.
+        """
+        text = self.carrier is self.bindings.text
+        if self.tool.output_schema is None:
+            if not text:
+                raise ValueError("NO_STRUCTURE tools bind only the TEXT carrier")
+            self.schema = NO_STRUCTURE
+            self.identity = producer_identity(self.tool, unstructured=True)
+            return True
+        if text:
+            raise ValueError("routed TEXT needs a tool without an output schema")
+        return False
 
     def bind_server(self, server: object) -> None:
         """Bind the serverInfo stamp from the server that dispatches the tool.
@@ -197,27 +220,33 @@ class HintAdapter:
         middleware or interceptor inside ``witnessed_call`` rewrites the
         result object after the witnessed body completed.
         """
-        if not self._admitted(original, execution):
+        if not self._admitted(original, execution, routed=False):
             return original
         return await self.workers.run(
             lambda stop: self._adapt(original, stop), original
         )
 
-    def _admitted(self, original: ToolResult, execution: object) -> bool:
+    def _admitted(
+        self, original: ToolResult, execution: object, *, routed: bool
+    ) -> bool:
         """The shared gate of ``adapt`` and ``adapt_routed``; it consumes the
-        receipt only after the cheap configuration checks passed."""
+        receipt only after the cheap configuration checks passed. A
+        ``NO_STRUCTURE`` tool is admitted on the routed path only, so ``adapt``
+        treats it as before g5 (unknown schema: unchanged)."""
+        unstructured = self.schema is NO_STRUCTURE
         if (
             self.enabled is not True
             or self.exclusive is not True
             or type(original) is not ToolResult
             or self.schema is None
             or self.identity is None
+            or (unstructured and not routed)
         ):
             return False
         tool = claim(execution, original)
         if tool is not self.bound_tool or not native_tool(tool):
             return False
-        producer = producer_identity(tool, self.identity)
+        producer = producer_identity(tool, self.identity, unstructured=unstructured)
         return producer is not None and producer == self.identity
 
     async def adapt_routed(
@@ -235,7 +264,10 @@ class HintAdapter:
         values) are read once from the backing map and never stored;
         ``HintAdapter.grant`` and ``jobs`` are not used on this path. No
         request field can construct a route. The producer, receipt, schema,
-        size and carrier rules are those of ``adapt``. The
+        size and carrier rules are those of ``adapt``, with one g5 addition
+        (§9.2 S-2, TEXT-U): a ``NO_STRUCTURE`` tool is served only here, only
+        with the TEXT carrier, and only when the result has no
+        ``structuredContent`` at all. The
         outcome names the exact jobs whose candidates the renderer received
         for the inserted hint (at most ``MAX_RENDERED``, each one in
         ``route.jobs``, in candidate order). Any doubt returns
@@ -264,7 +296,7 @@ class HintAdapter:
             or not all(type(job) is binding.job_type for job in jobs)
         ):
             return unchanged
-        if not self._admitted(original, execution):
+        if not self._admitted(original, execution, routed=True):
             return unchanged
         busy: tuple[ToolResult, tuple[object, ...]] = (original, ())
         result, rendered = await self.workers.run(
@@ -325,7 +357,14 @@ class HintAdapter:
             original_bytes = meter.bytes - (13 if original.meta is None else 0)
             meter.initial = False
             body = walk(original, meter, copy=True, byte_limit=262144 - overhead)
-            if not self.schema.valid(body["structuredContent"], meter):
+            if self.schema is NO_STRUCTURE:  # TEXT-U: no structure, routed TEXT
+                if (
+                    not routed
+                    or self.carrier is not binding.text
+                    or body["structuredContent"] is not None
+                ):
+                    return original, ()
+            elif not self.schema.valid(body["structuredContent"], meter):
                 return original, ()
             if (
                 type(jobs) is not tuple

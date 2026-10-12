@@ -90,7 +90,7 @@
     "LINUX": 62
   },
   "coverage_complete": true,
-  "implementation_commit": "1bb8eace488623b1b6ad72430dbacb08a681b8da",
+  "implementation_commit": "4850ea978d5154a474a21db7c32c5d6f825a2d66",
   "production_module_count": 216,
   "rows": [
     {
@@ -4606,7 +4606,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/features/commands/job_awareness/session_serving.py",
       "rationale": "Core durable record, RPC, output cursor or command business logic",
-      "sha256": "40aeedb921283518c6cd29dd9fce63a240a4e9be6e6f164c5385f3b62116e88e",
+      "sha256": "062c5287a33282bb0ef3a72a761de83e148156a4a25073bb9ac9b3e3886c5615",
       "stage": "OS6",
       "was_in_baseline": false
     },
@@ -5943,6 +5943,7 @@
         "binnacle.mcp.job_awareness_hint_identity.Execution",
         "binnacle.mcp.job_awareness_hint_identity.Identity",
         "binnacle.mcp.job_awareness_hint_identity.NATIVE_TOOL_TYPES",
+        "binnacle.mcp.job_awareness_hint_identity.NO_STRUCTURE",
         "binnacle.mcp.job_awareness_hint_identity.canonical_schema",
         "binnacle.mcp.job_awareness_hint_identity.claim",
         "binnacle.mcp.job_awareness_hint_identity.native_tool",
@@ -5984,7 +5985,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/mcp/job_awareness_hint.py",
       "rationale": "FastMCP-native integration; MCP framework remains solely responsible for Providers and Middleware",
-      "sha256": "86b819ac8b37d4c41b4917d7987f96749c2e4cb10ceef343a29523aa1bb2128c",
+      "sha256": "4da67eff5c614db50591549a31121edf911eded4e1be07d23dcd3e1fdf5954b0",
       "stage": "OS6",
       "was_in_baseline": false
     },
@@ -6027,7 +6028,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/mcp/job_awareness_hint_identity.py",
       "rationale": "FastMCP-native integration; MCP framework remains solely responsible for Providers and Middleware",
-      "sha256": "5ab179f05552a855f65db59f836355573cc70a691b66ba5e83a6e624e68bf122",
+      "sha256": "e608e3d59b40deea2b7726159d22da972055c66b0632e1f7a298116830c260b6",
       "stage": "OS6",
       "was_in_baseline": false
     },

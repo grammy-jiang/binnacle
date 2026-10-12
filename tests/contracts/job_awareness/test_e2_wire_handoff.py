@@ -23,7 +23,9 @@ from tests.contracts.job_awareness.synthetic_app import in_loop
 
 _NOTE_TEXT = f'{{"text":"{NOTE}","type":"text"}}'
 _TAIL = f'"isError":false,"structuredContent":{{"note":"{NOTE}"}}}}'
+_TAIL_U = '"isError":false}'  # v2-U (TEXT-U): no structuredContent at all
 PLAIN = f'{{"content":[{_NOTE_TEXT}],{_TAIL}'
+PLAIN_U = f'{{"content":[{_NOTE_TEXT}],{_TAIL_U}'
 
 
 def expected(carrier: HintCarrier, keys: list[str]) -> str:
@@ -31,7 +33,13 @@ def expected(carrier: HintCarrier, keys: list[str]) -> str:
     if carrier is HintCarrier.META:
         return f'{{"_meta":{{"{META_KEY}":"{hint}"}},"content":[{_NOTE_TEXT}],{_TAIL}'
     block = f'{{"text":"{hint}","type":"text"}}'
-    return f'{{"content":[{_NOTE_TEXT},{block}],{_TAIL}'
+    return f'{{"content":[{_NOTE_TEXT},{block}],{_TAIL_U}'
+
+
+def lab_server(path, text_u: bool, **options) -> E2Server:
+    """META on the structured note, or TEXT on the v2-U note (g5 §9.2 S-2)."""
+    carrier = HintCarrier.TEXT if text_u else HintCarrier.META
+    return E2Server(path, carrier=carrier, structured=not text_u, **options)
 
 
 def emit_states(server: E2Server) -> dict[str, str]:
@@ -60,7 +68,8 @@ async def start_sealed(server, wire, who, slots):
 @pytest.mark.parametrize("carrier", [HintCarrier.META, HintCarrier.TEXT])
 @in_loop
 async def test_serialized_bytes_carry_exactly_the_emitted_jobs(tmp_path, carrier):
-    server = E2Server(tmp_path / "phase", carrier=carrier)
+    text_u = carrier is HintCarrier.TEXT  # TEXT only on the v2-U tool (g5 §9.2)
+    server = E2Server(tmp_path / "phase", carrier=carrier, structured=not text_u)
     server.adapter = server.build_adapter(enabled=True)
     who = chat("wire-A")
     async with running(server) as wire:
@@ -72,41 +81,49 @@ async def test_serialized_bytes_carry_exactly_the_emitted_jobs(tmp_path, carrier
         assert call.raw.decode() == expected(carrier, emitted)  # nosec B101 - pytest assertion
         assert call.row["emit_state"] == "EMITTED"  # nosec B101 - pytest assertion
         again = await wire.call(who, "fixture_unrelated_read")
-        assert again.raw.decode() == PLAIN  # nosec B101 - pytest assertion
+        assert again.raw.decode() == (PLAIN_U if text_u else PLAIN)  # nosec B101 - pytest assertion
     for key, state in emit_states(server).items():
         assert (key.encode() in call.raw) is (state == "EMITTED")  # nosec B101 - pytest assertion
 
 
+@pytest.mark.parametrize("text_u", [False, True], ids=["META", "TEXT-U"])
 @pytest.mark.parametrize("point", ["lab:commit", "lab:reserve"])
 @in_loop
-async def test_store_failure_returns_original_bytes_and_never_rehints(tmp_path, point):
+async def test_store_failure_returns_original_bytes_and_never_rehints(
+    tmp_path, point, text_u
+):
     fault = Fault()
-    server = E2Server(tmp_path / "phase", faults=fault)
+    server = lab_server(tmp_path / "phase", text_u, faults=fault)
+    plain = PLAIN_U if text_u else PLAIN
     who = chat("wire-B")
     async with running(server) as wire:
         await start_sealed(server, wire, who, ["R3-SYN-JOB-01"])
         fault.armed = point
         failed = await wire.call(who, "fixture_unrelated_read")
         fault.armed = None
-        assert failed.raw.decode() == PLAIN  # nosec B101 - pytest assertion
+        assert failed.raw.decode() == plain  # nosec B101 - pytest assertion
         after = set(emit_states(server).values())
         assert after == ({"ABORTED"} if point == "lab:commit" else {"PENDING"})  # nosec B101 - pytest assertion
         later = await wire.call(who, "fixture_unrelated_read")
     hinted = point == "lab:reserve"  # a failed reserve wrote nothing: still PENDING
-    assert (later.raw.decode() != PLAIN) is hinted  # nosec B101 - pytest assertion
+    assert (later.raw.decode() != plain) is hinted  # nosec B101 - pytest assertion
 
 
+@pytest.mark.parametrize("text_u", [False, True], ids=["META", "TEXT-U"])
 @in_loop
-async def test_control_arm_keeps_original_bytes_and_jobs_pending(tmp_path):
-    server = E2Server(tmp_path / "phase")
+async def test_control_arm_keeps_original_bytes_and_jobs_pending(tmp_path, text_u):
+    server = lab_server(tmp_path / "phase", text_u)
     server.adapter = server.build_adapter(enabled=False)
     who = chat("wire-C")
     async with running(server) as wire:
         await start_sealed(server, wire, who, ["R3-SYN-JOB-01"])
         control = await wire.call(who, "fixture_unrelated_read")
-        assert control.raw.decode() == PLAIN  # nosec B101 - pytest assertion
+        assert control.raw.decode() == (PLAIN_U if text_u else PLAIN)  # nosec B101 - pytest assertion
         assert set(emit_states(server).values()) == {"PENDING"}  # nosec B101 - pytest assertion
         server.adapter = server.build_adapter(enabled=True)
         hinted = await wire.call(who, "fixture_unrelated_read")
-    assert json.loads(hinted.raw)["_meta"][META_KEY].endswith("unconfirmed")  # nosec B101 - pytest assertion
+    body = json.loads(hinted.raw)
+    hint = body["content"][-1]["text"] if text_u else body["_meta"][META_KEY]
+    assert hint.endswith("unconfirmed")  # nosec B101 - pytest assertion
+    assert ("structuredContent" in body) is not text_u  # nosec B101 - pytest assertion
     assert set(emit_states(server).values()) == {"EMITTED"}  # nosec B101 - pytest assertion

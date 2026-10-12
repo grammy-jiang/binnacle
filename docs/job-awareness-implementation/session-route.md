@@ -81,6 +81,37 @@ conversation correlation key. It is not authentication.
 - `test_e2_capacity.py` runs the 72 frozen A/B arm slots, one carrier per
   phase, and all TC sub-phases in one phase, with the real `Limits`.
 
+## Amendment g5: TEXT-U and the canonical-key selector
+
+Design §9.2 S-2 (TEXT-U) and the selector extension are implemented. The
+STRUCT carrier (§9.2 S-1) is not implemented; it waits for CV (c′).
+
+- **TEXT-U bind rule.** In routed mode (bindings with a `route_type`), a
+  native tool without an output schema binds the `NO_STRUCTURE` sentinel.
+  Only the TEXT carrier may bind it. TEXT on a tool that declares an output
+  schema raises `ValueError` at bind time (H-SC: the client drops a second
+  text block when `structuredContent` is present).
+- **TEXT-U render rule.** `adapt_routed` inserts the reminder as a second
+  text block only when the result has no `structuredContent` at all.
+  Otherwise the hint is suppressed and the jobs are reset, as for any other
+  suppression.
+- **Unchanged.** `adapt()` never hints a `NO_STRUCTURE` tool, so the
+  non-routed path is byte-identical to the pre-g5 baseline. The META path,
+  every tool with an output schema and every adapter-off result keep their
+  bytes. The master wire-byte golden values are unchanged.
+- **Lab tool v2-U.** The in-process composition registers
+  `fixture_unrelated_read` without an output schema when `structured=False`.
+  It returns one text block, `Synthetic reference note.`.
+- **Canonical-key selector.** Lab selectors also accept the canonical key that
+  the reminder prints (`^ja1_[0-9a-f]{32}:[0-9a-f]{12}:g1_[0-9a-f]{32}$`).
+  The grammar is disjoint from the handle and slot grammars. It is an exact
+  match inside the caller key's own allocations, before any global read.
+  Foreign, guessed, malformed and retired keys return the uniform `DENIED`.
+- **Evidence.** TC-1 to TC-5 pass on v2-U, alone and in one shared phase.
+  The capacity dry run covers all 72 frozen slots on v2-U (the TEXT block,
+  and the META and STRUCT blocks relabeled). Raw-value scans of wire results,
+  log rows, argument logs and lab files find no raw platform value.
+
 ## What is NOT claimed
 
 - No authentication, no authenticated per-chat authorization and no replay

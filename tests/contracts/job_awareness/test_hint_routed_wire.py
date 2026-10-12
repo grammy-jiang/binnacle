@@ -16,6 +16,7 @@ from binnacle.mcp.job_awareness_hint import META_KEY, HintAdapter
 from tests.contracts.job_awareness.routed_support import (
     RoutedLab,
     routed_app,
+    text_only,
     wire_call,
 )
 from tests.contracts.job_awareness.synthetic_app import in_loop, original
@@ -121,19 +122,28 @@ async def test_adapt_wire_bytes_equal_master(protocol, case):
         assert len(outcomes) == 1  # nosec B101 - pytest assertion
 
 
-@pytest.mark.parametrize(("protocol", "case"), CASES)
+ROUTED_CASES = [(p, c) for p, c in CASES if c != "text"]
+
+
+def test_routed_text_on_the_structured_tool_is_refused_at_bind():
+    """g5 §9.2 S-2: the routed TEXT golden case no longer binds. Routed TEXT
+    is TEXT-U; its bytes are in ``test_hint_routed_textu``."""
+    with RoutedLab(1) as lab, pytest.raises(ValueError, match="TEXT"):
+        lab.routed(enabled=True, carrier=HintCarrier.TEXT)
+
+
+@pytest.mark.parametrize(("protocol", "case"), ROUTED_CASES)
 @in_loop
 async def test_routed_wire_bytes_equal_adapt_for_the_same_job(protocol, case):
     """Same single job via a route: identical bytes; rendered iff hinted."""
     with RoutedLab(1) as lab:
-        carrier = HintCarrier.TEXT if case == "text" else HintCarrier.META
-        adapter = lab.routed(enabled=case != "off", carrier=carrier)
+        adapter = lab.routed(enabled=case != "off", carrier=HintCarrier.META)
         route = lab.route(lab.job)
         app, outcomes = routed_app(adapter, case_value(case), route=lambda: route)
         _, raw = await wire_call(app, protocol)
         assert raw.decode() == GOLDEN[(protocol, case)]  # nosec B101 - pytest assertion
         (outcome,) = outcomes
-        hinted = case in ("meta", "text")
+        hinted = case == "meta"
         assert outcome.rendered == ((lab.job,) if hinted else ())  # nosec B101 - pytest assertion
         assert (_JOB in raw.decode()) is hinted  # nosec B101 - pytest assertion
 
@@ -142,9 +152,11 @@ async def test_routed_wire_bytes_equal_adapt_for_the_same_job(protocol, case):
 @in_loop
 async def test_routed_wire_carries_only_rendered_jobs(protocol):
     with RoutedLab(4) as lab:
-        adapter = lab.routed(enabled=True, carrier=HintCarrier.TEXT)
+        adapter = lab.routed(structured=False, enabled=True, carrier=HintCarrier.TEXT)
         routes = iter([lab.route(*lab.jobs[2:]), lab.route(lab.jobs[1])])
-        app, outcomes = routed_app(adapter, route=lambda: next(routes))
+        app, outcomes = routed_app(
+            adapter, text_only(), route=lambda: next(routes), schema=None
+        )
         for expected in (lab.jobs[2:], (lab.jobs[1],)):
             result, raw = await wire_call(app, protocol)
             outcome = outcomes[-1]

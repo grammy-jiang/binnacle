@@ -29,10 +29,11 @@ from tests.contracts.job_awareness.synthetic_app import in_loop
 from tests.contracts.job_awareness.test_hint_schema_support import executed
 
 
-def note() -> ToolResult:
+def note(structured: bool = True) -> ToolResult:
+    """The lab note; ``structured=False`` is the v2-U (TEXT-U) shape."""
     return ToolResult(
         content=[TextContent(type="text", text=NOTE)],
-        structured_content={"note": NOTE},
+        structured_content={"note": NOTE} if structured else None,
     )
 
 
@@ -56,7 +57,7 @@ async def allocate(server: E2Server, name: str, count: int, *, seal=True):
 
 
 async def emission(server, who, *, adapter=None, checkpoint=None):
-    value = note()
+    value = note(server.structured)
     receipt = executed(value, server.tool)
     result = await emit_hint(
         server.lab,
@@ -142,8 +143,12 @@ async def test_concurrent_calls_hint_each_job_exactly_once(tmp_path, calls):
         if round_ % 30 == 0:
             if server is not None:
                 await server.workers.close()
-            carrier = HintCarrier.META if round_ % 60 else HintCarrier.TEXT
-            server = E2Server(tmp_path / f"phase-{round_}", carrier=carrier)
+            text_u = round_ % 60 == 0  # TEXT only on the v2-U tool (g5 §9.2)
+            server = E2Server(
+                tmp_path / f"phase-{round_}",
+                carrier=HintCarrier.TEXT if text_u else HintCarrier.META,
+                structured=not text_u,
+            )
             server.adapter = server.build_adapter(enabled=True)
         who, _ = await allocate(server, f"chat-{round_}", 3)
         results = await asyncio.gather(*(emission(server, who) for _ in range(calls)))

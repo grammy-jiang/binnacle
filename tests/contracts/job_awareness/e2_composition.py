@@ -212,6 +212,8 @@ class E2Server:
     templates: dict[str, FrozenTemplate] = field(default_factory=lambda: TEMPLATES)
     carrier: HintCarrier = HintCarrier.META
     note: str = NOTE
+    #: False = lab tool v2-U (g5 §9.2 S-2): no output schema, one text block.
+    structured: bool = True
     faults: Callable[[str], None] | None = None
 
     def __post_init__(self) -> None:
@@ -265,7 +267,7 @@ class E2Server:
             note = self.note
             return ToolResult(
                 content=[TextContent(type="text", text=note)],
-                structured_content={"note": note},
+                structured_content={"note": note} if self.structured else None,
             )
 
         for function in (fixture_start, fixture_read, fixture_echo):
@@ -274,7 +276,7 @@ class E2Server:
             witnessed_tool(
                 fixture_unrelated_read,
                 name="fixture_unrelated_read",
-                output_schema=NOTE_SCHEMA,
+                output_schema=NOTE_SCHEMA if self.structured else None,
             )
         )
         assert isinstance(tool, Tool)  # nosec B101 - pytest assertion

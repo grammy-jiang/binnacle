@@ -30,7 +30,11 @@ from binnacle.mcp.job_awareness_hint import (
     HintBindings,
     RoutedOutcome,
 )
-from tests.contracts.job_awareness.routed_support import RoutedLab, key_digest
+from tests.contracts.job_awareness.routed_support import (
+    RoutedLab,
+    key_digest,
+    text_only,
+)
 from tests.contracts.job_awareness.synthetic_app import in_loop, original
 from tests.contracts.job_awareness.test_hint_schema_support import executed
 
@@ -71,11 +75,13 @@ def test_route_bindings_are_optional_exact_types():
 @pytest.mark.parametrize("carrier", [HintCarrier.META, HintCarrier.TEXT])
 @in_loop
 async def test_rendered_is_exactly_the_hinted_jobs(carrier):
+    text_u = carrier is HintCarrier.TEXT  # routed TEXT = TEXT-U (g5 §9.2 S-2)
     with RoutedLab(4) as lab:
-        adapter = lab.routed(enabled=True, carrier=carrier)
+        adapter = lab.routed(structured=not text_u, enabled=True, carrier=carrier)
         routes = (lab.jobs[:1], lab.jobs[1:3], (lab.jobs[3], lab.jobs[0]))
         for jobs in routes:
-            value, outcome = await lab.call(adapter, lab.route(*jobs))
+            value = text_only() if text_u else original()
+            value, outcome = await lab.call(adapter, lab.route(*jobs), value)
             assert type(outcome) is RoutedOutcome and outcome.result is not value  # nosec B101 - pytest assertion
             result = outcome.result
             text = (
