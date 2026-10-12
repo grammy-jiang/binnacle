@@ -15,6 +15,7 @@ from pathlib import Path, PurePath
 from typing import TypeVar
 
 from binnacle.errors import CodedToolError
+from binnacle.features.files.fd_walk import permission_denied
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 from binnacle.platform.contracts.file_access_contracts import (
     FileAccess,
@@ -161,6 +162,9 @@ def linux_error(
     if code == SPECIAL_FILE_CODE:
         # The shared text for every tool on both OSes (r6 W3 PX1).
         return CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
+    if code == "permission_denied_tcc_possible":
+        # Darwin keeps its code (SD-77) and says Linux's sentence (R-OS1-F4).
+        return CodedToolError(code, str(permission_denied(display)))
     if code == "path_is_directory":
         use = "" if tool == "edit_file" else " Use list_files to browse it."
         return CodedToolError(code, f"Path is a directory, not a file: {display}.{use}")

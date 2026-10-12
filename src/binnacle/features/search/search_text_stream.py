@@ -19,7 +19,12 @@ from typing import BinaryIO
 import orjson
 
 from binnacle.errors import CodedToolError
-from binnacle.features.search.rg_env import NO_CONFIG, rejection_message, rg_env
+from binnacle.features.search.rg_env import (
+    NO_CONFIG,
+    accept_denied,
+    rejection_message,
+    rg_env,
+)
 
 
 @dataclass
@@ -146,8 +151,11 @@ class RgJsonStream:
             return ""
         self._stderr.flush()
         size = self._stderr.seek(0, 2)
-        self._stderr.seek(max(0, size - 2_048))
-        return self._stderr.read().decode("utf-8", errors="replace").strip()[-limit:]
+        self._stderr.seek(max(0, size - max(2_048, limit)))
+        text = self._stderr.read().decode("utf-8", errors="replace")
+        if limit > 2_048 and size > limit:
+            text = text.partition("\n")[2]  # Drop the cut first line.
+        return text.strip()[-limit:]
 
     def _record_timing(self) -> None:
         if self._started_ns:
@@ -180,7 +188,9 @@ class RgJsonStream:
             )
         self.no_match = returncode == 1
         stderr = self._stderr_tail()
-        if returncode == 2 or (returncode not in (0, 1) and stderr):
+        if (returncode == 2 or (returncode not in (0, 1) and stderr)) and not (
+            accept_denied(self._stderr_tail(65_536), self.root)
+        ):
             raise CodedToolError(
                 "rg_rejected",
                 rejection_message(stderr or "unknown error"),

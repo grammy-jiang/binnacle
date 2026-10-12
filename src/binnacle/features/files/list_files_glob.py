@@ -19,7 +19,7 @@ from binnacle.config import get_settings
 from binnacle.errors import CodedToolError
 from binnacle.features.files.paths import full_match
 from binnacle.features.search.fd_chain import EXHAUSTED, DirectoryChain
-from binnacle.features.search.rg_env import NO_CONFIG, rg_env
+from binnacle.features.search.rg_env import NO_CONFIG, accept_denied, rg_env
 from binnacle.platform.contracts.special_file_contracts import (
     TOO_MANY_OPEN_FILES_CODE,
     too_many_open_files_text,
@@ -132,7 +132,8 @@ def glob_mode(
             f"Glob search timed out after {timeout_s} s in {root}. "
             f"Narrow the glob or point path at a subdirectory.",
         ) from exc
-    if proc.returncode not in (0, 1):
+    # A permission-only failure below root keeps the readable part (R-OS1-F1).
+    if proc.returncode not in (0, 1) and not accept_denied(proc.stderr, root):
         stderr = proc.stderr.strip()[-300:]
         raise CodedToolError(
             "rg_failed",

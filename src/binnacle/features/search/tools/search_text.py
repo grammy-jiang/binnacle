@@ -19,6 +19,7 @@ from binnacle.features.files.paths import (
     full_match,
     resolve_path,
 )
+from binnacle.features.search.rg_env import noting_unreadable
 from binnacle.features.search.search_text_adaptive import (
     build_adaptive_result,
     log_adaptive_result,
@@ -392,6 +393,7 @@ def _search_exact_impl(
     return ToolResult(content=summary, structured_content=payload)
 
 
+@noting_unreadable  # Partial result plus one note (R-OS1-F1).
 def search_text_impl(
     pattern: str,
     path: str,

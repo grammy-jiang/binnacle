@@ -27,6 +27,7 @@ from binnacle.features.files.paths import (
     nearby_hint,
     resolve_path,
 )
+from binnacle.features.search.rg_env import noting_unreadable, record_unreadable
 from binnacle.platform.contracts.file_access_contracts import ListRequest
 from binnacle.platform.contracts.special_file_contracts import (
     SPECIAL_FILE_CODE,
@@ -222,6 +223,7 @@ def _list_mode(
     return ToolResult(content=summary, structured_content=payload)
 
 
+@noting_unreadable  # Partial result plus one note (R-OS1-F1).
 def list_files_impl(
     path: str,
     glob: str | None,
@@ -259,6 +261,10 @@ def list_files_impl(
             root_label = display
             for _ in PurePath(relative).parts:
                 root_label = root_label.parent
+            # Directories the walk could not open (FileListing.unreadable,
+            # Darwin only): the same note as Linux rg's (R-OS1-F1).
+            unreadable = getattr(listing, "unreadable", ())
+            record_unreadable(str(root_label / path) for path in unreadable)
             for entry in listing.entries:
                 # A symlink is typed by its in-root target; any other entry the
                 # provider could not type (unresolved link, fifo, socket) is omitted.

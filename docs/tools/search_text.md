@@ -151,6 +151,8 @@ in r6. ripgrep is run with `--no-config` and without `--follow`, and
 `RIPGREP_CONFIG_PATH` is removed from its environment. On macOS the tool
 uses the native search adapter, not this path.
 
+**Unreadable paths (r6 W3 PX1, R-OS1-F1/F4)**: a recursive search over a directory holding a directory (or, for search, a file) the server cannot read returns the readable part, with no tool error, plus one note on both OSes: "Skipped N unreadable path(s) (permission denied): P1, ..., P5 and M more. Results exclude their contents." (sorted, first five named; also appended to the summary). On Linux a ripgrep exit 2 whose stderr holds only permission errors is parsed into that note (`rg_env.accept_denied`), never `rg_failed` or `rg_rejected`; Darwin reports the directories its descriptor walk could not open. An unreadable base is an error: `permission_denied` on Linux, Darwin keeps its code `permission_denied_tcc_possible` (SD-77), with the same sentence on both: "Permission denied: PATH. The server cannot open this path; check its permissions or choose another path."
+
 **Shared refusal texts (r6 W3 PX1)**: a FIFO, socket or device is `special_file_unsupported` with the one text `SPECIAL_FILE_TEXT` from `platform/contracts/special_file_contracts.py` on both OSes, for read_file, edit_file, write_file, list_files (list and glob) and search_text; nothing opens it. Every descriptor shortage is `too_many_open_files`, worded from the one template `TOO_MANY_OPEN_FILES_TEXT` there: "{tool} could not {task}: the server has too many open files. {advice}".
 
 ## 4. Test checklist (tests/unit/tools/test_search_text.py)
