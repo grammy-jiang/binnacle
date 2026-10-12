@@ -60,7 +60,7 @@ def test_manager_backend_routine_reply_equals_linux_text(tmp_path, monkeypatch):
         1,
         False,
         None,
-        roots=RootsSettings(default_root=tmp_path, allowed=[tmp_path]),
+        roots=RootsSettings(default_root=tmp_path, extra_roots=()),
         settings=RunCommandSettings(),
         backend=backend,
     )
@@ -83,7 +83,7 @@ def test_restricted_registration_advertises_foreground_limits(tmp_path, states, 
     mcp = FastMCP("probe")
     rc.register(
         mcp,
-        roots=RootsSettings(default_root=tmp_path, allowed=[tmp_path]),
+        roots=RootsSettings(default_root=tmp_path, extra_roots=()),
         settings=RunCommandSettings(),
         backend=RestrictedCommandBackend(release_states=states),
     )
@@ -101,7 +101,7 @@ def test_restricted_registration_advertises_foreground_limits(tmp_path, states, 
 
 def test_registration_uses_settings_defaults(monkeypatch, tmp_path):
     defaults = SimpleNamespace(
-        roots=RootsSettings(default_root=tmp_path, allowed=[tmp_path]),
+        roots=RootsSettings(default_root=tmp_path, extra_roots=()),
         run_command=RunCommandSettings(),
     )
     monkeypatch.setattr(rc, "get_settings", lambda: defaults)
@@ -181,7 +181,7 @@ def native_call(tmp_path, backend, workdir=None, background=False):
             background,
             None,
             None,
-            roots=RootsSettings(default_root=tmp_path, allowed=[tmp_path]),
+            roots=RootsSettings(default_root=tmp_path, extra_roots=()),
             settings=RunCommandSettings(),
             backend=backend,
         )
@@ -242,7 +242,7 @@ def test_native_foreground_paths(tmp_path, monkeypatch):
 
 
 def test_impl_refusal_failure_and_default_settings(tmp_path, monkeypatch):
-    roots = RootsSettings(default_root=tmp_path, allowed=[tmp_path])
+    roots = RootsSettings(default_root=tmp_path, extra_roots=())
     with pytest.raises(rc.ToolError, match="native_capability_unavailable"):
         rc.run_command_impl(
             "true",
@@ -278,7 +278,7 @@ def test_impl_refusal_failure_and_default_settings(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("restricted", [False, True])
 def test_registered_tool_calls_reach_the_impl(tmp_path, monkeypatch, restricted):
-    roots = RootsSettings(default_root=tmp_path, allowed=[tmp_path])
+    roots = RootsSettings(default_root=tmp_path, extra_roots=())
     reply = CommandReply("done", {"job_id": "x", "state": "exited"})
     if restricted:
         backend = RestrictedCommandBackend(

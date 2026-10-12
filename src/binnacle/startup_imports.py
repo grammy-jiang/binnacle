@@ -50,17 +50,26 @@ def _excluded(name: str, prefixes: tuple[str, ...]) -> bool:
     return any(name == prefix or name.startswith(prefix + ".") for prefix in prefixes)
 
 
+def _walk(path: list[str], prefix: str, prefixes: tuple[str, ...]) -> list[str]:
+    # pkgutil.walk_packages imports every package to recurse into it, even an
+    # excluded one (the other OS's adapter package); skip those before import.
+    names = []
+    for info in pkgutil.iter_modules(path, prefix):
+        if _excluded(info.name, prefixes):
+            continue
+        names.append(info.name)
+        if info.ispkg:
+            package = importlib.import_module(info.name)
+            names += _walk(list(package.__path__), info.name + ".", prefixes)
+    return names
+
+
 def runtime_module_names(system: str | None = None) -> tuple[str, ...]:
     """The binnacle modules a serving process on ``system`` imports at start."""
     prefixes = _ALWAYS_EXCLUDED + _EXCLUDED_BY_OS.get(
         platform.system() if system is None else system, ()
     )
-    names = [
-        info.name
-        for info in pkgutil.walk_packages(binnacle.__path__, "binnacle.")
-        if not _excluded(info.name, prefixes)
-    ]
-    return tuple(sorted(names))
+    return tuple(sorted(_walk(list(binnacle.__path__), "binnacle.", prefixes)))
 
 
 def import_runtime_modules(system: str | None = None) -> tuple[str, ...]:

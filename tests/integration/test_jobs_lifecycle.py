@@ -118,14 +118,14 @@ def test_single_job_timing_logs_stage_breakdown(monkeypatch, caplog):
 
 
 def test_status_wait_returns_when_job_exits():
+    t0 = time.time()  # before run(): a slow run() return cannot eat the 0.5 s
     p = run("sleep 0.5; echo finished", background=True)
-    t0 = time.time()
     s = status(p["job_id"], wait_seconds=10)
     waited = time.time() - t0
     assert s["state"] == "exited" and s["exit_code"] == 0
     assert "finished" in s["log_tail"]
-    assert 0.2 < waited < 5  # returned soon after exit, not at the deadline
-    assert 0 < s["waited_s"] <= waited + 0.1
+    assert 0.4 < waited < 5  # returned soon after exit, not at the deadline
+    assert 0 <= s["waited_s"] <= waited + 0.1
     assert s["wait_requested_s"] == 10
     assert s["wait_effective_s"] == 10
     assert not any(key.startswith("blocking_") for key in s)

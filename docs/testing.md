@@ -650,6 +650,6 @@ the former flat `tests/` directory as a permanent design.
 
 The hardening review subsequently decomposed the oversized production modules
 and their corresponding large test suites. `quality-policy.json` now has no
-legacy module-size exceptions and no temporary coverage floors. The automated
-gates therefore represent the final policy directly rather than a migration
-baseline.
+legacy module-size exceptions. It lists the few remaining temporary coverage
+floors under `coverage.temporary_floors`; each floor is a migration mechanism
+and does not change the final acceptance target.

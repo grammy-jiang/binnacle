@@ -60,6 +60,8 @@ the matched block's first line. Occurrence rules per tier: exactly one
 unless `replace_all`. Re-encode with the original codec, re-attach the
 original BOM bytes, write.
 
+**Execute-only directories on Darwin (r6 W3 OS1)**: directories the edit only passes through are opened with `O_SEARCH`, as on Linux. An edit of a file in a write+execute-only (0o300) directory now succeeds on Darwin where it was refused; the file must still be readable, since the edit reads it first.
+
 **Errors**: 0 matches (re-read + whitespace + prefix warning); N matches
 with line numbers; identical old/new; missing file; directory; binary;
 lossy; outside roots.

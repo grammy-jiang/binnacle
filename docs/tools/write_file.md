@@ -48,6 +48,8 @@ Summary: `Created /x (245 bytes).` / `Overwrote /x (245 bytes, was 1020).`
 `write_bytes(content.encode("utf-8"))`. OSError → `ToolError` with
 `strerror` and the path.
 
+**Execute-only directories on Darwin (r6 W3 OS1)**: directories the write only passes through are opened with `O_SEARCH`, so search permission suffices, as on Linux. A write into a write+execute-only (0o300) directory now succeeds on Darwin; it was refused before.
+
 **Errors**: directory target; outside roots; OS failures (permission, no
 space) with `strerror`.
 

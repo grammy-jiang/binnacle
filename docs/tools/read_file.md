@@ -165,7 +165,7 @@ and the no-paging rule for large files in the description above.
 | `start_line`, `end_line` | int | The range actually served (1-based, inclusive) |
 | `total_lines` | int | |
 | `fits_in_one_call` | bool | Present (true) only on a partial, untruncated read of a file with ≤ 2 000 lines and ≤ 24 000 chars; the `note` and summary then say to omit the range. Added 2026-09-06. |
-| `bytes` | int | File size on disk |
+| `bytes` | int | Bytes read from the verified descriptor (r6 W3 RF1, SRC-W2-11; Darwin already reported this count). Equal to the size on disk unless the file changed between the stat and the read |
 | `truncated` | bool | Range served is less than requested/available |
 | `next_start_line` | int? | Present iff `truncated` and more lines exist |
 | `lines_clipped` | int? | Count of lines cut at `READ_MAX_LINE_CHARS` — those lines are NOT safe as `edit_file.old_string` |
@@ -185,7 +185,9 @@ looks like image/png) — content not shown.`
    itself refuses (`~nosuchuser` raises `RuntimeError` in `expanduser`,
    a pathological name can raise `OSError` in `resolve`) is a `ToolError`
    naming the path, never an internal error (property test, 2026-09-13).
-2. **Stat**: missing → error E1; directory → E2; > `READ_MAX_FILE_BYTES`
+2. **Stat**: missing → error E1; directory → E2; a FIFO, socket or
+   character or block device → `special_file_unsupported`, refused by this
+   stat before any open (r6 W3 RF1, SRC-W2-01); > `READ_MAX_FILE_BYTES`
    → E3.
    **Open and verify (Linux, r6 W2 X3b, SD-76)**: this is verify-after-open,
    not confinement. `fd_walk.open_walked` opens the innermost root holding
@@ -203,9 +205,17 @@ looks like image/png) — content not shown.`
    call reports E1). A symlink that the no-follow open refuses is
    `path_outside_root` when its target is outside every root, else
    `path_changed`; EACCES is `permission_denied`. A FIFO, a socket and a
-   character or block device are `special_file_unsupported` with the text
-   `special_file_unsupported.`, byte for byte as on Darwin (X3b-a3), also
-   when the open itself fails (a socket is ENXIO, a disk device EACCES).
+   character or block device are `special_file_unsupported` with the
+   shared text `SPECIAL_FILE_TEXT` from
+   `platform/contracts/special_file_contracts.py` (r6 W3 RF1): "special_file_unsupported: the path is a FIFO,
+   socket or device, not a regular file; the file tools read and write
+   regular files only. Do not retry it; use run_command (ls -l, stat) to see
+   what it is." The step-2 stat refuses them before any open; the checks
+   below still refuse one that a race brings in after the stat, also when
+   the open itself fails (a socket is ENXIO, a disk device EACCES).
+   On Darwin, `read_file` rewords the adapter's `special_file_unsupported.`
+   with the same shared text, so both OSes say the same thing; the Darwin
+   call site moves to the constant in r6 W3 wave B.
    `read_file` words them: `fd_walk` still raises `not_a_regular_file`,
    `file_io_failed` or `permission_denied`, and an lstat that shows the
    checked `(st_dev, st_ino)` with a FIFO, socket or device type turns that
@@ -224,10 +234,20 @@ looks like image/png) — content not shown.`
    that grew past the limit after the stat is E3, with the same text as at
    the stat. Every path whose target lies in any configured root
    (cross-root links, `..` into an outer root) reads as in r6. Darwin keeps its own `READ_FLAGS` walk and
-   never calls `open_verified`. `open_verified` without a parent descriptor
-   still opens by path and follows intermediate symlinks: an outside object
-   can be opened (a device open side effect, same uid only) before the
-   `path_outside_root` refusal; `read_file` does not use that form.
+   never calls `open_verified`. A call without a file-access adapter on
+   another OS (tests and direct `read_file_impl` calls; production Darwin
+   uses `DarwinFileAccess`) opens the path with `fd_walk.READ_FLAGS`
+   (`O_NONBLOCK`, so a FIFO never blocks the open), checks that
+   `(st_dev, st_ino)` is the stat's pair (else `path_changed`) and that the
+   object is a regular file, and reads at most `READ_MAX_FILE_BYTES` + 1
+   bytes with the same `os.read` loop (r6 W3 RF1, SRC-W2-10). `open_verified` requires a descriptor-walked
+   parent (`parent_fd`, SRC-W2-03); there is no by-path mode.
+   **Execute-only directories on Darwin (r6 W3 OS1)**: the Darwin walk opens
+   every directory it only passes through with `O_SEARCH|O_DIRECTORY|O_NOFOLLOW`
+   (search permission, no read), so an execute-only root is granted and an
+   execute-only directory on the way is traversed, as on Linux. A file
+   below such a directory is readable; the `O_SEARCH` descriptor itself
+   cannot be listed or read.
 3. **Sniff**: extension in the known-text allowlist → text; else read the
    first 8 KB — NUL byte present → `kind: "binary"` result (message names
    the size and a MIME guess; not an error).

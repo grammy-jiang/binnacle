@@ -10,7 +10,6 @@ descriptor walked no-follow from '/', and omits a swapped entry.
 import os
 import shutil
 import stat
-import sys
 from pathlib import Path
 
 import pytest
@@ -20,15 +19,6 @@ from binnacle.features.files.tools import list_files as lf
 
 # The process descriptor table: /proc/self/fd on Linux, /dev/fd on Darwin.
 FD_DIR = "/proc/self/fd" if os.path.isdir("/proc/self/fd") else "/dev/fd"
-# Parity finding PF-T3-01 (R6W2-T3): Darwin keeps TRAVERSE_FLAGS = O_RDONLY
-# (fd_walk.py, DARWIN-FOLLOWUP-exec-only-dirs), so an execute-only directory
-# differs from Linux; reported to the Supervisor, never loosened.
-PF_T3_01 = pytest.mark.xfail(
-    sys.platform == "darwin",
-    strict=True,
-    reason="PF-T3-01: execute-only directory parity (DARWIN-FOLLOWUP-exec-only-dirs)",
-)
-
 RG = shutil.which("rg") or "rg"
 OUTSIDE_SIZE = 4321
 
@@ -116,7 +106,6 @@ def test_a_file_removed_after_listing_keeps_its_entry_without_bytes(tree):
     assert sizes(glob(tree, rg)) == {"a.txt": None, "d/b.txt": 20}
 
 
-@PF_T3_01
 def test_an_execute_only_ancestor_still_sizes(tmp_path):
     if os.geteuid() == 0:
         pytest.skip("root ignores modes")

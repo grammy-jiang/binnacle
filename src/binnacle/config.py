@@ -19,6 +19,7 @@ import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from difflib import get_close_matches
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
@@ -42,6 +43,25 @@ from binnacle.auto_background_shell import shell_policy_code
 CONFIG_FILE_ENV = "BINNACLE_CONFIG_FILE"
 DEFAULT_CONFIG_FILE = Path.home() / ".config" / "binnacle" / "config.toml"
 
+# The keys a [roots] table may hold. Any other key, or a roots key or a
+# near-miss of "roots" at the top level, is a startup error: ignoring it would
+# leave the default roots in force (TEST-FOLLOWUP-roots-settings-unknown-kwargs).
+ROOTS_KEYS = ("default_root", "extra_roots")
+
+
+def roots_key_error(keys: list[str], where: str) -> ValueError:
+    named = ", ".join(repr(key) for key in keys)
+    return ValueError(
+        f"unknown {where} key(s) {named}; valid [roots] keys: {', '.join(ROOTS_KEYS)}"
+    )
+
+
+def roots_like(key: str) -> bool:
+    """A top-level key that a roots setting was meant for ([root], default_root)."""
+    return key in ROOTS_KEYS or bool(
+        get_close_matches(key.casefold(), ["roots"], cutoff=0.8)
+    )
+
 
 class RootsSettings(BaseModel):
     """Where the file tools and run_command may operate (design §6.7)."""
@@ -57,6 +77,15 @@ class RootsSettings(BaseModel):
 
     _canonical_source: tuple[Path, ...] | None = PrivateAttr(default=None)
     _canonical_snapshot: tuple[Path, ...] | None = PrivateAttr(default=None)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_unknown_keys(cls, data: Any) -> Any:
+        if isinstance(data, Mapping):
+            unknown = sorted(str(key) for key in data if key not in ROOTS_KEYS)
+            if unknown:
+                raise roots_key_error(unknown, "[roots]")
+        return data
 
     @property
     def allowed(self) -> tuple[Path, ...]:
@@ -418,6 +447,13 @@ class Settings(BaseSettings):
         removed: tuple[str, ...] = ()
         if isinstance(data, Mapping):
             removed = tuple(name for name in REMOVED_SECTIONS if name in data)
+            misplaced = sorted(
+                str(key)
+                for key in data
+                if key not in cls.model_fields and roots_like(str(key))
+            )
+            if misplaced:
+                raise roots_key_error(misplaced, "top-level roots-like")
             if removed:
                 data = {k: v for k, v in data.items() if k not in removed}
         model = handler(data)
