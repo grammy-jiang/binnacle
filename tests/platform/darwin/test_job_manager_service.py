@@ -24,6 +24,7 @@ from binnacle.platform.contracts import process_contracts as pc
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 from binnacle.platform.darwin import job_manager_client as jm_client
 from binnacle.platform.darwin import job_manager_entry as entry
+from binnacle.platform.darwin import job_manager_records as records
 from binnacle.platform.darwin import job_manager_service as svc
 from binnacle.platform.darwin.generation_runtime import (
     discover_service_lease,
@@ -161,7 +162,7 @@ def test_restated_values_equal_linux_source():
     assert svc.STOP_SIGTERM_GRACE_S == lit("jobs.py", "STOP_SIGTERM_GRACE_S")
     assert svc.STOP_SIGKILL_GRACE_S == lit("jobs.py", "STOP_SIGKILL_GRACE_S")
     assert dict(svc.ENV_OVERRIDES) == lit("jobs.py", "_ENV_OVERRIDES")
-    assert svc.META_REQUIRED == lit("job_store.py", "META_REQUIRED")
+    assert records.META_REQUIRED == lit("job_store.py", "META_REQUIRED")
     assert svc.PARTIAL_SIGNAL_FIELD == lit("job_stop.py", "PARTIAL_SIGNAL_FIELD")
     assert svc.PARTIAL_SIGNAL_MESSAGE == lit("job_stop.py", "PARTIAL_SIGNAL_MESSAGE")
     assert svc.PROTOCOL_VERSION == lit("job_client.py", "PROTOCOL_VERSION") == 1
@@ -217,7 +218,7 @@ def test_start_exit_and_stop_term_then_kill(tmp_path, jobs_dir, live):
     owner, manager = live
     done = manager.handle(req(tmp_path, "cat; exit 3", wait=5, stdin="x"))
     meta = job_store.read_meta(jobs_dir, done["job_id"])
-    assert meta == svc.read_meta(jobs_dir, done["job_id"])
+    assert meta == records.read_meta(jobs_dir, done["job_id"])
     assert (done["state"], meta["exit_code"], meta["pgid"]) == (
         "exited",
         3,

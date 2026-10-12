@@ -29,6 +29,8 @@ from binnacle.platform.contracts.capability_contracts import (
 )
 from binnacle.platform.contracts.native_service_contracts import ServiceLease
 from binnacle.platform.darwin import job_manager_entry as entry
+from binnacle.platform.darwin import job_manager_procinfo as procinfo
+from binnacle.platform.darwin import job_manager_records as records
 from binnacle.platform.darwin import job_manager_service as svc
 from tests.platform.darwin.test_job_manager_service import (
     LABEL,
@@ -147,8 +149,8 @@ def test_retention_close_and_writer_singleton(tmp_path, jobs_dir):
     assert (meta["signal"], meta["termination_reason"]) == (None, "owner_restart")
     assert "authority" not in meta
     assert unreaped["authority"] == "UNKNOWN"  # never reported exited
-    with svc.jobs_dir_writer(jobs_dir), pytest.raises(RuntimeError, match="owns"):
-        svc.jobs_dir_writer(jobs_dir).__enter__()
+    with records.jobs_dir_writer(jobs_dir), pytest.raises(RuntimeError, match="owns"):
+        records.jobs_dir_writer(jobs_dir).__enter__()
 
 
 def test_reaper_survives_lock_open_oserror_and_retries(tmp_path, jobs_dir, monkeypatch):
@@ -368,7 +370,7 @@ def test_unreadable_current_boot_identity_fails_closed(jobs_dir):
     v2 = {"schema_version": 2, "owner_instance_id": "old", "boot_id": session()}
     write_record(jobs_dir, "a" * 12, **v2)
     for current in ("", "unreadable", session().lower()):
-        assert not entry.prior_boot(v2, current)
+        assert not procinfo.prior_boot(v2, current)
     manager = booted(jobs_dir, "")
     assert manager.recover() == 1
     assert meta_of(jobs_dir, "a" * 12)["authority"] == "UNKNOWN"
@@ -428,11 +430,11 @@ def procargs(argc, path, *fields, pad=None):
 )
 def test_procargs2_parse_is_argv_only_and_fails_closed(monkeypatch, buffer, expected):
     """PRE-J1g-F1: never a field past argv (envp); any doubt -> None (comm)."""
-    monkeypatch.setattr(entry, "_sysctl", lambda mib, limit: buffer)
-    assert entry.command_line(1, 4096) == expected
+    monkeypatch.setattr(procinfo, "_sysctl", lambda mib, limit: buffer)
+    assert procinfo.command_line(1, 4096) == expected
     padded = procargs(1, b"/x", b"ab" * 9)
-    monkeypatch.setattr(entry, "_sysctl", lambda mib, limit: padded)
-    assert entry.command_line(1, 5) == "ababa"  # bounded after the join
+    monkeypatch.setattr(procinfo, "_sysctl", lambda mib, limit: padded)
+    assert procinfo.command_line(1, 5) == "ababa"  # bounded after the join
 
 
 def test_start_refused_once_the_manager_is_stopping(tmp_path, jobs_dir):

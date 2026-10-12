@@ -17,7 +17,7 @@ import jsonschema  # type: ignore[import-untyped]
 import pytest
 
 from binnacle.features.commands.tools import job_status as js
-from binnacle.platform.darwin import job_manager_entry as entry
+from binnacle.platform.darwin import job_manager_procinfo as procinfo
 
 LINUX_KEYS = ["pid", "state", "etime_s", "cpu_s", "cmd"]
 NOW = 1_800_000_000.0
@@ -42,12 +42,12 @@ def listing(monkeypatch):
 
     def run(records, argv=None, max_cmd_chars=200):
         argv = argv or {}
-        monkeypatch.setattr(entry, "_sysctl", lambda mib, limit: b"".join(records))
+        monkeypatch.setattr(procinfo, "_sysctl", lambda mib, limit: b"".join(records))
         monkeypatch.setattr(
-            entry, "command_line", lambda pid, n: argv.get(pid) and argv[pid][:n]
+            procinfo, "command_line", lambda pid, n: argv.get(pid) and argv[pid][:n]
         )
         monkeypatch.setattr(time, "time", lambda: NOW)
-        return entry.group_listing(500, max_cmd_chars)
+        return procinfo.group_listing(500, max_cmd_chars)
 
     return run
 
@@ -64,7 +64,7 @@ def listing(monkeypatch):
     ],
 )
 def test_state_letter_only_where_p_stat_decides(stat, flag, letter):
-    assert entry._state_letter(kinfo(7, stat=stat, flag=flag), stat) == letter
+    assert procinfo._state_letter(kinfo(7, stat=stat, flag=flag), stat) == letter
 
 
 def test_items_take_the_linux_key_order_without_ppid(listing):
@@ -115,7 +115,7 @@ def test_items_validate_against_the_linux_job_status_schema(listing):
 
 
 def test_listing_keeps_the_libproc_ban():
-    source = Path(entry.__file__).read_text()
+    source = Path(procinfo.__file__).read_text()
     assert "proc_pidinfo" not in source and "libproc.dylib" not in source
     assert "/usr/lib/libSystem.B.dylib" in source  # public sysctl(3) only
 
@@ -124,8 +124,8 @@ def test_denied_sysctl_lists_nothing(monkeypatch):
     def denied(mib, limit):
         raise OSError("sysctl read failed")
 
-    monkeypatch.setattr(entry, "_sysctl", denied)
-    assert entry.group_listing(500, 200) == []
+    monkeypatch.setattr(procinfo, "_sysctl", denied)
+    assert procinfo.group_listing(500, 200) == []
 
 
 def linux_builder_keys(tmp_path, monkeypatch):
