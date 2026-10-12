@@ -74,6 +74,40 @@ def matches_glob(
         ) from exc
 
 
+class SmallestMatches:
+    """The max_results first matches in (file, line) order, whatever the arrival order.
+
+    rg walks in parallel, so arrival order varies between calls. Keeping the
+    smallest keys makes the retained subset the same for the same tree. The
+    buffer is trimmed when it reaches twice the cap, so memory stays bounded.
+    """
+
+    def __init__(self, cap: int) -> None:
+        self.cap = cap
+        self._rows: list[tuple[str, int, str]] = []
+        self._limit: tuple[str, int] | None = None  # largest key kept when full
+
+    def add(self, file: str, line: int, text: str) -> None:
+        if self._limit is not None and (file, line) >= self._limit:
+            return
+        self._rows.append((file, line, text))
+        if len(self._rows) >= 2 * self.cap:
+            self._trim()
+
+    def _trim(self) -> None:
+        self._rows.sort(key=lambda row: (row[0], row[1]))
+        del self._rows[self.cap :]
+        if len(self._rows) == self.cap:
+            self._limit = (self._rows[-1][0], self._rows[-1][1])
+
+    def result(self, max_line_chars: int, clip_mark: str) -> list[dict]:
+        self._trim()
+        return [
+            {"file": file, "line": line, "text": clip(text, max_line_chars, clip_mark)}
+            for file, line, text in self._rows
+        ]
+
+
 def collect(
     events: list[dict],
     root: Path,
@@ -85,10 +119,9 @@ def collect(
     clip_mark: str,
 ) -> tuple[list[dict], dict[str, dict[int, str]], int, bool]:
     started_ns = time.perf_counter_ns()
-    matches: list[dict] = []
+    kept = SmallestMatches(max_results)
     line_map: dict[str, dict[int, str]] = {}
     total = 0
-    truncated = False
     try:
         for event in events:
             kind = event.get("type")
@@ -109,16 +142,9 @@ def collect(
             line_map.setdefault(file, {})[line_no] = text
             if kind == "match":
                 total += 1
-                if len(matches) < max_results:
-                    matches.append(
-                        {
-                            "file": file,
-                            "line": line_no,
-                            "text": clip(text, max_line_chars, clip_mark),
-                        }
-                    )
-                else:
-                    truncated = True
+                kept.add(file, line_no, text)
+        matches = kept.result(max_line_chars, clip_mark)
+        truncated = total > max_results
         if metrics is not None:
             metrics.accepted_matches = total
             metrics.accepted_files = len(line_map)
