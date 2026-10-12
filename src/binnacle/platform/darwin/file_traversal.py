@@ -163,6 +163,10 @@ def checked_open(parent: int, name: str, flags: int, info: os.stat_result) -> in
     fd = os.open(name, flags, dir_fd=parent)
     try:
         opened = os.fstat(fd)
+        if stat.S_ISREG(info.st_mode) and not stat.S_ISREG(opened.st_mode):
+            # The opened object's type decides, before identity (FDW-B1 #12).
+            kind = "path_is_directory" if stat.S_ISDIR(opened.st_mode) else None
+            raise unsafe(kind or "special_file_unsupported")
         if (opened.st_dev, opened.st_ino, stat.S_IFMT(opened.st_mode)) != (
             info.st_dev,
             info.st_ino,
@@ -411,7 +415,9 @@ class Listing:
                     if stat.S_ISREG(info.st_mode)
                     else "other"
                 )
-                if kind == "other":
+                if kind == "other" or not recursive:
+                    # List mode types an entry by this fstatat alone, as Linux
+                    # lstat-s it: nothing is opened (FDW-B1 #10).
                     self.add(path, kind, info)
                     continue  # Never open symlinks, sockets, devices or FIFOs.
                 try:
@@ -429,16 +435,9 @@ class Listing:
                     raise
                 try:
                     if is_dir:
-                        if recursive:
-                            self.walk(
-                                child_fd,
-                                path + "/",
-                                rules,
-                                depth=depth + 1,
-                                in_git=in_git,
-                            )
-                        else:
-                            self.add(path, kind, info)
+                        self.walk(
+                            child_fd, path + "/", rules, depth=depth + 1, in_git=in_git
+                        )
                     else:
                         self.add(path, kind, info)
                 except PermissionError:

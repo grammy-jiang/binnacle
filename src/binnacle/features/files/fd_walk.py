@@ -25,6 +25,11 @@ from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 from binnacle.errors import CodedToolError
+from binnacle.platform.contracts.special_file_contracts import (
+    TOO_MANY_OPEN_FILES_CODE,
+    TOO_MANY_OPEN_FILES_ERRNOS,
+    too_many_open_files_text,
+)
 
 MAX_LINK_HOPS = 40  # Darwin platform/darwin/file_access.py MAX_LINK_HOPS.
 # A directory that is read (listed): read permission is required.
@@ -136,8 +141,10 @@ def link_target_info(
     lexically, once, as on Darwin; the link is walked once. '..' above
     the root (also into an outer root when roots nest), an absolute
     intermediate link, more than MAX_LINK_HOPS links, a non-directory
-    intermediate, a dangling link, a loop and any read failure yield None.
-    The result is the lstat of the last component, or the fstat of the
+    intermediate, a dangling link, a loop and any read failure yield None,
+    except a descriptor shortage (EMFILE/ENFILE): it is no evidence about
+    the link, so it is raised for the caller's too_many_open_files refusal
+    and the entry is never silently omitted (FDW-B1 #9). The result is the lstat of the last component, or the fstat of the
     directory a trailing '', '.' or '..' ends on; it is never a symlink, and
     no path string below '/' is followed.
     """
@@ -146,7 +153,9 @@ def link_target_info(
             if chain is None:
                 chain = owned.enter_context(directory_chain(root_fd, directory))
             return _walk_link(list(chain), name, root_path, aliases)
-    except OSError:
+    except OSError as exc:
+        if exc.errno in TOO_MANY_OPEN_FILES_ERRNOS:
+            raise
         return None
 
 
@@ -304,6 +313,11 @@ def _open_refusal(
         return _changed(shown)
     if exc.errno == errno.ENOENT:
         return _changed(shown)
+    if exc.errno in TOO_MANY_OPEN_FILES_ERRNOS:
+        # A descriptor shortage is no evidence about the path: the shared
+        # template, as on Darwin, never file_io_failed (FDW-B1, PREP gap 4).
+        text = too_many_open_files_text("read_file", f"open {shown}")
+        return CodedToolError(TOO_MANY_OPEN_FILES_CODE, text)
     return CodedToolError("file_io_failed", f"Cannot open {shown}: {exc.strerror}.")
 
 

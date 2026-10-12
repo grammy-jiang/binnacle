@@ -182,9 +182,12 @@ def _list_mode(
         live = [str(a) for a, c in configured if c == top != a and _names(a, held)]
 
         def follow(name: str) -> os.stat_result | None:
-            return fd_walk.link_target_info(
-                chain[0], parts, name, str(top), chain=chain, aliases=live
-            )
+            try:
+                return fd_walk.link_target_info(
+                    chain[0], parts, name, str(top), chain=chain, aliases=live
+                )
+            except OSError as exc:  # Only a descriptor shortage (FDW-B1 #9).
+                raise _refusal(exc, root) from exc
 
         try:
             names = os.listdir(fd)  # dup(2): EMFILE is possible here too.
