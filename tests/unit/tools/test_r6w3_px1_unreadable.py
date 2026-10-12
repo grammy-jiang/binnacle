@@ -24,9 +24,9 @@ from binnacle.features.files import paths
 from binnacle.features.files.tools import list_files as lf
 from binnacle.features.search import rg_env
 from binnacle.features.search.tools import search_text as st
-from binnacle.platform.composition import create_search_access
 from binnacle.platform.contracts.capability_contracts import Capability, CapabilityState
 from binnacle.platform.darwin.file_access import DarwinFileAccess
+from binnacle.platform.darwin.search_access import DarwinSearchAccess
 
 RG = shutil.which("rg") or "rg"
 PATHS = pytest.mark.parametrize(
@@ -68,7 +68,7 @@ def outcome(root: Path, darwin: bool, call: Callable) -> tuple:
         access = paths.FileToolAccess(
             roots=roots,
             files=files,
-            search=create_search_access(files=files, rg_bin=RG),
+            search=DarwinSearchAccess(files, rg_bin=RG),
             generation="r6w3-px1",
             capability=Capability(CapabilityState.LIMITED, "test_only", "px1"),
         )

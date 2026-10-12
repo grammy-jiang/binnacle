@@ -29,7 +29,6 @@ from binnacle.features.files.tools import write_file as wf
 from binnacle.features.search import search_text_verify
 from binnacle.features.search.fd_chain import DirectoryChain
 from binnacle.features.search.tools import search_text as st
-from binnacle.platform.composition import create_search_access
 from binnacle.platform.contracts.capability_contracts import Capability, CapabilityState
 from binnacle.platform.contracts.special_file_contracts import (
     SPECIAL_FILE_CODE,
@@ -39,6 +38,7 @@ from binnacle.platform.contracts.special_file_contracts import (
     too_many_open_files_text,
 )
 from binnacle.platform.darwin.file_access import DarwinFileAccess
+from binnacle.platform.darwin.search_access import DarwinSearchAccess
 
 RG = shutil.which("rg") or "rg"
 TOOLS: dict[str, Callable] = {
@@ -93,7 +93,7 @@ def refusal(tool: str, path: Path, root: Path, darwin: bool) -> tuple:
         access = paths.FileToolAccess(
             roots=roots,
             files=files,
-            search=create_search_access(files=files, rg_bin=RG),
+            search=DarwinSearchAccess(files, rg_bin=RG),
             generation="r6w3-px1",
             capability=Capability(CapabilityState.LIMITED, "test_only", "px1"),
         )
