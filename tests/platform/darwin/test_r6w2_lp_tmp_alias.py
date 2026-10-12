@@ -24,7 +24,7 @@ from binnacle.platform.contracts.capability_contracts import (
 )
 from binnacle.platform.darwin.file_access import DarwinFileAccess
 
-pytestmark = pytest.mark.skipif(
+_DARWIN = pytest.mark.skipif(
     sys.platform != "darwin", reason="/tmp is a symlink to /private/tmp on macOS"
 )
 
@@ -71,6 +71,7 @@ def typed(env: dict, *, native: bool) -> dict:
     }
 
 
+@_DARWIN
 @pytest.mark.parametrize("native", [True, False], ids=["darwin", "linux"])
 def test_tmp_and_private_tmp_text_both_listed_case_variant_omitted(tmp_root, native):
     work, alias_work = tmp_root["work"], tmp_root["alias_work"]

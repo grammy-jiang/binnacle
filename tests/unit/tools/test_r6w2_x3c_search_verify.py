@@ -10,8 +10,10 @@ The parity cases pin the benign results, which are unchanged.
 """
 
 import os
+import re
 import shutil
 import stat
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -31,15 +33,27 @@ PF_T3_01 = pytest.mark.xfail(
     strict=True,
     reason="PF-T3-01: execute-only directory parity (DARWIN-FOLLOWUP-exec-only-dirs)",
 )
-# Parity finding PF-T3-02 (R6W2-T3): on Darwin the pathname core reports the
-# NUL line of an explicit file as rg 15 converts it; reported, never loosened.
-PF_T3_02 = pytest.mark.xfail(
-    sys.platform == "darwin",
-    strict=True,
-    reason="PF-T3-02: explicit-file NUL line text differs on Darwin",
-)
-
 RG = shutil.which("rg") or "rg"
+
+
+def rg_major(rg: str = RG) -> int:
+    """The major version of the rg these tests run ('ripgrep 15.2.0' -> 15)."""
+    out = subprocess.run(
+        [rg, "--version"], capture_output=True, text=True, check=True
+    ).stdout
+    found = re.match(r"ripgrep (\d+)\.", out)
+    assert found is not None, out
+    return int(found.group(1))
+
+
+# Parity finding PF-T3-02 (R6W2-T3, R-T3-F1): the pathname core reports the
+# NUL line of an explicit file as rg 15 converts it, and as rg 14 did not;
+# keyed on the rg major, not the OS; reported, never loosened.
+PF_T3_02 = pytest.mark.xfail(
+    rg_major() >= 15,
+    strict=True,
+    reason="PF-T3-02: explicit-file NUL line text differs under rg >= 15",
+)
 OUTSIDE = "OUTSIDE-SECRET"
 
 
