@@ -6,7 +6,7 @@ This module is normal Python composition, not a FastMCP Provider or registry.
 """
 
 import platform
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from secrets import token_hex
@@ -88,6 +88,27 @@ def create_runtime_paths() -> RuntimePaths:
     from binnacle.platform.linux.runtime_paths_linux import resolve_runtime_paths
 
     return resolve_runtime_paths()
+
+
+def read_usage_service_logs(
+    units: str | Sequence[str], since: str, until: str | None = None
+) -> str:
+    """Select OS-native production service logs for the usage-statistics CLI.
+
+    Darwin's installed LaunchDaemon stdout/stderr files are different from
+    the generation-bound private test-service log contract below.
+    """
+    if host_os_family() == "darwin":
+        from binnacle.platform.darwin.daemon_logstats import (
+            DarwinDaemonLogStatsSource,
+        )
+
+        return DarwinDaemonLogStatsSource().read_spec(units, since, until)
+    from binnacle.platform.linux.service_journal import JournalServiceLogSource
+
+    return JournalServiceLogSource(command_timeout_s=None).read_spec(
+        units, since, until
+    )
 
 
 def create_service_log_source(

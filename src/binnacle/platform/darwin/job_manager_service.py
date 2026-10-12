@@ -284,7 +284,17 @@ class DarwinJobManager(_ManagerStopping):
             except OSError:
                 self._kill_quietly(job_id)
                 raise
-            log.info("event=job_start job_id=%s call=%s owner=manager", job_id, call_id)
+            log.info(
+                "event=job_start job_id=%s pid=%s workdir=%s call=%s "
+                "owner=manager owner_instance=%s command_hash=%s command_chars=%s",
+                job_id,
+                process.pid,
+                shown,
+                call_id,
+                self.owner_instance_id[:12],
+                meta["command_hash"],
+                len(command),
+            )
             return job_id
 
     def _kill_quietly(self, job_id: str) -> None:
@@ -353,6 +363,7 @@ class DarwinJobManager(_ManagerStopping):
         for the reaper's retry; the record stays non-terminal, so ``state`` says
         ``unknown`` (the owner no longer reports OWNED), never ``exited``.
         """
+        recorded: dict[str, Any] | None = None
         try:
             with self._transaction():
                 meta, owner_id = self._meta(exited.job_id), self.owner_instance_id
@@ -361,7 +372,8 @@ class DarwinJobManager(_ManagerStopping):
                     log.warning("event=job_exit_unrecorded job_id=%s", exited.job_id)
                     return False
                 if not _terminal(meta):  # first writer wins; never overwritten
-                    self._write_meta(exited.job_id, _exit_meta(meta, exited))
+                    recorded = _exit_meta(meta, exited)
+                    self._write_meta(exited.job_id, recorded)
                 self._unrecorded.pop(exited.job_id, None)
                 self._release(exited.job_id)
         except OSError as exc:
@@ -370,7 +382,32 @@ class DarwinJobManager(_ManagerStopping):
             event = "event=job_exit_unrecorded job_id=%s errno=%s retry=queued"
             log.warning(event, exited.job_id, exc.errno)
             return False
-        log.info("event=job_exit job_id=%s", exited.job_id)
+        # A repeated reaper/close notification is idempotent: do not emit a
+        # second terminal event, otherwise logstats overcounts real job exits.
+        if recorded is not None:
+            try:
+                log_bytes = (self.jobs_dir / exited.job_id / "out.log").stat().st_size
+            except OSError:
+                log_bytes = 0
+            started = recorded.get("started_at")
+            ended = recorded["ended_at"]
+            duration = (
+                round(ended - started, 3) if isinstance(started, (int, float)) else "-"
+            )
+            log.info(
+                "event=job_exit job_id=%s exit_code=%s signal=%s reason=%s "
+                "runtime_s=%s log_bytes=%d call=%s owner=manager "
+                "owner_instance=%s command_hash=%s",
+                exited.job_id,
+                recorded.get("exit_code"),
+                recorded.get("signal"),
+                recorded["termination_reason"],
+                duration,
+                log_bytes,
+                recorded.get("call_id", "-"),
+                self.owner_instance_id[:12],
+                recorded.get("command_hash", "-"),
+            )
         return True
 
     def _release(self, job_id: str) -> None:

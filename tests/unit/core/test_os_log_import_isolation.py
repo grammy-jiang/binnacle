@@ -26,9 +26,12 @@ assert not any(name.startswith("binnacle.platform.linux") for name in sys.module
 try:
     logstats.fetch_journal("unit", "-1s")
 except ImportError as e:
-    assert "blocked:" in str(e)
+    assert sys.platform != "darwin" and "blocked:" in str(e)
+except Exception as e:
+    from binnacle.platform.contracts.service_log_contracts import ServiceLogError
+    assert sys.platform == "darwin" and isinstance(e, ServiceLogError)
 else:
-    raise AssertionError("explicit Linux journal read must fail with adapter blocked")
+    raise AssertionError("unavailable log read must report a typed failure")
 print("PURE_LOG_PASS")
 """
     proc = subprocess.run(

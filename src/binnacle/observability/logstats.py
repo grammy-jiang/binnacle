@@ -48,14 +48,13 @@ from binnacle.observability.logstats_tools import (
 def fetch_journal(
     unit: str | list[str] | tuple[str, ...], since: str, until: str | None = None
 ) -> str:
-    """Deprecated Linux CLI compatibility accessor, never used by pure parsing.
+    """Acquire native service logs lazily, leaving pure parsing OS-independent.
 
-    Import only when a caller explicitly requests a Linux journal read.
-    Parsing, analysis and rendering never load a platform adapter.
+    Linux reads journald; Darwin reads allowlisted launchd log files.
     """
-    from binnacle.observability.logstats_io import fetch_journal as linux_fetch
+    from binnacle.platform.composition import read_usage_service_logs
 
-    return linux_fetch(unit, since, until)
+    return read_usage_service_logs(unit, since, until)
 
 
 # Helper-level aliases remain for this canonical parser's tests and consumers.

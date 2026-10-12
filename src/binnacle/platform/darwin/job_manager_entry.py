@@ -341,7 +341,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return EX_USAGE
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    )
     if not hasattr(os, "waitid"):  # JCR-F1: refuse before any lease or spawn
         log.error("event=job_manager_refused reason=%s", WAITID_REQUIRED)
         return EX_CONFIG
