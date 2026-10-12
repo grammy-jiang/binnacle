@@ -18,6 +18,7 @@ recreates the private 0700 root and publishes a fresh generation.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import secrets
@@ -25,7 +26,7 @@ import signal
 import sys
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import suppress
 from pathlib import Path
 
@@ -58,6 +59,13 @@ from binnacle.platform.darwin.job_manager_service import (
     DarwinJobManager,
 )
 from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
+from binnacle.startup_imports import (
+    StartupImportFailed,
+    clear_record,
+    import_manager_modules,
+    record_start_failure,
+    state_root_of,
+)
 
 log = logging.getLogger("binnacle.job_manager")
 EX_FAILED, EX_USAGE, EX_TEMPFAIL, EX_CONFIG = 1, 64, 75, 78  # sysexits.h
@@ -247,6 +255,50 @@ def provisioner_stop(socket_path: Path, owner_instance_id: str) -> bool:
     return stop_marker_names(socket_path, owner_instance_id, consume=True)
 
 
+def record_import_failure(failure: StartupImportFailed) -> None:
+    """E1-a5: the entry's own record write; the config may be what failed."""
+    try:
+        root = state_root_of(read_config().jobs.dir)
+    except Exception:  # noqa: BLE001 - no configured root: the log line remains
+        log.error("event=startup_import_record_error process=job-manager")
+        return
+    record_start_failure("job-manager", failure, root)
+
+
+def clear_record_when_published(
+    socket_path: Path,
+    lease: ServiceLease,
+    stop: threading.Event,
+    clear: Callable[[], None],
+) -> threading.Thread:
+    """E1-a5: run ``clear`` once THIS process has published its endpoint.
+
+    The published ``.auth`` credentials carry this process's pid and its lease
+    generation; only then is the start successful (never at entry, never on a
+    stale endpoint of an earlier incarnation). Only those two fields are read.
+    """
+    auth = socket_path.with_name(socket_path.name + ".auth")
+
+    def published() -> bool:
+        try:
+            data = json.loads(auth.read_bytes())
+            return data["pid"] == os.getpid() and data["generation"] == lease.generation
+        except (OSError, ValueError, KeyError, TypeError):
+            return False
+
+    def watch() -> None:
+        while not stop.wait(0.05):
+            if published():
+                clear()
+                return
+
+    thread = threading.Thread(
+        target=watch, name="job-manager-start-record", daemon=True
+    )
+    thread.start()
+    return thread
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run com.binnacle.jobs: no CLI arguments; configuration is the only input."""
     if list(sys.argv[1:] if argv is None else argv):
@@ -256,6 +308,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return EX_USAGE
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    # E1: never first-import a later deploy's source. E1-a4: a required import
+    # failure raises StartupImportFailed (exit EX_STARTUP_IMPORT, 70) before
+    # the lease and the socket. E1-a5: this entry writes the record.
+    try:
+        import_manager_modules()
+    except StartupImportFailed as failure:
+        record_import_failure(failure)
+        raise
     if not hasattr(os, "waitid"):  # JCR-F1: refuse before any lease or spawn
         log.error("event=job_manager_refused reason=%s", WAITID_REQUIRED)
         return EX_CONFIG
@@ -289,6 +349,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     stop = threading.Event()
     for number in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(number, lambda *_: stop.set())
+    clear_record_when_published(
+        socket_path,
+        lease,
+        stop,
+        # E1-a5: cleared only once this process has published its endpoint.
+        lambda: clear_record("job-manager", state_root_of(settings.jobs.dir)),
+    )
     try:
         serve_job_manager(manager, socket_path=socket_path, lease=lease, stop=stop)
     except Exception as exc:
