@@ -14,6 +14,7 @@ import fnmatch
 import math
 import os
 import stat
+import sys
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -45,6 +46,15 @@ MAX_WALK_DEPTH = 48
 DIRECTORY_FLAGS = (
     os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NOCTTY
 )
+# A directory only passed through needs search permission alone, so execute-
+# only directories work as with fd_walk (DARWIN-FOLLOWUP-exec-only-dirs); the
+# descriptor cannot be listed or read (EBADF). Linux runs this adapter only in
+# portability tests. <sys/fcntl.h> O_SEARCH = O_EXEC | O_DIRECTORY (os: 3.13+).
+_PASS: int = os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NOCTTY
+if sys.platform == "linux":
+    TRAVERSE_FLAGS = os.O_PATH | _PASS
+else:
+    TRAVERSE_FLAGS = getattr(os, "O_SEARCH", 0x40000000 | os.O_DIRECTORY) | _PASS
 READ_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC | os.O_NOCTTY
 
 
@@ -109,12 +119,13 @@ def directory_at(
     root_fd: int, parts: tuple[str, ...], *, create: bool = False, max_new: int = 32
 ) -> Iterator[int]:
     """Transfer traversal to each opened directory before releasing its parent."""
-    fd = os.open(".", DIRECTORY_FLAGS, dir_fd=root_fd)
+    # TRAVERSE_FLAGS throughout: callers only use *at calls on the yielded fd.
+    fd = os.open(".", TRAVERSE_FLAGS, dir_fd=root_fd)
     created = 0
     try:
         for part in parts:
             try:
-                child = os.open(part, DIRECTORY_FLAGS, dir_fd=fd)
+                child = os.open(part, TRAVERSE_FLAGS, dir_fd=fd)
             except FileNotFoundError:
                 if not create:
                     raise
@@ -127,7 +138,7 @@ def directory_at(
                     created += 1
                 except FileExistsError:
                     pass  # A racer won; no-follow open still establishes authority.
-                child = os.open(part, DIRECTORY_FLAGS, dir_fd=fd)
+                child = os.open(part, TRAVERSE_FLAGS, dir_fd=fd)
             os.close(fd)
             fd = child
         yield fd
@@ -251,7 +262,9 @@ def listing_directory(
 ) -> Iterator[int]:
     # Discover requested-path ancestors through the same descriptor chain. No
     # policy outside the grant is consulted, even when rg would discover it.
-    fd = os.open(".", DIRECTORY_FLAGS, dir_fd=root_fd)
+    # Ancestors are passed through (TRAVERSE_FLAGS); only the listed directory
+    # is opened for reading.
+    fd = os.open(".", TRAVERSE_FLAGS if parts else DIRECTORY_FLAGS, dir_fd=root_fd)
     try:
         for depth, part in enumerate(parts):
             if listing.request.glob is not None:
@@ -259,7 +272,10 @@ def listing_directory(
                 listing.rules, listing.in_git = _local_rules(
                     fd, prefix, listing.rules, listing.in_git
                 )
-            child = os.open(part, DIRECTORY_FLAGS, dir_fd=fd)
+            last = depth == len(parts) - 1
+            child = os.open(
+                part, DIRECTORY_FLAGS if last else TRAVERSE_FLAGS, dir_fd=fd
+            )
             os.close(fd)
             fd = child
         listing.base = "/".join(parts) + "/" if parts else ""

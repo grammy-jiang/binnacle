@@ -9,10 +9,11 @@ swap of an in-root component for a symlink between a check and its use
 therefore cannot redirect the walk outside the root. This is not continuous
 containment: a directory renamed after it was opened keeps its identity.
 
-On Linux the walk opens directories with O_PATH (RX3a-F1): like a path
-lookup, it needs only search (execute) permission, so execute-only
-directories in the root chain or inside a root work as they did in r6. Only
-a directory that is enumerated is opened O_RDONLY (DIRECTORY_FLAGS).
+The walk opens directories with O_PATH on Linux (RX3a-F1) and O_SEARCH on
+Darwin (DARWIN-FOLLOWUP-exec-only-dirs): like a path lookup, it needs only
+search (execute) permission, so execute-only directories in the root chain
+or inside a root work as they did in r6, on both OSes. Only a directory
+that is enumerated is opened O_RDONLY (DIRECTORY_FLAGS).
 """
 
 import errno
@@ -30,11 +31,14 @@ MAX_LINK_HOPS = 40  # Darwin platform/darwin/file_access.py MAX_LINK_HOPS.
 DIRECTORY_FLAGS = (
     os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NOCTTY
 )
-# A directory that is only passed through or stat-ed.
+# A directory that is only passed through or stat-ed. The descriptor cannot
+# be listed or read (EBADF). Darwin <sys/fcntl.h>: O_SEARCH = O_EXEC |
+# O_DIRECTORY; os.O_SEARCH exists from Python 3.13.
 if sys.platform == "linux":
     TRAVERSE_FLAGS = os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
-else:  # Darwin keeps its own walk (DARWIN-FOLLOWUP-exec-only-dirs).
-    TRAVERSE_FLAGS = DIRECTORY_FLAGS
+else:  # Darwin; platform/darwin/file_traversal.py TRAVERSE_FLAGS twin.
+    _O_SEARCH: int = getattr(os, "O_SEARCH", 0x40000000 | os.O_DIRECTORY)
+    TRAVERSE_FLAGS = _O_SEARCH | DIRECTORY_FLAGS  # O_RDONLY is 0.
 READ_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC | os.O_NOCTTY
 
 
