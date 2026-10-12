@@ -147,6 +147,7 @@ MANAGER_MODULES = {
                 "binnacle.platform.darwin.job_manager_config",
                 "binnacle.platform.darwin.job_manager_entry",
                 "binnacle.platform.darwin.job_manager_procinfo",
+                "binnacle.platform.darwin.job_manager_queue",
                 "binnacle.platform.darwin.job_manager_records",
                 "binnacle.platform.darwin.job_manager_service",
                 "binnacle.platform.darwin.job_manager_stopping",

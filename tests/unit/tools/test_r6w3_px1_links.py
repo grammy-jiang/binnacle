@@ -224,7 +224,16 @@ def test_the_darwin_walk_names_a_final_link_apart_from_a_special_file(tree):
 def test_only_one_hop_is_followed(tree, monkeypatch):
     # The target chosen by the resolve is a link again (a race): the second
     # no-follow walk refuses it; nothing is followed a second time.
-    monkeypatch.setattr(error_text, "link_target", lambda *_args: tree / "rel")
+    # FDW-B1-a3 picks the initial in-root target before the no-follow
+    # descriptor open, not in the legacy exception retry helper.
+    original_resolve = error_text._resolve
+
+    def target_still_a_link(path):
+        if path == tree / "chain":
+            return tree / "rel"
+        return original_resolve(path)
+
+    monkeypatch.setattr(error_text, "_resolve", target_still_a_link)
     code, text = outcome(tree, True, read(tree / "chain"))
     # The coded path_changed text, never the bare adapter code (r6 W3 PX1b).
     assert (code, text) == (
