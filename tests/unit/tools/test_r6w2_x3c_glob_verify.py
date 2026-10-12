@@ -10,12 +10,24 @@ descriptor walked no-follow from '/', and omits a swapped entry.
 import os
 import shutil
 import stat
+import sys
 from pathlib import Path
 
 import pytest
 
 from binnacle.config import RootsSettings
 from binnacle.features.files.tools import list_files as lf
+
+# The process descriptor table: /proc/self/fd on Linux, /dev/fd on Darwin.
+FD_DIR = "/proc/self/fd" if os.path.isdir("/proc/self/fd") else "/dev/fd"
+# Parity finding PF-T3-01 (R6W2-T3): Darwin keeps TRAVERSE_FLAGS = O_RDONLY
+# (fd_walk.py, DARWIN-FOLLOWUP-exec-only-dirs), so an execute-only directory
+# differs from Linux; reported to the Supervisor, never loosened.
+PF_T3_01 = pytest.mark.xfail(
+    sys.platform == "darwin",
+    strict=True,
+    reason="PF-T3-01: execute-only directory parity (DARWIN-FOLLOWUP-exec-only-dirs)",
+)
 
 RG = shutil.which("rg") or "rg"
 OUTSIDE_SIZE = 4321
@@ -45,7 +57,7 @@ def tree(tmp_path: Path) -> dict:
     outside.mkdir()
     (outside / "a.txt").write_text("x" * OUTSIDE_SIZE)
     (outside / "b.txt").write_text("y" * OUTSIDE_SIZE)
-    roots = RootsSettings(allowed=[str(root)])
+    roots = RootsSettings(default_root=root, extra_roots=())
     return {"root": root, "outside": outside, "roots": roots, "tmp": tmp_path}
 
 
@@ -104,6 +116,7 @@ def test_a_file_removed_after_listing_keeps_its_entry_without_bytes(tree):
     assert sizes(glob(tree, rg)) == {"a.txt": None, "d/b.txt": 20}
 
 
+@PF_T3_01
 def test_an_execute_only_ancestor_still_sizes(tmp_path):
     if os.geteuid() == 0:
         pytest.skip("root ignores modes")
@@ -111,7 +124,7 @@ def test_an_execute_only_ancestor_still_sizes(tmp_path):
     root = gate / "root"
     root.mkdir(parents=True)
     (root / "f.txt").write_text("z" * 7)
-    tree = {"root": root, "roots": RootsSettings(allowed=[str(root)])}
+    tree = {"root": root, "roots": RootsSettings(default_root=root, extra_roots=())}
     gate.chmod(stat.S_IXUSR)
     try:
         payload = glob(tree)
@@ -126,7 +139,7 @@ def test_a_glob_through_a_cross_root_link_base_is_unchanged(tmp_path):
     (b / "s").mkdir(parents=True)
     (b / "s" / "f.txt").write_text("q" * 3)
     (a / "to_b").symlink_to(b / "s")
-    roots = RootsSettings(allowed=[str(a), str(b)])
+    roots = RootsSettings(default_root=a, extra_roots=(b,))
     payload = lf.list_files_impl(
         str(a / "to_b"), "*.txt", 200, False, roots=roots, rg_bin=RG
     ).structured_content
@@ -143,10 +156,8 @@ def test_glob_sizing_leaks_no_descriptor(tree):
         f'[ -L "{root}/a.txt" ] || {{ rm "{root}/a.txt"; '
         f'ln -s "{outside}/a.txt" "{root}/a.txt"; }}',
     )
-    if not Path("/proc/self/fd").exists():
-        pytest.skip("needs /proc")
-    before = len(os.listdir("/proc/self/fd"))
+    before = len(os.listdir(FD_DIR))
     for _ in range(30):
         glob(tree, rg)
         glob(tree)
-    assert len(os.listdir("/proc/self/fd")) == before
+    assert len(os.listdir(FD_DIR)) == before

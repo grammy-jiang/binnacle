@@ -40,12 +40,15 @@ def manifest_groups() -> dict[str, set[str]]:
             "features/files/paths.py",
             "features/files/error_text.py",
             "features/files/textio.py",
+            "features/files/fd_walk.py",
         },
         "search": {
             "features/search/__init__.py",
             "features/search/search_server.py",
             "features/search/tools/__init__.py",
             "features/search/tools/search_text.py",
+            "features/search/fd_chain.py",
+            "features/search/rg_env.py",
             *(rel(path) for path in SRC.glob("features/search/search_text_*.py")),
         },
         "commands": {

@@ -18,8 +18,14 @@ from binnacle.errors import CodedToolError
 from binnacle.features.files import fd_walk
 from binnacle.features.files.tools import list_files as lf
 
-pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="Linux walk")
+# The process descriptor table: /proc/self/fd on Linux, /dev/fd on Darwin.
+FD_DIR = "/proc/self/fd" if os.path.isdir("/proc/self/fd") else "/dev/fd"
+
 SECRET_SIZE = 4321  # A size that appears nowhere else in the fixture.
+# Linux-only mechanism: fd_walk.open_verified (RX3a2-N4).
+LINUX_WALK = pytest.mark.skipif(
+    sys.platform != "linux", reason="Linux fd_walk.open_verified (RX3a2-N4)"
+)
 
 
 def test_the_link_walk_never_follows_an_intermediate_swap(tmp_path, monkeypatch):
@@ -59,13 +65,14 @@ def ident(path: Path) -> tuple[int, int]:
 
 
 def refusal(path: Path, roots, expected) -> str:
-    before = len(os.listdir("/proc/self/fd"))
+    before = len(os.listdir(FD_DIR))
     with pytest.raises(CodedToolError) as exc:
         fd_walk.open_verified(path, roots, expected)
-    assert len(os.listdir("/proc/self/fd")) == before
+    assert len(os.listdir(FD_DIR)) == before
     return exc.value.telemetry_code
 
 
+@LINUX_WALK
 def test_a_sibling_prefix_root_is_outside(tmp_path):
     base = tmp_path.resolve()
     root, sibling = base / "root", base / "rootX"
@@ -76,6 +83,7 @@ def test_a_sibling_prefix_root_is_outside(tmp_path):
     assert refusal(path, (root,), ident(path)) == "path_outside_root"
 
 
+@LINUX_WALK
 def test_a_file_used_as_a_directory_is_path_changed(tmp_path):
     root = tmp_path.resolve() / "root"
     root.mkdir()

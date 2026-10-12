@@ -42,7 +42,7 @@ def tree(tmp_path: Path) -> dict:
     outside = tmp_path / "outside"
     outside.mkdir()
     (outside / "o.txt").write_text(f"needle {OUTSIDE}\n")
-    roots = RootsSettings(allowed=[str(tmp_path)])
+    roots = RootsSettings(default_root=tmp_path, extra_roots=())
     return {"root": root, "outside": outside, "roots": roots, "tmp": tmp_path}
 
 
@@ -138,24 +138,25 @@ from binnacle.features.search import fd_chain
 from binnacle.features.files.tools import list_files as lf
 from binnacle.features.search.tools import search_text as st
 base, rg = Path(sys.argv[1]), sys.argv[2]
-roots = RootsSettings(allowed=[str(base)])
+FD_DIR = "/proc/self/fd" if os.path.isdir("/proc/self/fd") else "/dev/fd"
+roots = RootsSettings(default_root=base, extra_roots=())
 peak = [0]
 real = fd_chain.DirectoryChain._descend
 def sampled(self, parts):
     fd = real(self, parts)
-    peak[0] = max(peak[0], len(os.listdir("/proc/self/fd")))
+    peak[0] = max(peak[0], len(os.listdir(FD_DIR)))
     return fd
 fd_chain.DirectoryChain._descend = sampled
 def search(max_results):
     return st.search_text_impl("NEEDLE", str(base), None, False, 0, True,
         max_results, roots=roots, rg_bin=rg).structured_content
 out = {"soft": resource.getrlimit(resource.RLIMIT_NOFILE)[0]}
-start = len(os.listdir("/proc/self/fd"))
+start = len(os.listdir(FD_DIR))
 p = search(1000)
 out["search"] = {"count": p["count"], "entries": len(p["entries"]),
     "files": sum(e.get("count", 1) for e in p["entries"]), "peak": peak[0] - start}
 peak[0] = 0
-start = len(os.listdir("/proc/self/fd"))
+start = len(os.listdir(FD_DIR))
 g = lf._glob_mode(base, "*.txt", 2000, False, rg_bin=rg, timeout_s=60).structured_content
 out["glob"] = {"count": g["count"], "sized": sum("bytes" in e for e in g["entries"]),
     "peak": peak[0] - start}
@@ -166,12 +167,11 @@ threads = [threading.Thread(target=one) for _ in range(2)]
 [t.start() for t in threads]
 [t.join() for t in threads]
 out["concurrent"] = results
-out["after"] = len(os.listdir("/proc/self/fd")) - start
+out["after"] = len(os.listdir(FD_DIR)) - start
 print(json.dumps(out))
 """
 
 
-@pytest.mark.skipif(not Path("/proc/self/fd").exists(), reason="needs /proc/self/fd")
 def test_1500_directories_under_a_soft_fd_limit_of_256(tmp_path):
     base = tmp_path / "many"
     for index in range(1500):

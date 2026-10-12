@@ -23,8 +23,15 @@ from binnacle.errors import CodedToolError
 from binnacle.features.files import fd_walk
 from binnacle.features.files.tools import read_file as rf
 
-pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="Linux read path")
+# The process descriptor table: /proc/self/fd on Linux, /dev/fd on Darwin.
+FD_DIR = "/proc/self/fd" if os.path.isdir("/proc/self/fd") else "/dev/fd"
+
 SECRET = "s" * 4321  # A size and text that appear nowhere else in the fixture.
+# Linux-only mechanism: read_file_impl without file_access over fd_walk;
+# Darwin reads through DarwinFileAccess (test_r6w2_t3_special_files.py).
+LINUX_READ = pytest.mark.skipif(
+    sys.platform != "linux", reason="Linux read path (fd_walk.open_walked)"
+)
 
 
 @pytest.fixture
@@ -109,6 +116,7 @@ def swap_in(target: Path, make: Callable[[Path], object]) -> Callable[[], None]:
 # F2: a swap between the checked stat and the open-walk entry.
 
 
+@LINUX_READ
 @pytest.mark.parametrize("swap", ["replaced_in_root", "hard_link_outside"])
 def test_a_swap_after_the_checked_stat_is_refused(tree, swap):
     def make(tmp: Path) -> None:
@@ -123,6 +131,7 @@ def test_a_swap_after_the_checked_stat_is_refused(tree, swap):
     assert swapping.fired == 1
 
 
+@LINUX_READ
 def test_the_walk_verifies_the_identity_of_the_checked_stat(tree, monkeypatch):
     checked = tree["file"].stat()
     seen: list[tuple[int, int]] = []
@@ -149,7 +158,7 @@ def test_successful_reads_leak_no_descriptor(tree):
     ]
     for path in paths:  # Warm imports and caches before the count.
         assert read(tree["roots"], path)[0] == "read"
-    before = sorted(os.listdir("/proc/self/fd"))
+    before = sorted(os.listdir(FD_DIR))
     for _ in range(25):
         outcomes = [read(tree["roots"], path) for path in paths]
         assert outcomes == [
@@ -158,7 +167,7 @@ def test_successful_reads_leak_no_descriptor(tree):
             ("read", ""),
             ("read", "other root"),
         ]
-    assert sorted(os.listdir("/proc/self/fd")) == before
+    assert sorted(os.listdir(FD_DIR)) == before
 
 
 # F4: st_dev is part of the identity.
@@ -180,6 +189,7 @@ def fstat_with(monkeypatch, change: Callable[[os.stat_result], tuple]) -> list[i
     return calls
 
 
+@LINUX_READ
 def test_a_different_st_dev_with_the_same_st_ino_is_refused(tree, monkeypatch):
     def other_device(info: os.stat_result) -> tuple:
         fields = list(info[:10])
@@ -191,6 +201,7 @@ def test_a_different_st_dev_with_the_same_st_ino_is_refused(tree, monkeypatch):
     assert calls
 
 
+@LINUX_READ
 def test_the_same_st_dev_and_st_ino_still_read(tree, monkeypatch):
     # Control for the test above: the rewritten fstat alone does not refuse.
     calls = fstat_with(monkeypatch, lambda info: tuple(info[:10]))
@@ -226,6 +237,7 @@ def limited(stand_in: SwapAfterStat) -> ReadFileSettings:
     return cast(ReadFileSettings, stand_in)
 
 
+@LINUX_READ
 @pytest.mark.parametrize("extra", [1, 3 * LIMIT])
 def test_a_file_that_grows_past_the_limit_after_the_stat_is_too_large(tree, extra):
     target = tree["root"] / "grows.txt"
@@ -242,6 +254,7 @@ def test_a_file_that_grows_past_the_limit_after_the_stat_is_too_large(tree, extr
     assert str(grown) == str(at_stat)
 
 
+@LINUX_READ
 def test_the_read_never_asks_for_more_than_the_limit_plus_one(tree, monkeypatch):
     target = tree["root"] / "grows.txt"
     target.write_bytes(b"a" * LIMIT)

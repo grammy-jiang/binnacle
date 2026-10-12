@@ -9,14 +9,12 @@ import pytest
 from binnacle.features.search import fd_chain
 from binnacle.features.search.fd_chain import DirectoryChain
 
+# The process descriptor table: /proc/self/fd on Linux, /dev/fd on Darwin.
+FD_DIR = "/proc/self/fd" if os.path.isdir("/proc/self/fd") else "/dev/fd"
+
 
 def open_fds() -> int:
-    return len(os.listdir("/proc/self/fd"))
-
-
-pytestmark = pytest.mark.skipif(
-    not Path("/proc/self/fd").exists(), reason="needs /proc/self/fd"
-)
+    return len(os.listdir(FD_DIR))
 
 
 def parts(path: Path) -> tuple[str, ...]:

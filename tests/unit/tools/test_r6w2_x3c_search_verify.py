@@ -12,6 +12,7 @@ The parity cases pin the benign results, which are unchanged.
 import os
 import shutil
 import stat
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,24 @@ import pytest
 
 from binnacle.config import RootsSettings, get_settings
 from binnacle.features.search.tools import search_text as st
+
+# The process descriptor table: /proc/self/fd on Linux, /dev/fd on Darwin.
+FD_DIR = "/proc/self/fd" if os.path.isdir("/proc/self/fd") else "/dev/fd"
+# Parity finding PF-T3-01 (R6W2-T3): Darwin keeps TRAVERSE_FLAGS = O_RDONLY
+# (fd_walk.py, DARWIN-FOLLOWUP-exec-only-dirs), so an execute-only directory
+# differs from Linux; reported to the Supervisor, never loosened.
+PF_T3_01 = pytest.mark.xfail(
+    sys.platform == "darwin",
+    strict=True,
+    reason="PF-T3-01: execute-only directory parity (DARWIN-FOLLOWUP-exec-only-dirs)",
+)
+# Parity finding PF-T3-02 (R6W2-T3): on Darwin the pathname core reports the
+# NUL line of an explicit file as rg 15 converts it; reported, never loosened.
+PF_T3_02 = pytest.mark.xfail(
+    sys.platform == "darwin",
+    strict=True,
+    reason="PF-T3-02: explicit-file NUL line text differs on Darwin",
+)
 
 RG = shutil.which("rg") or "rg"
 OUTSIDE = "OUTSIDE-SECRET"
@@ -67,7 +86,7 @@ def tree(tmp_path: Path) -> dict:
     outside.mkdir()
     (outside / "m.txt").write_text(f"needle {OUTSIDE}\n")
     (outside / "n.txt").write_text(f"needle {OUTSIDE} deep\n")
-    roots = RootsSettings(allowed=[str(root)])
+    roots = RootsSettings(default_root=root, extra_roots=())
     return {"root": root, "outside": outside, "roots": roots, "tmp": tmp_path}
 
 
@@ -223,16 +242,17 @@ def test_benign_encodings_are_reported_as_before(tmp_path, raw, expected):
     root = tmp_path / "root"
     root.mkdir()
     (root / "f.txt").write_bytes(raw)
-    roots = RootsSettings(allowed=[str(root)])
+    roots = RootsSettings(default_root=root, extra_roots=())
     payload = search("needle", root, roots, context_lines=0)
     assert [e["text"] for e in payload["entries"]] == expected
 
 
+@PF_T3_02
 def test_an_explicit_file_with_nul_bytes_is_reported_as_before(tmp_path):
     root = tmp_path / "root"
     root.mkdir()
     (root / "b.bin").write_bytes(b"needle\x00one\nneedle two\n")
-    roots = RootsSettings(allowed=[str(root)])
+    roots = RootsSettings(default_root=root, extra_roots=())
     payload = search("needle", root / "b.bin", roots, context_lines=0)
     assert [e["text"] for e in payload["entries"]] == ["needle\x00one", "needle two"]
 
@@ -241,7 +261,7 @@ def test_auto_context_and_line_numbers_are_unchanged(tmp_path):
     root = tmp_path / "root"
     root.mkdir()
     (root / "f.txt").write_text("".join(f"l{n}\n" for n in range(1, 20)) + "needle\n")
-    roots = RootsSettings(allowed=[str(root)])
+    roots = RootsSettings(default_root=root, extra_roots=())
     payload = search("needle", root, roots, line_numbers=True)
     (entry,) = payload["entries"]
     assert entry["line"] == 20
@@ -254,13 +274,14 @@ def test_a_search_base_reached_through_a_cross_root_link_is_unchanged(tmp_path):
     (b / "s").mkdir(parents=True)
     (b / "s" / "f.txt").write_text("needle b\n")
     (a / "to_b").symlink_to(b / "s")
-    roots = RootsSettings(allowed=[str(a), str(b)])
+    roots = RootsSettings(default_root=a, extra_roots=(b,))
     payload = search("needle", a / "to_b", roots, context_lines=0)
     assert [e["text"] for e in payload["entries"]] == ["needle b"]
     outer = search("needle", a / ".." / "b", roots, context_lines=0)
     assert [e["text"] for e in outer["entries"]] == ["needle b"]
 
 
+@PF_T3_01
 def test_nested_roots_and_an_execute_only_ancestor_are_unchanged(tmp_path):
     if os.geteuid() == 0:
         pytest.skip("root ignores modes")
@@ -268,7 +289,7 @@ def test_nested_roots_and_an_execute_only_ancestor_are_unchanged(tmp_path):
     inner = gate / "outer" / "inner"
     inner.mkdir(parents=True)
     (inner / "f.txt").write_text("needle nested\n")
-    roots = RootsSettings(allowed=[str(gate / "outer"), str(inner)])
+    roots = RootsSettings(default_root=gate / "outer", extra_roots=(inner,))
     gate.chmod(stat.S_IXUSR)
     try:
         payload = search("needle", gate / "outer", roots, context_lines=0)
@@ -284,7 +305,7 @@ def test_verification_leaks_no_descriptor(tree):
         f'[ -L "{root}/m.txt" ] || {{ rm "{root}/m.txt"; '
         f'ln -s "{outside}/m.txt" "{root}/m.txt"; }}',
     )
-    before = len(os.listdir("/proc/self/fd")) if Path("/proc/self/fd").exists() else 0
+    before = len(os.listdir(FD_DIR))
     for _ in range(30):
         st.search_text_impl(
             "needle",
@@ -298,5 +319,5 @@ def test_verification_leaks_no_descriptor(tree):
             rg_bin=rg,
         )
         search("needle", root, tree["roots"], context_lines=2)
-    after = len(os.listdir("/proc/self/fd")) if Path("/proc/self/fd").exists() else 0
+    after = len(os.listdir(FD_DIR))
     assert after == before

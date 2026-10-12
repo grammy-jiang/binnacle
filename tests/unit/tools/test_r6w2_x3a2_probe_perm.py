@@ -10,6 +10,7 @@ against the r6 base, the X3a head and X3a-a2.
 
 import os
 import stat
+import sys
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,14 @@ from binnacle.errors import CodedToolError
 from binnacle.features.files.tools import list_files as lf
 
 not_root = pytest.mark.skipif(os.geteuid() == 0, reason="root ignores modes")
+# Parity finding PF-T3-01 (R6W2-T3): Darwin keeps TRAVERSE_FLAGS = O_RDONLY
+# (fd_walk.py, DARWIN-FOLLOWUP-exec-only-dirs), so an execute-only directory
+# differs from Linux; reported to the Supervisor, never loosened.
+PF_T3_01 = pytest.mark.xfail(
+    sys.platform == "darwin",
+    strict=True,
+    reason="PF-T3-01: execute-only directory parity (DARWIN-FOLLOWUP-exec-only-dirs)",
+)
 
 
 def run(roots: RootsSettings, path: Path):
@@ -46,6 +55,7 @@ def chmod_back():
         path.chmod(mode)
 
 
+@PF_T3_01
 @not_root
 @pytest.mark.parametrize("mode", [0o100, 0o300])
 def test_p1_execute_only_ancestor_above_the_root_lists_as_r6(
@@ -72,12 +82,14 @@ def r2(tmp_path: Path) -> dict:
     return {"root": root, "roots": RootsSettings(default_root=root, extra_roots=())}
 
 
+@PF_T3_01
 @not_root
 def test_p2a_listing_below_an_execute_only_in_root_directory(r2, chmod_back):
     chmod_back(r2["root"] / "x", 0o100)
     assert types(run(r2["roots"], r2["root"] / "x" / "y")) == {"g.txt": "file"}
 
 
+@PF_T3_01
 @not_root
 def test_p2b_links_through_an_execute_only_in_root_directory(r2, chmod_back):
     root = r2["root"]

@@ -12,6 +12,7 @@ import errno
 import os
 import socket
 import stat
+import sys
 from pathlib import Path
 
 import pytest
@@ -22,8 +23,15 @@ from binnacle.errors import CodedToolError
 from binnacle.features.files import fd_walk
 from binnacle.features.files.tools import list_files as lf
 
+# The process descriptor table: /proc/self/fd on Linux, /dev/fd on Darwin.
+FD_DIR = "/proc/self/fd" if os.path.isdir("/proc/self/fd") else "/dev/fd"
+
 SECRET = "s" * 4321  # A size that appears nowhere else in the fixture.
 not_root = pytest.mark.skipif(os.geteuid() == 0, reason="root ignores modes")
+# Linux-only mechanism: open_verified (RX3a2-N4) and the O_PATH traverse flags.
+LINUX_WALK = pytest.mark.skipif(
+    sys.platform != "linux", reason="Linux fd_walk mechanism (RX3a2-N4)"
+)
 
 
 def run(roots: RootsSettings, path: Path):
@@ -92,6 +100,7 @@ def test_a_readable_listed_root_with_no_search_lists_names_as_r6(tmp_path, chmod
     assert payload["entries"] == [] and payload["count"] == 0
 
 
+@LINUX_WALK
 def test_the_walk_traverses_with_o_path_and_reads_only_the_listed_dir(r2, monkeypatch):
     opened: list[tuple[str, int]] = []
     real_open = os.open
@@ -179,12 +188,12 @@ def test_no_descriptor_leaks_across_permission_failures(r2, chmod_back):
     if os.geteuid() == 0:
         pytest.skip("root ignores modes")
     listed = r2["root"] / "x" / "y"
-    before = len(os.listdir("/proc/self/fd"))
+    before = len(os.listdir(FD_DIR))
     chmod_back(listed, 0o300)
     for _ in range(10):
         with pytest.raises(ToolError):
             run(r2["roots"], listed)
-    assert len(os.listdir("/proc/self/fd")) == before
+    assert len(os.listdir(FD_DIR)) == before
 
 
 # open_verified: the X3b verify-after-open helper (SD-76).
@@ -219,14 +228,15 @@ def ident(path: Path) -> tuple[int, int]:
 
 
 def refused(path: Path | str, roots, expected) -> CodedToolError:
-    before = len(os.listdir("/proc/self/fd"))
+    before = len(os.listdir(FD_DIR))
     with pytest.raises(CodedToolError) as exc:
         fd_walk.open_verified(path, roots, expected)
-    assert len(os.listdir("/proc/self/fd")) == before  # The fd was closed.
+    assert len(os.listdir(FD_DIR)) == before  # The fd was closed.
     assert str(len(SECRET)) not in str(exc.value)
     return exc.value
 
 
+@LINUX_WALK
 @pytest.mark.parametrize("name", ["o.txt", "inner/i.txt"])
 def test_open_verified_returns_a_readable_fd_in_any_root(files, name):
     path = files["outer"] / name
@@ -241,6 +251,7 @@ def test_open_verified_returns_a_readable_fd_in_any_root(files, name):
     os.close(fd)
 
 
+@LINUX_WALK
 def test_open_verified_refuses_a_final_symlink(files):
     link = files["outer"] / "l"
     link.symlink_to("o.txt")
@@ -248,11 +259,13 @@ def test_open_verified_refuses_a_final_symlink(files):
     assert err.telemetry_code == "path_changed"
 
 
+@LINUX_WALK
 def test_open_verified_refuses_a_missing_file(files):
     path = files["outer"] / "gone.txt"
     assert refused(path, files["roots"], (0, 0)).telemetry_code == "path_changed"
 
 
+@LINUX_WALK
 @not_root
 def test_open_verified_refuses_an_unreadable_file(files, chmod_back):
     path = files["outer"] / "o.txt"
@@ -261,6 +274,7 @@ def test_open_verified_refuses_an_unreadable_file(files, chmod_back):
     assert err.telemetry_code == "permission_denied"
 
 
+@LINUX_WALK
 def test_open_verified_refuses_an_unopenable_object(files):
     path = files["outer"] / "sock"
     with socket.socket(socket.AF_UNIX) as sock:
@@ -269,6 +283,7 @@ def test_open_verified_refuses_an_unopenable_object(files):
     assert err.telemetry_code == "file_io_failed"
 
 
+@LINUX_WALK
 @pytest.mark.parametrize("kind", ["directory", "fifo"])
 def test_open_verified_refuses_a_non_regular_file(files, kind):
     path = files["inner"] if kind == "directory" else files["outer"] / "fifo"
@@ -278,6 +293,7 @@ def test_open_verified_refuses_a_non_regular_file(files, kind):
     assert err.telemetry_code == "not_a_regular_file"
 
 
+@LINUX_WALK
 def test_open_verified_refuses_a_real_path_outside_every_root(files):
     # An intermediate symlink is followed by the open; the kernel path of the
     # opened object is outside the roots, so the identity match is not enough.
@@ -287,12 +303,14 @@ def test_open_verified_refuses_a_real_path_outside_every_root(files):
     assert err.telemetry_code == "path_outside_root"
 
 
+@LINUX_WALK
 def test_open_verified_refuses_another_object(files):
     path = files["outer"] / "o.txt"
     expected = ident(files["inner"] / "i.txt")
     assert refused(path, files["roots"], expected).telemetry_code == "path_changed"
 
 
+@LINUX_WALK
 def test_open_verified_maps_a_failure_after_the_open(files, monkeypatch):
     path = files["outer"] / "o.txt"
 
@@ -304,6 +322,7 @@ def test_open_verified_maps_a_failure_after_the_open(files, monkeypatch):
     assert err.telemetry_code == "file_io_failed"
 
 
+@LINUX_WALK
 def test_open_verified_opens_no_follow_non_blocking(files, monkeypatch):
     flags_seen: list[int] = []
     real_open = os.open

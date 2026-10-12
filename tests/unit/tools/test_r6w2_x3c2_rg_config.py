@@ -52,7 +52,7 @@ def tree(tmp_path: Path) -> dict:
     (outside / "o.txt").write_text("needle outside\n")
     (root / "link").symlink_to(outside, target_is_directory=True)
     (root / "alias").symlink_to(root / "d", target_is_directory=True)
-    roots = RootsSettings(allowed=[str(root)])
+    roots = RootsSettings(default_root=root, extra_roots=())
     return {"root": root, "roots": roots, "tmp": tmp_path}
 
 

@@ -23,17 +23,24 @@ from binnacle.config import RootsSettings
 from binnacle.errors import CodedToolError
 from binnacle.features.files.tools import read_file as rf
 
+# The process descriptor table: /proc/self/fd on Linux, /dev/fd on Darwin.
+FD_DIR = "/proc/self/fd" if os.path.isdir("/proc/self/fd") else "/dev/fd"
+
 try:
     from binnacle.features.files import fd_walk
 except ImportError:  # The r6 base (b18521f) has no descriptor walk.
     fd_walk = None  # type: ignore[assignment]
 
-pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="Linux read path")
 SECRET = "s" * 4321  # A size and text that appear nowhere else in the fixture.
 not_root = pytest.mark.skipif(os.geteuid() == 0, reason="root ignores modes")
 x3b_only = pytest.mark.skipif(
     fd_walk is None or not hasattr(fd_walk, "open_walked"),
     reason="the hook point exists only with the X3b walk",
+)
+# Linux-only mechanism: read_file_impl without file_access over fd_walk;
+# Darwin reads through DarwinFileAccess (test_r6w2_t3_special_files.py).
+LINUX_READ = pytest.mark.skipif(
+    sys.platform != "linux", reason="Linux read path (fd_walk.open_walked)"
 )
 
 
@@ -151,6 +158,7 @@ def test_an_unraced_read_is_unchanged(tree):
 # Swaps between the containment check and the open (r6 reads the swap).
 
 
+@LINUX_READ
 def test_a_final_symlink_to_an_outside_file_is_refused(tree, monkeypatch):
     link = swap_in(tree["file"], lambda tmp: tmp.symlink_to(tree["out"] / "secret.txt"))
     fired = before_open(monkeypatch, tree["file"], link)
@@ -158,6 +166,7 @@ def test_a_final_symlink_to_an_outside_file_is_refused(tree, monkeypatch):
     assert fired
 
 
+@LINUX_READ
 def test_a_final_symlink_to_another_in_root_file_is_refused(tree, monkeypatch):
     link = swap_in(tree["file"], lambda tmp: tmp.symlink_to(tree["root"] / "other.txt"))
     fired = before_open(monkeypatch, tree["file"], link)
@@ -165,6 +174,7 @@ def test_a_final_symlink_to_another_in_root_file_is_refused(tree, monkeypatch):
     assert fired
 
 
+@LINUX_READ
 def test_a_different_in_root_file_is_refused(tree, monkeypatch):
     other = swap_in(tree["file"], lambda tmp: tmp.write_text("swapped"))
     fired = before_open(monkeypatch, tree["file"], other)
@@ -172,6 +182,7 @@ def test_a_different_in_root_file_is_refused(tree, monkeypatch):
     assert fired
 
 
+@LINUX_READ
 def test_a_hard_link_to_an_outside_file_is_refused(tree, monkeypatch):
     # The swapped object's kernel path is in the root; the identity is not.
     hard = swap_in(tree["file"], lambda tmp: os.link(tree["out"] / "secret.txt", tmp))
@@ -180,6 +191,7 @@ def test_a_hard_link_to_an_outside_file_is_refused(tree, monkeypatch):
     assert fired
 
 
+@LINUX_READ
 def test_a_parent_symlink_to_an_outside_dir_opens_nothing_outside(tree, monkeypatch):
     # RX3a2-N2: the walk fails at the swapped component (no-follow), so the
     # outside file is never opened; the refusal still names it outside.
@@ -193,6 +205,7 @@ def test_a_parent_symlink_to_an_outside_dir_opens_nothing_outside(tree, monkeypa
     assert fired and seen == []
 
 
+@LINUX_READ
 @pytest.mark.timeout(10)  # r6 blocks in open(2) on the FIFO without a writer.
 def test_a_fifo_swapped_in_is_refused_by_identity_first(tree, monkeypatch):
     # Checks run root -> identity -> type: a different object is path_changed.
@@ -202,6 +215,7 @@ def test_a_fifo_swapped_in_is_refused_by_identity_first(tree, monkeypatch):
     assert fired
 
 
+@LINUX_READ
 @pytest.mark.timeout(10)
 def test_a_checked_fifo_is_not_a_regular_file(tree):
     fifo = tree["root"] / "fifo"
@@ -213,6 +227,7 @@ def test_a_checked_fifo_is_not_a_regular_file(tree):
 # Changes after the open, before the verification (X3b only).
 
 
+@LINUX_READ
 @x3b_only
 def test_a_file_renamed_out_of_every_root_after_the_open_is_refused(tree, monkeypatch):
     fired = after_open(
@@ -222,6 +237,7 @@ def test_a_file_renamed_out_of_every_root_after_the_open_is_refused(tree, monkey
     assert fired
 
 
+@LINUX_READ
 @x3b_only
 def test_a_file_deleted_after_the_open_is_path_changed(tree, monkeypatch):
     # The st_nlink == 0 rule: the named file no longer exists, so its content
@@ -238,6 +254,7 @@ def test_a_hard_linked_file_still_reads(tree):
     assert outcome(tree["roots"], tree["file"]) == ("read", "checked")
 
 
+@LINUX_READ
 @x3b_only
 def test_the_root_check_runs_before_the_identity_check(tree, monkeypatch):
     other = swap_in(tree["file"], lambda tmp: tmp.write_text("swapped"))
@@ -246,6 +263,7 @@ def test_the_root_check_runs_before_the_identity_check(tree, monkeypatch):
     assert outcome(tree["roots"], tree["file"]) == ("refused", "path_outside_root")
 
 
+@LINUX_READ
 @x3b_only
 @pytest.mark.timeout(10)
 def test_the_root_check_runs_before_the_type_check(tree, monkeypatch):
@@ -268,6 +286,7 @@ def test_the_content_comes_only_from_the_verified_fd(tree, monkeypatch):
     assert outcome(tree["roots"], tree["file"]) == ("read", "checked")
 
 
+@LINUX_READ
 @x3b_only
 def test_the_walk_traverses_no_follow_and_opens_the_name_once(tree, monkeypatch):
     calls: list[tuple[str, int, int | None]] = []
@@ -287,9 +306,10 @@ def test_the_walk_traverses_no_follow_and_opens_the_name_once(tree, monkeypatch)
     assert not any(name == str(tree["file"]) for name, _, _ in calls)
 
 
+@LINUX_READ
 @x3b_only
 def test_refusals_leak_no_descriptor(tree, monkeypatch):
-    before = len(os.listdir("/proc/self/fd"))
+    before = len(os.listdir(FD_DIR))
     link = swap_in(tree["file"], lambda tmp: tmp.symlink_to(tree["out"] / "secret.txt"))
     for _ in range(20):
         (tree["root"] / "d" / "f.txt").unlink(missing_ok=True)
@@ -297,7 +317,7 @@ def test_refusals_leak_no_descriptor(tree, monkeypatch):
         monkeypatch.undo()
         before_open(monkeypatch, tree["file"], link)
         assert outcome(tree["roots"], tree["file"])[0] == "refused"
-    assert len(os.listdir("/proc/self/fd")) == before
+    assert len(os.listdir(FD_DIR)) == before
 
 
 # SD-76: model-visible behavior stays as in r6.
@@ -356,6 +376,7 @@ def ident(path: Path) -> tuple[int, int]:
     return info.st_dev, info.st_ino
 
 
+@LINUX_READ
 @x3b_only
 def test_open_walked_opens_nothing_for_a_path_outside_every_root(tree, monkeypatch):
     opened: list[object] = []
