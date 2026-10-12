@@ -111,7 +111,7 @@ def test_descriptor_shortage_is_coded_error(
 
 
 def test_permission_only_failure_has_no_pattern_hint() -> None:
-    from binnacle.features.search.rg_env import rejection_message
+    from binnacle.features.files.rg_env import rejection_message
 
     text = rejection_message("rg: /x/secret: Permission denied (os error 13)")
     assert "Fix the pattern" not in text
@@ -119,7 +119,7 @@ def test_permission_only_failure_has_no_pattern_hint() -> None:
 
 
 def test_pattern_failure_keeps_pattern_hint() -> None:
-    from binnacle.features.search.rg_env import rejection_message
+    from binnacle.features.files.rg_env import rejection_message
 
     assert "Fix the pattern" in rejection_message("regex parse error: unclosed group")
     mixed = "rg: a: Permission denied (os error 13)\nregex parse error"

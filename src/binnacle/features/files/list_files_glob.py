@@ -17,9 +17,9 @@ from fastmcp.tools.base import ToolResult
 
 from binnacle.config import get_settings
 from binnacle.errors import CodedToolError
+from binnacle.features.files.fd_chain import EXHAUSTED, DirectoryChain
 from binnacle.features.files.paths import full_match
-from binnacle.features.search.fd_chain import EXHAUSTED, DirectoryChain
-from binnacle.features.search.rg_env import NO_CONFIG, accept_denied, rg_env, shown
+from binnacle.features.files.rg_env import NO_CONFIG, accept_denied, rg_env, shown
 from binnacle.platform.contracts.special_file_contracts import (
     TOO_MANY_OPEN_FILES_CODE,
     too_many_open_files_text,

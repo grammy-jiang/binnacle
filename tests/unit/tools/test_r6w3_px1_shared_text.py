@@ -22,12 +22,12 @@ from fastmcp.exceptions import ToolError
 
 from binnacle.config import RootsSettings
 from binnacle.features.files import list_files_glob, paths
+from binnacle.features.files.fd_chain import DirectoryChain
 from binnacle.features.files.tools import edit_file as ef
 from binnacle.features.files.tools import list_files as lf
 from binnacle.features.files.tools import read_file as rf
 from binnacle.features.files.tools import write_file as wf
 from binnacle.features.search import search_text_verify
-from binnacle.features.search.fd_chain import DirectoryChain
 from binnacle.features.search.tools import search_text as st
 from binnacle.platform.contracts.capability_contracts import Capability, CapabilityState
 from binnacle.platform.contracts.special_file_contracts import (

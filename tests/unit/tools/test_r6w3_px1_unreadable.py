@@ -20,9 +20,8 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from binnacle.config import RootsSettings
-from binnacle.features.files import paths
+from binnacle.features.files import paths, rg_env
 from binnacle.features.files.tools import list_files as lf
-from binnacle.features.search import rg_env
 from binnacle.features.search.tools import search_text as st
 from binnacle.platform.contracts.capability_contracts import Capability, CapabilityState
 from binnacle.platform.darwin.file_access import DarwinFileAccess

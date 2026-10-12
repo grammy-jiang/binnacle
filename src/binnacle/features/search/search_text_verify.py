@@ -26,8 +26,8 @@ from pathlib import Path
 
 from binnacle.config import RootsSettings
 from binnacle.errors import CodedToolError
+from binnacle.features.files.fd_chain import EXHAUSTED, DirectoryChain
 from binnacle.features.files.paths import nearby_hint
-from binnacle.features.search.fd_chain import EXHAUSTED, DirectoryChain
 from binnacle.features.search.search_text_stream_reduce import ExactScanResult
 from binnacle.platform.contracts.special_file_contracts import (
     SPECIAL_FILE_CODE,

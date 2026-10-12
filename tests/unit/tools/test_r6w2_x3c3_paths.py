@@ -134,7 +134,7 @@ from pathlib import Path
 soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (256, hard))
 from binnacle.config import RootsSettings
-from binnacle.features.search import fd_chain
+from binnacle.features.files import fd_chain
 from binnacle.features.files.tools import list_files as lf
 from binnacle.features.search.tools import search_text as st
 base, rg = Path(sys.argv[1]), sys.argv[2]

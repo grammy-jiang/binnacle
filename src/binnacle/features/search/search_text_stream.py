@@ -19,7 +19,7 @@ from typing import BinaryIO
 import orjson
 
 from binnacle.errors import CodedToolError
-from binnacle.features.search.rg_env import (
+from binnacle.features.files.rg_env import (
     NO_CONFIG,
     accept_denied,
     rejection_message,

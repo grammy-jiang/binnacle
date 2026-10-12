@@ -9,7 +9,7 @@ from pathlib import Path, PurePath
 from binnacle.errors import CodedToolError
 from binnacle.features.files.error_text import followed
 from binnacle.features.files.paths import full_match
-from binnacle.features.search.rg_env import NO_CONFIG, record_unreadable, rg_env
+from binnacle.features.files.rg_env import NO_CONFIG, record_unreadable, rg_env
 from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 

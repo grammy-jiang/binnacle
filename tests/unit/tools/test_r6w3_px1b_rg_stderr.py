@@ -25,8 +25,8 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from binnacle.config import ListFilesSettings, RootsSettings, SearchTextSettings
+from binnacle.features.files import rg_env
 from binnacle.features.files.tools import list_files as lf
-from binnacle.features.search import rg_env
 from binnacle.features.search.search_text_rg import run_rg
 from binnacle.features.search.search_text_stream import RgJsonStream, managed_rg_stream
 from binnacle.features.search.tools import search_text as st
