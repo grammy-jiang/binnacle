@@ -25,6 +25,11 @@ from binnacle.config import RootsSettings
 from binnacle.features.files import paths
 from binnacle.features.files.tools import list_files as lf
 from binnacle.features.files.tools import read_file as rf
+from binnacle.platform.contracts.capability_contracts import (
+    Capability,
+    CapabilityState,
+)
+from binnacle.platform.darwin.file_access import DarwinFileAccess
 
 LOOPS = ["loop", "loop/x", "ping", "ping/pong/x", "self/loop"]
 
@@ -151,3 +156,35 @@ def test_a_link_to_outside_is_still_path_outside_root(tree, monkeypatch, patch):
     )
     assert code == "path_outside_root"
     assert text.endswith(str(tree.parent / "outside"))
+
+
+# The Darwin path (FileToolAccess over DarwinFileAccess, built directly so it runs
+# on both OSes) words its refusals through features/files/error_text.py, which also
+# resolved with Path.resolve(): the second half of the SD-93 red (TM, e6b4279).
+
+
+def darwin_read_outcome(root: Path, name: str) -> tuple[str | None, str]:
+    access = paths.FileToolAccess(
+        roots=roots_for(root),
+        files=DarwinFileAccess(),
+        search=None,
+        generation="r6w3-px1c",
+        capability=Capability(CapabilityState.LIMITED, "test_only", "px1c"),
+    )
+    try:
+        return code_and_text(
+            lambda: rf.read_file_impl(
+                str(root / name), 1, None, roots=roots_for(root), file_access=access
+            )
+        )
+    finally:
+        access.close()
+
+
+@pytest.mark.parametrize("name", LOOPS)
+def test_the_darwin_path_answers_a_loop_the_same_under_the_old_resolve(
+    tree, monkeypatch, name
+):
+    expected = darwin_read_outcome(tree, name)
+    monkeypatch.setattr(Path, "resolve", old_resolve)
+    assert darwin_read_outcome(tree, name) == expected
