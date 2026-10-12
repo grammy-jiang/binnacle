@@ -127,8 +127,11 @@ def _entry_info(
 
 
 def _names(alias: Path, held: os.stat_result) -> bool:
+    # Absolute, no '..' (never normalized away), as Darwin's grant (LP-a2).
+    if not alias.is_absolute() or ".." in alias.parts:
+        return False
     try:
-        return alias.is_absolute() and os.path.samestat(os.stat(alias), held)
+        return os.path.samestat(os.stat(alias), held)
     except OSError:
         return False
 
@@ -152,13 +155,9 @@ def _list_mode(
         live = [str(a) for a, c in configured if c == top != a and _names(a, held)]
 
         def follow(name: str) -> os.stat_result | None:
-            for prefix in (str(top), *live):
-                info = fd_walk.link_target_info(
-                    chain[0], parts, name, prefix, chain=chain
-                )
-                if info is not None:
-                    return info
-            return None
+            return fd_walk.link_target_info(
+                chain[0], parts, name, str(top), chain=chain, aliases=live
+            )
 
         for name in os.listdir(fd):
             if name == ".git" or (not include_hidden and name.startswith(".")):

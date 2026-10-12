@@ -117,6 +117,7 @@ def link_target_info(
     root_path: str,
     *,
     chain: Sequence[int] | None = None,
+    aliases: Sequence[str] = (),
 ) -> os.stat_result | None:
     """ONE no-follow read of a link's target, only if it resolves in the root.
 
@@ -125,7 +126,10 @@ def link_target_info(
     of ``directory`` (the last one is the link's directory); without it the
     chain is opened once here. Each further component is opened once,
     relative to its opened parent (RX3a-F3). Absolute text is walked from
-    root_fd only when absolute_in_root accepts it for root_path. '..' above
+    root_fd only when absolute_in_root accepts it for root_path or, failing
+    that, for one of ``aliases`` (configured alias strings of that root whose
+    identity was re-checked for this call; LP, SD-74). The prefix is chosen
+    lexically, once, as on Darwin; the link is walked once. '..' above
     the root (also into an outer root when roots nest), an absolute
     intermediate link, more than MAX_LINK_HOPS links, a non-directory
     intermediate, a dangling link, a loop and any read failure yield None.
@@ -137,21 +141,27 @@ def link_target_info(
         with ExitStack() as owned:
             if chain is None:
                 chain = owned.enter_context(directory_chain(root_fd, directory))
-            return _walk_link(list(chain), name, root_path)
+            return _walk_link(list(chain), name, root_path, aliases)
     except OSError:
         return None
 
 
-def _walk_link(fds: list[int], name: str, root_path: str) -> os.stat_result | None:
+def _walk_link(
+    fds: list[int], name: str, root_path: str, aliases: Sequence[str] = ()
+) -> os.stat_result | None:
     # fds[0] is the root; descriptors opened here are closed on every exit.
     opened: list[int] = []
     try:
         text = os.readlink(name, dir_fd=fds[-1])
         pending = text.split("/")
         if pending[0] == "":
-            below = absolute_in_root(text, root_path)
+            below = None
+            for prefix in (root_path, *aliases):
+                below = absolute_in_root(text, prefix)
+                if below is not None:
+                    break
             if below is None:
-                return None  # '..', another root or an alias: omitted.
+                return None  # '..', another root or an unknown alias: omitted.
             del fds[1:]
             pending = below
         hops = 1
