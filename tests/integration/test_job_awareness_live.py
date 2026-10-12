@@ -8,7 +8,6 @@ an in-memory job backend (``Jobs``); no real process or job store is used.
 
 import asyncio
 import logging
-import sys
 
 import pytest
 
@@ -353,7 +352,6 @@ def test_journal_lines_carry_no_raw_platform_value(root, ja_log):
         assert value not in text
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="Linux tool surface")
 def test_hinted_wire_result_is_the_structured_field_and_text_is_unchanged(root):
     app, jobs = application(root, enabled=True)
     headers, meta = conversation("alpha")
@@ -363,9 +361,7 @@ def test_hinted_wire_result_is_the_structured_field_and_text_is_unchanged(root):
         async with http_client(app, headers=headers, raw=raw) as client:
             job = await start(client, root, meta)
             jobs.finish(job)
-            plain_mark = len(raw)
             await browse(client, root, meta)
-            return plain_mark
 
     run(go())
     results = [

@@ -351,6 +351,7 @@ def test_effective_config_line(caplog, monkeypatch):
                 ("job_status", status),
                 ("stop_job", stop),
                 ("edit_file", None),
+                ("job_awareness", None),
             ], owner
             by_tool = {f["tool"]: f for f in parsed}
             assert by_tool["read_file"]["max_chars"] == "24000"
@@ -361,8 +362,9 @@ def test_effective_config_line(caplog, monkeypatch):
             assert _fields(owner_line)["configured_owner"] == owner
             assert _fields(owner_line)["effective_owner"] == effective
         return
-    assert len(tool_lines) == 6
+    assert len(tool_lines) == 7
     by_tool = {_fields(line)["tool"]: _fields(line) for line in tool_lines}
+    assert by_tool["job_awareness"]["hints_enabled"] == "false"  # default off
     assert by_tool["read_file"]["max_chars"] == "24000"
     assert by_tool["search_text"]["result_max_bytes"] == "65536"
     assert by_tool["search_text"]["exact_execution"] == "streaming"
