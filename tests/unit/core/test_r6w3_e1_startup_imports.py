@@ -79,6 +79,29 @@ def test_runtime_modules_cover_every_tool_and_backend_module_per_os():
         ), system
 
 
+def test_listing_names_never_imports_an_excluded_package():
+    # walk_packages imported binnacle.platform.darwin on Linux (and the Linux
+    # packages on Darwin) just to list names; the server must not load them.
+    script = """
+import sys
+from binnacle.startup_imports import _EXCLUDED_BY_OS, runtime_module_names
+system = sys.argv[1]
+runtime_module_names(system)
+loaded = [m for m in sys.modules if any(m == p or m.startswith(p + ".") for p in _EXCLUDED_BY_OS[system])]
+print(loaded)
+sys.exit(1 if loaded else 0)
+"""
+    for system in ("Linux", "Darwin"):
+        done = subprocess.run(
+            [sys.executable, "-c", script, system],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+        assert done.returncode == 0, (system, done.stdout, done.stderr[-2000:])
+
+
 def test_host_runtime_modules_import_without_failure():
     assert import_runtime_modules() == ()
 
