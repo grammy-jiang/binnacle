@@ -53,6 +53,8 @@ Summary: `Created /x (245 bytes).` / `Overwrote /x (245 bytes, was 1020).`
 **Errors**: directory target; outside roots; OS failures (permission, no
 space) with `strerror`.
 
+**In-root symlinks on Darwin (r6 W3 PX1, R-OS1-F3)**: a write through a link whose target lies in a configured root writes the target and keeps the link, as on Linux; the reported path is the target. `FileToolAccess` resolves the request once and opens the in-root target with the no-follow descriptor walk (one hop only). A target outside every root is `path_outside_root`.
+
 ## 4. Test checklist (tests/unit/tools/test_write_file.py)
 
 Create with nested parents; byte-verbatim content (CRLF stays CRLF — the

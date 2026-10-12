@@ -66,6 +66,8 @@ original BOM bytes, write.
 with line numbers; identical old/new; missing file; directory; binary;
 lossy; outside roots.
 
+**In-root symlinks on Darwin (r6 W3 PX1, R-OS1-F3)**: a edit through a link whose target lies in a configured root edits the target and keeps the link, as on Linux; the reported path is the target. `FileToolAccess` resolves the request once and opens the in-root target with the no-follow descriptor walk (one hop only). A target outside every root is `path_outside_root`.
+
 ## 4. Test checklist (tests/unit/tools/test_edit_file.py)
 
 Exact single replace (payload + file content + snippet window); delete

@@ -248,6 +248,19 @@ looks like image/png) — content not shown.`
    execute-only directory on the way is traversed, as on Linux. A file
    below such a directory is readable; the `O_SEARCH` descriptor itself
    cannot be listed or read.
+   **In-root symlinks on Darwin (r6 W3 PX1, R-OS1-F3)**: the Darwin walk
+   never follows a link; a final link is `symlink_or_wrong_path_type`, not
+   a special file. `FileToolAccess` then resolves the request once, as
+   Linux's `resolve_path` does, and, when that names a path inside a
+   configured root, opens it with the same no-follow descriptor walk from
+   its grant (`error_text.followed`). So a relative, absolute or chained
+   in-root link, or a link to an in-root directory on the way, reads its
+   target, and the reported path is the target, as on Linux. A target
+   outside every root is `path_outside_root`; a link to a FIFO, socket or
+   device is `special_file_unsupported` with the shared text; a dangling
+   in-root link names its missing target (`file_not_found`); a link loop is
+   `file_not_found`. Only one hop is followed: a target that is a link
+   again (a race) is refused by the second no-follow walk.
 3. **Sniff**: extension in the known-text allowlist → text; else read the
    first 8 KB — NUL byte present → `kind: "binary"` result (message names
    the size and a MIME guess; not an error).

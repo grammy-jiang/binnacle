@@ -150,6 +150,8 @@ def regular_fd(parent: int, name: str, flags: int = READ_FLAGS) -> int:
     info = os.stat(name, dir_fd=parent, follow_symlinks=False)
     if stat.S_ISDIR(info.st_mode):
         raise unsafe("path_is_directory")
+    if stat.S_ISLNK(info.st_mode):  # FileToolAccess follows an in-root link (F3).
+        raise unsafe("symlink_or_wrong_path_type")
     if not stat.S_ISREG(info.st_mode):
         raise unsafe("special_file_unsupported")
     return checked_open(parent, name, flags, info)

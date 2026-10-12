@@ -24,6 +24,7 @@ from binnacle.features.files.error_text import (
     MISSING_ERRORS,
     TERSE_OUTSIDE,
     TOOL,
+    followed,
     linux_error,
     outside_display,
     outside_error,
@@ -423,7 +424,10 @@ class FileToolAccess:
         # Only read_file and edit_file read through here; a stale tool name
         # from another call context must not change the wording.
         tool = "edit_file" if TOOL.get() == "edit_file" else "read_file"
-        with self.operation(raw, tool) as (grant, relative, display):
+
+        def step(
+            grant: RootGrant, relative: str, display: Path
+        ) -> tuple[Path, int, bytes]:
             opened = self.provider.open_read(grant, relative)
             try:
                 size = opened.metadata().size_bytes
@@ -446,6 +450,9 @@ class FileToolAccess:
                 return display, len(data), data
             finally:
                 opened.close()
+
+        # An in-root symlink reads its target, as on Linux (R-OS1-F3).
+        return followed(self.operation, raw, tool, dict(self.grants), step)
 
     def close(self) -> None:
         with self._lock:

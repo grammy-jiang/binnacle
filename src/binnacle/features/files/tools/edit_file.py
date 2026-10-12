@@ -206,7 +206,8 @@ def edit_file_impl(
         if file_access is None:
             resolved.write_bytes(data)
         else:
-            with file_access.operation(path) as (grant, relative, _):
+            # resolved is the target of an in-root link that read followed.
+            with file_access.operation(str(resolved)) as (grant, relative, _):
                 file_access.provider.write_bytes(
                     grant,
                     relative,
