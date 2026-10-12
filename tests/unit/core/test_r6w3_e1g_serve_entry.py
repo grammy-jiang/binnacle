@@ -126,12 +126,13 @@ seen = {"started": False, "gone_at_started": False}
 async def main():
     srv = uvicorn.Server(uvicorn.Config(
         server.app, host="127.0.0.1", port=port, log_level="warning", loop="asyncio"))
-    task = asyncio.ensure_future(srv.serve())
-    while not srv.started and not task.done():
-        await asyncio.sleep(0.002)
-    seen.update(started=srv.started, gone_at_started=not record.exists())
-    srv.should_exit = True
-    await task
+    with serving_entry():
+        task = asyncio.ensure_future(srv.serve())
+        while not srv.started and not task.done():
+            await asyncio.sleep(0.002)
+        seen.update(started=srv.started, gone_at_started=not record.exists())
+        srv.should_exit = True
+        await task
 
 try:
     asyncio.run(main())

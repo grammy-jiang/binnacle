@@ -302,7 +302,14 @@ def _clear_record_when_server_started() -> None:
 
     async def startup(self: Any, *args: Any, **kwargs: Any) -> None:
         await original(self, *args, **kwargs)
-        if self.started:  # a failed bind exits before this point
+        configured_app = getattr(getattr(self, "config", None), "app", None)
+        if (
+            self.started
+            and serving_entry_marked()
+            and (configured_app is app or configured_app == "binnacle.server:app")
+        ):
+            # The hook is on uvicorn.Server globally: an unrelated server
+            # must never clear Binnacle's durable failure record.
             _clear_record_after_start()
 
     uvicorn.Server.startup = startup  # type: ignore[method-assign]

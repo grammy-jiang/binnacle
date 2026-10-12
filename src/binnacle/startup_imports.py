@@ -26,7 +26,6 @@ import json
 import logging
 import os
 import platform
-import sys
 import time
 import traceback
 from collections.abc import Callable, Iterator
@@ -194,32 +193,50 @@ def record_path(state_root: Path, process: str) -> Path:
 
 
 def _raising_frame(exc: BaseException, module: str) -> str:
-    """The raising location an operator can open: a SyntaxError's own
-    file:line, else the innermost frame outside importlib and this module
-    (frozen ``<...>`` frames included), else the failing module's name."""
-    located: list[tuple[str, int | None]] = []
-    if isinstance(exc, SyntaxError) and exc.filename and exc.lineno:
-        located.append((exc.filename, exc.lineno))
-    this = Path(__file__).resolve()
-    for frame in reversed(traceback.extract_tb(exc.__traceback__)):
-        path = Path(frame.filename)
-        if frame.filename.startswith("<") or path.parent.name == "importlib":
-            continue  # frozen bootstrap or the stdlib importlib package
-        if path.resolve() == this:
-            continue
-        located.append((frame.filename, frame.lineno))
-    if not located:
-        return f"{module}:0"
-    filename, lineno = located[0]
-    path = Path(filename)
-    package_root = Path(binnacle.__file__).resolve().parent.parent
-    roots = [package_root, *(Path(p) for p in sys.path if p.endswith("site-packages"))]
-    for root in roots:
+    """Name the actionable origin without leaking exception text.
+
+    Syntax errors expose their own source location. Other exceptions select
+    the innermost Binnacle source frame, never an unrelated dependency frame.
+    A direct, test-owned import may have an external source path; if there is
+    no Binnacle frame, name that requested module's own file if identifiable.
+    Otherwise report the requested module, not an importlib/third-party frame.
+    """
+    package_root = Path(binnacle.__file__).resolve().parent
+    own_file = Path(__file__).resolve()
+
+    def source_label(path: Path, lineno: int) -> str:
         try:
-            return f"{path.resolve().relative_to(root.resolve())}:{lineno}"
-        except (OSError, ValueError):
+            return f"{path.relative_to(package_root.parent)}:{lineno}"
+        except ValueError:
+            return f"{path.name}:{lineno}"
+
+    if isinstance(exc, SyntaxError) and exc.filename and exc.lineno:
+        path = Path(exc.filename).resolve()
+        return source_label(path, exc.lineno)
+
+    candidates: list[tuple[Path, int]] = []
+    for frame in reversed(traceback.extract_tb(exc.__traceback__)):
+        filename = frame.filename
+        if filename.startswith("<"):
             continue
-    return f"{path.name}:{lineno}"
+        path = Path(filename).resolve()
+        if path == own_file or path.parent.name == "importlib":
+            continue
+        candidates.append((path, frame.lineno if frame.lineno is not None else 0))
+
+    # A dependency can raise after a Binnacle importer. Its own innermost
+    # traceback is not the useful attribution required by the operator.
+    for path, lineno in candidates:
+        if path.is_relative_to(package_root):
+            return source_label(path, lineno)
+
+    leaf = module.rpartition(".")[-1]
+    for path, lineno in candidates:
+        if path.stem == leaf or (
+            path.name == "__init__.py" and path.parent.name == leaf
+        ):
+            return source_label(path, lineno)
+    return f"{module}:0"
 
 
 def _required_import(name: str) -> ModuleType:

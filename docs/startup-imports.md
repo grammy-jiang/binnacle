@@ -57,13 +57,13 @@ event=startup_import_failed process=<mcp-server|job-manager> module=<name> error
 ```
 
 `at` names where an operator opens the source, never a frozen or importlib
-frame: a `SyntaxError`'s own `file:line`; otherwise the innermost traceback
-frame that is not frozen (`<frozen importlib._bootstrap>`), not in the stdlib
-`importlib` package and not `startup_imports.py` itself; otherwise, for a
-required module that does not exist (`ModuleNotFoundError`), the module name
-itself, `<module>:0`. Paths are relative to the binnacle package root or to its
-site-packages root for a third-party frame. The exception message and the
-traceback are never logged (a message can carry a secret or a path to one).
+frame: a SyntaxError's own source location. For other exceptions, prefer the
+innermost traceback frame inside Binnacle (excluding startup_imports.py
+itself) over a nested third-party dependency. A test-owned direct import may
+use the requested module's own source outside Binnacle. If no attributable
+source exists, report the requested module name and line zero; never name an
+unrelated third-party, frozen or stdlib importlib frame. The exception
+message and traceback are never logged, as they may contain secrets.
 
 `OPTIONAL_MODULES` is the pinned allowlist of modules that may instead fail,
 warn and report themselves unavailable at call time. No such module exists
@@ -89,7 +89,9 @@ explicit act, not an argv guess: `cli.serve` runs `uvicorn.run` inside
 `binnacle.server` and ends when `uvicorn.run` returns. `server.py` then writes
 the record on a failed import and, because binnacle owns the uvicorn server
 there, wraps `uvicorn.Server.startup` to clear the record once `started` is
-True. The uvicorn CLI hands binnacle no `Server` object, so it is recognised by
+True, and only while the explicit serving mark is active and the server's
+configured app identifies Binnacle. Another Uvicorn server in the same
+interpreter must never clear the Binnacle start-up record. The uvicorn CLI hands binnacle no `Server` object, so it is recognised by
 argv (`bin/uvicorn`, `uvicorn/__main__.py`) and keeps the 1 s rule. `binnacle
 serve` is never recognised by argv: only the explicit mark counts, so an
 unmarked `binnacle ...` importer (and the worker of an ad-hoc
