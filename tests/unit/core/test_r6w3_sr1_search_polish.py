@@ -150,7 +150,10 @@ def test_python_order_equals_rg_sort_path_bytes(tmp_path: Path) -> None:
     events = [json.loads(line) for line in out.splitlines()]
     matches = [e for e in events if e["type"] == "match"]
     expected = [(e["data"]["path"]["text"], e["data"]["line_number"]) for e in matches]
-    assert len(expected) == 2 * len(names)
+    # A case-insensitive file system (macOS APFS) merges B.txt/b.txt and Z/z,
+    # so count the files that exist, not the names written.
+    files = [path for path in tmp_path.rglob("*") if path.is_file()]
+    assert len(expected) == 2 * len(files)
     for seed in range(4):
         shuffled = list(matches)
         random.Random(seed).shuffle(shuffled)
