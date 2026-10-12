@@ -21,6 +21,9 @@ from binnacle.errors import CodedToolError
 from binnacle.features.files import fd_walk
 from binnacle.features.files.tools import list_files as lf
 
+# The process descriptor table: /proc/self/fd on Linux, /dev/fd on Darwin.
+FD_DIR = "/proc/self/fd" if os.path.isdir("/proc/self/fd") else "/dev/fd"
+
 SECRET = "s" * 4321  # A size that appears nowhere else in the fixture.
 
 
@@ -293,7 +296,7 @@ def test_no_descriptor_leaks_on_success_and_failure(tree, monkeypatch):
     (root / "l").symlink_to("d/in.txt")
     (root / "dangle").symlink_to("nope/x")
     (root / "loop").symlink_to("loop")
-    before = len(os.listdir("/proc/self/fd"))
+    before = len(os.listdir(FD_DIR))
     for _ in range(20):
         run(tree["roots"], root)
         with pytest.raises(ToolError):
@@ -309,4 +312,4 @@ def test_no_descriptor_leaks_on_success_and_failure(tree, monkeypatch):
     monkeypatch.setattr(lf, "resolve_path", resolve_then_swap)
     with pytest.raises(ToolError, match="Directory changed"):
         run(tree["roots"], root / "d" / "e")
-    assert len(os.listdir("/proc/self/fd")) == before
+    assert len(os.listdir(FD_DIR)) == before

@@ -31,8 +31,12 @@ from binnacle.platform.contracts.capability_contracts import Capability, Capabil
 from binnacle.platform.darwin import file_traversal
 from binnacle.platform.darwin.file_access import DarwinFileAccess
 
-pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="Linux read path")
 not_root = pytest.mark.skipif(os.geteuid() == 0, reason="root ignores modes")
+# Linux-only mechanism: these cases run the Linux read path (fd_walk) beside
+# the Darwin one; the native Darwin cases are test_r6w2_t3_special_files.py.
+LINUX_READ = pytest.mark.skipif(
+    sys.platform != "linux", reason="Linux read path (fd_walk.open_walked)"
+)
 CODE = "special_file_unsupported"
 
 
@@ -90,12 +94,14 @@ def test_the_helper_equals_the_darwin_rendering():
     assert str(rendered) == f"{darwin.code}."
 
 
+@LINUX_READ
 @pytest.mark.timeout(10)
 def test_a_fifo_is_refused_as_on_darwin(root):
     os.mkfifo(root / "fifo")
     assert both(in_root(root), root / "fifo") == (CODE, f"{CODE}.")
 
 
+@LINUX_READ
 @not_root
 @pytest.mark.timeout(10)
 def test_an_unreadable_fifo_is_refused_as_on_darwin(root):
@@ -104,6 +110,7 @@ def test_an_unreadable_fifo_is_refused_as_on_darwin(root):
     assert both(in_root(root), root / "fifo") == (CODE, f"{CODE}.")
 
 
+@LINUX_READ
 def test_a_socket_is_refused_as_on_darwin(root):
     # open(2) of a socket is ENXIO; r6 W2 X3b-a2 said file_io_failed.
     with socket.socket(socket.AF_UNIX) as server:
@@ -111,6 +118,7 @@ def test_a_socket_is_refused_as_on_darwin(root):
         assert both(in_root(root), root / "sock") == (CODE, f"{CODE}.")
 
 
+@LINUX_READ
 def test_a_character_device_is_refused_as_on_darwin():
     # /dev is the root because a device node cannot be created without
     # privilege, so the test reads the host's own /dev/null in place.
@@ -125,6 +133,7 @@ def test_a_character_device_is_refused_as_on_darwin():
     assert both(roots, Path("/dev/null")) == (CODE, f"{CODE}.")
 
 
+@LINUX_READ
 def test_a_block_device_is_refused_as_on_darwin():
     # Without the disk group the open is EACCES; nothing is read either way.
     candidates = ("loop0", "mmcblk0", "nvme0n1", "sda", "vda")
@@ -143,6 +152,7 @@ def test_a_block_device_is_refused_as_on_darwin():
     assert both(roots, found[0]) == (CODE, f"{CODE}.")
 
 
+@LINUX_READ
 @not_root
 def test_a_mode_000_regular_file_differs_by_design(root):
     # Darwin adds a macOS TCC hint (permission_denied_tcc_possible); Linux
@@ -165,6 +175,7 @@ def test_a_regular_file_still_reads(root):
     assert payload is not None and payload["content"] == "plain"
 
 
+@LINUX_READ
 def test_a_socket_swapped_in_keeps_the_identity_refusal(root, monkeypatch):
     # Identity first: the open fails (ENXIO) on an object that is not the
     # checked file, so the special-file wording does not apply.
@@ -184,6 +195,7 @@ def test_a_socket_swapped_in_keeps_the_identity_refusal(root, monkeypatch):
     assert code == "file_io_failed"
 
 
+@LINUX_READ
 @pytest.mark.parametrize("code", ["path_changed", "path_outside_root"])
 def test_path_refusals_on_the_checked_fifo_are_never_reworded(root, monkeypatch, code):
     # RX3b3-F2: the lstat shows the unchanged checked FIFO, so only the code
@@ -225,6 +237,7 @@ def recorded_reads(monkeypatch) -> list[tuple[int, int]]:
     return asked
 
 
+@LINUX_READ
 def test_a_grown_file_asks_for_at_most_the_limit_plus_one(root, monkeypatch):
     limit = ReadFileSettings().max_file_bytes  # READ_MAX_FILE_BYTES
     target = root / "grows.txt"
@@ -246,6 +259,7 @@ def test_a_grown_file_asks_for_at_most_the_limit_plus_one(root, monkeypatch):
     assert asked[0][1] == limit + 1
 
 
+@LINUX_READ
 def test_a_small_file_reads_until_end_of_file(root, monkeypatch):
     (root / "f.txt").write_text("plain")
     asked = recorded_reads(monkeypatch)
