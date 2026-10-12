@@ -305,7 +305,14 @@ def test_open_verified_refuses_a_non_regular_file(files, kind):
     if kind == "fifo":
         os.mkfifo(path)  # O_NONBLOCK: the open does not wait for a writer.
     err = refused(path, files["roots"], ident(path))
-    assert err.telemetry_code == "not_a_regular_file"
+    # The type step words it as Darwin does (FDW-B1-a2 R1, SD-91).
+    assert (
+        err.telemetry_code
+        == {
+            "directory": "path_is_directory",
+            "fifo": "special_file_unsupported",
+        }[kind]
+    )
 
 
 @LINUX_WALK

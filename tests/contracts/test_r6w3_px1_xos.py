@@ -34,10 +34,14 @@ search_text on a path that is, or passes through, an in-root symlink, in
 (ancestor), absolute and root-relative requests, an outside target, a
 dangling link and a loop (lnk_*); and a listing that omits a link to a FIFO
 and the dangling, looping and outside links (list_lnk).
+
+Cases added by FDW-B1 and FDW-B1-a2 (SD-91, fdw_*; FDW_CASES): a hook at
+os.open swaps a file at its final open, or fails an open with EMFILE.
 """
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
@@ -71,7 +75,7 @@ TIMING_WORDS = ("elapsed", "duration", "latency", "_ms", "seconds", "timing")
 MTIME = 1_700_000_000  # Fixed mtimes: glob mode orders newest first.
 TCC_CODE, LINUX_CODE = "permission_denied_tcc_possible", "permission_denied"
 # SHA-256 of the normalized document; equal on Linux and Darwin by design.
-GOLDEN_SHA256 = "c9bb5ab14d09ef7b592795cc90115d1297b047f0b9142933323041279312a266"
+GOLDEN_SHA256 = "f66a3061b6561037d49be8d240c7a8c89f4b9a035f10322cb64c0b059fc7db12"
 
 FILES = {
     "a.txt": ("alpha needle\n", 500),
@@ -86,6 +90,23 @@ FILES = {
     "van/gone.txt": ("gone needle\n", 30),
     "lnk/t/f.txt": ("link needle\n", 20),
     "lnk/t/u/v.txt": ("deep link needle\n", 10),
+    "fdw/swap_regular.txt": ("swap\n", 5),
+    "fdw/swap_fifo.txt": ("swap\n", 5),
+    "fdw/swap_dir.txt": ("swap\n", 5),
+}
+# fdw_* case: (tool, path below <ROOT>, os.open name hooked, hook, times).
+# A swap hook replaces the file by another regular file, a FIFO or a
+# directory (check order: type, then identity); "shortage" fails with EMFILE
+# in the read, the listed directory or the link walk (to_fifo opens sub).
+FDW_CASES = {
+    "fdw_read_swap_regular": ("read", "fdw/swap_regular.txt", None, "regular", 1),
+    "fdw_read_swap_fifo": ("read", "fdw/swap_fifo.txt", None, "fifo", 1),
+    "fdw_read_swap_dir": ("read", "fdw/swap_dir.txt", None, "dir", 1),
+    "fdw_read_shortage": ("read", "a.txt", None, "shortage", None),
+    "fdw_list_shortage_once": ("list", "sub", None, "shortage", 1),
+    "fdw_list_shortage_twice": ("list", "sub", None, "shortage", None),
+    "fdw_list_link_walk_shortage_once": ("list", "lnk", "sub", "shortage", 1),
+    "fdw_list_link_walk_shortage_twice": ("list", "lnk", "sub", "shortage", None),
 }
 # In-root links below <ROOT>/lnk (PF-PX1-1); "<ROOT>" and "<BASE>" are
 # filled in by build(). <BASE>/out is outside every root.
@@ -170,6 +191,31 @@ def _vanishing(stat_call: Callable[..., Any]) -> Callable[..., Any]:
         if os.fspath(path) == VANISHED and kwargs.get("dir_fd") is not None:
             raise FileNotFoundError(2, "vanished", path)
         return stat_call(path, *args, **kwargs)
+
+    return call
+
+
+def _fdw_open(target: Path, name: str, hook: str, times: int | None) -> Any:
+    """os.open that runs hook before opening name relative to a dir_fd."""
+    real_open, fired = os.open, list[str]()
+
+    def call(path: Any, flags: int, *args: Any, **kwargs: Any) -> int:
+        wanted = path == name and kwargs.get("dir_fd") is not None
+        if wanted and (times is None or len(fired) < times):
+            fired.append(path)
+            if hook == "shortage":
+                raise OSError(errno.EMFILE, os.strerror(errno.EMFILE))
+            if hook == "regular":  # os.replace of a file that exists: a new inode.
+                incoming = target.with_name("incoming.txt")
+                incoming.write_text("swapped in\n", encoding="utf-8")
+                os.replace(incoming, target)
+                return real_open(path, flags, *args, **kwargs)
+            target.rename(target.with_name(name + ".kept"))  # Keeps the inode.
+            if hook == "fifo":
+                os.mkfifo(target)
+            else:
+                target.mkdir()
+        return real_open(path, flags, *args, **kwargs)
 
     return call
 
@@ -293,6 +339,19 @@ def document(set_attr: Callable[[Any, str, Any], None]) -> dict:
             ("glob_vanished_entry", vanished),
             ("list_lnk", lambda: lst(f"{r}/lnk")),
         ]
+
+        def fdw(tool: str, rel: str, name: str | None, hook: str, times: Any) -> Any:
+            def case() -> dict:
+                target = root / rel
+                with _Patch() as patch:
+                    patch(
+                        os, "open", _fdw_open(target, name or target.name, hook, times)
+                    )
+                    return (read if tool == "read" else lst)(str(target))
+
+            return case
+
+        cases += [(label, fdw(*spec)) for label, spec in FDW_CASES.items()]
         # PF-PX1-1: each request through a link, for all three modes.
         through_links = {
             "dir_rel": f"{r}/lnk/dir_rel",
@@ -397,6 +456,13 @@ def test_the_only_os_difference_is_the_tcc_code(monkeypatch):
         "search": "path_not_found",
     }
     assert errors == {
+        # FDW-B1 + a2: the same refusals on both OSes (SD-91).
+        "fdw_read_swap_regular": "path_changed",
+        "fdw_read_swap_fifo": "special_file_unsupported",
+        "fdw_read_swap_dir": "path_is_directory",
+        "fdw_read_shortage": "too_many_open_files",
+        "fdw_list_shortage_twice": "too_many_open_files",
+        "fdw_list_link_walk_shortage_twice": "too_many_open_files",
         "glob_fifo": "special_file_unsupported",
         "glob_root_exec_only": denied,
         "list_fifo": "special_file_unsupported",

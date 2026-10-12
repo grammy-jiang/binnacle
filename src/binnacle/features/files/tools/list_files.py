@@ -33,6 +33,7 @@ from binnacle.platform.contracts.file_access_contracts import ListRequest, RootG
 from binnacle.platform.contracts.special_file_contracts import (
     SPECIAL_FILE_CODE,
     SPECIAL_FILE_TEXT,
+    TOO_MANY_OPEN_FILES_CODE,
 )
 
 OUTPUT_SCHEMA = {
@@ -175,33 +176,16 @@ def _list_mode(
     top = max(
         (r for r in allowed if root.is_relative_to(r)), key=lambda r: len(r.parts)
     )
-    parts = root.relative_to(top).parts
-    listed = []
-    with _opened(top, parts, root, roots) as (chain, fd):
-        held = os.fstat(chain[0])  # Configured aliases, re-checked per call (LP).
-        live = [str(a) for a, c in configured if c == top != a and _names(a, held)]
-
-        def follow(name: str) -> os.stat_result | None:
-            return fd_walk.link_target_info(
-                chain[0], parts, name, str(top), chain=chain, aliases=live
-            )
-
-        try:
-            names = os.listdir(fd)  # dup(2): EMFILE is possible here too.
-        except OSError as exc:
-            raise _refusal(exc, root) from exc
-        for name in names:
-            if name == ".git" or (not include_hidden and name.startswith(".")):
-                continue
-            info = _entry_info(fd, name, follow)
-            if info is None or not (
-                stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)
-            ):
-                continue  # A FIFO, socket or device is omitted, as on Darwin.
-            entry: dict = {"path": str(root / name), "type": "dir"}
-            if not stat.S_ISDIR(info.st_mode):
-                entry.update(type="file", bytes=info.st_size)
-            listed.append((name, entry))
+    try:
+        listed = _listed(top, root, include_hidden, configured, roots)
+    except CodedToolError as exc:
+        # One retry on a descriptor shortage, after every descriptor of the
+        # first walk is closed, as DarwinFileAccess.list_entries does: this
+        # call's own descriptors never cause the refusal. A second shortage
+        # is too_many_open_files (FDW-B1-a2 R2).
+        if exc.telemetry_code != TOO_MANY_OPEN_FILES_CODE:
+            raise
+        listed = _listed(top, root, include_hidden, configured, roots)
     listed.sort(key=lambda ne: (0 if ne[1]["type"] == "dir" else 1, ne[0].lower()))
     truncated = len(listed) > max_results
     entries = [e for _, e in listed[:max_results]]
@@ -221,6 +205,50 @@ def _list_mode(
         payload["note"] = note
         summary = f"Listed first {len(entries)} of {len(listed)} entries in {root}."
     return ToolResult(content=summary, structured_content=payload)
+
+
+def _listed(
+    top: Path,
+    root: Path,
+    include_hidden: bool,
+    configured: tuple[tuple[Path, Path], ...],
+    roots: RootsSettings | None,
+) -> list[tuple[str, dict]]:
+    """One walk of root below top: (name, entry) for each listed entry.
+
+    Every descriptor it opens is closed when it returns or raises.
+    """
+    parts = root.relative_to(top).parts
+    listed = []
+    with _opened(top, parts, root, roots) as (chain, fd):
+        held = os.fstat(chain[0])  # Configured aliases, re-checked per call (LP).
+        live = [str(a) for a, c in configured if c == top != a and _names(a, held)]
+
+        def follow(name: str) -> os.stat_result | None:
+            try:
+                return fd_walk.link_target_info(
+                    chain[0], parts, name, str(top), chain=chain, aliases=live
+                )
+            except OSError as exc:  # Only a descriptor shortage (FDW-B1 #9).
+                raise _refusal(exc, root) from exc
+
+        try:
+            names = os.listdir(fd)  # dup(2): EMFILE is possible here too.
+        except OSError as exc:
+            raise _refusal(exc, root) from exc
+        for name in names:
+            if name == ".git" or (not include_hidden and name.startswith(".")):
+                continue
+            info = _entry_info(fd, name, follow)
+            if info is None or not (
+                stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)
+            ):
+                continue  # A FIFO, socket or device is omitted, as on Darwin.
+            entry: dict = {"path": str(root / name), "type": "dir"}
+            if not stat.S_ISDIR(info.st_mode):
+                entry.update(type="file", bytes=info.st_size)
+            listed.append((name, entry))
+    return listed
 
 
 @noting_unreadable  # Partial result plus one note (R-OS1-F1).

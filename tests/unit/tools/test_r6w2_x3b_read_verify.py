@@ -207,11 +207,15 @@ def test_a_parent_symlink_to_an_outside_dir_opens_nothing_outside(tree, monkeypa
 
 @LINUX_READ
 @pytest.mark.timeout(10)  # r6 blocks in open(2) on the FIFO without a writer.
-def test_a_fifo_swapped_in_is_refused_by_identity_first(tree, monkeypatch):
-    # Checks run root -> identity -> type: a different object is path_changed.
+def test_a_fifo_swapped_in_is_refused_by_type_first(tree, monkeypatch):
+    # Checks run root -> type -> identity on both OSes (FDW-B1-a2 R1, SD-91):
+    # a FIFO is special_file_unsupported even when it is another object.
     fifo = swap_in(tree["file"], os.mkfifo)
     fired = before_open(monkeypatch, tree["file"], fifo)
-    assert outcome(tree["roots"], tree["file"]) == ("refused", "path_changed")
+    assert outcome(tree["roots"], tree["file"]) == (
+        "refused",
+        "special_file_unsupported",
+    )
     assert fired
 
 

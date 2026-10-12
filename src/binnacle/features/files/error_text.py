@@ -15,7 +15,7 @@ from pathlib import Path, PurePath
 from typing import TypeVar
 
 from binnacle.errors import CodedToolError
-from binnacle.features.files.fd_walk import permission_denied
+from binnacle.features.files.fd_walk import path_changed, permission_denied
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 from binnacle.platform.contracts.file_access_contracts import (
     FileAccess,
@@ -39,6 +39,8 @@ MISSING_ERRORS = {
     "search_text": ("path_not_found", "Path not found"),
 }
 DEFAULT_MISSING = ("file_not_found", "File not found")
+# Tools whose Darwin open of one file can see it swapped (checked_open).
+ENTRY_CHANGED_TOOLS = ("read_file", "edit_file", "write_file")
 # Symlink hops caller_form follows before it gives up (the kernel's MAXSYMLINKS).
 _MAX_LINKS = 32
 T = TypeVar("T")
@@ -180,6 +182,10 @@ def linux_error(
     if code == "permission_denied_tcc_possible":
         # Darwin keeps its code (SD-77) and says Linux's sentence (R-OS1-F4).
         return CodedToolError(code, str(permission_denied(display)))
+    if code == "entry_changed" and tool in ENTRY_CHANGED_TOOLS:
+        # The opened file is another regular file than the one stat-ed: the
+        # identity step after the type step, Linux's path_changed (FDW-B1-a2).
+        return path_changed(display, tool)
     if code == "path_is_directory":
         use = "" if tool == "edit_file" else " Use list_files to browse it."
         return CodedToolError(code, f"Path is a directory, not a file: {display}.{use}")
