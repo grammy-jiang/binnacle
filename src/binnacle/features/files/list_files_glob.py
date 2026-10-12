@@ -19,7 +19,7 @@ from binnacle.config import get_settings
 from binnacle.errors import CodedToolError
 from binnacle.features.files.paths import full_match
 from binnacle.features.search.fd_chain import EXHAUSTED, DirectoryChain
-from binnacle.features.search.rg_env import NO_CONFIG, accept_denied, rg_env
+from binnacle.features.search.rg_env import NO_CONFIG, accept_denied, rg_env, shown
 from binnacle.platform.contracts.special_file_contracts import (
     TOO_MANY_OPEN_FILES_CODE,
     too_many_open_files_text,
@@ -123,6 +123,8 @@ def glob_mode(
             cwd=root,
             capture_output=True,
             text=True,
+            # Names are bytes: decoded as os.fsdecode does, never strictly (R-PX1-3).
+            errors="surrogateescape",
             timeout=timeout_s,
             check=False,
             env=rg_env(),
@@ -141,7 +143,7 @@ def glob_mode(
         ) from exc
     # A permission-only failure below root keeps the readable part (R-OS1-F1).
     if proc.returncode not in (0, 1) and not accept_denied(proc.stderr, root):
-        stderr = proc.stderr.strip()[-300:]
+        stderr = shown(proc.stderr.strip()[-300:])
         raise CodedToolError(
             "rg_failed",
             f"ripgrep failed in {root}: {stderr or 'unknown error'}. "
@@ -149,10 +151,12 @@ def glob_mode(
         )
 
     try:
+        # A name that is not UTF-8 cannot be reported in a UTF-8 JSON
+        # result: it is omitted, as search_text omits it (R-PX1-3).
         lines = [
             line
             for line in proc.stdout.splitlines()
-            if line and full_match(line, pattern)
+            if line and shown(line) == line and full_match(line, pattern)
         ]
     except ValueError as e:
         raise CodedToolError(

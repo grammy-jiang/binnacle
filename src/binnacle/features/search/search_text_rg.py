@@ -40,6 +40,8 @@ def run_rg(
             cmd,
             capture_output=True,
             text=True,
+            # rg's JSON is UTF-8; stderr names any byte (R-PX1-3).
+            errors="surrogateescape",
             timeout=timeout_s,
             check=False,
             env=rg_env(),

@@ -151,7 +151,9 @@ def collect(
             if metrics is not None:
                 metrics.collect_event_candidates += 1
             data = event["data"]
-            file = data["path"]["text"]
+            file = data["path"].get("text")
+            if file is None:  # rg's {"bytes": ...}: not UTF-8 (R-PX1-3).
+                continue
             if glob is not None and metrics is not None:
                 metrics.collect_glob_checks += 1
             if not matches_glob(file, root, glob):

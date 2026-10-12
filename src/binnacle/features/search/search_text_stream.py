@@ -188,8 +188,9 @@ class RgJsonStream:
             )
         self.no_match = returncode == 1
         stderr = self._stderr_tail()
+        # ALL of the spooled stderr is scanned, never a tail (R-PX1-1).
         if (returncode == 2 or (returncode not in (0, 1) and stderr)) and not (
-            accept_denied(self._stderr_tail(65_536), self.root)
+            self._stderr is not None and accept_denied(self._stderr, self.root)
         ):
             raise CodedToolError(
                 "rg_rejected",
