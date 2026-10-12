@@ -31,7 +31,9 @@ from binnacle.platform.darwin.generation_runtime import (
     open_service_lease,
 )
 
-NATIVE = pytest.mark.skipif(sys.platform != "darwin", reason="Darwin A3 IPC")
+NATIVE = pytest.mark.skipif(
+    sys.platform != "darwin" or not hasattr(os, "waitid"), reason="Darwin A3 IPC"
+)
 LABEL = "com.binnacle.r4test.jobs"
 SRC = Path(__file__).resolve().parents[3] / "src/binnacle/features/commands"
 Err = job_client.JobManagerError

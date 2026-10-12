@@ -11,6 +11,7 @@ the CLI only renders and tests can fake systemctl, procfs, HTTP, and journal IO.
 """
 
 import os
+import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -109,6 +110,34 @@ def check_config() -> list[Check]:
                 )
             )
     return out
+
+
+def check_darwin_job_python(
+    platform_name: str | None = None,
+    py_version: tuple[int, int] | None = None,
+    supports_waitid: bool | None = None,
+) -> list[Check]:
+    """SD-97: report the Darwin job owner's required interpreter capability.
+
+    The MCP frontend still runs on older interpreters; the manager alone
+    requires os.waitid on macOS (CPython >= 3.13). Never infer that a working
+    HTTP frontend proves the job owner can start.
+    """
+    platform_name = sys.platform if platform_name is None else platform_name
+    if platform_name != "darwin":
+        return []
+    version = sys.version_info[:2] if py_version is None else py_version
+    has_waitid = hasattr(os, "waitid") if supports_waitid is None else supports_waitid
+    detail = f"Darwin jobs require Python >= 3.13 with os.waitid; found {version[0]}.{version[1]}"
+    if version < (3, 13) or not has_waitid:
+        return [
+            fail(
+                "jobs-python",
+                detail + " (unsupported)",
+                "install Python 3.13+ and restart com.binnacle.jobs only when jobs are idle",
+            )
+        ]
+    return [ok("jobs-python", detail + " (supported)")]
 
 
 def check_token(token_file: Path) -> list[Check]:
@@ -251,6 +280,7 @@ def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list
     checks += check_provenance(provenance)
     checks += check_startup_imports()  # E1-a4: last start-up import failure
     checks += check_config()
+    checks += check_darwin_job_python()
     checks += check_config_keys()
     checks += check_rg_version(s.rg_bin)
     checks += check_token(dep.token_file)

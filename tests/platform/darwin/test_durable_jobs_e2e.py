@@ -42,7 +42,9 @@ from binnacle.platform.darwin.job_manager_client import DarwinJobClient
 from binnacle.platform.darwin.job_manager_entry import serve_job_manager
 from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
 
-NATIVE = pytest.mark.skipif(sys.platform != "darwin", reason="Darwin kqueue/A3 IPC")
+NATIVE = pytest.mark.skipif(
+    sys.platform != "darwin" or not hasattr(os, "waitid"), reason="Darwin kqueue/A3 IPC"
+)
 LABEL = svc.MANAGER_LABEL
 REPO = Path(__file__).resolve().parents[3]
 Err = job_client.JobManagerError

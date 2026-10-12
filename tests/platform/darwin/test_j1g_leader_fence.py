@@ -34,7 +34,9 @@ from binnacle.platform.darwin import job_process_owner as jpo
 from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
 from tests import signal_safety
 
-native = pytest.mark.skipif(sys.platform != "darwin", reason="Darwin job owner")
+native = pytest.mark.skipif(
+    sys.platform != "darwin" or not hasattr(os, "waitid"), reason="Darwin job owner"
+)
 
 GRACES = {"stop_sigterm_grace_s": 0.5, "stop_sigkill_grace_s": 0.5}
 

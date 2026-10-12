@@ -35,7 +35,9 @@ from tests.platform.darwin.test_job_manager_service import (
     stop_req,
 )
 
-NATIVE = pytest.mark.skipif(sys.platform != "darwin", reason="Darwin J1 owner, A3")
+NATIVE = pytest.mark.skipif(
+    sys.platform != "darwin" or not hasattr(os, "waitid"), reason="Darwin J1 owner, A3"
+)
 
 
 def test_release_only_after_the_terminal_record_is_durable(tmp_path, monkeypatch):

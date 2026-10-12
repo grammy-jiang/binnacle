@@ -57,3 +57,17 @@ Preserve current production service processes, credentials, user-owned files
 and other worktrees. No remaining gate is implicitly satisfied by a successful
 targeted test. Do not change the original run ledger to claim that a suspended
 session performed this work.
+
+
+## 2026-10-13 follow-up integration (local only)
+
+- R1D's config-keys doctor warning implementation 212f89c and legacy
+  check test af4fcf0 have been integrated as separate signed commits.
+- SD-97 Darwin Python 3.13 manager floor and capability-aware native skip
+  policy are implemented in the candidate, awaiting final acceptance.
+- J7m-W3 uses scripts/mac_w3_deploy_gate.py to extend the pinned reviewed
+  J7m-a5 deployment gate with crash-loop exit/status classification and
+  an additional startup-record doctor check; source and security review
+  gates remain required.
+- SEC-FU-14 now has an analysis-only findings document beside this file.
+- No production deployment, master merge, or ChatGPT live smoke is claimed.

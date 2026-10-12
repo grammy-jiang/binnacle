@@ -10,6 +10,7 @@ verified record (RULE-NO-PKILL).
 """
 
 import functools
+import os
 import sys
 import time
 from pathlib import Path
@@ -29,7 +30,10 @@ from tests.platform.darwin.test_durable_manager_e2e import (
 )
 from tests.platform.darwin.test_durable_tool_wiring import _run
 
-_DARWIN = pytest.mark.skipif(sys.platform != "darwin", reason="real com.binnacle.jobs")
+_DARWIN = pytest.mark.skipif(
+    sys.platform != "darwin" or not hasattr(os, "waitid"),
+    reason="real com.binnacle.jobs",
+)
 
 
 def _live_members(leader):

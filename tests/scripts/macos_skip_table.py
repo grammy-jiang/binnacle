@@ -72,15 +72,15 @@ platform/darwin/test_foreground_commands.py | A2: per-test Darwin posix_spawn ow
 platform/darwin/test_process_native.py | A2: per-test Darwin kqueue/posix_spawn child and witness probes
 platform/darwin/test_job_process_owner.py | A2: per-test Darwin posix_spawn/kqueue manager-owned job leaders (R4 J1, A2 successor)
 platform/darwin/test_ipc_generation.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID contract
-platform/darwin/test_job_manager_service.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID job-manager IPC (R4 J2, A3 successor)
-platform/darwin/test_job_manager_entry.py | A3: per-test Darwin com.binnacle.jobs entry point, J1 owner and job-manager IPC (R4 J2r, A3 successor)
-platform/darwin/test_job_manager_entry_owner.py | A3: per-test Darwin J1 owner behind the com.binnacle.jobs manager: J1r handoff and J1g repairs (r6 T1, split from test_job_manager_entry.py)
-platform/darwin/test_durable_jobs_e2e.py | A3: per-test Darwin kqueue/getpeereid job-manager E2E over the real J1 owner and J2 manager (R4 J5)
-platform/darwin/test_j1g_leader_fence.py | A2: per-test Darwin waitid(WNOWAIT)/KERN_PROC_PGRP leader-exit fence, stopping event and killpg guard (R4 J1g, SD-43)
-platform/darwin/test_j1g_e2e_survival.py | B0: per-test Darwin real com.binnacle.jobs background-member survival E2E (R4 J1g, SD-43 JCRP-F1)
+platform/darwin/test_job_manager_service.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID job-manager IPC (R4 J2, A3 successor); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
+platform/darwin/test_job_manager_entry.py | A3: per-test Darwin com.binnacle.jobs entry point, J1 owner and job-manager IPC (R4 J2r, A3 successor); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
+platform/darwin/test_job_manager_entry_owner.py | A3: per-test Darwin J1 owner behind the com.binnacle.jobs manager: J1r handoff and J1g repairs (r6 T1, split from test_job_manager_entry.py); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
+platform/darwin/test_durable_jobs_e2e.py | A3: per-test Darwin kqueue/getpeereid job-manager E2E over the real J1 owner and J2 manager (R4 J5); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
+platform/darwin/test_j1g_leader_fence.py | A2: per-test Darwin waitid(WNOWAIT)/KERN_PROC_PGRP leader-exit fence, stopping event and killpg guard (R4 J1g, SD-43); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
+platform/darwin/test_j1g_e2e_survival.py | B0: per-test Darwin real com.binnacle.jobs background-member survival E2E (R4 J1g, SD-43 JCRP-F1); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
 platform/darwin/test_job_manager_resilience.py | A3: per-test Darwin libproc verified-teardown negative test (R4 J2t, RULE-NO-PKILL); the rest of the module runs everywhere
 platform/darwin/test_durable_tool_wiring.py | B0: per-test Darwin manager-owner tool composition (R4 J4); the owner call-site test runs everywhere
-platform/darwin/test_durable_manager_e2e.py | B0: per-test Darwin real com.binnacle.jobs end-to-end for the manager-composed command tools (R4 J4, split from test_durable_tool_wiring.py)
+platform/darwin/test_durable_manager_e2e.py | B0: per-test Darwin real com.binnacle.jobs end-to-end for the manager-composed command tools (R4 J4, split from test_durable_tool_wiring.py); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
 platform/darwin/test_r5_l2_parity.py | B0: per-test Darwin manager composition and caller_form workdir on the real macOS filesystem (r5 L2, SD-50; STEER-01); the Linux-host cases run everywhere
 platform/darwin/test_r5_l2b_strict_client.py | B0: per-test Darwin KERN_PROC_PGRP group_listing through the strict in-memory client (r5 L2b, SD-61 STEER-02b)
 platform/darwin/test_r5_l2c_output_snapshot.py | B0: per-test Darwin real com.binnacle.jobs burst-writer output/output_bytes one-snapshot repro (r5 L2c); the pairing unit test runs everywhere

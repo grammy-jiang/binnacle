@@ -30,7 +30,9 @@ from tests.platform.darwin.test_job_manager_service import (
     write_record,
 )
 
-NATIVE = pytest.mark.skipif(sys.platform != "darwin", reason="Darwin J1 owner, A3")
+NATIVE = pytest.mark.skipif(
+    sys.platform != "darwin" or not hasattr(os, "waitid"), reason="Darwin J1 owner, A3"
+)
 MODULE = "binnacle.platform.darwin.job_manager_service"
 PING_FIELDS = {"ok", "version", "owner_instance_id", "boot_id", "pid"}
 PING_FIELDS |= {"package_version", "revision", "running_jobs", "unknown_jobs"}

@@ -235,6 +235,9 @@ def test_run_all_registers_the_check(
     for name in ("check_config", "check_rg_version", "check_boot"):
         monkeypatch.setattr(doctor, name, lambda *a, **k: [])
     monkeypatch.setattr(doctor, "check_units", lambda *a, **k: ([], None))
+    # Source-bound aggregation: never inspect the production startup state.
+    monkeypatch.setattr(doctor, "check_startup_imports", list)
+    monkeypatch.setattr(doctor, "check_darwin_job_python", list)
     monkeypatch.setattr(
         doctor, "check_config_keys", lambda: [doctor.ok(GROUP, "marker")]
     )
