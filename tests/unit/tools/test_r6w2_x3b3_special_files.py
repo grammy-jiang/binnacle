@@ -44,8 +44,12 @@ TEXT = SPECIAL_FILE_TEXT  # r6 W3 RF1: the shared, actionable text.
 
 @pytest.fixture
 def root() -> Iterator[Path]:
-    # A short /tmp path: an AF_UNIX socket path is limited to 108 bytes.
-    base = Path(tempfile.mkdtemp(prefix="r6w2-x3b3-", dir="/tmp")).resolve()
+    # AF_UNIX paths have a tight byte limit; use a short, test-owned
+    # directory instead of an MCP-readable /tmp or any production root.
+    state = Path.home() / ".local/state/bt/x3b3"
+    state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    state.chmod(0o700)
+    base = Path(tempfile.mkdtemp(prefix="s-", dir=state)).resolve()
     try:
         yield base
     finally:
@@ -179,8 +183,9 @@ def test_a_regular_file_still_reads(root):
 
 @LINUX_READ
 def test_a_socket_swapped_in_keeps_the_identity_refusal(root, monkeypatch):
-    # Identity first: the open fails (ENXIO) on an object that is not the
-    # checked file, so the special-file wording does not apply.
+    # FDW-B1-a3: the open itself may refuse a newly swapped-in socket
+    # (ENXIO/EOPNOTSUPP). Descriptor-relative lstat identifies the socket,
+    # and both operating systems must return the shared special-file text.
     target = root / "f.txt"
     target.write_text("checked")
     real = fd_walk.open_walked
@@ -193,8 +198,8 @@ def test_a_socket_swapped_in_keeps_the_identity_refusal(root, monkeypatch):
 
     monkeypatch.setattr(fd_walk, "open_walked", swapped)
     with server:
-        code, _text = refusal(in_root(root), target, darwin=False)
-    assert code == "file_io_failed"
+        code, text = refusal(in_root(root), target, darwin=False)
+    assert (code, text) == (CODE, TEXT)
 
 
 @LINUX_READ

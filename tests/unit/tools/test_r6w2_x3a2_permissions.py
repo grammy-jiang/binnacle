@@ -22,6 +22,10 @@ from binnacle.config import RootsSettings
 from binnacle.errors import CodedToolError
 from binnacle.features.files import fd_walk
 from binnacle.features.files.tools import list_files as lf
+from binnacle.platform.contracts.special_file_contracts import (
+    SPECIAL_FILE_CODE,
+    SPECIAL_FILE_TEXT,
+)
 
 # The process descriptor table: /proc/self/fd on Linux, /dev/fd on Darwin.
 FD_DIR = "/proc/self/fd" if os.path.isdir("/proc/self/fd") else "/dev/fd"
@@ -295,7 +299,11 @@ def test_open_verified_refuses_an_unopenable_object(files):
     with socket.socket(socket.AF_UNIX) as sock:
         sock.bind(str(path))
         err = refused(path, files["roots"], ident(path))
-    assert err.telemetry_code == "file_io_failed"
+    # FDW-B1-a3: an AF_UNIX socket may reject the open before fstat.
+    # Descriptor-relative type classification must still use the shared
+    # special-file refusal, never a kernel-dependent file_io_failed.
+    assert err.telemetry_code == SPECIAL_FILE_CODE
+    assert str(err) == SPECIAL_FILE_TEXT
 
 
 @LINUX_WALK
