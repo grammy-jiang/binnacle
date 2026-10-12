@@ -48,6 +48,7 @@ def _flock_bounded(path: Path, wait_s: float) -> Iterator[int]:
     """RL1: LOCK_EX within ``wait_s``, else BlockingIOError (an OSError)."""
     deadline = time.monotonic() + wait_s
     fd = _lock_fd(path)
+    attempts = 0
     try:
         while True:
             try:
@@ -56,10 +57,30 @@ def _flock_bounded(path: Path, wait_s: float) -> Iterator[int]:
             except BlockingIOError:
                 if time.monotonic() >= deadline:
                     raise
-                time.sleep(LOCK_POLL_S)
+                # F5: bounded backoff reduces repeated 5ms lock barging.
+                # Monotonic deadline still bounds EVERY waiter, even under load.
+                attempts += 1
+                remaining = deadline - time.monotonic()
+                if remaining > 0:
+                    time.sleep(
+                        min(remaining, LOCK_POLL_S * min(2 ** (attempts // 3), 8))
+                    )
         yield fd
     finally:
         os.close(fd)
+
+
+def queued_exit_metrics(
+    queued_since: dict[str, float], now: float
+) -> dict[str, int | float | None]:
+    """Advisory ping telemetry, never interpreted as process authority."""
+    oldest = min(queued_since.values(), default=None)
+    return {
+        "unrecorded_exits": len(queued_since),
+        "oldest_unrecorded_age_s": (
+            max(0.0, now - oldest) if oldest is not None else None
+        ),
+    }
 
 
 def _exit_meta(meta: dict[str, Any], exited: OwnedJobExit) -> dict[str, Any]:

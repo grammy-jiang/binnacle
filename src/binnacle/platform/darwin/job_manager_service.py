@@ -28,11 +28,13 @@ from typing import Any, Protocol
 from binnacle.platform.contracts import process_contracts as pc
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 from binnacle.platform.contracts.process_contracts import OwnedJobExit
+from binnacle.platform.darwin.job_manager_queue import ExitQueueStorage
 from binnacle.platform.darwin.job_manager_records import (
     _exit_meta,
     _flock,
     _flock_bounded,
     list_job_ids,
+    queued_exit_metrics,
     read_meta,
 )
 from binnacle.platform.darwin.job_manager_stopping import (
@@ -65,7 +67,7 @@ class ReleasingJobOwner(pc.DarwinJobOwner, Protocol):
     def release(self, job_id: str) -> None: ...
 
 
-class DarwinJobManager(_ManagerStopping):
+class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
     """RPC v1 dispatcher and durable-record writer for one owner incarnation."""
 
     owner: ReleasingJobOwner
@@ -87,6 +89,7 @@ class DarwinJobManager(_ManagerStopping):
         self.grace, self.provenance = grace, runtime_provenance()
         self._lock = threading.RLock()
         self._unrecorded: dict[str, OwnedJobExit] = {}  # reaped, not yet durable
+        self._unrecorded_since: dict[str, float] = {}
         # RL1: guards ``_unrecorded`` only, never held across I/O or ``_lock``,
         # so a reaper that gave up on a busy ``_lock`` can still queue.
         self._queue_lock = threading.Lock()
@@ -162,6 +165,10 @@ class DarwinJobManager(_ManagerStopping):
             reply["pid"] = os.getpid()
             reply["package_version"] = self.provenance.package_version
             reply["running_jobs"], reply["unknown_jobs"] = self.job_counts()
+            with self._queue_lock:
+                reply.update(
+                    queued_exit_metrics(self._unrecorded_since, time.monotonic())
+                )
             held = {"jobs_dir": self.held_jobs_dir} if self.held_jobs_dir else {}
             return {**reply, **held, "revision": self.provenance.revision}
         if op == "start":
@@ -343,18 +350,15 @@ class DarwinJobManager(_ManagerStopping):
         except OSError as exc:
             self._queue(exited)
             event = "event=job_exit_unrecorded job_id=%s errno=%s retry=queued"
-            log.warning(event, exited.job_id, exc.errno)
+            log.warning(
+                event + " reason=%s",
+                exited.job_id,
+                exc.errno,
+                "busy" if isinstance(exc, BlockingIOError) else "io_error",
+            )
             return None if isinstance(exc, BlockingIOError) else False
         log.info("event=job_exit job_id=%s", exited.job_id)
         return True
-
-    def _queue(self, exited: OwnedJobExit) -> None:
-        with self._queue_lock:
-            self._unrecorded[exited.job_id] = exited
-
-    def _dequeue(self, job_id: str) -> None:
-        with self._queue_lock:
-            self._unrecorded.pop(job_id, None)
 
     def _release(self, job_id: str) -> None:
         """J1 1.2.0-additive ack, only once the terminal record is durable."""
@@ -449,6 +453,9 @@ class DarwinJobManager(_ManagerStopping):
             for exited in exits:
                 if busy:
                     self._queue(exited)
+                    log.warning(
+                        "event=job_exit_unrecorded job_id=%s reason=busy", exited.job_id
+                    )
                 else:
                     busy = self._record_guarded(exited, REAPER_LOCK_WAIT_S) is None
             self.persist_lost(REAPER_LOCK_WAIT_S)
