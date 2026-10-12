@@ -224,10 +224,14 @@ looks like image/png) — content not shown.`
    that grew past the limit after the stat is E3, with the same text as at
    the stat. Every path whose target lies in any configured root
    (cross-root links, `..` into an outer root) reads as in r6. Darwin keeps its own `READ_FLAGS` walk and
-   never calls `open_verified`. `open_verified` without a parent descriptor
-   still opens by path and follows intermediate symlinks: an outside object
-   can be opened (a device open side effect, same uid only) before the
-   `path_outside_root` refusal; `read_file` does not use that form.
+   never calls `open_verified`. `open_verified` requires a descriptor-walked
+   parent (`parent_fd`, SRC-W2-03); there is no by-path mode.
+   **Execute-only directories on Darwin (r6 W3 OS1)**: the Darwin walk opens
+   every directory it only passes through with `O_SEARCH|O_DIRECTORY|O_NOFOLLOW`
+   (search permission, no read), so an execute-only root is granted and an
+   execute-only directory on the way is traversed, as on Linux. A file
+   below such a directory is readable; the `O_SEARCH` descriptor itself
+   cannot be listed or read.
 3. **Sniff**: extension in the known-text allowlist → text; else read the
    first 8 KB — NUL byte present → `kind: "binary"` result (message names
    the size and a MIME guess; not an error).

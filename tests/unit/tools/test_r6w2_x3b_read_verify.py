@@ -398,8 +398,11 @@ def test_open_verified_never_runs_off_linux(tree, monkeypatch, opener):
     opened: list[object] = []
     monkeypatch.setattr(fd_walk.os, "open", lambda *a, **k: opened.append(a))
     monkeypatch.setattr(fd_walk.sys, "platform", "darwin")
+    extra = {"parent_fd": -1} if opener == "open_verified" else {}  # SRC-W2-03
     with pytest.raises(RuntimeError, match="Linux-only"):
-        getattr(fd_walk, opener)(tree["file"], (tree["root"],), ident(tree["file"]))
+        getattr(fd_walk, opener)(
+            tree["file"], (tree["root"],), ident(tree["file"]), **extra
+        )
     assert opened == []
 
 

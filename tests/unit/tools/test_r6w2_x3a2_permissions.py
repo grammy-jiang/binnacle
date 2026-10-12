@@ -227,10 +227,25 @@ def ident(path: Path) -> tuple[int, int]:
     return info.st_dev, info.st_ino
 
 
+def verified(path: Path | str, roots, expected) -> int:
+    # SRC-W2-03: open_verified needs a parent descriptor. This test helper
+    # opens it by path (following intermediate links), as the removed by-path
+    # mode did, so the cases below keep their meaning.
+    flags = fd_walk.TRAVERSE_FLAGS & ~os.O_NOFOLLOW
+    try:
+        parent = os.open(os.path.dirname(os.fspath(path)), flags)
+    except OSError as err:
+        raise fd_walk._open_refusal(err, str(path), roots) from err
+    try:
+        return fd_walk.open_verified(path, roots, expected, parent_fd=parent)
+    finally:
+        os.close(parent)
+
+
 def refused(path: Path | str, roots, expected) -> CodedToolError:
     before = len(os.listdir(FD_DIR))
     with pytest.raises(CodedToolError) as exc:
-        fd_walk.open_verified(path, roots, expected)
+        verified(path, roots, expected)
     assert len(os.listdir(FD_DIR)) == before  # The fd was closed.
     assert str(len(SECRET)) not in str(exc.value)
     return exc.value
@@ -240,14 +255,14 @@ def refused(path: Path | str, roots, expected) -> CodedToolError:
 @pytest.mark.parametrize("name", ["o.txt", "inner/i.txt"])
 def test_open_verified_returns_a_readable_fd_in_any_root(files, name):
     path = files["outer"] / name
-    fd = fd_walk.open_verified(path, files["roots"], ident(path))
+    fd = verified(path, files["roots"], ident(path))
     try:
         assert os.read(fd, 100) == path.read_bytes()
         assert os.get_inheritable(fd) is False
     finally:
         os.close(fd)
     other = files["other"] / "x.txt"
-    fd = fd_walk.open_verified(str(other), [files["other"]], ident(other))
+    fd = verified(str(other), [files["other"]], ident(other))
     os.close(fd)
 
 
@@ -331,8 +346,14 @@ def test_open_verified_opens_no_follow_non_blocking(files, monkeypatch):
         flags_seen.append(flags)
         return real_open(path, flags, *args, **kwargs)
 
-    monkeypatch.setattr(fd_walk.os, "open", record)
     path = files["outer"] / "o.txt"
-    os.close(fd_walk.open_verified(path, files["roots"], ident(path)))
+    parent = os.open(path.parent, fd_walk.TRAVERSE_FLAGS)
+    monkeypatch.setattr(fd_walk.os, "open", record)
+    try:
+        fd = fd_walk.open_verified(path, files["roots"], ident(path), parent_fd=parent)
+    finally:
+        monkeypatch.undo()
+        os.close(parent)
+    os.close(fd)
     wanted = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC | os.O_NOCTTY
     assert flags_seen == [wanted]
