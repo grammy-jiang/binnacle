@@ -380,9 +380,11 @@ def check_skip_policy(
         if not present and not rel.startswith(DARWIN_DIR):
             problems.append(f"{rel}: table row names a missing file")
     for rel, source in sorted(sources.items()):
-        sites = scan_skips(source, conftest=rel.rsplit("/", 1)[-1] == "conftest.py")
-        loose = _Scanner(ast.parse(source)).loose_xfails
-        problems.extend(f"{rel}:{line}: {LOOSE_XFAIL}" for line in loose)
+        # One parse and one scan per module: loose_xfails does not depend on conftest.
+        tree = ast.parse(source)
+        scanner = _Scanner(tree, conftest=rel.rsplit("/", 1)[-1] == "conftest.py")
+        sites = sorted(scanner.sites.values(), key=lambda s: (s.line, s.kind))
+        problems.extend(f"{rel}:{line}: {LOOSE_XFAIL}" for line in scanner.loose_xfails)
         platform_sites = 0
         for site in sites:
             where = f"{rel}:{site.line}"
@@ -411,7 +413,7 @@ def check_skip_policy(
                 )
             platform_sites += site.platform
         if alias_uses and rel in alias_uses:
-            names = (n for n in ast.walk(ast.parse(source)) if isinstance(n, ast.Name))
+            names = (n for n in ast.walk(tree) if isinstance(n, ast.Name))
             used = sum(
                 n.id == "LINUX_ONLY" and isinstance(n.ctx, ast.Load) for n in names
             )
