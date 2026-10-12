@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 from fastmcp.exceptions import ToolError
 
-from binnacle.config import RootsSettings
+from binnacle.config import ReadFileSettings, RootsSettings
 from binnacle.errors import CodedToolError
 from binnacle.features.files.tools import read_file as rf
 
@@ -267,10 +267,17 @@ def test_the_root_check_runs_before_the_identity_check(tree, monkeypatch):
 @x3b_only
 @pytest.mark.timeout(10)
 def test_the_root_check_runs_before_the_type_check(tree, monkeypatch):
+    # read_file_impl refuses a FIFO by its pre-open stat (r6 W3 RF1,
+    # SRC-W2-01), so the race step is called directly.
     os.mkfifo(tree["root"] / "d" / "fifo")
     after_open(monkeypatch, lambda: os.rename(tree["root"] / "d", tree["out"] / "m"))
     fifo = tree["root"] / "d" / "fifo"
-    assert outcome(tree["roots"], fifo) == ("refused", "path_outside_root")
+    info = os.lstat(fifo)
+    with pytest.raises(CodedToolError) as exc:
+        rf._read_checked(
+            fifo, (info.st_dev, info.st_ino), tree["roots"], ReadFileSettings()
+        )
+    assert exc.value.telemetry_code == "path_outside_root"
 
 
 @x3b_only
