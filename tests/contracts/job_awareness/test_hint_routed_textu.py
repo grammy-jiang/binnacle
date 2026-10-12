@@ -169,7 +169,10 @@ async def test_adapt_never_hints_a_no_structure_tool():
 async def test_carrier_changed_after_bind_suppresses():
     with RoutedLab(1) as lab:
         adapter = lab.routed(structured=False, enabled=True, carrier=HintCarrier.TEXT)
-        adapter.carrier = HintCarrier.META  # mutation after the bind check
+        with pytest.raises(AttributeError, match="immutable"):
+            adapter.carrier = HintCarrier.META
+        # Trusted-code bypass (out of model): the per-call checks still refuse.
+        object.__setattr__(adapter, "carrier", HintCarrier.META)
         value, outcome = await lab.call(adapter, lab.route(lab.job), text_only())
         assert outcome.result is value and outcome.rendered == ()  # nosec B101 - pytest assertion
         assert META_KEY not in (value.meta or {})  # nosec B101 - pytest assertion

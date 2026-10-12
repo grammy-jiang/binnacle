@@ -119,6 +119,15 @@ class RoutedOutcome:
 
 @dataclass
 class HintAdapter:
+    """Routed adapters (``bindings.route_type`` set) are immutable after
+    construction (TEXTU-G3): assigning or deleting any field except
+    ``last_meter`` raises, so an admitted call can never observe another
+    carrier, flag, binding, tool or server stamp. A new arm is a new adapter
+    (``dataclasses.replace``); a call keeps the adapter it was dispatched
+    with. ``object.__setattr__`` bypasses this; in-process code is trusted
+    (see job_awareness_hint_identity). Non-routed adapters stay mutable.
+    """
+
     bindings: HintBindings
     grant: object
     jobs: tuple[object, ...]
@@ -150,13 +159,26 @@ class HintAdapter:
             raise ValueError("explicit native tool binding required")
         self.bound_tool = self.tool  # provenance snapshot of the registration
         self.carrier = self.bindings.meta if self.carrier is None else self.carrier
-        if self.bindings.route_type is not None and self._bind_routed():
-            return
-        try:
-            self.schema = Schema(self.tool.output_schema)
-        except (ValueError, TypeError, RecursionError):
-            self.schema = None
-        self.identity = None if self.schema is None else producer_identity(self.tool)
+        routed = self.bindings.route_type is not None
+        if not (routed and self._bind_routed()):
+            try:
+                self.schema = Schema(self.tool.output_schema)
+            except (ValueError, TypeError, RecursionError):
+                self.schema = None
+            self.identity = (
+                None if self.schema is None else producer_identity(self.tool)
+            )
+        object.__setattr__(self, "_sealed", routed)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name != "last_meter" and self.__dict__.get("_sealed") is True:
+            raise AttributeError(f"routed HintAdapter.{name} is immutable")
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if self.__dict__.get("_sealed") is True:
+            raise AttributeError(f"routed HintAdapter.{name} is immutable")
+        object.__delattr__(self, name)
 
     def _bind_routed(self) -> bool:
         """g5 §9.2 S-2 bind rules for routed (E2) mode; True when bound here.
@@ -200,6 +222,7 @@ class HintAdapter:
         hint. A production composition must call this with the same server that
         registers the bound tool, after the server name and version are final.
         A server without a dict stamp binds None, which suppresses every hint.
+        A routed adapter is immutable: give it ``server_info`` at construction.
         """
         stamp = getattr(getattr(server, "_mcp_server", None), "server_info_stamp", None)
         self.server_info = stamp if type(stamp) is dict else None

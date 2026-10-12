@@ -1,7 +1,10 @@
 """Review TEXTU-G2-01: a carrier changed while a routed render is in flight.
 
 A barrier pauses the worker inside ``binding.check`` (after the render entry
-check). The test then reassigns ``adapter.carrier`` and releases the worker.
+check). The test then changes ``adapter.carrier`` through the trusted-code bypass
+``object.__setattr__`` (plain assignment raises: routed adapters are
+immutable, see ``test_hint_routed_immutable``) and releases the worker.
+These tests keep the per-call checks honest as defence in depth.
 The render pins the bind-approved carrier for the whole call and checks for
 drift again before it returns, so the hint is suppressed: the original
 object and bytes, ``rendered == ()``, and on the real lab ledger the
@@ -47,17 +50,22 @@ class Barrier:
         return self.check(grant, job, scopes)
 
 
-def pause(adapter) -> Barrier:
+def force(adapter, name: str, value: object) -> None:
+    """Trusted in-process bypass of the routed immutability (out of model)."""
+    object.__setattr__(adapter, name, value)
+
+
+def pause(adapter):
+    """A new adapter (routed adapters are immutable) whose check pauses."""
     barrier = Barrier(adapter.bindings.check)
-    adapter.bindings = replace(adapter.bindings, check=barrier)
-    return barrier
+    return replace(adapter, bindings=replace(adapter.bindings, check=barrier)), barrier
 
 
 async def drift_during(barrier: Barrier, adapter, drift, call):
     """Run ``call``; change the carrier while the worker is paused in check."""
     task = asyncio.ensure_future(call)
     assert await asyncio.to_thread(barrier.entered.wait, WAIT_S)  # nosec B101 - pytest assertion
-    adapter.carrier = drift
+    force(adapter, "carrier", drift)
     barrier.release.set()
     return await task
 
@@ -71,7 +79,7 @@ def states(server: E2Server) -> set[str]:
 async def test_drift_inside_the_render_suppresses(carrier, drift, structured):
     with RoutedLab(1) as lab:
         adapter = lab.routed(structured=structured, enabled=True, carrier=carrier)
-        barrier = pause(adapter)
+        adapter, barrier = pause(adapter)
         value = original() if structured else text_only()
         receipt = executed(value, adapter.bound_tool)
         call = adapter.adapt_routed(value, execution=receipt, route=lab.route(lab.job))
@@ -92,11 +100,11 @@ async def test_drift_inside_the_render_on_the_wire_resets_the_job(
     async with running(server) as wire:
         start = await wire.call(who, "fixture_start", {"slot": "R3-SYN-JOB-01"})
         await server.seal(who, str(start.data["job"]))
-        barrier = pause(server.adapter)
+        server.adapter, barrier = pause(server.adapter)
         call = wire.call(who, "fixture_unrelated_read")
         raced = await drift_during(barrier, server.adapter, drift, call)
         after = states(server)
-        server.adapter.carrier = carrier
+        force(server.adapter, "carrier", carrier)
         restored = await wire.call(who, "fixture_unrelated_read")
     assert raced.raw.decode() == plain and raced.row["ja_hint"] == "0"  # nosec B101 - pytest assertion
     assert after == {"PENDING"}  # nosec B101 - pytest assertion
@@ -116,7 +124,7 @@ async def test_drift_before_the_commit_never_emits(
 
     async def checkpoint(name: str) -> None:
         if name == point:
-            server.adapter.carrier = drift
+            force(server.adapter, "carrier", drift)
 
     value = note(structured)
     result = await emit_hint(

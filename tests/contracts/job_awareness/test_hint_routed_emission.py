@@ -70,6 +70,11 @@ async def emission(server, who, *, adapter=None, checkpoint=None):
     return value, result
 
 
+def rebind(server: E2Server, bindings) -> None:
+    """Routed adapters are immutable: changing bindings is a new adapter."""
+    server.adapter = replace(server.adapter, bindings=bindings)
+
+
 def states(server, who=None) -> dict[str, str]:
     rows = ledger_rows(server, "SELECT jobref,kd,state FROM emit")
     kd = None if who is None else server.key(who).kd
@@ -114,20 +119,23 @@ async def test_unselected_and_render_none_reset_to_pending(tmp_path):
     who, _ = await allocate(server, "A", 3)
     done = keys_of(server, who)[0]
     real = server.adapter.bindings
-    server.adapter.bindings = replace(
-        real,
-        select=lambda grant, observed: tuple(
-            c for c in real.select(grant, observed) if c.job.canonical_key != done
+    rebind(
+        server,
+        replace(
+            real,
+            select=lambda grant, observed: tuple(
+                c for c in real.select(grant, observed) if c.job.canonical_key != done
+            ),
         ),
     )
     _, first = await emission(server, who)
     assert hinted(first) == keys_of(server, who)[1:2]  # nosec B101 - pytest assertion
     assert states(server)[done] == "PENDING"  # nosec B101 - pytest assertion
-    server.adapter.bindings = replace(real, render=lambda *args: None)
+    rebind(server, replace(real, render=lambda *args: None))
     value, result = await emission(server, who)
     assert result is value  # nosec B101 - pytest assertion
     assert sorted(states(server).values()) == ["EMITTED", "PENDING", "PENDING"]  # nosec B101 - pytest assertion
-    server.adapter.bindings = real
+    rebind(server, real)
     _, last = await emission(server, who)
     assert done in hinted(last)  # nosec B101 - pytest assertion
     await server.workers.close()
@@ -195,8 +203,11 @@ async def test_commit_rowcount_mismatch_returns_original_and_aborts(tmp_path, st
     keys = keys_of(server, who)
     real = server.adapter.bindings
     if step == "reset":
-        server.adapter.bindings = replace(
-            real, select=lambda grant, observed: real.select(grant, observed)[:1]
+        rebind(
+            server,
+            replace(
+                real, select=lambda grant, observed: real.select(grant, observed)[:1]
+            ),
         )
     victim = keys[0 if step == "emit" else 1]
 
@@ -214,7 +225,7 @@ async def test_commit_rowcount_mismatch_returns_original_and_aborts(tmp_path, st
     after = states(server)
     assert after[victim] == "RESERVED"  # nosec B101 - pytest assertion
     assert {after[k] for k in keys if k != victim} == {"ABORTED"}  # nosec B101 - pytest assertion
-    server.adapter.bindings = real
+    rebind(server, real)
     value, result = await emission(server, who)
     assert result is value  # nosec B101 - pytest assertion
     await server.workers.close()

@@ -154,6 +154,17 @@ STRUCT carrier (§9.2 S-1) is not implemented; it waits for CV (c′).
   and inside the commit transaction; a drift there aborts the job
   (`ABORTED`), as for any other failed final validation. Barrier tests pause
   the worker after the render entry check in both directions.
+- **TEXTU-G3-01/02.** A routed adapter is immutable after construction.
+  Assigning or deleting any field except the diagnostic `last_meter`
+  raises, so an admitted call cannot observe another carrier, `enabled`,
+  `exclusive`, bindings, tool or server stamp, and the reviewer's in-flight
+  and late-commit changes cannot be made. A new arm is a new adapter
+  (`dataclasses.replace` or `E2Server.build_adapter`). A call keeps the
+  adapter it was dispatched with (bounded snapshot), so the arm controller
+  switches arms only between calls. `object.__setattr__` bypasses this; it
+  is trusted in-process code and out of the threat model, as before. The
+  per-call carrier checks stay as defence in depth. Non-routed adapters and
+  `adapt()` are unchanged.
 - **TEXTU-02.** The capacity dry run checks the lifecycle of every arm again
   (`arm_failures`). A negative control proves that a bad non-final arm fails.
 - **ADV-TU-02.** The raw-value scan covers the synthetic argument log. A

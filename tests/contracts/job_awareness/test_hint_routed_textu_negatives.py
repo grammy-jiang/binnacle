@@ -190,8 +190,9 @@ async def test_gu4_adapter_off_returns_the_original(options):
 @in_loop
 async def test_gu4_adapter_off_keeps_jobs_pending_on_the_ledger(tmp_path, off):
     server = E2Server(tmp_path / "phase", carrier=HintCarrier.TEXT, structured=False)
-    adapter = server.build_adapter(enabled=off != "enabled")
-    adapter.exclusive = off != "exclusive"
+    adapter = replace(
+        server.build_adapter(enabled=off != "enabled"), exclusive=off != "exclusive"
+    )
     who = chat("gu4")
     handle = await server.lab.start_fixture(server.outcome(who), "R3-SYN-JOB-01")
     await server.seal(who, str(handle))
