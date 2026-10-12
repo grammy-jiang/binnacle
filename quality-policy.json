@@ -117,6 +117,7 @@
         "src/binnacle/platform/darwin/job_group_fence.py": 15.0,
         "src/binnacle/platform/darwin/job_manager_client.py": 59.0,
         "src/binnacle/platform/darwin/job_manager_entry.py": 47.0,
+        "src/binnacle/platform/darwin/job_manager_procinfo.py": 73.0,
         "src/binnacle/platform/darwin/job_manager_stopping.py": 62.0,
         "src/binnacle/platform/darwin/job_process_owner.py": 10.0,
         "src/binnacle/platform/darwin/process_authority.py": 69.5,
