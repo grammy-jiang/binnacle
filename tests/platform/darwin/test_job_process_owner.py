@@ -33,6 +33,7 @@ from binnacle.platform.contracts.process_contracts import (
 from binnacle.platform.darwin import job_process_owner
 from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
 from binnacle.platform.darwin.process_backend import OwnedProcessHandle
+from tests.platform.darwin.test_job_manager_resilience import wait_for
 
 # Per-test gate: the portable contract/handle tests below also run on Linux.
 native = pytest.mark.skipif(
@@ -232,8 +233,6 @@ def test_exit_before_registration_is_pending_not_lost(spool, monkeypatch):
 
 @native
 def test_stop_signals_only_owned_group_and_records_stop_requested(owner, spool):
-    from tests.platform.darwin.test_job_manager_resilience import wait_for
-
     started = _spawn(owner, "job-s", "sleep 30 & sleep 30; wait", spool)
 
     def forked():  # live group members other than the leader
@@ -307,8 +306,9 @@ def test_close_kills_reaps_and_returns_owner_restart(spool):
     )
     stubborn = _spawn(created, "job-t", "trap '' TERM; sleep 30 & wait", spool)
     polite = _spawn(created, "job-p", "sleep 30", spool)
-    time.sleep(0.2)
-    members = job_process_owner._process_records(2, stubborn.pid)
+    proc = job_process_owner._process_records
+    assert wait_for(lambda: len(proc(2, stubborn.pid)) >= 2, timeout=10)
+    members = proc(2, stubborn.pid)
     exits = created.close()
     assert {e.job_id: e.termination_reason for e in exits} == {
         "job-t": "owner_restart",
