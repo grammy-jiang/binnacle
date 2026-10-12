@@ -1,12 +1,14 @@
-"""fd_walk traverse flags on both OSes (r6 W3 OS1).
+"""fd_walk traverse flags and open_verified's parent_fd (r6 W3 OS1).
 
 TRAVERSE_FLAGS is O_PATH on Linux and O_SEARCH on Darwin
 (DARWIN-FOLLOWUP-exec-only-dirs): search permission only, never listable,
-always no-follow per component.
+always no-follow per component. SRC-W2-03: open_verified has no by-path
+mode, so no caller can open through an intermediate symlink.
 """
 
 from __future__ import annotations
 
+import inspect
 import os
 import stat
 from pathlib import Path
@@ -54,3 +56,12 @@ def test_the_walk_passes_through_an_execute_only_directory(tmp_path: Path):
                 pass
     finally:
         (base / "x").chmod(mode)
+
+
+def test_open_verified_requires_parent_fd():
+    parameter = inspect.signature(fd_walk.open_verified).parameters["parent_fd"]
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameter.default is inspect.Parameter.empty
+    assert parameter.annotation in (int, "int")
+    with pytest.raises(TypeError):
+        fd_walk.open_verified("/etc/hosts", [Path("/etc")], (0, 0))

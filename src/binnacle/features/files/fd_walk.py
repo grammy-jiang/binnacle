@@ -222,15 +222,15 @@ def open_verified(
     root_paths: Sequence[Path],
     expected: tuple[int, int],
     *,
-    parent_fd: int | None = None,
+    parent_fd: int,
 ) -> int:
     """Open an already-resolved regular file and verify the opened object.
 
     For read_file (r6 W2 X3b, SD-76); this is no confinement resolver. The
-    final component is opened no-follow and non-blocking: relative to
-    ``parent_fd`` when given (open_walked), else by path, which follows
-    intermediate symlinks and so can open an outside object before the
-    refusal. The descriptor is returned only when its kernel path is inside
+    final component is opened no-follow and non-blocking relative to
+    ``parent_fd``, a descriptor-walked parent (open_walked). There is no
+    by-path mode, which would follow intermediate symlinks (SRC-W2-03). The
+    descriptor is returned only when its kernel path is inside
     SOME configured root (any one, not only the innermost), its (st_dev,
     st_ino) equals ``expected`` from the caller's containment check, it is
     a regular file and it still has a link (st_nlink > 0: a file deleted
@@ -241,10 +241,7 @@ def open_verified(
     _require_linux()
     shown = os.fspath(path)
     try:
-        if parent_fd is None:
-            fd = os.open(shown, READ_FLAGS)
-        else:
-            fd = os.open(os.path.basename(shown), READ_FLAGS, dir_fd=parent_fd)
+        fd = os.open(os.path.basename(shown), READ_FLAGS, dir_fd=parent_fd)
     except OSError as exc:
         raise _open_refusal(exc, shown, root_paths) from exc
     try:

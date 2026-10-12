@@ -67,7 +67,17 @@ def ident(path: Path) -> tuple[int, int]:
 def refusal(path: Path, roots, expected) -> str:
     before = len(os.listdir(FD_DIR))
     with pytest.raises(CodedToolError) as exc:
-        fd_walk.open_verified(path, roots, expected)
+        # SRC-W2-03: a parent descriptor, opened by path for this guard test;
+        # a failure maps as the removed by-path open did.
+        flags = fd_walk.TRAVERSE_FLAGS & ~os.O_NOFOLLOW
+        try:
+            parent = os.open(os.path.dirname(os.fspath(path)), flags)
+        except OSError as err:
+            raise fd_walk._open_refusal(err, str(path), roots) from err
+        try:
+            fd_walk.open_verified(path, roots, expected, parent_fd=parent)
+        finally:
+            os.close(parent)
     assert len(os.listdir(FD_DIR)) == before
     return exc.value.telemetry_code
 
