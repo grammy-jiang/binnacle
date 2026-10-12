@@ -20,7 +20,7 @@ from binnacle.deployment import units
 from binnacle.diagnostics import doctor_common as _doctor_common
 from binnacle.diagnostics import doctor_jobs as _doctor_jobs
 from binnacle.diagnostics.doctor_connectivity import _tail_lines, check_endpoint
-from binnacle.diagnostics.doctor_provenance import check_provenance
+from binnacle.diagnostics.doctor_provenance import check_provenance, check_rg_version
 from binnacle.diagnostics.doctor_render import render, render_json
 from binnacle.diagnostics.job_manager_doctor import check_job_manager
 from binnacle.doctor_contracts import Check, fail, ok, warn
@@ -245,6 +245,7 @@ def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list
     checks: list[Check] = []
     checks += check_provenance(provenance)
     checks += check_config()
+    checks += check_rg_version(s.rg_bin)
     checks += check_token(dep.token_file)
     unit_checks, active = check_units(dep.server_unit, inspector=services)
     checks += unit_checks
