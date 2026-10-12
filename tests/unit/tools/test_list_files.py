@@ -183,7 +183,7 @@ def test_glob_translates_invalid_pattern_error(monkeypatch, tmp_path):
         ),
     )
     monkeypatch.setattr(
-        lf,
+        lf.list_files_glob,
         "full_match",
         lambda *a, **k: (_ for _ in ()).throw(ValueError("bad glob")),
     )

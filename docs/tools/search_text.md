@@ -85,8 +85,9 @@ budget.` / `No matches for 'foo' under /x.`
 
 **Behavior**: resolve path (shared guard). Run
 `rg --json --smart-case [-F] [-C n]` on the path, 20 s timeout; parse the
-event stream (`match`/`context`) with `orjson`; apply the Python-side glob filter; stop
-at `max_results`. Auto-context: when the first pass yields 1–3 matches with
+event stream (`match`/`context`) with `orjson`; apply the Python-side glob filter; keep the
+first `max_results` matches in (file, line) order, so the same tree gives the
+same subset on every call (`count` and `truncated` are unchanged). Auto-context: when the first pass yields 1–3 matches with
 no explicit `context_lines` and not `names_only`, re-run with `-C 50`
 (1 match) or `-C 15` (2–3). After the ordinary result is assembled, measure
 its compact-JSON UTF-8 size. If it exceeds `result_max_bytes`, binary-search
@@ -122,7 +123,8 @@ chain of the current path is open, so the descriptors held are bounded by
 the path depth. A file that fails either check (outside the base, swapped
 for a symlink, removed, or no longer a regular file) is omitted with all
 its lines, and its retained matches are subtracted from `count`. Adaptive
-discovery checks every file in its final entries the same way. The text of
+discovery checks every file in its final entries the same way; the matches of a
+dropped file leave the adaptive `count` and `candidate_files`. The text of
 each reported line is rg's text, as in r6. If the server has too many open
 files to check a path, the call fails with `too_many_open_files`; no entry
 is dropped silently. Benign results are unchanged, including a search base
