@@ -137,6 +137,27 @@ async def run_arm(server, wire, arm, *, adapter_on):
     }
 
 
+def arm_failures(results, mode: str) -> list[str]:
+    """Per-arm lifecycle checks; one entry per failed check of each arm."""
+    failed = []
+    for arm, result in results:
+        hinted = mode != "OFF" and arm["arm"] == "CANDIDATE"
+        checks = {
+            "errors": result["errors"] == [],
+            "route": result["route"] == "BOUND",
+            "values": result["values"] == arm["expected_values"],
+            "echo": result["echo"] == {"ok": True},
+            "hint": (result["hint"] == result["handle"]) is hinted,
+            "live": result["live"] == 1,
+            "retired": result["retired"] == 1,
+            "grant_after_close": result["grant_after_close"] is None,
+            "remaining": int(result["remaining"]) > 0,
+        }
+        name = f"{arm['pair_id']}-{arm['arm']}"
+        failed += [f"{name}:{check}" for check, ok in checks.items() if not ok]
+    return failed
+
+
 #: (frozen block, lab mode). OFF = adapter off for every arm (STRUCT NOT_RUN).
 BLOCKS = [
     ("META", "META"),
@@ -169,19 +190,12 @@ async def test_capacity_dry_run_all_arms_of_one_carrier_phase(tmp_path, carrier,
             on = mode != "OFF" and arm["arm"] == "CANDIDATE"
             results.append((arm, await run_arm(server, wire, arm, adapter_on=on)))
         notes = [c for c in wire.calls if c.tool == "fixture_unrelated_read"]
-    for arm, result in results:
-        assert result["errors"] == [] and result["route"] == "BOUND"  # nosec B101 - pytest assertion
-        assert result["values"] == arm["expected_values"]  # nosec B101 - pytest assertion
-        assert result["echo"] == {"ok": True}  # nosec B101 - pytest assertion
-        hinted = mode != "OFF" and arm["arm"] == "CANDIDATE"
-        assert (result["hint"] == result["handle"]) is hinted  # nosec B101 - pytest assertion
+    assert arm_failures(results, mode) == []  # nosec B101 - pytest assertion
     assert len(notes) == 24  # nosec B101 - pytest assertion
     for call in notes:
         assert ("structuredContent" in call.result) is not text_u  # nosec B101 - pytest assertion
         blocks = len(call.result["content"])
         assert blocks == (1 + len(call.hints) if text_u else 1)  # nosec B101 - pytest assertion
-        assert result["live"] == 1 and result["retired"] == 1  # nosec B101 - pytest assertion
-        assert result["grant_after_close"] is None and int(result["remaining"]) > 0  # nosec B101 - pytest assertion
     keys = ledger_rows(server, "SELECT kd,ns FROM keys")
     alloc = ledger_rows(server, "SELECT jobref,kd,state FROM alloc")
     ns_of = dict(keys)
@@ -226,3 +240,33 @@ async def test_capacity_all_tc_subphases_in_one_phase(tmp_path):
     assert grants[0] == grants[1] <= Limits().grants  # nosec B101 - pytest assertion
     keys = ledger_rows(server, "SELECT kd FROM keys")
     assert len(keys) == len({k for (k,) in keys})  # nosec B101 - pytest assertion
+
+
+def test_arm_checks_catch_a_bad_non_final_arm():
+    """Negative control (review TEXTU-02): a corrupt early arm must fail."""
+    arms = [a for a in SLOTS["arms"] if a["carrier"] == "TEXT"][:3]
+    good = {
+        "errors": [],
+        "route": "BOUND",
+        "hint": None,
+        "handle": "j_000000000000",
+        "echo": {"ok": True},
+        "live": 1,
+        "retired": 1,
+        "grant_after_close": None,
+        "remaining": "1000",
+    }
+    results = [(arm, good | {"values": arm["expected_values"]}) for arm in arms]
+    assert arm_failures(results, "OFF") == []  # nosec B101 - pytest assertion
+    bad = {
+        "live": 0,
+        "retired": 0,
+        "grant_after_close": "NOT_REVOKED",
+        "remaining": "0",
+    }
+    results[0] = (results[0][0], results[0][1] | bad)
+    name = f"{arms[0]['pair_id']}-{arms[0]['arm']}"
+    assert arm_failures(results, "OFF") == [  # nosec B101 - pytest assertion
+        f"{name}:{check}"
+        for check in ("live", "retired", "grant_after_close", "remaining")
+    ]

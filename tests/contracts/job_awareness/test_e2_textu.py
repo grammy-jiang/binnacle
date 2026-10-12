@@ -36,7 +36,10 @@ def text_u(path) -> E2Server:
 
 
 def scan(server: E2Server, raws: list[bytes]) -> list[str]:
-    """Raw platform values in any wire result, log row or lab export."""
+    """Raw platform values in any wire result, log row or lab export.
+
+    ``exports`` includes the synthetic argument log (review ADV-TU-02).
+    """
     blobs = list(raws) + [format_fields(row).encode() for row in server.rows]
     blobs += exports(server)
     return [
@@ -170,3 +173,18 @@ async def test_canonical_key_selector_is_owner_scoped_on_the_wire(tmp_path):
     assert scan(server, raws) == []  # nosec B101 - pytest assertion
     for raw in raws:
         assert _RAW.search(raw) is None  # nosec B101 - pytest assertion
+
+
+@in_loop
+async def test_scan_covers_the_argument_log(tmp_path):
+    """Negative control (ADV-TU-02): a raw-looking value in a tool argument
+    reaches only the synthetic argument log, and the scan reports it."""
+    server = text_u(tmp_path / "phase")
+    planted = "v1/" + "Q" * 76
+    async with running(server) as wire:
+        call = await wire.call(
+            chat("scan-A"), "fixture_unrelated_read", {"context": planted}
+        )
+    assert planted.encode() not in call.raw  # nosec B101 - pytest assertion
+    assert any(planted in line for line in server.argument_log)  # nosec B101 - pytest assertion
+    assert scan(server, [call.raw]) == [planted]  # nosec B101 - pytest assertion

@@ -136,6 +136,21 @@ STRUCT carrier (§9.2 S-1) is not implemented; it waits for CV (c′).
   `tools/list` hash is the same for the control and candidate arms. The STRUCT
   carrier is still not implemented.
 
+## Code review of the TEXT-U branch: fixes
+
+- **TEXTU-01.** The routed carrier rule is checked on every call, not only
+  at bind time. The adapter records the carrier that the routed bind rules
+  accepted (`routed_carrier`). Both routed admission and `_render` require
+  META for a schema-backed binding and TEXT for a `NO_STRUCTURE` binding,
+  and require the current carrier to equal the recorded one. A carrier
+  reassigned after bind returns the original result, consumes no receipt,
+  and the lab resets the reservation (`PENDING`).
+- **TEXTU-02.** The capacity dry run checks the lifecycle of every arm again
+  (`arm_failures`). A negative control proves that a bad non-final arm fails.
+- **ADV-TU-02.** The raw-value scan covers the synthetic argument log. A
+  negative control plants a raw-looking value in a tool argument and the
+  scan reports it.
+
 ## What is NOT claimed
 
 - No authentication, no authenticated per-chat authorization and no replay
