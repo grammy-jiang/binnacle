@@ -379,7 +379,9 @@ def main(argv: list[str] | None = None) -> int:
             os.close(lockfd)
         log.error("event=service_watchdog_start_refused reason=%s", type(exc).__name__)
         return 2
-    assert lockfd is not None
+    if lockfd is None:
+        log.error("event=service_watchdog_start_refused reason=missing_lock")
+        return 2
     try:
         watchdog = Watchdog(
             Supervisor(host),
