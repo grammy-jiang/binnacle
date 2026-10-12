@@ -16,7 +16,12 @@ from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
 from binnacle.config import EditFileSettings, RootsSettings, get_settings
+from binnacle.errors import CodedToolError
 from binnacle.features.files.paths import FileToolAccess, nearby_hint, resolve_path
+from binnacle.platform.contracts.special_file_contracts import (
+    SPECIAL_FILE_CODE,
+    SPECIAL_FILE_TEXT,
+)
 
 _BOM_CODECS = (
     (b"\xff\xfe\x00\x00", "utf-32-le"),
@@ -139,6 +144,8 @@ def edit_file_impl(
             )
         if resolved.is_dir():
             raise ToolError(f"Path is a directory, not a file: {resolved}.")
+        if not resolved.is_file():  # Never open a FIFO, socket or device.
+            raise CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
     if not old_string:
         raise ToolError(
             "old_string must be non-empty. To create or fully rewrite a "

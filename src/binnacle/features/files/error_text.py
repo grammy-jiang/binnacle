@@ -21,6 +21,10 @@ from binnacle.platform.contracts.file_access_contracts import (
     ListRequest,
     RootGrant,
 )
+from binnacle.platform.contracts.special_file_contracts import (
+    SPECIAL_FILE_CODE,
+    SPECIAL_FILE_TEXT,
+)
 
 # Tool named by the last access.require() in this call context.
 TOOL: ContextVar[str] = ContextVar("binnacle_file_tool", default="read_file")
@@ -154,6 +158,9 @@ def linux_error(
     code = exc.code
     if code in ("file_not_found", "path_not_found"):
         return _missing(tool, files, grant, rel, display)
+    if code == SPECIAL_FILE_CODE:
+        # The shared text for every tool on both OSes (r6 W3 PX1).
+        return CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
     if code == "path_is_directory":
         use = "" if tool == "edit_file" else " Use list_files to browse it."
         return CodedToolError(code, f"Path is a directory, not a file: {display}.{use}")
@@ -166,6 +173,9 @@ def linux_error(
             return outside_error(allowed, caller_form(display, resolved, canonical))
     except (RuntimeError, OSError):
         return None
+    if resolved.exists() and not resolved.is_dir() and not resolved.is_file():
+        # A FIFO, socket or device opened as a directory (list, glob).
+        return CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
     if tool == "list_files" and resolved.is_file():
         return CodedToolError(
             "path_is_file",

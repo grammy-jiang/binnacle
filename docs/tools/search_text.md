@@ -151,6 +151,8 @@ in r6. ripgrep is run with `--no-config` and without `--follow`, and
 `RIPGREP_CONFIG_PATH` is removed from its environment. On macOS the tool
 uses the native search adapter, not this path.
 
+**Shared refusal texts (r6 W3 PX1)**: a FIFO, socket or device is `special_file_unsupported` with the one text `SPECIAL_FILE_TEXT` from `platform/contracts/special_file_contracts.py` on both OSes, for read_file, edit_file, write_file, list_files (list and glob) and search_text; nothing opens it. Every descriptor shortage is `too_many_open_files`, worded from the one template `TOO_MANY_OPEN_FILES_TEXT` there: "{tool} could not {task}: the server has too many open files. {advice}".
+
 ## 4. Test checklist (tests/unit/tools/test_search_text.py)
 
 Match basics (file/line/text, no number prefix); smart-case both ways;

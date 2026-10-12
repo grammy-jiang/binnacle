@@ -213,9 +213,10 @@ looks like image/png) — content not shown.`
    what it is." The step-2 stat refuses them before any open; the checks
    below still refuse one that a race brings in after the stat, also when
    the open itself fails (a socket is ENXIO, a disk device EACCES).
-   On Darwin, `read_file` rewords the adapter's `special_file_unsupported.`
-   with the same shared text, so both OSes say the same thing; the Darwin
-   call site moves to the constant in r6 W3 wave B.
+   On Darwin, `FileToolAccess.operation` words the adapter's
+   `special_file_unsupported` with the same shared text
+   (`error_text.linux_error`, r6 W3 PX1), for every file tool, so both OSes
+   say the same thing.
    `read_file` words them: `fd_walk` still raises `not_a_regular_file`,
    `file_io_failed` or `permission_denied`, and an lstat that shows the
    checked `(st_dev, st_ino)` with a FIFO, socket or device type turns that

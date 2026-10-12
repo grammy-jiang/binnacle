@@ -20,6 +20,10 @@ from binnacle.errors import CodedToolError
 from binnacle.features.files.paths import full_match
 from binnacle.features.search.fd_chain import EXHAUSTED, DirectoryChain
 from binnacle.features.search.rg_env import NO_CONFIG, rg_env
+from binnacle.platform.contracts.special_file_contracts import (
+    TOO_MANY_OPEN_FILES_CODE,
+    too_many_open_files_text,
+)
 
 
 def is_shortage(exc: OSError) -> bool:
@@ -32,10 +36,10 @@ def descriptor_shortage(task: str, advice: str) -> CodedToolError:
 
     One policy with search_text (SRC-W2-04, SD-79): a descriptor shortage
     is not evidence about a path, so nothing is omitted or kept unchecked.
+    The text is the shared template (special_file_contracts, r6 W3 PX1).
     """
     return CodedToolError(
-        "too_many_open_files",
-        f"list_files could not {task}: the server has too many open files. {advice}",
+        TOO_MANY_OPEN_FILES_CODE, too_many_open_files_text("list_files", task, advice)
     )
 
 

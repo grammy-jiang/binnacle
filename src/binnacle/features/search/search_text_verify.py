@@ -24,9 +24,17 @@ import stat
 from collections.abc import Iterable
 from pathlib import Path
 
+from binnacle.config import RootsSettings
 from binnacle.errors import CodedToolError
+from binnacle.features.files.paths import nearby_hint
 from binnacle.features.search.fd_chain import EXHAUSTED, DirectoryChain
 from binnacle.features.search.search_text_stream_reduce import ExactScanResult
+from binnacle.platform.contracts.special_file_contracts import (
+    SPECIAL_FILE_CODE,
+    SPECIAL_FILE_TEXT,
+    TOO_MANY_OPEN_FILES_CODE,
+    too_many_open_files_text,
+)
 
 
 def components(path: str) -> list[str] | None:
@@ -60,9 +68,12 @@ def is_regular(chain: DirectoryChain, parts: list[str]) -> bool:
     except OSError as exc:
         if exc.errno in EXHAUSTED:
             raise CodedToolError(
-                "too_many_open_files",
-                "search_text could not check the reported files: the server "
-                "has too many open files. Retry, or narrow the search.",
+                TOO_MANY_OPEN_FILES_CODE,
+                too_many_open_files_text(
+                    "search_text",
+                    "check the reported files",
+                    "Retry, or narrow the search.",
+                ),
             ) from exc
         return False
     return stat.S_ISREG(info.st_mode)
@@ -159,3 +170,17 @@ def candidate_files(payload: dict) -> int:
             if isinstance(entry, dict) and isinstance(entry.get("file"), str)
         }
     )
+
+
+def require_searchable(resolved: Path, roots: RootsSettings) -> None:
+    """The Linux path's refusals for the search base itself.
+
+    A missing base is path_not_found with the nearby hint; a FIFO, socket or
+    device is special_file_unsupported with the shared text, before rg could
+    block on or fail at it (r6 W3 PX1).
+    """
+    if not resolved.exists():
+        hint = nearby_hint(resolved.parent, roots=roots)
+        raise CodedToolError("path_not_found", f"Path not found: {resolved}.{hint}")
+    if not resolved.is_dir() and not resolved.is_file():
+        raise CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)

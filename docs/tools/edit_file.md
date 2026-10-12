@@ -68,6 +68,8 @@ lossy; outside roots.
 
 **In-root symlinks on Darwin (r6 W3 PX1, R-OS1-F3)**: a edit through a link whose target lies in a configured root edits the target and keeps the link, as on Linux; the reported path is the target. `FileToolAccess` resolves the request once and opens the in-root target with the no-follow descriptor walk (one hop only). A target outside every root is `path_outside_root`.
 
+**Shared refusal texts (r6 W3 PX1)**: a FIFO, socket or device is `special_file_unsupported` with the one text `SPECIAL_FILE_TEXT` from `platform/contracts/special_file_contracts.py` on both OSes, for read_file, edit_file, write_file, list_files (list and glob) and search_text; nothing opens it. Every descriptor shortage is `too_many_open_files`, worded from the one template `TOO_MANY_OPEN_FILES_TEXT` there: "{tool} could not {task}: the server has too many open files. {advice}".
+
 ## 4. Test checklist (tests/unit/tools/test_edit_file.py)
 
 Exact single replace (payload + file content + snippet window); delete

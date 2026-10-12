@@ -15,9 +15,14 @@ from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
 from binnacle.config import RootsSettings, get_settings
+from binnacle.errors import CodedToolError
 from binnacle.features.files.error_text import followed
 from binnacle.features.files.paths import FileToolAccess, resolve_path
 from binnacle.platform.contracts.file_access_contracts import RootGrant
+from binnacle.platform.contracts.special_file_contracts import (
+    SPECIAL_FILE_CODE,
+    SPECIAL_FILE_TEXT,
+)
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -60,6 +65,9 @@ def write_file_impl(
             raise ToolError(
                 f"Path is a directory, not a file: {resolved}. Use list_files to browse it."
             )
+        if resolved.exists() and not resolved.is_file():
+            # A FIFO, socket or device: never opened for writing (r6 W3 PX1).
+            raise CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
         previous_bytes = resolved.stat().st_size if resolved.exists() else None
         data = content.encode("utf-8")
         try:

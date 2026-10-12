@@ -28,6 +28,10 @@ from binnacle.features.files.paths import (
     resolve_path,
 )
 from binnacle.platform.contracts.file_access_contracts import ListRequest
+from binnacle.platform.contracts.special_file_contracts import (
+    SPECIAL_FILE_CODE,
+    SPECIAL_FILE_TEXT,
+)
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -316,6 +320,8 @@ def list_files_impl(
             "directory_not_found",
             f"Directory not found: {resolved}.{nearby_hint(resolved.parent, roots=roots)}",
         )
+    if not resolved.is_dir() and not resolved.is_file():
+        raise CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
     if not resolved.is_dir():
         raise CodedToolError(
             "path_is_file",

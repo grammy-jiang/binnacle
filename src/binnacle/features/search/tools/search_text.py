@@ -17,7 +17,6 @@ from binnacle.errors import CodedToolError
 from binnacle.features.files.paths import (
     FileToolAccess,
     full_match,
-    nearby_hint,
     resolve_path,
 )
 from binnacle.features.search.search_text_adaptive import (
@@ -57,6 +56,7 @@ from binnacle.features.search.search_text_telemetry import (
 )
 from binnacle.features.search.search_text_verify import (
     candidate_files,
+    require_searchable,
     verify_adaptive,
     verify_exact_scan,
 )
@@ -431,11 +431,7 @@ def search_text_impl(
             settings,
         )
     resolved = resolve_path(path, roots=roots)
-    if not resolved.exists():
-        raise CodedToolError(
-            "path_not_found",
-            f"Path not found: {resolved}.{nearby_hint(resolved.parent, roots=roots)}",
-        )
+    require_searchable(resolved, roots)
     max_results = max(1, min(max_results, settings.max_results_cap))
 
     # mode stays in the line for journal readers; since the removal of the
