@@ -113,6 +113,15 @@ def manifest_groups() -> dict[str, set[str]]:
         "job_awareness_lab": {
             "mcp/job_awareness_session.py",
         },
+        # Production Job Awareness hints (default off, 2026-10-12): the
+        # request-local route extraction, the carrier and ledger, and the
+        # composition that joins them. Mirrors job-awareness-live-no-lab.
+        "job_awareness_live": {
+            "job_awareness_composition.py",
+            "mcp/job_awareness_live.py",
+            "mcp/job_awareness_live_ledger.py",
+            "mcp/job_awareness_route.py",
+        },
         "platform_contracts": {
             "platform/__init__.py",
             "platform/contracts/__init__.py",

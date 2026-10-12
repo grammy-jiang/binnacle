@@ -29,24 +29,40 @@ PUBLIC_TOOLS = [
     "stop_job",
     "write_file",
 ]
+# 2026-10-12 production enable: the reviewed route parser, fence and STRUCT
+# carrier modules are production-reachable (default off); these stay lab only.
 LAB_MODULES = [
     "binnacle.mcp.job_awareness_session",
     "binnacle.mcp.job_awareness_hint",
-    "binnacle.mcp.job_awareness_hint_struct",
     "binnacle.mcp.job_awareness_hint_routed",
     *(
         f"binnacle.features.commands.job_awareness.session_{name}"
         for name in (
             "binding",
             "emission",
-            "fence",
             "lab",
-            "route",
             "serving",
             "snapshot",
         )
     ),
 ]
+#: Every Job Awareness module the production server may load when the
+#: ``[job_awareness] hints_enabled`` switch is on.
+LIVE_MODULES = {
+    "binnacle.job_awareness_composition",
+    "binnacle.mcp.job_awareness_live",
+    "binnacle.mcp.job_awareness_live_ledger",
+    "binnacle.mcp.job_awareness_route",
+    "binnacle.mcp.job_awareness_hint_identity",
+    "binnacle.mcp.job_awareness_hint_schema",
+    "binnacle.mcp.job_awareness_hint_struct",
+    "binnacle.mcp.job_awareness_hint_walk",
+    "binnacle.features.commands.job_awareness",
+    "binnacle.features.commands.job_awareness.identifiers",
+    "binnacle.features.commands.job_awareness.models",
+    "binnacle.features.commands.job_awareness.session_fence",
+    "binnacle.features.commands.job_awareness.session_route",
+}
 PROBE = """
 import asyncio, json, sys
 {inject}
@@ -65,11 +81,13 @@ print(json.dumps({{
 """
 
 
-def probe(tmp_path: Path, inject: str = "") -> dict[str, list[str]]:
+def probe(
+    tmp_path: Path, inject: str = "", extra_config: str = ""
+) -> dict[str, list[str]]:
     token = tmp_path / "token"
     token.write_text("Bearer synthetic-no-path\n")
     config = tmp_path / "config.toml"
-    config.write_text(f'[auth]\ntoken_file = "{token}"\n')
+    config.write_text(f'[auth]\ntoken_file = "{token}"\n{extra_config}')
     proc = subprocess.run(  # nosec B603 - fixed interpreter and script
         [sys.executable, "-c", PROBE.format(inject=inject)],
         env=clean_env(config),
@@ -88,6 +106,21 @@ def test_production_entry_points_load_no_lab_module(tmp_path):
     assert seen["modules"] == []  # nosec B101 - pytest assertion
     assert seen["tools"] == PUBLIC_TOOLS  # nosec B101 - pytest assertion
     assert not any("job_awareness" in m for m in seen["middleware"])  # nosec B101 - pytest assertion
+
+
+def test_explicit_off_loads_no_job_awareness_module(tmp_path):
+    seen = probe(tmp_path, extra_config="[job_awareness]\nhints_enabled = false\n")
+    assert seen["modules"] == []  # nosec B101 - pytest assertion
+    assert seen["tools"] == PUBLIC_TOOLS  # nosec B101 - pytest assertion
+
+
+def test_enabled_loads_only_production_modules(tmp_path):
+    seen = probe(tmp_path, extra_config="[job_awareness]\nhints_enabled = true\n")
+    loaded = set(seen["modules"])
+    assert loaded <= LIVE_MODULES, sorted(loaded - LIVE_MODULES)  # nosec B101 - pytest assertion
+    assert not loaded & set(LAB_MODULES)  # nosec B101 - pytest assertion
+    assert "binnacle.mcp.job_awareness_live" in seen["middleware"]  # nosec B101 - pytest assertion
+    assert seen["tools"] == PUBLIC_TOOLS  # nosec B101 - pytest assertion
 
 
 def test_probe_negative_control_sees_an_injected_lab_import(tmp_path):

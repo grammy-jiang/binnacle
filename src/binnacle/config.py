@@ -364,6 +364,31 @@ class JobsSettings(BaseModel):
         return self._removed_keys
 
 
+class JobAwarenessSettings(BaseModel):
+    """Per-conversation job-completion hints for ChatGPT (default off).
+
+    Kill switch: set ``hints_enabled = false`` and restart the MCP service.
+    See docs/job-awareness-implementation/production-enable.md.
+    """
+
+    hints_enabled: bool = Field(
+        False,
+        description=(
+            "Add a job_awareness_hint field to a later tool result in the "
+            "ChatGPT conversation that started a background job, once, after "
+            "the job exits. Off: no Job Awareness code is loaded."
+        ),
+    )
+    client_names: tuple[str, ...] = Field(
+        default=("openai-mcp", "openai-mcp(ChatGPT)"),
+        min_length=1,
+        description=(
+            "Exact client names (not prefixes) that may receive hints and "
+            "the declared hint field. Every other client is unchanged."
+        ),
+    )
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="BINNACLE_",
@@ -381,6 +406,7 @@ class Settings(BaseSettings):
     edit_file: EditFileSettings = Field(default_factory=EditFileSettings)
     run_command: RunCommandSettings = Field(default_factory=RunCommandSettings)
     jobs: JobsSettings = Field(default_factory=JobsSettings)
+    job_awareness: JobAwarenessSettings = Field(default_factory=JobAwarenessSettings)
     rg_bin: str = Field("rg", description="ripgrep binary for list/search.")
     client_tools: dict[str, tuple[str, ...]] = Field(
         default={

@@ -137,6 +137,10 @@ def log_effective_config() -> None:
     _log_tool_config(
         "edit_file", snippet_context_lines=s.edit_file.snippet_context_lines
     )
+    _log_tool_config(
+        "job_awareness",
+        hints_enabled=str(s.job_awareness.hints_enabled).lower(),
+    )
 
 
 def _log_jobs_config(s) -> None:

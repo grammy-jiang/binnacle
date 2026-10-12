@@ -245,6 +245,12 @@ def create_application(
         )
     )
     root.add_middleware(ClientToolVisibility(settings.client_tools, identity))
+    if settings.job_awareness.hints_enabled:  # off: no Job Awareness import
+        from binnacle.job_awareness_composition import install_job_awareness
+
+        install_job_awareness(
+            root, settings=settings, backend=backend, identity=identity
+        )
     root.add_transform(PublicToolOrder())
     root.add_transform(ClientToolVisibilityTransform())
     root.mount(

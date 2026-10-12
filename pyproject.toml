@@ -486,6 +486,9 @@ source_modules = [
     "binnacle.mcp.job_awareness_hint_identity",
     "binnacle.mcp.job_awareness_hint_struct",
     "binnacle.mcp.job_awareness_hint_routed",
+    "binnacle.mcp.job_awareness_live",
+    "binnacle.mcp.job_awareness_live_ledger",
+    "binnacle.mcp.job_awareness_route",
 ]
 forbidden_modules = [
     "binnacle.features",
@@ -505,17 +508,56 @@ forbidden_modules = ["binnacle.mcp.job_awareness_session"]
 id = "job-awareness-lab-not-in-production"
 name = "Production entry points never import any E2 lab module (S5 no-path check)"
 type = "forbidden"
+# Production (default off) may reach the reviewed route, fence and STRUCT
+# carrier modules only through binnacle.job_awareness_composition; the lab
+# ledger, allocation, serving, emission, extraction and synthetic adapter
+# stay unreachable (2026-10-12 production enable).
 source_modules = ["binnacle.server", "binnacle.application", "binnacle.cli"]
 forbidden_modules = [
     "binnacle.mcp.job_awareness_session",
     "binnacle.mcp.job_awareness_hint",
-    "binnacle.mcp.job_awareness_hint_struct",
     "binnacle.mcp.job_awareness_hint_routed",
     "binnacle.features.commands.job_awareness.session_binding",
     "binnacle.features.commands.job_awareness.session_emission",
-    "binnacle.features.commands.job_awareness.session_fence",
     "binnacle.features.commands.job_awareness.session_lab",
-    "binnacle.features.commands.job_awareness.session_route",
     "binnacle.features.commands.job_awareness.session_serving",
     "binnacle.features.commands.job_awareness.session_snapshot",
 ]
+
+[[tool.importlinter.contracts]]
+id = "job-awareness-live-no-lab"
+name = "Production Job Awareness modules never import an E2 lab module"
+type = "forbidden"
+source_modules = [
+    "binnacle.job_awareness_composition",
+    "binnacle.mcp.job_awareness_live",
+    "binnacle.mcp.job_awareness_live_ledger",
+    "binnacle.mcp.job_awareness_route",
+]
+forbidden_modules = [
+    "binnacle.mcp.job_awareness_session",
+    "binnacle.mcp.job_awareness_hint",
+    "binnacle.mcp.job_awareness_hint_routed",
+    "binnacle.features.commands.job_awareness.session_binding",
+    "binnacle.features.commands.job_awareness.session_emission",
+    "binnacle.features.commands.job_awareness.session_lab",
+    "binnacle.features.commands.job_awareness.session_serving",
+    "binnacle.features.commands.job_awareness.session_snapshot",
+    "binnacle.features.commands.job_awareness.grants",
+    "binnacle.features.commands.job_awareness.receipt_store",
+    "tests",
+]
+
+[[tool.importlinter.contracts]]
+id = "job-awareness-live-only-via-composition"
+name = "Only the Job Awareness composition imports the production hint carrier"
+type = "protected"
+protected_modules = ["binnacle.mcp.job_awareness_live"]
+allowed_importers = ["binnacle.job_awareness_composition"]
+
+[[tool.importlinter.contracts]]
+id = "job-awareness-composition-only-via-application"
+name = "Only the application composition root installs Job Awareness hints"
+type = "protected"
+protected_modules = ["binnacle.job_awareness_composition"]
+allowed_importers = ["binnacle.application"]

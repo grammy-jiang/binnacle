@@ -38,11 +38,19 @@ raw-value scan; a field that looks like a platform value is refused.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Iterable, Mapping
 from enum import Enum
-from typing import Protocol, TypeVar
+from typing import Protocol
 
-from fastmcp.server.dependencies import fastmcp_request_ctx
+# The reviewed extraction lives in the production-allowed module; the lab
+# re-exports the same objects (one implementation, pinned by a test).
+from binnacle.mcp.job_awareness_route import (
+    RAW_VALUE,
+    SESSION_HEADER,
+    SUBJECT_HEADER,
+    Classifier,
+    route_call,
+)
 
 __all__ = [
     "LAB_MARKERS",
@@ -50,6 +58,7 @@ __all__ = [
     "ROUTE_STATUSES",
     "SESSION_HEADER",
     "SUBJECT_HEADER",
+    "Classifier",
     "LabLogError",
     "format_fields",
     "lab_fields",
@@ -58,9 +67,6 @@ __all__ = [
     "route_fields",
 ]
 
-#: Mirrors of the core ``session_route`` names (pinned equal by a contract test).
-SESSION_HEADER = "x-openai-session"
-SUBJECT_HEADER = "x-openai-subject"
 ROUTE_STATUSES = frozenset(
     {
         "BOUND",
@@ -74,8 +80,6 @@ ROUTE_STATUSES = frozenset(
         "SUSPENDED",
     }
 )
-#: Every export, log and argument log is scanned for this (design §2.7).
-RAW_VALUE = re.compile(r"v1/[A-Za-z0-9_-]{40,}")
 #: Harness-only ``ja_lab_marker`` vocabulary (TC-5 N5 scripted replay).
 LAB_MARKERS = frozenset({"scripted"})
 _FIELD_NAME = re.compile(r"ja_[a-z_]{1,24}|rid|emit_state|grant_remaining_ms")
@@ -83,9 +87,6 @@ _FIELD_VALUE = re.compile(r"[A-Za-z0-9_.:,-]{1,128}")
 _HANDLE = re.compile(r"j_[0-9a-f]{12}")
 _RID = re.compile(r"[0-9a-f]{32}")
 _LOG_KEY = re.compile(r"[0-9a-f]{16}")
-R = TypeVar("R")
-#: ``(session header values, subject header values, raw _meta or None)``.
-Classifier = Callable[[list[str], list[str], "dict[str, object] | None"], R]
 
 
 class LoggedKey(Protocol):
@@ -109,33 +110,6 @@ _EMIT_STATES = frozenset({"PENDING", "RESERVED", "EMITTED", "ABORTED", "-"})
 
 class LabLogError(ValueError):
     """A log field failed validation; the caller logs nothing for it."""
-
-
-def route_call(classify: Classifier[R]) -> R:
-    """Classify the current ``tools/call`` from its own request only.
-
-    ``classify`` is the core parser bound to the epoch keyer. It receives the
-    raw values once and returns a digest-only outcome.
-
-    Call it inside the ``tools/call`` handler (for example from a middleware
-    ``on_call_tool``). ``getlist`` keeps duplicate header lines and matches
-    names case-insensitively. Without a bound request context or an HTTP
-    request (in-memory transport), both header lists are empty and the parser
-    returns ``NO_SESSION``. A non-dict ``_meta`` is absent (``NO_META``);
-    non-string ``_meta`` values reach the parser untouched and fail closed
-    there. The outcome holds digests only; raw values do not outlive this call.
-    """
-    context = fastmcp_request_ctx.get()
-    request = None if context is None else context.request
-    if context is None or request is None:
-        return classify([], [], None)
-    headers = request.headers
-    meta = context.meta
-    return classify(
-        headers.getlist(SESSION_HEADER),
-        headers.getlist(SUBJECT_HEADER),
-        meta if type(meta) is dict else None,
-    )
 
 
 def _checked(name: str, value: str) -> str:
