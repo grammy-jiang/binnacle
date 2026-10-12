@@ -50,8 +50,11 @@ def glob_entries(root: Path, lines: list[str]) -> list[dict]:
     lstat-ed relative to that descriptor. A path whose directory is no
     longer a directory (swapped for a symlink or a file) or whose final
     component is now a symlink is omitted: no outside object is typed or
-    sized. Any other failure, including a descriptor shortage, keeps the
-    entry without bytes, as r6 did when p.stat() failed.
+    sized. A final component that is now a directory, a FIFO or any other
+    non-regular object is omitted too: an entry typed 'file' is a regular
+    file, as in search_text_verify.is_regular (SRC-W2-12). Any other
+    failure, including a descriptor shortage, keeps the entry without
+    bytes, as r6 did when p.stat() failed.
     """
     entries: list[dict] = []
     # Plain string splitting: PurePath costs more than the walk itself. The
@@ -71,7 +74,7 @@ def glob_entries(root: Path, lines: list[str]) -> list[dict]:
                     continue
                 entries.append(entry)
                 continue
-            if stat.S_ISLNK(info.st_mode):
+            if not stat.S_ISREG(info.st_mode):
                 continue
             entry["bytes"] = info.st_size
             entries.append(entry)
