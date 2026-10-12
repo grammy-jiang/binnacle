@@ -246,3 +246,15 @@ def test_list_for_other_clients_is_the_same_object():
         return tools
 
     assert asyncio.run(mw.on_list_tools(context("x"), call_next)) is tools
+
+
+def test_a_conversation_without_jobs_never_takes_the_fence():
+    fences = FenceSet(1.0)
+    mw = middleware(fences=fences)
+    for name in ("list_files", "job_status", "stop_job", "read_file"):
+        asyncio.run(
+            call(mw, context(name, job_id=JOB), result(job_id=JOB, state="exited"))
+        )
+    assert fences._locks == {}
+    started(mw)
+    assert len(fences._locks) == 1

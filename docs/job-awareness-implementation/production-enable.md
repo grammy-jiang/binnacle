@@ -52,8 +52,9 @@ All state is in memory and owner scoped (`mcp/job_awareness_live_ledger.py`):
   `reason=key_full`), 256 keys (least recently used dropped), 24 h per row.
 - **Acknowledge.** A `job_status` result for that `job_id` that shows
   `state == "exited"`, or a `stop_job` call for it, marks the row `ACKED`.
-- **Emit.** Under the reviewed per-key fence (`session_fence.FenceSet`,
-  5 s), the key's own `PENDING` jobs are read through the backend's
+- **Emit.** A call that is not `run_command` and whose key has no pending
+  job returns at once, without the fence. Otherwise, under the reviewed
+  per-key fence (`session_fence.FenceSet`, 5 s), the key's own `PENDING` jobs are read through the backend's
   `job_state` (in a worker thread, 2 s timeout each). At most two `exited`
   jobs are rendered with fixed words (job ids and the exit code or signal
   only; at most 512 UTF-8 bytes). The rows become `EMITTED` only after the
@@ -249,5 +250,7 @@ Environment override for a one-off test: `BINNACLE_JOB_AWARENESS__HINTS_ENABLED=
   seen.
 - Cancellation after the commit and before the transport sends the result
   can lose one hint (at most once, never twice).
+- `FenceSet` has no eviction: it keeps one small `asyncio.Lock` per
+  conversation that started a background job, until the next restart.
 - Darwin: the composition is host neutral, but only Linux was tested with
   this switch on.

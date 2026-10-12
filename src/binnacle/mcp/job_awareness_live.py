@@ -381,6 +381,10 @@ class JobAwarenessHints(Middleware):
         tool = _tool_name(context)
         call = current_call.get()
         base = {"call": call, "tool": tool, "ja_key": log_key}
+        if tool != "run_command" and not self.ledger.pending(kd, self._clock()):
+            # Nothing to bind, acknowledge or hint. Skipping the fence also
+            # keeps FenceSet (no eviction) to conversations that start jobs.
+            return result
         async with self._fences.hold(kd) as held:
             now = self._clock()
             if not held:
