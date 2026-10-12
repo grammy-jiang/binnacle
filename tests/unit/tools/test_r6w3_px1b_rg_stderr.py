@@ -25,6 +25,7 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from binnacle.config import ListFilesSettings, RootsSettings, SearchTextSettings
+from binnacle.features.files import list_files_glob
 from binnacle.features.files.tools import list_files as lf
 from binnacle.features.search import rg_env
 from binnacle.features.search.search_text_rg import run_rg
@@ -211,10 +212,23 @@ def test_a_non_utf8_permission_line_in_search(tmp_path, root, mode):
     assert note.endswith(f"{root}/bad\\xff. Results exclude their contents.")
 
 
-def test_a_non_utf8_name_from_glob_is_omitted_not_a_crash(tmp_path, root):
+def test_a_non_utf8_name_from_glob_is_omitted_not_a_crash(tmp_path, root, monkeypatch):
+    # APFS cannot store a non-UTF-8 name, so make the bad name EXIST for the
+    # metadata step on every host: lstat of exactly that name answers with a
+    # regular file's stat. Without that, the name is dropped by the ENOENT
+    # omission and the UTF-8 filter in glob_mode is never what removes it
+    # (R-PX1b-F2: the mutant without `shown(line) == line` survived).
+    bad = os.fsdecode(BAD + b".txt")
+    real = os.lstat
+
+    def lstat(path, *, dir_fd=None):
+        return real("m.txt" if path == bad else path, dir_fd=dir_fd)
+
+    monkeypatch.setattr(list_files_glob.os, "lstat", lstat)
     rg = fake_rg(tmp_path, stdout=BAD + b".txt\nm.txt\n", stderr=b"", code=0)
     payload = glob(root, rg).structured_content
     assert [e["path"] for e in payload["entries"]] == [str(root / "m.txt")]
+    assert payload["count"] == 1
 
 
 @MODES

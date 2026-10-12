@@ -5,6 +5,7 @@ does not) and §7.11. Sanitization details: docs/tools/read_file.md §3.
 """
 
 import fnmatch
+import os
 import re
 from functools import lru_cache
 from pathlib import Path, PurePath, PurePosixPath
@@ -36,10 +37,14 @@ def resolve_path(raw: str, *, roots: RootsSettings | None = None) -> Path:
         candidate = Path(cleaned).expanduser()
         if not candidate.is_absolute():
             candidate = roots.default_root / candidate
-        resolved = candidate.resolve()
+        # Not Path.resolve(): before Python 3.13 it raises RuntimeError for a
+        # symlink loop, while 3.13+ is os.path.realpath(strict=False) and
+        # leaves the looping tail in place (so the tools answer not-found).
+        # realpath gives the 3.13 outcome on every supported version.
+        resolved = Path(os.path.realpath(candidate))
         allowed_roots = _canonical_roots(roots)
     except (RuntimeError, OSError) as e:
-        # expanduser() raises RuntimeError for `~nosuchuser`; resolve() can
+        # expanduser() raises RuntimeError for `~nosuchuser`; the resolve can
         # raise OSError on pathological names. Found by the property test
         # 2026-09-13: either would reach the client as an internal error.
         raise CodedToolError(

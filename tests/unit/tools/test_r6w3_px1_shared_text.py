@@ -71,10 +71,17 @@ TOOLS: dict[str, Callable] = {
 }
 
 
+STATE_PARENT = Path("~/.local/state/bt/px1c").expanduser()
+
+
 @pytest.fixture
 def root() -> Iterator[Path]:
-    # A short /tmp path: an AF_UNIX socket path is limited to 104 bytes on Darwin.
-    base = Path(tempfile.mkdtemp(prefix="r6w3-px1-", dir="/tmp")).resolve()
+    # A short path under the per-test state root (never /tmp, an MCP root): an
+    # AF_UNIX socket path is limited to 104 bytes on Darwin. Only this test's
+    # own directory is removed; the shared parent is left to the lane teardown.
+    STATE_PARENT.mkdir(mode=0o700, parents=True, exist_ok=True)
+    base = Path(tempfile.mkdtemp(prefix="st-", dir=STATE_PARENT)).resolve()
+    assert base.parent == STATE_PARENT.resolve() and base.is_absolute()
     os.mkfifo(base / "fifo")
     server = socket.socket(socket.AF_UNIX)
     server.bind(str(base / "sock"))
