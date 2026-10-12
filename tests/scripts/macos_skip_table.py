@@ -73,9 +73,11 @@ platform/darwin/test_process_native.py | A2: per-test Darwin kqueue/posix_spawn 
 platform/darwin/test_job_process_owner.py | A2: per-test Darwin posix_spawn/kqueue manager-owned job leaders (R4 J1, A2 successor)
 platform/darwin/test_ipc_generation.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID contract
 platform/darwin/test_job_manager_service.py | A3: per-test Darwin getpeereid/LOCAL_PEERPID job-manager IPC (R4 J2, A3 successor); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
+platform/darwin/test_job_manager_service_stop_e2e.py | A3: native stop persistence split from manager service test; SD-97 manager requires os.waitid
 platform/darwin/test_job_manager_entry.py | A3: per-test Darwin com.binnacle.jobs entry point, J1 owner and job-manager IPC (R4 J2r, A3 successor); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
 platform/darwin/test_job_manager_entry_owner.py | A3: per-test Darwin J1 owner behind the com.binnacle.jobs manager: J1r handoff and J1g repairs (r6 T1, split from test_job_manager_entry.py); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
 platform/darwin/test_durable_jobs_e2e.py | A3: per-test Darwin kqueue/getpeereid job-manager E2E over the real J1 owner and J2 manager (R4 J5); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
+platform/darwin/test_durable_jobs_launchd_restart.py | A3: per-test Darwin native launchd restart, split from J5 to retain 500-line module limit; SD-97 manager requires os.waitid
 platform/darwin/test_j1g_leader_fence.py | A2: per-test Darwin waitid(WNOWAIT)/KERN_PROC_PGRP leader-exit fence, stopping event and killpg guard (R4 J1g, SD-43); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
 platform/darwin/test_j1g_e2e_survival.py | B0: per-test Darwin real com.binnacle.jobs background-member survival E2E (R4 J1g, SD-43 JCRP-F1); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
 platform/darwin/test_job_manager_resilience.py | A3: per-test Darwin libproc verified-teardown negative test (R4 J2t, RULE-NO-PKILL); the rest of the module runs everywhere
@@ -140,9 +142,11 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_job_process_owner.py": 1,
     "tests/platform/darwin/test_ipc_generation.py": 1,
     "tests/platform/darwin/test_job_manager_service.py": 1,
+    "tests/platform/darwin/test_job_manager_service_stop_e2e.py": 1,
     "tests/platform/darwin/test_job_manager_entry.py": 1,
     "tests/platform/darwin/test_job_manager_entry_owner.py": 1,
     "tests/platform/darwin/test_durable_jobs_e2e.py": 1,
+    "tests/platform/darwin/test_durable_jobs_launchd_restart.py": 1,
     "tests/platform/darwin/test_j1g_leader_fence.py": 1,
     "tests/platform/darwin/test_j1g_e2e_survival.py": 1,
     "tests/platform/darwin/test_job_manager_resilience.py": 1,
