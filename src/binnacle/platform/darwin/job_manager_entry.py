@@ -18,26 +18,16 @@ recreates the private 0700 root and publishes a fresh generation.
 
 from __future__ import annotations
 
-import ctypes
 import logging
 import os
-import re
 import secrets
 import signal
 import sys
 import threading
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from contextlib import suppress
 from pathlib import Path
-
-from pydantic import BaseModel, Field
-from pydantic_settings import (
-    BaseSettings,
-    PydanticBaseSettingsSource,
-    SettingsConfigDict,
-    TomlConfigSettingsSource,
-)
 
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 from binnacle.platform.contracts.native_service_contracts import ServiceLease
@@ -53,12 +43,19 @@ from binnacle.platform.darwin.generation_runtime import (
     unlink_owned,
 )
 from binnacle.platform.darwin.job_group_fence import WAITID_REQUIRED
-from binnacle.platform.darwin.job_manager_service import (
-    MANAGER_LABEL,
-    DarwinJobManager,
+from binnacle.platform.darwin.job_manager_config import read_config
+from binnacle.platform.darwin.job_manager_procinfo import (
+    boot_id,
+    group_listing,  # noqa: F401 - job_group_fence imports it from here (MS1 split)
+)
+from binnacle.platform.darwin.job_manager_records import (
     jobs_dir_writer,
     list_job_ids,
     read_meta,
+)
+from binnacle.platform.darwin.job_manager_service import (
+    MANAGER_LABEL,
+    DarwinJobManager,
 )
 from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
 
@@ -67,14 +64,9 @@ EX_FAILED, EX_USAGE, EX_TEMPFAIL, EX_CONFIG = 1, 64, 75, 78  # sysexits.h
 STOP_MARKER_SUFFIX = ".stop"
 STOP_PENDING_CODE = "manager_stopping"  # D2: typed, retryable start refusal
 STOP_MARKER_AGE_S = (-5.0, 300.0)  # SR6-F1: honored only for -5 s <= age < 300 s
-CONFIG_FILE_ENV = "BINNACLE_CONFIG_FILE"
-# env_nested_delimiter overrides, and the runtime root the client would not share
-_OVERRIDES = ("BINNACLE_JOBS__", "BINNACLE_RUN_COMMAND__", "BINNACLE_RUNTIME_DIR")
-BOOT_SESSION = re.compile(r"[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}")
 SUN_PATH_MAX = 104  # Darwin sockaddr_un.sun_path bytes, terminating NUL included
 REBIND_DELAY_S = (0.1, 5.0)  # D1: first and longest wait before an endpoint rebind
 REBIND_WARN_S = 60.0  # SR6-F4: one endpoint-loss warning per code per 60 s
-GROUP_LISTING_ATTEMPTS = 3  # PRE-J1g-F5: then [] (no listing), as before
 
 
 def serve_job_manager(
@@ -199,84 +191,6 @@ def serve_endpoint(
         delay = min(delay * 2, REBIND_DELAY_S[1])
 
 
-class _Jobs(BaseModel):
-    socket_path: Path | None = None
-    dir: Path = Field(
-        default_factory=lambda: Path.home() / ".local" / "state" / "binnacle" / "jobs"
-    )
-    keep_newest: int = Field(50, ge=1)
-
-
-class _RunCommand(BaseModel):
-    wait_max_s: int = 50
-
-
-class ManagerConfig(BaseSettings):
-    """The ``binnacle.config`` keys the manager needs, from the config file only.
-
-    Layering forbids ``binnacle.platform`` importing ``binnacle.config`` (the
-    top-level acyclic contract), so these keys and defaults are restated with
-    the same TOML source and pinned to ``Settings`` by tests.
-    """
-
-    model_config = SettingsConfigDict(extra="ignore")
-
-    jobs: _Jobs = Field(default_factory=_Jobs)
-    run_command: _RunCommand = Field(default_factory=_RunCommand)
-
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: type[BaseSettings],
-        init_settings: PydanticBaseSettingsSource,
-        env_settings: PydanticBaseSettingsSource,
-        dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
-    ) -> tuple[PydanticBaseSettingsSource, ...]:
-        default = Path.home() / ".config" / "binnacle" / "config.toml"
-        toml_file = Path(os.environ.get(CONFIG_FILE_ENV, default))
-        return (TomlConfigSettingsSource(settings_cls, toml_file=toml_file),)
-
-
-def read_config() -> ManagerConfig:
-    """Refuse environment overrides: the config file is the only input."""
-    if any(name.startswith(_OVERRIDES) for name in os.environ):
-        raise ValueError("job manager settings come from the config file only")
-    return ManagerConfig()
-
-
-def boot_id() -> str:
-    """``kern.bootsessionuuid``: a public sysctl, new per boot, fixed within one.
-
-    STEER-10: ``kern.boottime`` moves whenever the wall clock is set, so it
-    cannot prove a reboot (``prior_boot``); ``kern.uuid`` is the kernel build.
-    It is never process authority. The J1 owner is composed with this same id.
-    """
-    libc = ctypes.CDLL(None, use_errno=True)
-
-    def sysctl(name: str, size: int) -> bytes:
-        value, length = ctypes.create_string_buffer(size), ctypes.c_size_t(size)
-        if libc.sysctlbyname(name.encode(), value, ctypes.byref(length), None, 0):
-            raise OSError(ctypes.get_errno(), f"sysctl {name} failed")
-        return value.raw[: length.value]
-
-    session = sysctl("kern.bootsessionuuid", 64).rstrip(b"\0").decode("ascii")
-    if not BOOT_SESSION.fullmatch(session.upper()):
-        raise OSError("darwin_boot_identity_unavailable")
-    return session.upper()
-
-
-def prior_boot(meta: Mapping[str, object], current: str) -> bool:
-    """STEER-10: the record's ``boot_id`` is provably an earlier boot's.
-
-    Both ids must be boot sessions and differ. An absent, unreadable or
-    other-format id proves nothing: the record stays UNKNOWN (fail closed).
-    """
-    ids = (meta.get("boot_id"), current)
-    known = all(isinstance(i, str) and BOOT_SESSION.fullmatch(i) for i in ids)
-    return known and ids[0] != ids[1]
-
-
 def inherited_fds_cloexec() -> None:
     """RJ1-F6: no descriptor inherited at start (fd >= 3) may reach a job."""
     for name in os.listdir("/dev/fd"):
@@ -370,7 +284,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     except Exception:
         log.exception("event=job_manager_owner_unavailable")
         return EX_FAILED
-    log.info("event=job_manager_compose owner_reaper_thread=%s", owner.reaper_running)
+    reaper = owner.reaper_running
+    log.info("event=job_manager_compose owner_reaper_thread=%s", reaper)
     stop = threading.Event()
     for number in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(number, lambda *_: stop.set())
@@ -386,115 +301,3 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     log.warning("event=job_manager_stopped reason=unrequested")
     return EX_FAILED
-
-
-# SD-59: only p_stat values with one Linux letter. SRUN is kept by XNU for a
-# sleeping process too (R or S needs libproc thread states) and SIDL has no
-# Linux state, so both stay unknown; SSTOP of a traced process may be Linux t.
-_STATE_LETTERS = {3: "S", 4: "T", 5: "Z"}  # SSLEEP, SSTOP, SZOMB
-_UNKNOWN_STATE = "?"  # D-2: not a state letter, never invented
-_P_TRACED = 0x800  # kinfo_proc p_flag (offset 32)
-
-
-def _sysctl(mib: Sequence[int], limit: int) -> bytes:
-    """Public sysctl(3) read (KERN_PROC_PGRP / KERN_PROCARGS2); never libproc."""
-    query = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True).sysctl
-    query.argtypes = [ctypes.POINTER(ctypes.c_int), ctypes.c_uint, ctypes.c_void_p]
-    query.argtypes += [
-        ctypes.POINTER(ctypes.c_size_t),
-        ctypes.c_void_p,
-        ctypes.c_size_t,
-    ]
-    query.restype = ctypes.c_int
-    names, size = (ctypes.c_int * len(mib))(*mib), ctypes.c_size_t()
-    if query(names, len(mib), None, ctypes.byref(size), None, 0) != 0:
-        raise OSError(ctypes.get_errno(), "sysctl size failed")
-    if size.value > limit:
-        raise OSError("sysctl size over limit")
-    buffer = ctypes.create_string_buffer(size.value + 648 * 4)
-    size.value = len(buffer)
-    if query(names, len(mib), buffer, ctypes.byref(size), None, 0) != 0:
-        raise OSError(ctypes.get_errno(), "sysctl read failed")
-    return buffer.raw[: min(size.value, len(buffer))]
-
-
-def command_line(pid: int, max_cmd_chars: int) -> str | None:
-    """argv ONLY from KERN_PROCARGS2, like Linux /proc/<pid>/cmdline (PRE-J1g-F1).
-
-    Layout: int argc, exec path, NUL padding to an 8-byte boundary, argv[argc],
-    then envp, which is never read. Empty argv fields are kept and exactly
-    argc are taken. Any doubt (short buffer, padding that does not match the
-    aligned start, e.g. an empty argv[0], too few fields, undecodable bytes)
-    returns None so the caller falls back to comm: fail closed.
-    """
-    try:
-        data = _sysctl((1, 49, pid), 1 << 20)
-    except OSError:
-        return None
-    argc = int.from_bytes(data[:4], sys.byteorder) if len(data) >= 4 else 0
-    end = data.find(b"\0", 4)
-    if argc <= 0 or end < 0:
-        return None
-    start = 4 + ((end - 4 + 1 + 7) & ~7)  # exec path + NUL, 8-byte aligned
-    skipped = end
-    while skipped < len(data) and data[skipped] == 0:
-        skipped += 1
-    if skipped != start:
-        return None
-    fields = data[start:].split(b"\0", argc)  # [argc fields..., rest: envp]
-    if len(fields) <= argc:  # argv[argc - 1] not NUL-terminated: truncated
-        return None
-    try:
-        argv = [field.decode("utf-8") for field in fields[:argc]]
-    except UnicodeDecodeError:
-        return None
-    return " ".join(argv)[:max_cmd_chars]  # bounded after the join
-
-
-def _state_letter(entry: bytes, state: int) -> str:
-    """The Linux /proc state letter kinfo_proc determines, else ``?``."""
-    if state == 4 and int.from_bytes(entry[32:36], sys.byteorder) & _P_TRACED:
-        return _UNKNOWN_STATE
-    return _STATE_LETTERS.get(state, _UNKNOWN_STATE)
-
-
-def group_listing(pgid: int, max_cmd_chars: int) -> list[dict]:
-    """JCRP-F6 (Linux job_processes shape): pid, state, etime_s and cmd.
-
-    ``etime_s`` is the age from kinfo_proc p_starttime, rounded like Linux.
-    ``cmd`` is the KERN_PROCARGS2 argv bounded by ``max_cmd_chars``, else the
-    kinfo_proc comm when PROCARGS2 is denied, else empty like an empty Linux
-    cmdline: never invented. ``cpu_s`` has no public per-process source here
-    (SD-59 ruling 2 is pending). The owner calls this only for its verified
-    group; it grants no signal right.
-    """
-    from binnacle.platform.darwin.process_authority import _decode_process_records
-
-    raw = b""  # PRE-J1g-F5: a forking group races the size + read pair (ENOMEM)
-    for _ in range(GROUP_LISTING_ATTEMPTS):
-        with suppress(OSError):
-            raw = _sysctl((1, 14, 2, pgid), 648 * 65536)
-            break
-    listing: list[dict] = []
-    now = time.time()  # p_starttime is wall clock (microtime at fork)
-    for offset in range(0, len(raw) - len(raw) % 648, 648):
-        entry = raw[offset : offset + 648]
-        try:
-            (member,) = _decode_process_records(entry)
-        except OSError:
-            continue
-        if member.group != pgid:
-            continue
-        cmd = command_line(member.pid, max_cmd_chars)
-        if cmd is None:  # p_comm (MAXCOMLEN + 1) at kinfo_proc offset 243
-            cmd = entry[243:260].split(b"\0", 1)[0].decode(errors="replace")
-        started = member.birth[0] + member.birth[1] / 1_000_000
-        listing.append(
-            {
-                "pid": member.pid,
-                "state": _state_letter(entry, member.state),
-                "etime_s": round(max(now - started, 0.0), 1),
-                "cmd": cmd[:max_cmd_chars],
-            }
-        )
-    return sorted(listing, key=lambda item: int(item["pid"]))

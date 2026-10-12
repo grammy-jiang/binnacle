@@ -27,6 +27,12 @@ from typing import Any, Protocol
 from binnacle.platform.contracts import process_contracts as pc
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 from binnacle.platform.contracts.process_contracts import OwnedJobExit
+from binnacle.platform.darwin.job_manager_records import (
+    _exit_meta,
+    _flock,
+    list_job_ids,
+    read_meta,
+)
 from binnacle.platform.darwin.job_manager_stopping import (
     _JOB_ID,
     _ManagerStopping,
@@ -44,7 +50,6 @@ STOP_SIGTERM_GRACE_S, STOP_SIGKILL_GRACE_S = 5.0, 2.0  # Linux jobs values
 _ENV = "PAGER=cat GIT_PAGER=cat GIT_TERMINAL_PROMPT=0 PYTHONUNBUFFERED=1 CI=1"
 _ENV += " BINNACLE=1 DEBIAN_FRONTEND=noninteractive"
 ENV_OVERRIDES: Mapping[str, str] = dict(i.split("=", 1) for i in _ENV.split())
-META_REQUIRED = ("command", "workdir", "pid", "started_at")
 PARTIAL_SIGNAL_FIELD = "stop_signal_partial"
 PARTIAL_SIGNAL_MESSAGE = "previous verified process signal delivery was incomplete"
 EXIT_RETRY_S = 1.0  # an unpersisted exit is retried, never dropped
@@ -55,63 +60,6 @@ class ReleasingJobOwner(pc.DarwinJobOwner, Protocol):
     """1.2.0 owner plus J1's additive ack (darwin-side; contracts stay frozen)."""
 
     def release(self, job_id: str) -> None: ...
-
-
-@contextmanager
-def _flock(path: Path, operation: int, busy: str = "") -> Iterator[int]:
-    """CLOEXEC so spawned jobs never inherit (and pin) a manager lock (yields it)."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC
-    fd = os.open(path, flags, 0o600)
-    try:
-        try:
-            fcntl.flock(fd, operation)
-        except BlockingIOError as exc:
-            raise RuntimeError(busy) from exc
-        yield fd
-    finally:
-        os.close(fd)
-
-
-def _exit_meta(meta: dict[str, Any], exited: OwnedJobExit) -> dict[str, Any]:
-    if exited.termination_reason == "owner_restart":
-        # job_owner._record_interruption: the owner stop ended it; no exit status.
-        meta.update(exit_code=None, signal=None)
-        reason = "owner_restart"
-    elif exited.signal is not None:
-        meta.update(signal=exited.signal, exit_code=None)
-        reason = "signal"
-    else:
-        meta["exit_code"] = exited.exit_code
-        reason = "normal_exit"
-    meta["ended_at"] = time.time()
-    stopped = meta.get("stop_requested")
-    meta["termination_reason"] = "stop_requested" if stopped else reason
-    return meta
-
-
-def jobs_dir_writer(jobs_dir: Path) -> Any:
-    """Lifetime singleton: one manager writer per jobs dir, any runtime root."""
-    busy = f"job manager already owns {jobs_dir}"
-    return _flock(jobs_dir / ".manager.lock", fcntl.LOCK_EX | fcntl.LOCK_NB, busy)
-
-
-def read_meta(root: Path, job_id: str) -> dict[str, Any] | None:
-    """``job_store.read_meta``: a complete record, or None when unusable."""
-    try:
-        meta = json.loads((root / job_id / "meta.json").read_text())
-    except (OSError, json.JSONDecodeError):
-        return None
-    if not isinstance(meta, dict) or any(k not in meta for k in META_REQUIRED):
-        return None
-    return meta
-
-
-def list_job_ids(root: Path) -> list[str]:
-    try:
-        return [path.name for path in root.iterdir() if path.is_dir()]
-    except OSError:
-        return []
 
 
 class DarwinJobManager(_ManagerStopping):
@@ -136,7 +84,8 @@ class DarwinJobManager(_ManagerStopping):
         self.grace, self.provenance = grace, runtime_provenance()
         self._lock = threading.RLock()
         self._unrecorded: dict[str, OwnedJobExit] = {}  # reaped, not yet durable
-        # SIGTERM sets it (serve_job_manager shares stop): handlers return (JCRP-F2).
+        # Set on SIGTERM (serve_job_manager shares its stop event): every
+        # waiting handler returns at once (JCRP-F2).
         self.stopping = threading.Event()
         # D2: the entry's stop-marker probe: a typed refusal, or None to start.
         self.stop_pending: Callable[[], dict[str, Any] | None] = lambda: None
@@ -402,7 +351,7 @@ class DarwinJobManager(_ManagerStopping):
 
     def recover(self) -> int:
         """Other incarnations' unfinished v2 records -> UNKNOWN; prior boot: final."""
-        from binnacle.platform.darwin.job_manager_entry import prior_boot
+        from binnacle.platform.darwin.job_manager_procinfo import prior_boot
 
         recovered = 0
         with self._transaction():
