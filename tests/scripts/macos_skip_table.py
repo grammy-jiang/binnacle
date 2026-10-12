@@ -93,6 +93,7 @@ platform/darwin/test_r6w2_m1_a2_followups.py | B0: per-test Darwin real com.binn
 platform/darwin/test_r6w2_m1_a3_proof_order.py | B0: Darwin entry proof before recover
 platform/darwin/test_r6w2_m1_a3_held_dir_io.py | B0: Darwin entry held-dir I/O (F1)
 platform/darwin/test_r6_x2_absolute_in_root_links.py | B0: per-test Darwin /tmp -> /private/tmp configured-root alias (r6 X2, SD-67 STEER-01 item 3); the Darwin/Linux probe parity cases run everywhere
+platform/darwin/test_r6w2_lp_tmp_alias.py | B0: per-test Darwin /tmp -> /private/tmp configured-root alias listing (r6 W2 LP, SD-74); the alias-prefix parity cases in tests/unit/tools/test_r6w2_lp_alias_prefixes.py run everywhere
 platform/darwin/test_ipc_launchd.py | A3: per-test opt-in real launchd bootstrap (BINNACLE_A3_LAUNCHD=1)
 platform/darwin/test_search_parity.py | A4: in-body skip when APFS rejects a non-UTF-8 filename
 platform/darwin/test_package_install.py | A6: per-test Apple-silicon (arm64) native package install
@@ -159,6 +160,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_r6w2_m1_a3_proof_order.py": 1,
     "tests/platform/darwin/test_r6w2_m1_a3_held_dir_io.py": 1,
     "tests/platform/darwin/test_r6_x2_absolute_in_root_links.py": 1,
+    "tests/platform/darwin/test_r6w2_lp_tmp_alias.py": 1,
     "tests/platform/darwin/test_ipc_launchd.py": 3,
     "tests/platform/darwin/test_search_parity.py": 1,
     "tests/platform/darwin/test_package_install.py": 1,
