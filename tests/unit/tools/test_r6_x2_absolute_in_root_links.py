@@ -365,8 +365,8 @@ def test_glob_mode_is_unchanged(tree, glob):
 
 
 def test_configured_alias_prefix_follows_darwin(tmp_path):
-    # Darwin's provider is granted only the canonical root, so alias-prefixed
-    # text is omitted on both OSes (STEER-01 item 3 is reported, not changed).
+    # r6 W2 LP (SD-74): text under a configured alias of the root is listed on
+    # both OSes, as Darwin's grant now carries the configured alias strings.
     real = tmp_path.resolve() / "real"
     real.mkdir()
     (real / "f.txt").write_text("ff")
@@ -379,5 +379,6 @@ def test_configured_alias_prefix_follows_darwin(tmp_path):
     entries = payload.structured_content["entries"]
     assert {Path(e["path"]).name: e.get("bytes") for e in entries} == {
         "f.txt": 2,
+        "via_alias": 2,
         "via_real": 2,
     }
