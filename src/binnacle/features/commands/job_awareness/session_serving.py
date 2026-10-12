@@ -6,8 +6,9 @@ that fails the gate reads no ledger, catalog, snapshot or grant state.
 Foreign, missing, malformed, retired and route-failure selectors all return
 the same ``DENIED``. Three disjoint grammars exist: the handle, the slot and
 (g5 §9.2) the canonical key that the reminder prints; the canonical key is an
-exact match inside the caller's own allocations. Serving then needs all three: lab ``alloc.state=LIVE`` in
-the current epoch, an AUTHORIZED grant, and the unchanged in-memory entry.
+exact match inside the caller's own allocations. Serving then needs all
+three: lab ``alloc.state=LIVE`` in the current epoch, an AUTHORIZED grant,
+and the unchanged in-memory entry.
 """
 
 import re
