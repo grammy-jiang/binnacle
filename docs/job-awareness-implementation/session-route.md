@@ -112,6 +112,30 @@ STRUCT carrier (§9.2 S-1) is not implemented; it waits for CV (c′).
   and the META and STRUCT blocks relabeled). Raw-value scans of wire results,
   log rows, argument logs and lab files find no raw platform value.
 
+## Amendment g6 D0: negatives, lab manifests and the c′ fixture
+
+- **G-U1..G-U5** (`test_hint_routed_textu_negatives.py`): a value-equal
+  second schema-less Tool, forged, reused, other-result, `None` and
+  non-`Execution` receipts, a name or version change after bind, a Tool
+  subclass, the adapter off, and non-routed bindings with a schema-less tool.
+  Each returns the original result object and leaves every lab emit row
+  `PENDING`. No code change was needed.
+- **Lab manifests** (`fixtures/e2_cv/lab-manifests.json`, lab-only). The
+  hash rule is the frozen E2-RUN rule. The in-process composition reproduces
+  the frozen E2-RUN hashes:
+
+  | Manifest | sha256 |
+  | --- | --- |
+  | v1 (`fixture_unrelated_read` with the closed `{note}` schema) | `ca4563c3ba00fdeb1b9cee2932a33c7ea110eeb05d20e5781c5b20dccfc77e04` |
+  | v2-U (no output schema on `fixture_unrelated_read`) | `4aab8ee00b24d5c4759b8b55e875e59fae6c9b6d28fc1aa33dde830bdf087721` |
+  | c′ (declared optional `job_awareness_hint`, ≤ 512, no description) | `a995405136191de89fb9657ecccf8de14ae9ee011d98eddce365845481627828` |
+
+- **c′ fixture** (`e2_cprime.py`): the schema and result rule mirror the
+  E2-RUN CV variant `e`. The result is schema-valid with and without the hint,
+  a hint over 512 characters is dropped, the wire bytes are pinned, and the
+  `tools/list` hash is the same for the control and candidate arms. The STRUCT
+  carrier is still not implemented.
+
 ## What is NOT claimed
 
 - No authentication, no authenticated per-chat authorization and no replay

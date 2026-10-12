@@ -214,6 +214,10 @@ class E2Server:
     note: str = NOTE
     #: False = lab tool v2-U (g5 §9.2 S-2): no output schema, one text block.
     structured: bool = True
+    #: Lab-only CV fixtures (g6 §9.3, e2_cprime): another advertised schema for
+    #: the structured note, and the result the note tool returns for a note.
+    note_schema: dict[str, Any] | None = None
+    note_result: Callable[[str], ToolResult] | None = None
     faults: Callable[[str], None] | None = None
 
     def __post_init__(self) -> None:
@@ -265,6 +269,8 @@ class E2Server:
 
         def fixture_unrelated_read(context: str = "") -> ToolResult:
             note = self.note
+            if self.note_result is not None:
+                return self.note_result(note)
             return ToolResult(
                 content=[TextContent(type="text", text=note)],
                 structured_content={"note": note} if self.structured else None,
@@ -276,7 +282,9 @@ class E2Server:
             witnessed_tool(
                 fixture_unrelated_read,
                 name="fixture_unrelated_read",
-                output_schema=NOTE_SCHEMA if self.structured else None,
+                output_schema=(self.note_schema or NOTE_SCHEMA)
+                if self.structured
+                else None,
             )
         )
         assert isinstance(tool, Tool)  # nosec B101 - pytest assertion

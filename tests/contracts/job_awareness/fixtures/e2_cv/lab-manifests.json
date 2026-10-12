@@ -1,0 +1,448 @@
+{
+ "c_prime": {
+  "example_hint": "[Binnacle job reminder] ja1_55555555555555555555555555555555:666666666666:g1_77777777777777777777777777777777 unconfirmed",
+  "output_schema": {
+   "additionalProperties": false,
+   "properties": {
+    "job_awareness_hint": {
+     "maxLength": 512,
+     "type": "string"
+    },
+    "note": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "note"
+   ],
+   "type": "object"
+  },
+  "result_rule": "structuredContent = {note} plus job_awareness_hint only when a hint of <= 512 characters exists; one text block = json.dumps(structuredContent) (E2-RUN CV variant e)",
+  "tool": "fixture_unrelated_read",
+  "wire_legacy": {
+   "hinted": "{\"content\":[{\"text\":\"{\\\"note\\\": \\\"Synthetic reference note.\\\", \\\"job_awareness_hint\\\": \\\"[Binnacle job reminder] ja1_55555555555555555555555555555555:666666666666:g1_77777777777777777777777777777777 unconfirmed\\\"}\",\"type\":\"text\"}],\"isError\":false,\"structuredContent\":{\"note\":\"Synthetic reference note.\",\"job_awareness_hint\":\"[Binnacle job reminder] ja1_55555555555555555555555555555555:666666666666:g1_77777777777777777777777777777777 unconfirmed\"}}",
+   "unhinted": "{\"content\":[{\"text\":\"{\\\"note\\\": \\\"Synthetic reference note.\\\"}\",\"type\":\"text\"}],\"isError\":false,\"structuredContent\":{\"note\":\"Synthetic reference note.\"}}"
+  }
+ },
+ "design": "E2-DESIGN-20261012 g6 section 9.2 (v2-U) and 9.3 (CV-F c')",
+ "hash_rule": "sha256 of json.dumps(manifest, sort_keys=True, separators=(',', ':')) where manifest = {schema, server_info{name,version}, tools: tools/list result tools sorted by name}",
+ "lab_only": true,
+ "manifests": {
+  "c-prime": {
+   "manifest": {
+    "schema": "ja-e2-lab-manifest-v1",
+    "server_info": {
+     "name": "E2 S5 synthetic only",
+     "version": "synthetic"
+    },
+    "tools": [
+     {
+      "_meta": {
+       "fastmcp": {
+        "tags": []
+       }
+      },
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "context": {
+         "default": "",
+         "type": "string"
+        },
+        "job": {
+         "type": "string"
+        },
+        "values": {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        }
+       },
+       "required": [
+        "job",
+        "values"
+       ],
+       "type": "object"
+      },
+      "name": "fixture_echo",
+      "outputSchema": {
+       "additionalProperties": {
+        "type": "boolean"
+       },
+       "type": "object"
+      },
+      "title": "Fixture Echo"
+     },
+     {
+      "_meta": {
+       "fastmcp": {
+        "tags": []
+       }
+      },
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "context": {
+         "default": "",
+         "type": "string"
+        },
+        "job": {
+         "type": "string"
+        },
+        "page": {
+         "type": "integer"
+        }
+       },
+       "required": [
+        "job",
+        "page"
+       ],
+       "type": "object"
+      },
+      "name": "fixture_read",
+      "outputSchema": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Fixture Read"
+     },
+     {
+      "_meta": {
+       "fastmcp": {
+        "tags": []
+       }
+      },
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "slot": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "slot"
+       ],
+       "type": "object"
+      },
+      "name": "fixture_start",
+      "outputSchema": {
+       "additionalProperties": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "title": "Fixture Start"
+     },
+     {
+      "_meta": {
+       "fastmcp": {
+        "tags": []
+       }
+      },
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "context": {
+         "default": "",
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "name": "fixture_unrelated_read",
+      "outputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "job_awareness_hint": {
+         "maxLength": 512,
+         "type": "string"
+        },
+        "note": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "note"
+       ],
+       "type": "object"
+      },
+      "title": "Fixture Unrelated Read"
+     }
+    ]
+   },
+   "sha256": "a995405136191de89fb9657ecccf8de14ae9ee011d98eddce365845481627828"
+  },
+  "v1": {
+   "manifest": {
+    "schema": "ja-e2-lab-manifest-v1",
+    "server_info": {
+     "name": "E2 S5 synthetic only",
+     "version": "synthetic"
+    },
+    "tools": [
+     {
+      "_meta": {
+       "fastmcp": {
+        "tags": []
+       }
+      },
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "context": {
+         "default": "",
+         "type": "string"
+        },
+        "job": {
+         "type": "string"
+        },
+        "values": {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        }
+       },
+       "required": [
+        "job",
+        "values"
+       ],
+       "type": "object"
+      },
+      "name": "fixture_echo",
+      "outputSchema": {
+       "additionalProperties": {
+        "type": "boolean"
+       },
+       "type": "object"
+      },
+      "title": "Fixture Echo"
+     },
+     {
+      "_meta": {
+       "fastmcp": {
+        "tags": []
+       }
+      },
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "context": {
+         "default": "",
+         "type": "string"
+        },
+        "job": {
+         "type": "string"
+        },
+        "page": {
+         "type": "integer"
+        }
+       },
+       "required": [
+        "job",
+        "page"
+       ],
+       "type": "object"
+      },
+      "name": "fixture_read",
+      "outputSchema": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Fixture Read"
+     },
+     {
+      "_meta": {
+       "fastmcp": {
+        "tags": []
+       }
+      },
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "slot": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "slot"
+       ],
+       "type": "object"
+      },
+      "name": "fixture_start",
+      "outputSchema": {
+       "additionalProperties": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "title": "Fixture Start"
+     },
+     {
+      "_meta": {
+       "fastmcp": {
+        "tags": []
+       }
+      },
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "context": {
+         "default": "",
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "name": "fixture_unrelated_read",
+      "outputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "note": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "note"
+       ],
+       "type": "object"
+      },
+      "title": "Fixture Unrelated Read"
+     }
+    ]
+   },
+   "sha256": "ca4563c3ba00fdeb1b9cee2932a33c7ea110eeb05d20e5781c5b20dccfc77e04"
+  },
+  "v2-U": {
+   "manifest": {
+    "schema": "ja-e2-lab-manifest-v1",
+    "server_info": {
+     "name": "E2 S5 synthetic only",
+     "version": "synthetic"
+    },
+    "tools": [
+     {
+      "_meta": {
+       "fastmcp": {
+        "tags": []
+       }
+      },
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "context": {
+         "default": "",
+         "type": "string"
+        },
+        "job": {
+         "type": "string"
+        },
+        "values": {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        }
+       },
+       "required": [
+        "job",
+        "values"
+       ],
+       "type": "object"
+      },
+      "name": "fixture_echo",
+      "outputSchema": {
+       "additionalProperties": {
+        "type": "boolean"
+       },
+       "type": "object"
+      },
+      "title": "Fixture Echo"
+     },
+     {
+      "_meta": {
+       "fastmcp": {
+        "tags": []
+       }
+      },
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "context": {
+         "default": "",
+         "type": "string"
+        },
+        "job": {
+         "type": "string"
+        },
+        "page": {
+         "type": "integer"
+        }
+       },
+       "required": [
+        "job",
+        "page"
+       ],
+       "type": "object"
+      },
+      "name": "fixture_read",
+      "outputSchema": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Fixture Read"
+     },
+     {
+      "_meta": {
+       "fastmcp": {
+        "tags": []
+       }
+      },
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "slot": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "slot"
+       ],
+       "type": "object"
+      },
+      "name": "fixture_start",
+      "outputSchema": {
+       "additionalProperties": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "title": "Fixture Start"
+     },
+     {
+      "_meta": {
+       "fastmcp": {
+        "tags": []
+       }
+      },
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "context": {
+         "default": "",
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "name": "fixture_unrelated_read",
+      "title": "Fixture Unrelated Read"
+     }
+    ]
+   },
+   "sha256": "4aab8ee00b24d5c4759b8b55e875e59fae6c9b6d28fc1aa33dde830bdf087721"
+  }
+ },
+ "schema": "ja-e2-lab-manifests-v1"
+}
