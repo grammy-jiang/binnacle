@@ -125,10 +125,12 @@ where the state root is the parent of the instance's configured `jobs.dir`
 message.
 
 `binnacle doctor` reports every record as `startup` with its age and
-revision. A record whose revision equals the running checkout's is a FAIL
-(exit 1). A record of an older revision is `STALE` (WARN): it predates the
-current revision's start and a clean start clears it. `startup ok` when none
-exists. Under systemd `Restart=` or launchd `KeepAlive` a failing process
+revision. A record matching the running checkout is a FAIL (exit 1). **Unknown,
+empty, installed or otherwise unverified revision identities are also FAIL**:
+an import error may precede loading the provenance module, and cannot be
+assumed to belong to a prior release. Only a record carrying a valid Git
+revision different from the current valid revision is `STALE` (WARN).
+A clean start clears the record; `startup ok` requires that none exists. Under systemd `Restart=` or launchd `KeepAlive` a failing process
 crash-loops; the record keeps the cause visible on every restart, and the
 deploy smoke (`scripts/deploy_smoke.py`) treats the failing doctor as an
 ALERT, so a gated deploy rolls back.

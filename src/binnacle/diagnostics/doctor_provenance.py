@@ -5,7 +5,8 @@ E1-a4: a server or job manager whose required module fails to import exits
 a clean start removes it. Under systemd ``Restart=`` or launchd ``KeepAlive``
 such a process crash-loops; ``check_startup_imports`` keeps the cause visible.
 E1-a5: it shows the record's age and revision. A record of an older revision
-than the running checkout is STALE (WARN); one for the current revision is FAIL.
+than the running checkout is STALE (WARN) only when BOTH revisions are
+validated Git SHA identifiers. Current, missing or unknown provenance is FAIL.
 """
 
 import calendar
@@ -88,13 +89,25 @@ def _age(stamp: str, now: float) -> str:
     return f"age={seconds}s"
 
 
+def _known_git_revision(value: object) -> bool:
+    """Only Git revisions can establish a different/old recorded checkout.
+
+    An early failure may be unable to import provenance; its revision is
+    unknown, not evidence of a stale record from an earlier deployment.
+    """
+    return (
+        isinstance(value, str)
+        and re.fullmatch(r"[0-9a-f]{12,40}(?:\+dirty)?", value) is not None
+    )
+
+
 def check_startup_imports(
     directory: Path | None = None,
     *,
     revision: str | None = None,
     now: float | None = None,
 ) -> list[Check]:
-    """FAIL per record of the running revision; WARN (STALE) for an older one."""
+    """FAIL for current/unknown provenance; WARN only for a different known SHA."""
     root = (
         record_dir(state_root_of(get_settings().jobs.dir))
         if directory is None
@@ -124,7 +137,11 @@ def check_startup_imports(
                 )
             )
             continue
-        if recorded is not None and recorded != current:
+        if (
+            _known_git_revision(recorded)
+            and _known_git_revision(current)
+            and recorded != current
+        ):
             checks.append(
                 warn(
                     "startup",

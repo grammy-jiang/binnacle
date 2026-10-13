@@ -86,3 +86,21 @@ Do not call those older snapshots a clean final acceptance.
 
 **Release remains NO_GO** until all repairs, the precise integrated commit,
 GitHub CI, independent read-only review and the guarded deployment gates pass.
+
+## Third independent review follow-up — R6W3-06
+
+A third read-only delta review on 72e107786e03121ffa6f9a04b9a24e2079ca7d37
+confirmed the four previous P2 issues fixed but returned REVISE/NO_GO for a
+new P2: a bootstrap error with revision unknown was misclassified as
+STALE by doctor and accepted by the W3 startup doctor wrapper.
+
+The remediation in the isolated master-merge candidate changes
+check_startup_imports to recognize an older revision ONLY when both the
+recorded and current revisions are verified Git SHA tokens. Unknown, missing,
+installed or malformed revisions fail closed. End-to-end test coverage
+records an early failure, checks doctor output and passes the result through
+the W3 doctor parser; a genuine, known different Git SHA still produces
+STALE as designed.
+
+Release remains unapproved until exact-SHA qualification and independent
+review of this follow-up on top of the concurrent production master.

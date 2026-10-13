@@ -175,12 +175,16 @@ def test_the_record_has_the_pinned_fields_and_no_message(home):
 def test_doctor_marks_an_older_revision_stale_and_the_current_one_fail(home):
     plant(home, "job-manager")
     directory = record_dir(home)
+    # A different *verified Git revision*, not arbitrary free text, proves
+    # the record belongs to another checkout. Unknown never means STALE.
+    record = record_path(home, "job-manager")
+    payload = json.loads(record.read_text("utf-8"))
+    payload["revision"] = "a" * 12
+    record.write_text(json.dumps(payload), encoding="utf-8")
     now = time.time() + 90
-    (current,) = check_startup_imports(directory, revision="rev-now", now=now)
-    stale_rev = json.loads(record_path(home, "job-manager").read_text("utf-8"))[
-        "revision"
-    ]
-    (older,) = check_startup_imports(directory, revision="rev-newer", now=now)
+    (current,) = check_startup_imports(directory, revision="b" * 12, now=now)
+    stale_rev = payload["revision"]
+    (older,) = check_startup_imports(directory, revision="c" * 12, now=now)
     (same,) = check_startup_imports(directory, revision=stale_rev, now=now)
     assert same.status == "fail" and f"revision={stale_rev}" in same.detail
     assert 85 <= int(re.search(r"age=(\d+)s", same.detail).group(1)) <= 110
