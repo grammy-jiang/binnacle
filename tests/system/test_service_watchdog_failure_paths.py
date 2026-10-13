@@ -301,6 +301,13 @@ def test_main_refuses_corrupt_state(tmp_path):
 def test_main_restart_persistence_failure_never_calls_supervisor(
     tmp_path, monkeypatch, caplog
 ):
+    from binnacle.companions import service_watchdog_safety
+
+    monkeypatch.setattr(
+        service_watchdog_safety,
+        "recovery_allowed",
+        lambda **kwargs: (True, "verified"),
+    )
     called = []
     monkeypatch.setattr(wd.Watchdog, "cycle", lambda self, **kw: {"mcp": "restart_due"})
     monkeypatch.setattr(

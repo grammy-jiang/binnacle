@@ -19,16 +19,23 @@ def _path(path: Path) -> str:
     return str(path)
 
 
-def linux_user_unit(python: Path, *, restart_enabled: bool = True) -> str:
+def linux_user_unit(
+    python: Path, *, restart_enabled: bool = True, module_root: Path | None = None
+) -> str:
     executable = _path(python)
     enabled = " --restart-enabled" if restart_enabled else ""
+    environment = (
+        f"Environment=PYTHONPATH={_path(module_root)}\n"
+        if module_root is not None
+        else ""
+    )
     return f"""[Unit]
 Description=Binnacle application-only service health watchdog
 After=network.target binnacle-mcp.service binnacle-tunnel.service
 
 [Service]
 Type=simple
-ExecStart={executable} -m binnacle.companions.service_watchdog{enabled}
+{environment}ExecStart={executable} -m binnacle.companions.service_watchdog{enabled}
 Restart=always
 RestartSec=10
 UMask=0077

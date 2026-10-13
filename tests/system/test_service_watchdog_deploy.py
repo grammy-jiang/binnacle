@@ -67,3 +67,20 @@ def test_render_rejects_ambiguous_paths_and_bad_account(tmp_path):
             home=tmp_path,
             username="owner;rm",
         )
+
+
+def test_linux_watchdog_can_pin_private_source_without_touching_live_checkout():
+    frozen = Path(
+        "/home/user/.local/share/binnacle-service-watchdog/releases/commit/src"
+    )
+    text = linux_user_unit(
+        Path("/home/user/Projects/binnacle/.venv/bin/python"),
+        restart_enabled=True,
+        module_root=frozen,
+    )
+    assert f"Environment=PYTHONPATH={frozen}" in text
+    assert "ExecStart=/home/user/Projects/binnacle/.venv/bin/python -m " in text
+    assert "--restart-enabled" in text
+    assert "Wants=" not in text
+    with pytest.raises(ValueError):
+        linux_user_unit(Path("/usr/bin/python3"), module_root=Path("relative/src"))
