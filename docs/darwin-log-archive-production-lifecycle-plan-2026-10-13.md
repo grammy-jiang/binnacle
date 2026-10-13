@@ -93,3 +93,30 @@ rebootstraps a target. Trust decisions are rooted in actual launchd
 service identity, fd inspection and serial controller locks, not
 untrusted user-provided WriterHold instances. An isolated test fixture
 does not grant authority to prune real logs.
+
+## Fixture guardian admission tightening — 2026-10-13
+
+The isolated guardian now enforces an exact-match fixture bootstrap plan:
+root:wheel 0644 single-link plist with a fixed allowlisted label, the
+non-root test user's name/group, one pinned Python fixture command,
+RunAtLoad/KeepAlive, and only two specifically named stdout/stderr
+paths beneath an owned private 0700 private-logs directory. An
+unexpected plist key, changed command, root-run writer, environment
+injection, MachServices, or path pointing to the production log
+directory refuses restoration. macOS's legitimate /var -> /private/var
+alias is accepted while the final private directory symlink and
+ownership checks remain strict.
+
+If the controller exits before bootout, the guardian confirms that
+the original writer generation is still running, records a durable
+producer-never-stopped disarm and does not restart it. The old
+rotated inode remains writable: no new active pathname is fabricated
+in this no-op branch. Synthetic launchd acceptance covers both this
+case and the writer-stopped recovery flow, with the guardian running
+or itself restarted after SIGKILL.
+
+None of these test-only checks grants production use. A privileged,
+independently reviewed controller and J7-compatible maintenance
+authority, running-job/connection admission barrier, production
+identity/generation proof, privileged FD census, liveness/lease-break
+and crash-durable recovery remain required before Issue #30 closes.

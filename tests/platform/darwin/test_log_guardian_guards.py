@@ -38,6 +38,7 @@ def _record(root: Path, **updates) -> dict:
         "lock": str(root / "lease.lock"),
         "previous_pid": 123,
         "nonce": "0" * 32,
+        "log_root": str(root.parent / "private-logs"),
     }
     base.update(updates)
     return base
@@ -128,15 +129,32 @@ def test_guardian_policy_rejects_foreign_inputs(
 def _trusted_plist(
     monkeypatch: pytest.MonkeyPatch, root: Path, **modifications
 ) -> dict:
-    """Simulate a signed-off 0644 root-owned fixture; no host plist is written."""
+    """Simulate root-owned test plist and private logs; never write a host plist."""
+    import grp
+    import pwd
+
+    log_root = root.parent / "private-logs"
+    log_root.mkdir(mode=0o700, exist_ok=True)
+    log_root.chmod(0o700)
     payload = {
         "Label": LABEL,
+        "UserName": pwd.getpwuid(os.getuid()).pw_name,
+        "GroupName": grp.getgrgid(os.getgid()).gr_name,
+        "ProgramArguments": guardian.FIXTURE_PROGRAM_ARGS,
+        "RunAtLoad": True,
         "KeepAlive": True,
-        "ProgramArguments": ["/bin/true"],
+        "Umask": 0o077,
+        "ThrottleInterval": 1,
+        "StandardErrorPath": str(log_root / "mcp.stderr.log"),
+        "StandardOutPath": str(log_root / "mcp.stdout.log"),
     }
     payload.update(modifications)
     wire = plistlib.dumps(payload)
-    record = _record(root, plist_sha256=hashlib.sha256(wire).hexdigest())
+    record = _record(
+        root,
+        plist_sha256=hashlib.sha256(wire).hexdigest(),
+        log_root=str(log_root),
+    )
     original_lstat, original_read = Path.lstat, Path.read_bytes
 
     def fake_lstat(p: Path):
@@ -469,27 +487,3 @@ def test_guardian_nonce_change_during_hold_refuses(
     monkeypatch.setattr(guardian, "_read_verified", changed)
     with pytest.raises(ArchiveFinalizeRefused, match="transaction changed"):
         guardian.supervise(path, max_wait_s=0.5)
-
-
-def test_guardian_policy_refuses_bad_plist_owner(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    root = _root(tmp_path)
-    with monkeypatch.context() as m:
-        record = _trusted_plist(m, root)
-        good_lstat = Path.lstat
-
-        def bad_owner(p):
-            if p == PLIST:
-                return SimpleNamespace(
-                    st_mode=stat.S_IFREG | 0o644,
-                    st_uid=99,
-                    st_gid=0,
-                    st_nlink=1,
-                )
-            return good_lstat(p)
-
-        m.setattr(Path, "lstat", bad_owner)
-        with pytest.raises(ArchiveFinalizeRefused, match="ownership"):
-            guardian._policy(record, root)

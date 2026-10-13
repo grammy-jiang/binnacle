@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import grp
 import hashlib
 import json
 import os
 import platform
 import plistlib
+import pwd
 import stat
 import sys
 import time
@@ -31,6 +33,28 @@ from binnacle.companions.darwin_log_writer_hold import (
 
 MAX_RECORD_BYTES = 4096
 TICK_S = 0.1
+# Only the disposable test writer's exact command is permitted.
+# This guardian must never serve as an arbitrary launchd bootstrap wrapper.
+FIXTURE_PROGRAM_ARGS = [
+    sys.executable,
+    "-u",
+    "-c",
+    "import os,time;os.write(2,b'fixture started\\n');time.sleep(120)",
+]
+_FIXTURE_PLIST_KEYS = frozenset(
+    {
+        "Label",
+        "UserName",
+        "GroupName",
+        "ProgramArguments",
+        "RunAtLoad",
+        "KeepAlive",
+        "Umask",
+        "ThrottleInterval",
+        "StandardOutPath",
+        "StandardErrorPath",
+    }
+)
 
 
 def _read_verified(path: Path) -> dict[str, Any]:
@@ -103,7 +127,31 @@ def _policy(record: dict[str, Any], base: Path) -> tuple[str, Path]:
         if hashlib.sha256(raw).hexdigest() != record.get("plist_sha256"):
             raise ArchiveFinalizeRefused("guardian fixture plist digest changed")
         parsed = plistlib.loads(raw)
-        if parsed.get("Label") != label or parsed.get("KeepAlive") is not True:
+        root_value = record.get("log_root")
+        if not isinstance(root_value, str) or not root_value.startswith("/"):
+            raise ArchiveFinalizeRefused("fixture log root is not authenticated")
+        log_root = Path(root_value)
+        root_info = log_root.lstat()
+        if (
+            log_root.name != "private-logs"
+            or not stat.S_ISDIR(root_info.st_mode)
+            or root_info.st_uid != os.getuid()
+            or root_info.st_mode & 0o077
+        ):
+            raise ArchiveFinalizeRefused("unsafe test-owned fixture log root")
+        if (
+            set(parsed) != _FIXTURE_PLIST_KEYS
+            or parsed.get("Label") != label
+            or parsed.get("UserName") != pwd.getpwuid(os.getuid()).pw_name
+            or parsed.get("GroupName") != grp.getgrgid(os.getgid()).gr_name
+            or parsed.get("ProgramArguments") != FIXTURE_PROGRAM_ARGS
+            or parsed.get("RunAtLoad") is not True
+            or parsed.get("KeepAlive") is not True
+            or parsed.get("Umask") != 0o077
+            or parsed.get("ThrottleInterval") != 1
+            or parsed.get("StandardErrorPath") != str(log_root / "mcp.stderr.log")
+            or parsed.get("StandardOutPath") != str(log_root / "mcp.stdout.log")
+        ):
             raise ArchiveFinalizeRefused("guardian fixture plist plan invalid")
     except (OSError, ValueError, TypeError, plistlib.InvalidFileException) as exc:
         raise ArchiveFinalizeRefused("guardian fixture plist unreadable") from exc

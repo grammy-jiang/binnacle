@@ -121,6 +121,7 @@ def test_independent_guardian_recovers_after_controller_sigkill(
             "lock": str(lock),
             "nonce": nonce,
             "previous_pid": old,
+            "log_root": str(root),
         }
         guardian._write_record(state, record)
         acquired = guard_root / "held.lock"
