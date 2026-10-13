@@ -25,6 +25,7 @@ import shutil
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
@@ -33,10 +34,7 @@ from typing import Any, Protocol
 from binnacle.platform.contracts import process_contracts as pc
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 from binnacle.platform.contracts.process_contracts import OwnedJobExit
-from binnacle.platform.darwin.job_manager_lifecycle import (
-    quiet_kill_owned,
-    release_owned_exit,
-)
+from binnacle.platform.darwin.job_manager_lifecycle import quiet_kill_owned
 from binnacle.platform.darwin.job_manager_queue import ExitQueueStorage
 from binnacle.platform.darwin.job_manager_records import (
     _exit_meta,
@@ -101,7 +99,9 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
         self._lock = threading.RLock()
         self._unrecorded: dict[str, OwnedJobExit] = {}  # reaped, not yet durable
         self._unrecorded_since: dict[str, float] = {}
-        self._acknowledged_exits: set[str] = set()
+        self._acknowledged_exits: OrderedDict[str, None] = OrderedDict()
+        self._active_attempts: dict[str, int] = {}
+        self._ack_pending: set[str] = set()
         # RL1: guards ``_unrecorded`` only, never held across I/O or ``_lock``,
         # so a reaper that gave up on a busy ``_lock`` can still queue.
         self._queue_lock = threading.Lock()
@@ -340,7 +340,8 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
             with self._persist_or_queue(exited, self._transaction(wait_s)):
                 meta, owner_id = self._meta(exited.job_id), self.owner_instance_id
                 if meta is None or meta.get("owner_instance_id") != owner_id:
-                    self._dequeue(exited.job_id)  # never ours to write
+                    # A transient read error reports None for a visible but
+                    # UNSYNCED JSON. Preserve the pending retry and uncertainty.
                     log.warning("event=job_exit_unrecorded job_id=%s", exited.job_id)
                     return False
                 if not _terminal(meta):  # first writer wins; never overwritten
@@ -352,7 +353,6 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
                     fsync_meta_directory(self.jobs_dir / exited.job_id)
                     recorded = meta
                 self._dequeue(exited.job_id, committed=True)
-                self._release(exited.job_id)
         except OSError as exc:
             event = "event=job_exit_unrecorded job_id=%s errno=%s retry=queued"
             log.warning(
@@ -364,21 +364,20 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
             return None if isinstance(exc, BlockingIOError) else False
         if recorded is not None:
             log_job_exit(log, exited.job_id, recorded, self.jobs_dir / exited.job_id)
+        self._release(exited.job_id)  # advisory ack cannot uncommit an fsync
         return True
 
     def _release(self, job_id: str) -> None:
-        release_owned_exit(self.owner, job_id, log)
+        self._ack_owner(job_id)
 
     def retry_unrecorded(self, wait_s: float | None = None) -> int:
-        """Re-attempt queued exits; returns how many are still not durable.
-
-        RL1: a busy lock (``wait_s``) ends this pass; the rest stay queued.
-        """
+        """Retry unsynced exits, then deferred owner acknowledgements."""
         with self._queue_lock:
             queued = tuple(self._unrecorded.values())
         for exited in queued:
             if self._record_guarded(exited, wait_s) is None:
                 break
+        self._retry_acks()
         with self._queue_lock:
             return len(self._unrecorded)
 
@@ -454,29 +453,22 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
                 stop.wait(0.1)
                 continue
             failures = 0
-            busy = False  # RL1: after one busy acquire, queue the rest unblocked
-            for exited in exits:
-                if busy:
-                    self._queue(exited)
-                    log.warning(
-                        "event=job_exit_unrecorded job_id=%s reason=busy", exited.job_id
-                    )
-                else:
-                    busy = self._record_guarded(exited, REAPER_LOCK_WAIT_S) is None
+            self._process_reaped_batch(exits, self._record_guarded, REAPER_LOCK_WAIT_S)
             self.persist_lost(REAPER_LOCK_WAIT_S)
-            if self._unrecorded and time.monotonic() >= retry_at:
+            if self._needs_retry() and time.monotonic() >= retry_at:
                 retry_at = time.monotonic() + EXIT_RETRY_S
                 self.retry_unrecorded(REAPER_LOCK_WAIT_S)
 
     def _record_guarded(
         self, exited: OwnedJobExit, wait_s: float | None = None
     ) -> bool | None:
-        try:
-            return self._try_record(exited, wait_s)
-        except Exception:
-            self._queue(exited)
-            log.exception("event=job_exit_unrecorded job_id=%s", exited.job_id)
-            return False
+        with self._pin_exit_callback(exited.job_id):
+            try:
+                return self._try_record(exited, wait_s)
+            except Exception:
+                self._queue(exited)
+                log.exception("event=job_exit_unrecorded job_id=%s", exited.job_id)
+                return False
 
     def close(self) -> Sequence[OwnedJobExit]:
         """Persist reaped exits BEFORE returning; unreaped stay UNKNOWN."""

@@ -110,7 +110,7 @@
     "LINUX": 67
   },
   "coverage_complete": true,
-  "implementation_commit": "c385365e0e0e6483ab87146697d9512f0a94b944",
+  "implementation_commit": "83053ec08b56464f86bba65b74a266f44212af07",
   "production_module_count": 233,
   "rows": [
     {
@@ -7848,11 +7848,19 @@
         "__future__.annotations",
         "binnacle.platform.contracts.process_contracts",
         "binnacle.platform.contracts.process_contracts.OwnedJobExit",
+        "binnacle.platform.darwin.job_manager_lifecycle",
+        "binnacle.platform.darwin.job_manager_lifecycle.LifecycleOwner",
+        "binnacle.platform.darwin.job_manager_lifecycle.release_owned_exit",
+        "collections",
+        "collections.OrderedDict",
         "collections.abc",
+        "collections.abc.Callable",
         "collections.abc.Iterator",
+        "collections.abc.Sequence",
         "contextlib",
         "contextlib.AbstractContextManager",
         "contextlib.contextmanager",
+        "logging",
         "threading",
         "time"
       ],
@@ -7862,7 +7870,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/platform/darwin/job_manager_queue.py",
       "rationale": "No native OS mechanisms required; portable application logic or Python package marker",
-      "sha256": "3da55e439026609a65ed0052f68499fb27ea3dfbbc68c00e22aff86e455ed04d",
+      "sha256": "dcf3e3f55722ab0bdc33bbf2809635b45c4f3be0ac5efd75a64d78c1353a060b",
       "stage": "OS6",
       "was_in_baseline": false
     },
@@ -7910,7 +7918,6 @@
         "binnacle.platform.contracts.process_contracts.OwnedJobExit",
         "binnacle.platform.darwin.job_manager_lifecycle",
         "binnacle.platform.darwin.job_manager_lifecycle.quiet_kill_owned",
-        "binnacle.platform.darwin.job_manager_lifecycle.release_owned_exit",
         "binnacle.platform.darwin.job_manager_procinfo",
         "binnacle.platform.darwin.job_manager_procinfo.prior_boot",
         "binnacle.platform.darwin.job_manager_queue",
@@ -7934,6 +7941,8 @@
         "binnacle.platform.darwin.job_manager_telemetry.log_job_start",
         "binnacle.provenance",
         "binnacle.provenance.runtime_provenance",
+        "collections",
+        "collections.OrderedDict",
         "collections.abc",
         "collections.abc.Callable",
         "collections.abc.Iterator",
@@ -7964,7 +7973,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/platform/darwin/job_manager_service.py",
       "rationale": "No native OS mechanisms required; portable application logic or Python package marker",
-      "sha256": "ed6e12fa9eeea1dc04ec09013373b03956d4d555ab66b3eeb92ef1d891646e17",
+      "sha256": "de2e13771f7dfa4bd9bf0d52b73ad25a89f49913ffc0722a4426a87f50b8b865",
       "stage": "OS6",
       "was_in_baseline": false
     },

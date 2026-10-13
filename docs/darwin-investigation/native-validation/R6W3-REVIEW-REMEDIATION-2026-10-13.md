@@ -198,3 +198,47 @@ passed on the local repair worktree. This is preliminary local validation;
 fresh CI, final Mac/Pi qualification and independent APPROVE on the exact
 signed SHA remain mandatory. The original J7m-a5 quiet/rollback gate must
 still pass before any production deployment.
+
+## Sixth independent review: 83053ec (REVISE; three P2)
+
+The exact read-only delta review of
+83053ec08b56464f86bba65b74a266f44212af07 marked the previous
+early-pending / stale-writer / prune issues FIXED, but found three further
+failure-state and lifecycle defects:
+
+1. A transient unreadable meta.json is represented by read_meta as None.
+   The retry branch previously dequeued that job and exposed an unsynced,
+   visible terminal record as EXITED.
+2. The in-memory committed-ID set grew by one entry per completed job
+   forever, even as the owning process continued and retained jobs were
+   pruned.
+3. An unexpected owner.release exception occurred after a confirmed fsync
+   but before job_exit logging. The durable completion marker suppressed
+   requeuing, so the event was lost and owner acknowledgement was not retried.
+
+The reviewer used isolated in-memory fault cases; no live production
+processes or developer worktrees were altered.
+
+## Seventh repair: truthful exit phases with bounded in-flight pins
+
+An isolated candidate worktree addresses these as follows:
+
+- A pending unsynced job cannot be dequeued when a metadata read
+  momentarily fails or the owner identity cannot be verified. It stays
+  UNKNOWN and is retried; the durability status never becomes optimistic.
+- Committed IDs use a bounded 2048-entry recency window, but any still
+  executing callback or reaper batch pins its job ID until the last writer
+  exits. This prevents a timed-out writer from resurrecting its exit even
+  after thousands of other commits, while memory does not accumulate
+  forever with successful throughput.
+- Exit logging follows confirmed metadata fsync and precedes owner
+  acknowledgement. An unexpected owner release failure becomes a redacted
+  owner-ack retry, not a failed metadata commit or suppressed job_exit.
+  The normal reaper loop retries deferred owner acknowledgements even
+  when there are no unsynced metadata records.
+- Six regression tests initially reproduced the three defects and exercise
+  timed-out writers, direct busy-reaper batches, bounded cache memory,
+  transient unreadable JSON and deferred owner acknowledgement.
+- No production restart, broad Git merge or CI override is permitted on
+  the basis of this local repair. Independent exact-commit review,
+  coverage and managed Mac/Pi acceptance remain required.
