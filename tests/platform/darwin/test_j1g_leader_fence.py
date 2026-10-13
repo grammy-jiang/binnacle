@@ -27,12 +27,16 @@ from binnacle.platform.contracts.process_contracts import (
 )
 from binnacle.platform.darwin import job_group_fence as fence
 from binnacle.platform.darwin import job_manager_entry as entry
+from binnacle.platform.darwin import job_manager_procinfo as procinfo
+from binnacle.platform.darwin import job_manager_records as job_records
 from binnacle.platform.darwin import job_manager_service as svc
 from binnacle.platform.darwin import job_process_owner as jpo
 from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
 from tests import signal_safety
 
-native = pytest.mark.skipif(sys.platform != "darwin", reason="Darwin job owner")
+native = pytest.mark.skipif(
+    sys.platform != "darwin" or not hasattr(os, "waitid"), reason="Darwin job owner"
+)
 
 GRACES = {"stop_sigterm_grace_s": 0.5, "stop_sigkill_grace_s": 0.5}
 
@@ -275,7 +279,7 @@ def test_manager_persists_an_owner_loss_as_unknown(tmp_path, recorded):
     try:
         reply = manager.handle(_start(tmp_path, "sleep 30"))
         job_id = reply["job_id"]
-        meta = svc.read_meta(jobs, job_id)
+        meta = job_records.read_meta(jobs, job_id)
         record = signal_safety.observe(meta["pid"])
         recorded.append((meta["pid"], record.birth))
         real = jpo._process_records
@@ -290,7 +294,7 @@ def test_manager_persists_an_owner_loss_as_unknown(tmp_path, recorded):
                 owner.reap_exits(0)  # only reaper ticks count (PRE-J1g-F2)
                 owner.authority(job_id)
         assert manager.persist_lost() == 1
-        meta = svc.read_meta(jobs, job_id)
+        meta = job_records.read_meta(jobs, job_id)
         assert meta["authority"] == "UNKNOWN"
         assert meta["termination_reason"] == "owner_restart"
         assert manager.state(job_id) == "unknown"  # D-1, never exited
@@ -338,7 +342,7 @@ def test_stopping_releases_a_50s_start_and_close_fits_exit_timeout(tmp_path):
     manager.close()
     total = time.monotonic() - began
     assert total < plan.JOBS_EXIT_TIMEOUT_S
-    meta = svc.read_meta(jobs, reply["job_id"])
+    meta = job_records.read_meta(jobs, reply["job_id"])
     assert (meta["signal"], meta["termination_reason"]) == (None, "owner_restart")
 
 
@@ -356,7 +360,7 @@ def test_stopping_stop_returns_current_state(tmp_path, recorded):
     )
     try:
         job_id = manager.handle(_start(tmp_path, "trap '' TERM; sleep 60"))["job_id"]
-        meta = svc.read_meta(jobs, job_id)
+        meta = job_records.read_meta(jobs, job_id)
         recorded.append((meta["pid"], signal_safety.observe(meta["pid"]).birth))
         time.sleep(0.2)
         replies: list[dict] = []
@@ -449,7 +453,7 @@ def test_stop_owned_after_leader_exit_mirrors_linux(tmp_path, recorded):
         reply = manager.handle(_start(tmp_path, "sleep 30 & exit 0", wait=5))
         job_id = reply["job_id"]
         assert reply["state"] == "exited"
-        meta = svc.read_meta(jobs, job_id)
+        meta = job_records.read_meta(jobs, job_id)
         assert _await(lambda: _live_members(meta["pid"]))
         (member,) = _live_members(meta["pid"])
         recorded.append((member.pid, member.birth))
@@ -461,7 +465,7 @@ def test_stop_owned_after_leader_exit_mirrors_linux(tmp_path, recorded):
     finally:
         manager.close()
     assert not _alive_exact(member.pid, member.birth)
-    assert svc.read_meta(jobs, job_id)["termination_reason"] == "normal_exit"
+    assert job_records.read_meta(jobs, job_id)["termination_reason"] == "normal_exit"
 
 
 @native
@@ -471,7 +475,7 @@ def test_processes_uses_comm_only_when_procargs_is_denied(owned, spool, recorded
     record = signal_safety.observe(started.pid)
     recorded.append((started.pid, record.birth))
     assert _await(lambda: owner.processes("job-p", 5)[0]["cmd"] == "sleep")
-    with mock.patch.object(entry, "command_line", return_value=None):
+    with mock.patch.object(procinfo, "command_line", return_value=None):
         (item,) = owner.processes("job-p")
     assert item["state"] in {"?", "S"}  # Darwin p_stat: SRUN (R or S) or SSLEEP
     assert item["etime_s"] >= 0

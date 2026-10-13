@@ -22,6 +22,10 @@ from binnacle.config import RootsSettings
 from binnacle.errors import CodedToolError
 from binnacle.features.files import fd_walk
 from binnacle.features.files.tools import list_files as lf
+from binnacle.platform.contracts.special_file_contracts import (
+    SPECIAL_FILE_CODE,
+    SPECIAL_FILE_TEXT,
+)
 
 # The process descriptor table: /proc/self/fd on Linux, /dev/fd on Darwin.
 FD_DIR = "/proc/self/fd" if os.path.isdir("/proc/self/fd") else "/dev/fd"
@@ -227,10 +231,25 @@ def ident(path: Path) -> tuple[int, int]:
     return info.st_dev, info.st_ino
 
 
+def verified(path: Path | str, roots, expected) -> int:
+    # SRC-W2-03: open_verified needs a parent descriptor. This test helper
+    # opens it by path (following intermediate links), as the removed by-path
+    # mode did, so the cases below keep their meaning.
+    flags = fd_walk.TRAVERSE_FLAGS & ~os.O_NOFOLLOW
+    try:
+        parent = os.open(os.path.dirname(os.fspath(path)), flags)
+    except OSError as err:
+        raise fd_walk._open_refusal(err, str(path), roots) from err
+    try:
+        return fd_walk.open_verified(path, roots, expected, parent_fd=parent)
+    finally:
+        os.close(parent)
+
+
 def refused(path: Path | str, roots, expected) -> CodedToolError:
     before = len(os.listdir(FD_DIR))
     with pytest.raises(CodedToolError) as exc:
-        fd_walk.open_verified(path, roots, expected)
+        verified(path, roots, expected)
     assert len(os.listdir(FD_DIR)) == before  # The fd was closed.
     assert str(len(SECRET)) not in str(exc.value)
     return exc.value
@@ -240,14 +259,14 @@ def refused(path: Path | str, roots, expected) -> CodedToolError:
 @pytest.mark.parametrize("name", ["o.txt", "inner/i.txt"])
 def test_open_verified_returns_a_readable_fd_in_any_root(files, name):
     path = files["outer"] / name
-    fd = fd_walk.open_verified(path, files["roots"], ident(path))
+    fd = verified(path, files["roots"], ident(path))
     try:
         assert os.read(fd, 100) == path.read_bytes()
         assert os.get_inheritable(fd) is False
     finally:
         os.close(fd)
     other = files["other"] / "x.txt"
-    fd = fd_walk.open_verified(str(other), [files["other"]], ident(other))
+    fd = verified(str(other), [files["other"]], ident(other))
     os.close(fd)
 
 
@@ -280,7 +299,11 @@ def test_open_verified_refuses_an_unopenable_object(files):
     with socket.socket(socket.AF_UNIX) as sock:
         sock.bind(str(path))
         err = refused(path, files["roots"], ident(path))
-    assert err.telemetry_code == "file_io_failed"
+    # FDW-B1-a3: an AF_UNIX socket may reject the open before fstat.
+    # Descriptor-relative type classification must still use the shared
+    # special-file refusal, never a kernel-dependent file_io_failed.
+    assert err.telemetry_code == SPECIAL_FILE_CODE
+    assert str(err) == SPECIAL_FILE_TEXT
 
 
 @LINUX_WALK
@@ -290,7 +313,14 @@ def test_open_verified_refuses_a_non_regular_file(files, kind):
     if kind == "fifo":
         os.mkfifo(path)  # O_NONBLOCK: the open does not wait for a writer.
     err = refused(path, files["roots"], ident(path))
-    assert err.telemetry_code == "not_a_regular_file"
+    # The type step words it as Darwin does (FDW-B1-a2 R1, SD-91).
+    assert (
+        err.telemetry_code
+        == {
+            "directory": "path_is_directory",
+            "fifo": "special_file_unsupported",
+        }[kind]
+    )
 
 
 @LINUX_WALK
@@ -331,8 +361,14 @@ def test_open_verified_opens_no_follow_non_blocking(files, monkeypatch):
         flags_seen.append(flags)
         return real_open(path, flags, *args, **kwargs)
 
-    monkeypatch.setattr(fd_walk.os, "open", record)
     path = files["outer"] / "o.txt"
-    os.close(fd_walk.open_verified(path, files["roots"], ident(path)))
+    parent = os.open(path.parent, fd_walk.TRAVERSE_FLAGS)
+    monkeypatch.setattr(fd_walk.os, "open", record)
+    try:
+        fd = fd_walk.open_verified(path, files["roots"], ident(path), parent_fd=parent)
+    finally:
+        monkeypatch.undo()
+        os.close(parent)
+    os.close(fd)
     wanted = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC | os.O_NOCTTY
     assert flags_seen == [wanted]

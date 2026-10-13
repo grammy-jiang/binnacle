@@ -9,10 +9,11 @@ swap of an in-root component for a symlink between a check and its use
 therefore cannot redirect the walk outside the root. This is not continuous
 containment: a directory renamed after it was opened keeps its identity.
 
-On Linux the walk opens directories with O_PATH (RX3a-F1): like a path
-lookup, it needs only search (execute) permission, so execute-only
-directories in the root chain or inside a root work as they did in r6. Only
-a directory that is enumerated is opened O_RDONLY (DIRECTORY_FLAGS).
+The walk opens directories with O_PATH on Linux (RX3a-F1) and O_SEARCH on
+Darwin (DARWIN-FOLLOWUP-exec-only-dirs): like a path lookup, it needs only
+search (execute) permission, so execute-only directories in the root chain
+or inside a root work as they did in r6, on both OSes. Only a directory
+that is enumerated is opened O_RDONLY (DIRECTORY_FLAGS).
 """
 
 import errno
@@ -24,18 +25,35 @@ from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 from binnacle.errors import CodedToolError
+from binnacle.platform.contracts.special_file_contracts import (
+    PATH_CHANGED_CODE,
+    PATH_IS_DIRECTORY_CODE,
+    SPECIAL_FILE_CODE,
+    SPECIAL_FILE_TEXT,
+    SPECIAL_OPEN_ERRNOS,
+    TOO_MANY_OPEN_FILES_CODE,
+    TOO_MANY_OPEN_FILES_ERRNOS,
+    path_changed_text,
+    path_is_directory_text,
+    too_many_open_files_text,
+)
 
 MAX_LINK_HOPS = 40  # Darwin platform/darwin/file_access.py MAX_LINK_HOPS.
 # A directory that is read (listed): read permission is required.
 DIRECTORY_FLAGS = (
     os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NOCTTY
 )
-# A directory that is only passed through or stat-ed.
+# A directory that is only passed through or stat-ed. The descriptor cannot
+# be listed or read (EBADF). Darwin <sys/fcntl.h>: O_SEARCH = O_EXEC |
+# O_DIRECTORY; os.O_SEARCH exists from Python 3.13.
 if sys.platform == "linux":
     TRAVERSE_FLAGS = os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
-else:  # Darwin keeps its own walk (DARWIN-FOLLOWUP-exec-only-dirs).
-    TRAVERSE_FLAGS = DIRECTORY_FLAGS
+else:  # Darwin; platform/darwin/file_traversal.py TRAVERSE_FLAGS twin.
+    _O_SEARCH: int = getattr(os, "O_SEARCH", 0x40000000 | os.O_DIRECTORY)
+    TRAVERSE_FLAGS = _O_SEARCH | DIRECTORY_FLAGS  # O_RDONLY is 0.
 READ_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC | os.O_NOCTTY
+# A FIFO, socket or device: special_file_unsupported on both OSes.
+SPECIAL_FILE_TYPES = (stat.S_IFIFO, stat.S_IFSOCK, stat.S_IFCHR, stat.S_IFBLK)
 
 
 def absolute_in_root(text: str, root: str) -> list[str] | None:
@@ -132,8 +150,10 @@ def link_target_info(
     lexically, once, as on Darwin; the link is walked once. '..' above
     the root (also into an outer root when roots nest), an absolute
     intermediate link, more than MAX_LINK_HOPS links, a non-directory
-    intermediate, a dangling link, a loop and any read failure yield None.
-    The result is the lstat of the last component, or the fstat of the
+    intermediate, a dangling link, a loop and any read failure yield None,
+    except a descriptor shortage (EMFILE/ENFILE): it is no evidence about
+    the link, so it is raised for the caller's too_many_open_files refusal
+    and the entry is never silently omitted (FDW-B1 #9). The result is the lstat of the last component, or the fstat of the
     directory a trailing '', '.' or '..' ends on; it is never a symlink, and
     no path string below '/' is followed.
     """
@@ -142,7 +162,9 @@ def link_target_info(
             if chain is None:
                 chain = owned.enter_context(directory_chain(root_fd, directory))
             return _walk_link(list(chain), name, root_path, aliases)
-    except OSError:
+    except OSError as exc:
+        if exc.errno in TOO_MANY_OPEN_FILES_ERRNOS:
+            raise
         return None
 
 
@@ -218,40 +240,44 @@ def open_verified(
     root_paths: Sequence[Path],
     expected: tuple[int, int],
     *,
-    parent_fd: int | None = None,
+    parent_fd: int,
 ) -> int:
     """Open an already-resolved regular file and verify the opened object.
 
     For read_file (r6 W2 X3b, SD-76); this is no confinement resolver. The
-    final component is opened no-follow and non-blocking: relative to
-    ``parent_fd`` when given (open_walked), else by path, which follows
-    intermediate symlinks and so can open an outside object before the
-    refusal. The descriptor is returned only when its kernel path is inside
-    SOME configured root (any one, not only the innermost), its (st_dev,
-    st_ino) equals ``expected`` from the caller's containment check, it is
-    a regular file and it still has a link (st_nlink > 0: a file deleted
-    after the open is path_changed). The checks run in that order
-    (RX3a2-N2), so an outside object is always path_outside_root. Otherwise
-    the descriptor is closed and a coded refusal is raised.
+    final component is opened no-follow and non-blocking relative to
+    ``parent_fd``, a descriptor-walked parent (open_walked). There is no
+    by-path mode, which would follow intermediate symlinks (SRC-W2-03). The
+    descriptor is returned only when its kernel path is inside
+    SOME configured root (any one, not only the innermost), it is a regular
+    file, its (st_dev, st_ino) equals ``expected`` from the caller's
+    containment check and it still has a link (st_nlink > 0: a file deleted
+    after the open is path_changed). The checks run in that order: the root
+    check first (RX3a2-N2), so an outside object is always
+    path_outside_root; then the one order both OSes use (FDW-B1-a2 R1,
+    Darwin file_traversal.checked_open): the TYPE of the opened object (a
+    FIFO, socket or device is special_file_unsupported, a directory
+    path_is_directory, never read), then its IDENTITY (another regular file
+    is path_changed). Otherwise the descriptor is closed and a coded
+    refusal is raised.
     """
     _require_linux()
     shown = os.fspath(path)
     try:
-        if parent_fd is None:
-            fd = os.open(shown, READ_FLAGS)
-        else:
-            fd = os.open(os.path.basename(shown), READ_FLAGS, dir_fd=parent_fd)
+        fd = os.open(os.path.basename(shown), READ_FLAGS, dir_fd=parent_fd)
     except OSError as exc:
+        if _failed_open_special(parent_fd, os.path.basename(shown), exc):
+            raise CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT) from exc
         raise _open_refusal(exc, shown, root_paths) from exc
     try:
         real = Path(_opened_path(fd))
         if not any(real.is_relative_to(root) for root in root_paths):
             raise _outside(shown, root_paths)
         info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise wrong_type(shown, info)
         if (info.st_dev, info.st_ino) != expected:
             raise _changed(shown)
-        if not stat.S_ISREG(info.st_mode):
-            raise _not_regular(shown)
         if info.st_nlink == 0:
             raise _changed(shown)
     except BaseException as exc:
@@ -280,13 +306,29 @@ def open_walked(
         raise _outside(shown, root_paths)
     top = max(holders, key=lambda root: len(root.parts))
     parts = path.relative_to(top).parts
-    if not parts:  # A root itself is a directory.
-        raise _not_regular(shown)
+    if not parts:  # A root itself is a directory, not a file.
+        raise CodedToolError(PATH_IS_DIRECTORY_CODE, path_is_directory_text(shown))
     try:
         with open_root(top) as root_fd, directory_at(root_fd, parts[:-1]) as parent:
             return open_verified(path, root_paths, expected, parent_fd=parent)
     except OSError as exc:
         raise _open_refusal(exc, shown, root_paths) from exc
+
+
+def _failed_open_special(parent_fd: int, name: str, exc: OSError) -> bool:
+    """Inspect a failed no-follow open by the *held parent*, not by path.
+
+    Socket and device opens can fail before fstat; an ordinary permission
+    denial remains a permission denial when the entry is still regular.
+    A second rename cannot make this routine open or read the new entry.
+    """
+    if exc.errno not in SPECIAL_OPEN_ERRNOS:
+        return False
+    try:
+        info = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except OSError:
+        return False
+    return stat.S_IFMT(info.st_mode) in SPECIAL_FILE_TYPES
 
 
 def _open_refusal(
@@ -303,6 +345,11 @@ def _open_refusal(
         return _changed(shown)
     if exc.errno == errno.ENOENT:
         return _changed(shown)
+    if exc.errno in TOO_MANY_OPEN_FILES_ERRNOS:
+        # A descriptor shortage is no evidence about the path: the shared
+        # template, as on Darwin, never file_io_failed (FDW-B1, PREP gap 4).
+        text = too_many_open_files_text("read_file", f"open {shown}")
+        return CodedToolError(TOO_MANY_OPEN_FILES_CODE, text)
     return CodedToolError("file_io_failed", f"Cannot open {shown}: {exc.strerror}.")
 
 
@@ -320,10 +367,25 @@ def _not_regular(shown: str) -> CodedToolError:
     )
 
 
+def wrong_type(shown: object, info: os.stat_result) -> CodedToolError:
+    """The refusal for an opened object that is not a regular file.
+
+    Its type decides before its identity, on both OSes (FDW-B1-a2 R1).
+    """
+    if stat.S_IFMT(info.st_mode) in SPECIAL_FILE_TYPES:
+        return CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
+    if stat.S_ISDIR(info.st_mode):
+        return CodedToolError(PATH_IS_DIRECTORY_CODE, path_is_directory_text(shown))
+    return _not_regular(str(shown))
+
+
 def _changed(shown: str) -> CodedToolError:
-    return CodedToolError(
-        "path_changed", f"File changed while it was opened: {shown}. Read it again."
-    )
+    return path_changed(shown)
+
+
+def path_changed(shown: object, tool: str = "read_file") -> CodedToolError:
+    """The coded refusal for a path that changed while it was walked."""
+    return CodedToolError(PATH_CHANGED_CODE, path_changed_text(shown, tool))
 
 
 def permission_denied(shown: object) -> CodedToolError:

@@ -21,12 +21,18 @@ from binnacle.errors import CodedToolError
 from binnacle.features.files import fd_walk
 from binnacle.features.files.paths import FileToolAccess, nearby_hint, resolve_path
 from binnacle.features.files.textio import decode_text, human_size
+from binnacle.platform.contracts.special_file_contracts import (
+    PATH_IS_DIRECTORY_CODE,
+    SPECIAL_FILE_CODE,
+    SPECIAL_FILE_TEXT,
+    path_is_directory_text,
+)
 
 LINE_CLIP_MARK = "… [line truncated]"
 # A FIFO, socket or device: Darwin's file_traversal.regular_fd refuses these.
-SPECIAL_FILE_TYPES = (stat.S_IFIFO, stat.S_IFSOCK, stat.S_IFCHR, stat.S_IFBLK)
-# fd_walk's refusals for such an object: the type check after the open (a
-# FIFO or device), ENXIO (a socket) and EACCES (a disk device) at the open.
+SPECIAL_FILE_TYPES = fd_walk.SPECIAL_FILE_TYPES
+# fd_walk's refusals for such an object at the open: ENXIO (a socket) and
+# EACCES (a disk device); the type check after the open words it already.
 SPECIAL_FILE_REFUSALS = ("not_a_regular_file", "file_io_failed", "permission_denied")
 
 
@@ -76,15 +82,14 @@ def _too_large(size: int, settings: ReadFileSettings) -> CodedToolError:
 
 
 def special_file_unsupported() -> CodedToolError:
-    """Darwin's refusal for a FIFO, socket or device, byte for byte (X3b-a3).
+    """The refusal for a FIFO, socket or device on both OSes (r6 W3 RF1).
 
-    Darwin raises unsafe("special_file_unsupported") in
-    platform/darwin/file_traversal.py and FileToolAccess.operation words it
-    as f"{code}."; the Linux path never imports the Darwin adapter, so the
-    text is copied here and a test pins the two equal.
+    Code and text come from platform/contracts/special_file_contracts.py,
+    the one source for both OSes. Darwin raises the same code in
+    platform/darwin/file_traversal.py, which FileToolAccess.operation words
+    with the same constants (error_text.linux_error, r6 W3 PX1).
     """
-    code = "special_file_unsupported"
-    return CodedToolError(code, f"{code}.")
+    return CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
 
 
 def _is_special(resolved: Path, expected: tuple[int, int]) -> bool:
@@ -117,6 +122,40 @@ def _read_at_most(fd: int, limit: int) -> bytes:
     return b"".join(chunks)
 
 
+def _read_bounded(fd: int, settings: ReadFileSettings) -> bytes:
+    """Read at most max_file_bytes from fd; a file that grew is file_too_large."""
+    data = _read_at_most(fd, settings.max_file_bytes + 1)
+    if len(data) > settings.max_file_bytes:
+        grown = os.fstat(fd).st_size
+        raise _too_large(max(grown, len(data)), settings)
+    return data
+
+
+def _read_legacy(
+    resolved: Path, expected: tuple[int, int], settings: ReadFileSettings
+) -> bytes:
+    """The non-Linux read without a file_access adapter (SRC-W2-10).
+
+    Production Darwin reads through DarwinFileAccess; this path serves tests
+    and direct read_file_impl calls. It opens with fd_walk.READ_FLAGS
+    (O_NONBLOCK: a FIFO swapped in after the stat never blocks the open;
+    O_NOFOLLOW: a final symlink is not followed), checks that the opened
+    object is the checked regular file, and reads at most max_file_bytes + 1
+    bytes, as on Linux.
+    """
+    fd = os.open(resolved, fd_walk.READ_FLAGS)
+    try:
+        opened = os.fstat(fd)
+        # Type, then identity: the order of both OSes (FDW-B1-a2 R1).
+        if not stat.S_ISREG(opened.st_mode):
+            raise fd_walk.wrong_type(resolved, opened)
+        if (opened.st_dev, opened.st_ino) != expected:
+            raise fd_walk.path_changed(resolved)
+        return _read_bounded(fd, settings)
+    finally:
+        os.close(fd)
+
+
 def _read_checked(
     resolved: Path,
     expected: tuple[int, int],
@@ -132,10 +171,12 @@ def _read_checked(
     (RX3b-F6); the raw descriptor is read with os.read, each request asking
     only for the bytes still allowed, so at most max_file_bytes + 1 bytes are
     read from the descriptor (RX3b2-F1, RX3b3-F1). Darwin keeps its own READ_FLAGS walk (RX3a2-N4) and never
-    calls open_verified. A FIFO, socket or device that fd_walk refuses is
-    worded as on Darwin when an lstat shows the checked object (X3b-a3);
-    path_outside_root and path_changed are never reworded, and nothing is
-    opened again.
+    calls open_verified. read_file_impl refuses a FIFO, socket or device by
+    its pre-open stat (SRC-W2-01), so one reaches this point only after a
+    race; a special file that fd_walk refuses is still worded
+    special_file_unsupported when an lstat shows the checked object
+    (X3b-a3); path_outside_root and path_changed are never reworded, and
+    nothing is opened again. Other OSes read through _read_legacy.
     """
     if sys.platform == "linux":
         allowed = (get_settings().roots if roots is None else roots).canonical_allowed
@@ -148,15 +189,11 @@ def _read_checked(
                 raise special_file_unsupported() from exc
             raise
         try:
-            data = _read_at_most(fd, settings.max_file_bytes + 1)
-            if len(data) > settings.max_file_bytes:
-                grown = os.fstat(fd).st_size
-                raise _too_large(max(grown, len(data)), settings)
-            return data
+            return _read_bounded(fd, settings)
         finally:
             os.close(fd)
     else:
-        return resolved.read_bytes()
+        return _read_legacy(resolved, expected, settings)
 
 
 def read_file_impl(
@@ -171,6 +208,8 @@ def read_file_impl(
     settings = get_settings().read_file if settings is None else settings
     if file_access is not None:
         file_access.require("read_file")
+        # Darwin words special_file_unsupported with the shared text in
+        # error_text.linux_error (r6 W3 PX1), as for every file tool.
         resolved, size, data = file_access.read(path, settings.max_file_bytes)
     else:
         resolved = resolve_path(path, roots=roots)
@@ -181,13 +220,15 @@ def read_file_impl(
             )
         if resolved.is_dir():
             raise CodedToolError(
-                "path_is_directory",
-                f"Path is a directory, not a file: {resolved}. Use list_files to browse it.",
+                PATH_IS_DIRECTORY_CODE, path_is_directory_text(resolved)
             )
         checked = resolved.stat()
-        size = checked.st_size
-        if size > settings.max_file_bytes:
-            raise _too_large(size, settings)
+        if not stat.S_ISREG(checked.st_mode):
+            # SRC-W2-01: a FIFO, socket or device is refused by this stat,
+            # before any open; the verify after the open still covers a race.
+            raise special_file_unsupported()
+        if checked.st_size > settings.max_file_bytes:
+            raise _too_large(checked.st_size, settings)
     if end_line is not None and start_line > end_line:
         raise CodedToolError(
             "range_invalid",
@@ -198,6 +239,9 @@ def read_file_impl(
         data = _read_checked(
             resolved, (checked.st_dev, checked.st_ino), roots, settings
         )
+        # SRC-W2-11: report the bytes read from the verified descriptor, as
+        # Darwin's FileToolAccess.read does, not the pre-open stat size.
+        size = len(data)
     decoded = decode_text(data, resolved)
     if decoded is None:
         mime = mimetypes.guess_type(resolved.name)[0] or "unknown type"

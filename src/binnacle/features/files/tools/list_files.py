@@ -2,14 +2,14 @@
 
 Spec: docs/tools/list_files.md. Two modes: no glob = one-level listing
 (dirs first); glob = recursive `rg --files` match, newest first,
-gitignore respected. Uses the system ripgrep on purpose: bundled
-jemalloc builds abort on this Pi's 16 KB kernel pages (Copilot lesson).
+gitignore respected. Glob mode lives in features/files/list_files_glob.py
+(split behavior-neutrally, r6 W3 SP1); it uses the system ripgrep on purpose.
 """
 
 import errno
 import os
 import stat
-import subprocess
+import subprocess  # noqa: F401 - tests patch lf.subprocess.run (glob mode moved)
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from pathlib import Path, PurePath
@@ -21,16 +21,20 @@ from pydantic import Field
 
 from binnacle.config import ListFilesSettings, RootsSettings, get_settings
 from binnacle.errors import CodedToolError
-from binnacle.features.files import fd_walk
+from binnacle.features.files import fd_walk, list_files_glob
+from binnacle.features.files.error_text import followed
 from binnacle.features.files.paths import (
     FileToolAccess,
-    full_match,
     nearby_hint,
     resolve_path,
 )
-from binnacle.features.search.fd_chain import DirectoryChain
-from binnacle.features.search.rg_env import NO_CONFIG, rg_env
-from binnacle.platform.contracts.file_access_contracts import ListRequest
+from binnacle.features.files.rg_env import noting_unreadable, record_unreadable
+from binnacle.platform.contracts.file_access_contracts import ListRequest, RootGrant
+from binnacle.platform.contracts.special_file_contracts import (
+    SPECIAL_FILE_CODE,
+    SPECIAL_FILE_TEXT,
+    TOO_MANY_OPEN_FILES_CODE,
+)
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -70,11 +74,32 @@ def _file_entry(p: Path) -> dict | None:
 # The r5/r6 names stay importable here; fd_walk holds the shared walk.
 MAX_LINK_HOPS = fd_walk.MAX_LINK_HOPS
 _absolute_in_root = fd_walk.absolute_in_root
+# Glob mode moved to list_files_glob (r6 W3 SP1); the r6 names stay here.
+_glob_entries = list_files_glob.glob_entries
+_glob_mode = list_files_glob.glob_mode
+
+
+def _changed(shown: Path) -> CodedToolError:
+    # The shared text; Darwin's link refusal after the followed hop uses it too.
+    return fd_walk.path_changed(shown, "list_files")
+
+
+def _refusal(exc: OSError, shown: Path) -> CodedToolError:
+    """The coded refusal for any other walk or read failure (SRC-W2-06)."""
+    if exc.errno == errno.ELOOP:
+        # O_NOFOLLOW met a symlink: the listed directory was swapped.
+        return _changed(shown)
+    if list_files_glob.is_shortage(exc):
+        return list_files_glob.descriptor_shortage(f"open {shown}", "Retry.")
+    return CodedToolError("file_io_failed", f"Cannot list {shown}: {exc.strerror}.")
 
 
 @contextmanager
 def _opened(
-    top: Path, parts: tuple[str, ...], shown: Path
+    top: Path,
+    parts: tuple[str, ...],
+    shown: Path,
+    roots: RootsSettings | None = None,
 ) -> Iterator[tuple[list[int], int]]:
     """The descriptor chain from the root being listed, and the listed fd.
 
@@ -82,6 +107,8 @@ def _opened(
     swapped for a symlink or a file after resolve_path fails here instead of
     being followed out of the root. The chain only traverses (O_PATH on
     Linux); the listed directory alone is opened O_RDONLY to be read.
+    Every failure is a coded refusal; a race directory_not_found carries
+    the nearby hint, as the path check before the walk does (SRC-W2-06).
     """
     with ExitStack() as opened:
         try:
@@ -94,17 +121,16 @@ def _opened(
                 fd_walk.directory_chain(root_fd, parts, readable)
             )
         except FileNotFoundError as exc:
+            hint = nearby_hint(shown.parent, roots=roots)
             raise CodedToolError(
-                "directory_not_found", f"Directory not found: {shown}."
+                "directory_not_found", f"Directory not found: {shown}.{hint}"
             ) from exc
         except NotADirectoryError as exc:
-            raise CodedToolError(
-                "path_changed",
-                f"Directory changed during the listing: {shown}. "
-                f"A path component is no longer a directory; list it again.",
-            ) from exc
+            raise _changed(shown) from exc
         except PermissionError as exc:
             raise fd_walk.permission_denied(shown) from exc
+        except OSError as exc:
+            raise _refusal(exc, shown) from exc
         # Links resolve through the open chain; the listed fd ends it (F3).
         yield chain, chain[-1]
 
@@ -142,33 +168,24 @@ def _list_mode(
     include_hidden: bool,
     allowed: tuple[Path, ...],
     configured: tuple[tuple[Path, Path], ...] = (),
+    *,
+    roots: RootsSettings | None = None,
 ) -> ToolResult:
     # Links resolve inside the innermost root holding root, as Darwin's grant
     # descriptor walk does: '..' into an outer root is omitted (SD-74).
     top = max(
         (r for r in allowed if root.is_relative_to(r)), key=lambda r: len(r.parts)
     )
-    parts = root.relative_to(top).parts
-    listed = []
-    with _opened(top, parts, root) as (chain, fd):
-        held = os.fstat(chain[0])  # Configured aliases, re-checked per call (LP).
-        live = [str(a) for a, c in configured if c == top != a and _names(a, held)]
-
-        def follow(name: str) -> os.stat_result | None:
-            return fd_walk.link_target_info(
-                chain[0], parts, name, str(top), chain=chain, aliases=live
-            )
-
-        for name in os.listdir(fd):
-            if name == ".git" or (not include_hidden and name.startswith(".")):
-                continue
-            info = _entry_info(fd, name, follow)
-            if info is None:
-                continue
-            entry: dict = {"path": str(root / name), "type": "dir"}
-            if not stat.S_ISDIR(info.st_mode):
-                entry.update(type="file", bytes=info.st_size)
-            listed.append((name, entry))
+    try:
+        listed = _listed(top, root, include_hidden, configured, roots)
+    except CodedToolError as exc:
+        # One retry on a descriptor shortage, after every descriptor of the
+        # first walk is closed, as DarwinFileAccess.list_entries does: this
+        # call's own descriptors never cause the refusal. A second shortage
+        # is too_many_open_files (FDW-B1-a2 R2).
+        if exc.telemetry_code != TOO_MANY_OPEN_FILES_CODE:
+            raise
+        listed = _listed(top, root, include_hidden, configured, roots)
     listed.sort(key=lambda ne: (0 if ne[1]["type"] == "dir" else 1, ne[0].lower()))
     truncated = len(listed) > max_results
     entries = [e for _, e in listed[:max_results]]
@@ -190,136 +207,51 @@ def _list_mode(
     return ToolResult(content=summary, structured_content=payload)
 
 
-def _glob_entries(root: Path, lines: list[str]) -> list[dict]:
-    """Size each listed file by ONE no-follow lstat (r6 W2 X3c-a3, SD-78).
-
-    rg lists by path string and never lists a symlink. A line that is
-    absolute or has a '..' component is rejected: rg --files below root
-    prints neither. Every component from '/' to the file's directory is
-    opened no-follow (O_PATH on Linux); only the chain of the current path
-    is open (fd_chain, a stack bounded by the path depth). The file is
-    lstat-ed relative to that descriptor. A path whose directory is no
-    longer a directory (swapped for a symlink or a file) or whose final
-    component is now a symlink is omitted: no outside object is typed or
-    sized. Any other failure, including a descriptor shortage, keeps the
-    entry without bytes, as r6 did when p.stat() failed.
-    """
-    entries: list[dict] = []
-    # Plain string splitting: PurePath costs more than the walk itself. The
-    # components and the reported path equal those of root / line.
-    top = [part for part in str(root).split("/") if part]
-    with DirectoryChain() as chain:
-        for line in lines:
-            below = [part for part in line.split("/") if part not in ("", ".")]
-            if line.startswith("/") or ".." in below or not below:
-                continue
-            parts = top + below
-            entry: dict = {"path": "/" + "/".join(parts), "type": "file"}
-            try:
-                info = os.lstat(below[-1], dir_fd=chain.directory(tuple(parts[:-1])))
-            except OSError as exc:
-                if exc.errno in (errno.ENOTDIR, errno.ELOOP):
-                    continue
-                entries.append(entry)
-                continue
-            if stat.S_ISLNK(info.st_mode):
-                continue
-            entry["bytes"] = info.st_size
-            entries.append(entry)
-    return entries
-
-
-def _glob_mode(
+def _listed(
+    top: Path,
     root: Path,
-    glob: str,
-    max_results: int,
     include_hidden: bool,
-    *,
-    rg_bin: str | None = None,
-    timeout_s: int | None = None,
-) -> ToolResult:
-    if rg_bin is None or timeout_s is None:
-        defaults = get_settings()
-        rg_bin = defaults.rg_bin if rg_bin is None else rg_bin
-        timeout_s = defaults.list_files.rg_timeout_s if timeout_s is None else timeout_s
-    # rg only walks (gitignore/hidden respected); the glob filter runs in
-    # Python: rg's --glob "always overrides any other ignore logic", so a
-    # positive --glob would whitelist gitignored files (found by the gate).
-    pattern = glob if "/" in glob else f"**/{glob}"
-    cmd = [rg_bin, NO_CONFIG, "--files", "--sortr", "modified"]
-    if include_hidden:
-        cmd += ["--hidden", "--glob", "!**/.git/**"]
-    try:
-        proc = subprocess.run(
-            cmd,
-            cwd=root,
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-            check=False,
-            env=rg_env(),
-        )
-    except FileNotFoundError as exc:
-        raise CodedToolError(
-            "rg_missing",
-            "ripgrep (rg) is not available on this system; "
-            "use run_command (find, ls) instead.",
-        ) from exc
-    except subprocess.TimeoutExpired as exc:
-        raise CodedToolError(
-            "rg_timeout",
-            f"Glob search timed out after {timeout_s} s in {root}. "
-            f"Narrow the glob or point path at a subdirectory.",
-        ) from exc
-    if proc.returncode not in (0, 1):
-        stderr = proc.stderr.strip()[-300:]
-        raise CodedToolError(
-            "rg_failed",
-            f"ripgrep failed in {root}: {stderr or 'unknown error'}. "
-            f"Use run_command (find, ls) as a fallback.",
-        )
+    configured: tuple[tuple[Path, Path], ...],
+    roots: RootsSettings | None,
+) -> list[tuple[str, dict]]:
+    """One walk of root below top: (name, entry) for each listed entry.
 
-    try:
-        lines = [
-            line
-            for line in proc.stdout.splitlines()
-            if line and full_match(line, pattern)
-        ]
-    except ValueError as e:
-        raise CodedToolError(
-            "invalid_glob", f"Invalid glob pattern {glob!r}: {e}"
-        ) from e
-    truncated = len(lines) > max_results
-    entries = _glob_entries(root, lines[:max_results])
-    payload = {
-        "path": str(root),
-        "mode": "glob",
-        "entries": entries,
-        "count": len(entries),
-        "truncated": truncated,
-    }
-    if not entries:
-        payload["note"] = (
-            f"No files match {glob!r} under {root} "
-            f"(gitignored and hidden files are skipped by default)."
-        )
-        summary = f"No files match {glob!r} under {root}."
-    elif truncated:
-        payload["note"] = (
-            f"Showing first {max_results} of {len(lines)} matches; "
-            f"narrow the glob or raise max_results."
-        )
-        summary = (
-            f"Found {len(lines)} files matching {glob!r} under {root}; "
-            f"showing newest {max_results}."
-        )
-    else:
-        summary = (
-            f"Found {len(entries)} files matching {glob!r} under {root} (newest first)."
-        )
-    return ToolResult(content=summary, structured_content=payload)
+    Every descriptor it opens is closed when it returns or raises.
+    """
+    parts = root.relative_to(top).parts
+    listed = []
+    with _opened(top, parts, root, roots) as (chain, fd):
+        held = os.fstat(chain[0])  # Configured aliases, re-checked per call (LP).
+        live = [str(a) for a, c in configured if c == top != a and _names(a, held)]
+
+        def follow(name: str) -> os.stat_result | None:
+            try:
+                return fd_walk.link_target_info(
+                    chain[0], parts, name, str(top), chain=chain, aliases=live
+                )
+            except OSError as exc:  # Only a descriptor shortage (FDW-B1 #9).
+                raise _refusal(exc, root) from exc
+
+        try:
+            names = os.listdir(fd)  # dup(2): EMFILE is possible here too.
+        except OSError as exc:
+            raise _refusal(exc, root) from exc
+        for name in names:
+            if name == ".git" or (not include_hidden and name.startswith(".")):
+                continue
+            info = _entry_info(fd, name, follow)
+            if info is None or not (
+                stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)
+            ):
+                continue  # A FIFO, socket or device is omitted, as on Darwin.
+            entry: dict = {"path": str(root / name), "type": "dir"}
+            if not stat.S_ISDIR(info.st_mode):
+                entry.update(type="file", bytes=info.st_size)
+            listed.append((name, entry))
+    return listed
 
 
+@noting_unreadable  # Partial result plus one note (R-OS1-F1).
 def list_files_impl(
     path: str,
     glob: str | None,
@@ -337,7 +269,8 @@ def list_files_impl(
         rg_bin = defaults.rg_bin if rg_bin is None else rg_bin
     if file_access is not None:
         file_access.require("list_files")
-        with file_access.operation(path, "list_files") as (grant, relative, display):
+
+        def listed(grant: RootGrant, relative: str, display: Path) -> ToolResult:
             cap = settings.max_results_cap
             wanted = max(1, min(max_results, cap))
             # Ask for the full cap so the total behind a "showing first N of M"
@@ -357,6 +290,10 @@ def list_files_impl(
             root_label = display
             for _ in PurePath(relative).parts:
                 root_label = root_label.parent
+            # Directories the walk could not open (FileListing.unreadable,
+            # Darwin only): the same note as Linux rg's (R-OS1-F1).
+            unreadable = getattr(listing, "unreadable", ())
+            record_unreadable(str(root_label / path) for path in unreadable)
             for entry in listing.entries:
                 # A symlink is typed by its in-root target; any other entry the
                 # provider could not type (unresolved link, fifo, socket) is omitted.
@@ -412,12 +349,23 @@ def list_files_impl(
                 )
                 summary = f"Listed first {len(shown)} of {total} entries in {display}."
             return ToolResult(content=summary, structured_content=payload)
+
+        # An in-root link is listed as its target, as on Linux (PF-PX1-1).
+        return followed(
+            file_access.operation,
+            path,
+            "list_files",
+            lambda: dict(file_access.grants),
+            listed,
+        )
     resolved = resolve_path(path, roots=roots)
     if not resolved.exists():
         raise CodedToolError(
             "directory_not_found",
             f"Directory not found: {resolved}.{nearby_hint(resolved.parent, roots=roots)}",
         )
+    if not resolved.is_dir() and not resolved.is_file():
+        raise CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
     if not resolved.is_dir():
         raise CodedToolError(
             "path_is_file",
@@ -436,7 +384,9 @@ def list_files_impl(
     roots = get_settings().roots if roots is None else roots
     allowed = roots.canonical_allowed
     pairs = tuple(zip([r.expanduser() for r in roots.allowed], allowed, strict=True))
-    return _list_mode(resolved, max_results, include_hidden, allowed, pairs)
+    return _list_mode(
+        resolved, max_results, include_hidden, allowed, pairs, roots=roots
+    )
 
 
 def register(

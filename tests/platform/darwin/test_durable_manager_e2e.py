@@ -7,6 +7,7 @@ runtime; only that exact child is ever signalled (RULE-NO-PKILL).
 
 import functools
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -23,7 +24,10 @@ from binnacle.features.commands.tools import stop_job as sj
 from binnacle.platform.contracts.process_contracts import JOB_MANAGER_UNAVAILABLE
 from tests.platform.darwin.test_durable_tool_wiring import _app, _run, _settings, _tools
 
-_DARWIN = pytest.mark.skipif(sys.platform != "darwin", reason="real com.binnacle.jobs")
+_DARWIN = pytest.mark.skipif(
+    sys.platform != "darwin" or not hasattr(os, "waitid"),
+    reason="real com.binnacle.jobs",
+)
 
 # J2r frozen ping fields (jobs/J2r-a2/INTERFACE-FROZEN.md, D3).
 PING_FIELDS = {"ok", "version", "owner_instance_id", "boot_id", "pid"}

@@ -7,8 +7,9 @@ import time
 from pathlib import Path, PurePath
 
 from binnacle.errors import CodedToolError
+from binnacle.features.files.error_text import followed
 from binnacle.features.files.paths import full_match
-from binnacle.features.search.rg_env import NO_CONFIG, rg_env
+from binnacle.features.files.rg_env import NO_CONFIG, record_unreadable, rg_env
 from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 
@@ -74,6 +75,60 @@ def matches_glob(
         ) from exc
 
 
+def path_order(file: str, line: int) -> tuple[tuple[bytes, ...], int]:
+    """The order of rg --sort path: sibling names in byte order, depth first.
+
+    Comparing whole paths is not enough: 'a/x' sorts before 'a.txt' because
+    the sibling 'a' sorts before 'a.txt', although '/' follows '.' in bytes.
+    """
+    return tuple(os.fsencode(part) for part in file.split("/")), line
+
+
+class SmallestMatches:
+    """The max_results first matches in (file, line) order, whatever the arrival order.
+
+    rg walks in parallel, so arrival order varies between calls. Keeping the
+    smallest keys makes the retained subset the same for the same tree. The
+    buffer is trimmed when it reaches twice the cap, so memory stays bounded.
+    """
+
+    def __init__(self, cap: int) -> None:
+        self.cap = cap
+        self._rows: list[tuple[str, int, str]] = []
+        self._limit: tuple[tuple[bytes, ...], int] | None = (
+            None  # largest key kept when full
+        )
+        self._parts: dict[
+            str, tuple[bytes, ...]
+        ] = {}  # one key per file, not per match
+
+    def _key(self, file: str, line: int) -> tuple[tuple[bytes, ...], int]:
+        parts = self._parts.get(file)
+        if parts is None:
+            parts = self._parts[file] = path_order(file, 0)[0]
+        return parts, line
+
+    def add(self, file: str, line: int, text: str) -> None:
+        if self._limit is not None and self._key(file, line) >= self._limit:
+            return
+        self._rows.append((file, line, text))
+        if len(self._rows) >= 2 * self.cap:
+            self._trim()
+
+    def _trim(self) -> None:
+        self._rows.sort(key=lambda row: self._key(row[0], row[1]))
+        del self._rows[self.cap :]
+        if len(self._rows) == self.cap:
+            self._limit = self._key(self._rows[-1][0], self._rows[-1][1])
+
+    def result(self, max_line_chars: int, clip_mark: str) -> list[dict]:
+        self._trim()
+        return [
+            {"file": file, "line": line, "text": clip(text, max_line_chars, clip_mark)}
+            for file, line, text in self._rows
+        ]
+
+
 def collect(
     events: list[dict],
     root: Path,
@@ -85,10 +140,9 @@ def collect(
     clip_mark: str,
 ) -> tuple[list[dict], dict[str, dict[int, str]], int, bool]:
     started_ns = time.perf_counter_ns()
-    matches: list[dict] = []
+    kept = SmallestMatches(max_results)
     line_map: dict[str, dict[int, str]] = {}
     total = 0
-    truncated = False
     try:
         for event in events:
             kind = event.get("type")
@@ -97,7 +151,9 @@ def collect(
             if metrics is not None:
                 metrics.collect_event_candidates += 1
             data = event["data"]
-            file = data["path"]["text"]
+            file = data["path"].get("text")
+            if file is None:  # rg's {"bytes": ...}: not UTF-8 (R-PX1-3).
+                continue
             if glob is not None and metrics is not None:
                 metrics.collect_glob_checks += 1
             if not matches_glob(file, root, glob):
@@ -109,16 +165,9 @@ def collect(
             line_map.setdefault(file, {})[line_no] = text
             if kind == "match":
                 total += 1
-                if len(matches) < max_results:
-                    matches.append(
-                        {
-                            "file": file,
-                            "line": line_no,
-                            "text": clip(text, max_line_chars, clip_mark),
-                        }
-                    )
-                else:
-                    truncated = True
+                kept.add(file, line_no, text)
+        matches = kept.result(max_line_chars, clip_mark)
+        truncated = total > max_results
         if metrics is not None:
             metrics.accepted_matches = total
             metrics.accepted_files = len(line_map)
@@ -171,13 +220,17 @@ def search_opened(
     line_numbers,
     settings,
 ):
-    """Format authorized adapter events; no filesystem calls or path reopening."""
+    """Format authorized adapter events; no filesystem calls or path reopening.
+
+    The one exception is an in-root symlink: the request is reopened once at
+    its resolved target through the same no-follow grant walk (PF-PX1-1).
+    """
     from fastmcp.tools.base import ToolResult
 
     from binnacle.features.search.search_text_budget import enforce_result_budget
     from binnacle.platform.contracts.file_access_contracts import SearchRequest
 
-    with access.operation(path, "search_text") as (grant, relative, display):
+    def searched(grant, relative, display):
         if access.search is None:
             raise CodedToolError(
                 "native_capability_unavailable", "Search provider missing."
@@ -209,6 +262,10 @@ def search_opened(
             root_label = root_label.parent
         events = []
         for event in batch.events:
+            if event.get("type") == "summary":
+                # What the adapter could not read: the Linux note (R-OS1-F1).
+                unread = event["data"]["stats"].get("unreadable_paths", ())
+                record_unreadable(str(root_label / name) for name in unread)
             mapped = dict(event)
             if mapped.get("type") in ("match", "context"):
                 data = dict(mapped["data"])
@@ -306,6 +363,7 @@ def search_opened(
                     f"{key}={value}"
                     for key, value in stats.items()
                     if (key.endswith("_skipped") or key.startswith("skipped_"))
+                    and key != "unreadable_files_skipped"  # In the note (F1).
                     and value
                 ]
                 if skipped:
@@ -324,3 +382,9 @@ def search_opened(
             content=summary,
             structured_content=payload,
         )
+
+    # An in-root link is searched as its target, as on Linux (PF-PX1-1).
+    def roots():  # Read only after a link refusal.
+        return dict(access.grants)
+
+    return followed(access.operation, path, "search_text", roots, searched)

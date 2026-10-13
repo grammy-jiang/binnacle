@@ -6,17 +6,29 @@ give the same sentence for the same condition. It never decides whether a
 request is allowed; it only words a refusal that was already made.
 """
 
+import errno
 import os
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
+from contextlib import AbstractContextManager
 from contextvars import ContextVar
 from pathlib import Path, PurePath
+from typing import TypeVar
 
 from binnacle.errors import CodedToolError
+from binnacle.features.files.fd_walk import path_changed, permission_denied
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 from binnacle.platform.contracts.file_access_contracts import (
     FileAccess,
     ListRequest,
     RootGrant,
+)
+from binnacle.platform.contracts.special_file_contracts import (
+    PATH_IS_DIRECTORY_CODE,
+    SPECIAL_FILE_CODE,
+    SPECIAL_FILE_TEXT,
+    TOO_MANY_OPEN_FILES_CODE,
+    path_is_directory_text,
+    too_many_open_files_text,
 )
 
 # Tool named by the last access.require() in this call context.
@@ -29,8 +41,12 @@ MISSING_ERRORS = {
     "search_text": ("path_not_found", "Path not found"),
 }
 DEFAULT_MISSING = ("file_not_found", "File not found")
+# Tools whose Darwin open of one file can see it swapped (checked_open).
+ENTRY_CHANGED_TOOLS = ("read_file", "edit_file", "write_file")
 # Symlink hops caller_form follows before it gives up (the kernel's MAXSYMLINKS).
 _MAX_LINKS = 32
+T = TypeVar("T")
+Operation = Callable[[str, str], AbstractContextManager[tuple[RootGrant, str, Path]]]
 
 
 def outside_error(allowed: Iterable[Path], display: Path) -> CodedToolError:
@@ -38,6 +54,16 @@ def outside_error(allowed: Iterable[Path], display: Path) -> CodedToolError:
     return CodedToolError(
         "path_outside_root", f"Path outside allowed roots ({roots}): {display}"
     )
+
+
+def _resolve(path: Path) -> Path:
+    """Path.resolve() as Python 3.13+ does it, on every supported version.
+
+    Before 3.13, Path.resolve() raises RuntimeError for a symlink loop; 3.13+
+    is os.path.realpath(strict=False), which leaves the looping tail in place.
+    The display and link-target logic below needs the 3.13 answer (r6 W3 PX1c).
+    """
+    return Path(os.path.realpath(path))
 
 
 def caller_form(requested: Path, resolved: Path, roots: Iterable[Path]) -> Path:
@@ -63,7 +89,7 @@ def caller_form(requested: Path, resolved: Path, roots: Iterable[Path]) -> Path:
                 shown = shown.parent
                 continue
             step = shown / part
-            here = shown.resolve()
+            here = _resolve(shown)
             if any(here.is_relative_to(r) for r in canonical) and step.is_symlink():
                 links += 1
                 if links > _MAX_LINKS:
@@ -74,7 +100,7 @@ def caller_form(requested: Path, resolved: Path, roots: Iterable[Path]) -> Path:
                 pending[:0] = target.parts[1:] if target.is_absolute() else target.parts
                 continue
             shown = step
-        same = shown.resolve() == resolved
+        same = _resolve(shown) == resolved
     except (RuntimeError, OSError, ValueError):
         return resolved
     return shown if same else resolved
@@ -125,6 +151,15 @@ def _nearby(
     return format_nearby(parent, sorted(names))
 
 
+def _missing(
+    tool: str, files: FileAccess | None, grant: RootGrant, rel: str, display: Path
+) -> CodedToolError:
+    code, text = MISSING_ERRORS.get(tool, DEFAULT_MISSING)
+    tail = " To create a new file, use write_file." if tool == "edit_file" else ""
+    hint = _nearby(files, grant, PurePath(rel).parts, display)
+    return CodedToolError(code, f"{text}: {display}.{hint}{tail}")
+
+
 def linux_error(
     exc: NativeCapabilityError,
     tool: str,
@@ -139,29 +174,126 @@ def linux_error(
     """The sentence Linux gives for the condition behind a terse adapter code."""
     code = exc.code
     if code in ("file_not_found", "path_not_found"):
-        code, text = MISSING_ERRORS.get(tool, DEFAULT_MISSING)
-        tail = " To create a new file, use write_file." if tool == "edit_file" else ""
-        hint = _nearby(files, grant, PurePath(rel).parts, display)
-        return CodedToolError(code, f"{text}: {display}.{hint}{tail}")
-    if code == "path_is_directory":
-        use = "" if tool == "edit_file" else " Use list_files to browse it."
-        return CodedToolError(code, f"Path is a directory, not a file: {display}.{use}")
+        return _missing(tool, files, grant, rel, display)
+    if code == SPECIAL_FILE_CODE:
+        # The shared text for every tool on both OSes (r6 W3 PX1).
+        return CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
+    if code == TOO_MANY_OPEN_FILES_CODE:
+        # Darwin EMFILE/ENFILE: Linux list mode's sentence (PF-SP1-1).
+        return CodedToolError(code, too_many_open_files_text(tool, f"open {display}"))
+    if code == "permission_denied_tcc_possible":
+        # Darwin keeps its code (SD-77) and says Linux's sentence (R-OS1-F4).
+        return CodedToolError(code, str(permission_denied(display)))
+    if code == "entry_changed" and tool in ENTRY_CHANGED_TOOLS:
+        # The opened file is another regular file than the one stat-ed: the
+        # identity step after the type step, Linux's path_changed (FDW-B1-a2).
+        return path_changed(display, tool)
+    if code == PATH_IS_DIRECTORY_CODE:
+        return CodedToolError(code, path_is_directory_text(display, tool))
     if code != "symlink_or_wrong_path_type":
         return None
     try:
-        resolved = display.resolve()
-        canonical = [r.resolve() for r in grants]
+        resolved = _resolve(display)
+        canonical = [_resolve(r) for r in grants]
         if not any(resolved.is_relative_to(r) for r in canonical):
             return outside_error(allowed, caller_form(display, resolved, canonical))
     except (RuntimeError, OSError):
         return None
+    if resolved.exists() and not resolved.is_dir() and not resolved.is_file():
+        # A FIFO, socket or device opened as a directory (list, glob).
+        return CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
     if tool == "list_files" and resolved.is_file():
         return CodedToolError(
             "path_is_file",
             f"Path is a file, not a directory: {display}. Use read_file to read it.",
         )
-    if tool == "write_file" and any(p.is_file() for p in display.parents):
+    if tool == "write_file" and any(
+        p.is_file() or (p.is_symlink() and not p.exists()) for p in display.parents
+    ):
+        # A file or a link loop where a parent directory should be (Linux mkdir).
         return CodedToolError(
             "write_failed", f"Could not write {display}: File exists."
         )
+    if resolved.is_symlink() and not resolved.exists():
+        # A link loop: Linux resolves the request to itself and finds nothing.
+        if tool == "write_file":
+            loop = os.strerror(errno.ELOOP)
+            return CodedToolError("write_failed", f"Could not write {display}: {loop}.")
+        return _missing(tool, files, grant, rel, display)
+    if tool != "write_file" and not resolved.exists():
+        # Below a file or a loop ("a.txt/x", "loop/x"): Linux finds nothing.
+        return _missing(tool, files, grant, rel, display)
     return None
+
+
+def link_target(
+    exc: NativeCapabilityError, display: Path, roots: Iterable[Path]
+) -> Path | None:
+    """The in-root path a request names through a symlink, else None (R-OS1-F3).
+
+    Linux resolves the request (resolve_path) and opens what it names. Darwin
+    refuses any link on its no-follow walk (symlink_or_wrong_path_type); this
+    resolves the request the way Linux does, only to choose which in-root path
+    to open next. The open is again a no-follow descriptor walk from a grant,
+    so a link retargeted in between is refused, never followed. A target
+    outside every root keeps the refusal, which linux_error words as
+    path_outside_root.
+    """
+    if exc.code != "symlink_or_wrong_path_type":
+        return None
+    try:
+        target = _resolve(display)
+    except (RuntimeError, OSError):
+        return None
+    if target == Path(os.path.normpath(display)):
+        return None
+    return target if any(target.is_relative_to(r) for r in roots) else None
+
+
+def followed(
+    operation: Operation,
+    raw: str,
+    tool: str,
+    roots: Iterable[Path] | Callable[[], Iterable[Path]],
+    step: Callable[[RootGrant, str, Path], T],
+) -> T:
+    """Follow only a link that was present during the *first* resolution.
+
+    The previous retry-on-ELOOP path could follow a link appearing after the
+    initial stat, and read a swapped-in in-root file on Darwin while Linux
+    refused the same race. Resolve only to choose an original in-root target;
+    the target itself is still opened via a new descriptor-verified grant.
+    A newly appearing link is never followed (FDW-B1-a3 F3).
+    """
+    target: Path | None = None
+    request_display: Path | None = None
+    initially_linked = False
+    try:
+        with operation(raw, tool) as (grant, relative, display):
+            request_display = display
+            resolved = _resolve(display)
+            initially_linked = resolved != Path(os.path.normpath(display))
+            if initially_linked:
+                allowed = roots() if callable(roots) else roots
+                if any(resolved.is_relative_to(r) for r in allowed):
+                    target = resolved
+            if target is None:
+                return step(grant, relative, display)
+    except CodedToolError as exc:
+        if (
+            not initially_linked
+            and request_display is not None
+            and exc.telemetry_code == "path_outside_root"
+        ):
+            # The newly swapped-in outside link is named by the *request*,
+            # as Linux's _open_refusal does; static outside-link texts stay
+            # byte-identical to their existing XOS contract.
+            allowed = roots() if callable(roots) else roots
+            raise outside_error(allowed, request_display) from exc
+        raise
+    if target is None:
+        raise path_changed(
+            request_display if request_display is not None else raw, tool
+        )
+    with operation(str(target), tool) as (grant, relative, display):
+        return step(grant, relative, display)

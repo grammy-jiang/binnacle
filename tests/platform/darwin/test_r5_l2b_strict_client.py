@@ -16,7 +16,7 @@ import subprocess
 import pytest
 from fastmcp import Client
 
-from binnacle.platform.darwin import job_manager_entry as entry
+from binnacle.platform.darwin import job_manager_procinfo as procinfo
 from tests.platform.darwin.test_durable_tool_wiring import (
     _app,
     _manager,
@@ -59,7 +59,7 @@ def listed():
     """The real group_listing of a sleeping group this test owns."""
     child = subprocess.Popen(["/bin/sleep", "30"], start_new_session=True)
     try:
-        items = entry.group_listing(child.pid, 200)
+        items = procinfo.group_listing(child.pid, 200)
         assert [item["pid"] for item in items] == [child.pid]
         yield items
     finally:

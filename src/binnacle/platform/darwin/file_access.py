@@ -14,10 +14,15 @@ import secrets
 import stat
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
+from typing import Literal
 
-from binnacle.platform.contracts.capability_contracts import UnsafePath
+from binnacle.platform.contracts.capability_contracts import (
+    AuthorityUnknown,
+    UnsafePath,
+)
 from binnacle.platform.contracts.file_access_contracts import (
     FileListing,
     FileMetadata,
@@ -26,15 +31,19 @@ from binnacle.platform.contracts.file_access_contracts import (
     RootGrant,
     WriteReceipt,
 )
+from binnacle.platform.contracts.special_file_contracts import (
+    TOO_MANY_OPEN_FILES_CODE,
+    TOO_MANY_OPEN_FILES_ERRNOS,
+)
+from binnacle.platform.darwin.file_io import read_at_most
 from binnacle.platform.darwin.file_traversal import (
-    DIRECTORY_FLAGS,
     MAX_BYTES,
     READ_FLAGS,
+    TRAVERSE_FLAGS,
     Listing,
     directory_at,
     listing_directory,
     native_errors,
-    read_at_most,
     regular_fd,
     require_positive,
     unsafe,
@@ -78,7 +87,9 @@ def link_target_info(
     identity was re-checked for this call; LP, SD-74);
     absolute intermediate links, ``..`` above the root, dangling links, loops
     and non-file/non-directory targets yield None; the root is never widened
-    and no path string is followed.
+    and no path string is followed. A descriptor shortage (EMFILE/ENFILE) is
+    raised, never an omitted entry: native_errors makes it the
+    too_many_open_files refusal, as on Linux (FDW-B1 #9).
     """
     stack = list(directory)
     try:
@@ -126,9 +137,47 @@ def link_target_info(
                 info = os.fstat(final)
         if stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode):
             return info
-    except (OSError, UnsafePath):
+    except OSError as exc:
+        if exc.errno in TOO_MANY_OPEN_FILES_ERRNOS:
+            raise
+        return None
+    except UnsafePath:
         return None
     return None
+
+
+@dataclass(frozen=True)
+class UnreadableListing(FileListing):
+    """A listing plus the directories a recursive walk could not open (F1).
+
+    Relative to the root, like the entries. The features layer reads it by
+    attribute; FileListing itself (contracts) is unchanged.
+    """
+
+    unreadable: tuple[str, ...] = ()
+
+
+class _Listing(Listing):
+    """Listing that remembers the directories a recursive walk skipped.
+
+    Listing.walk adds a directory in a recursive walk only when it could not
+    open or scan it (EACCES/EPERM); the glob filter then drops the entry.
+    """
+
+    def __init__(self, request: ListRequest) -> None:
+        super().__init__(request)
+        self.unreadable: list[str] = []
+
+    def add(
+        self,
+        path: str,
+        kind: Literal["file", "directory", "other"],
+        info: os.stat_result,
+        target: os.stat_result | None = None,
+    ) -> None:
+        if self.request.glob is not None and kind == "directory":
+            self.unreadable.append(self.base + path)
+        super().add(path, kind, info, target)
 
 
 class _RootGrant:
@@ -312,7 +361,8 @@ class DarwinFileAccess:
             self._check()
             # Composition supplies canonical roots; even root capture refuses
             # symlink ancestors instead of resolving aliases at access time.
-            fd = os.open("/", DIRECTORY_FLAGS)
+            # '/' is only passed through (O_SEARCH), as on Linux (FDW-B1 #5).
+            fd = os.open("/", TRAVERSE_FLAGS)
             try:
                 with directory_at(fd, parts) as directory:
                     grant = _RootGrant(
@@ -357,8 +407,24 @@ class DarwinFileAccess:
                 return opened
 
     def list_entries(self, grant: RootGrant, request: ListRequest) -> FileListing:
+        """One listing; a descriptor shortage retries it once (FDW-B1 #10).
+
+        Every descriptor of the first attempt is closed before the retry, as
+        Linux's DirectoryChain closes itself, so this call's own descriptors
+        never cause the refusal; a second shortage is too_many_open_files.
+        """
         parts = validate_relative_path(request.relative_path)
-        listing = Listing(request)
+        try:
+            return self._list_once(grant, parts, request)
+        except AuthorityUnknown as exc:
+            if exc.code != TOO_MANY_OPEN_FILES_CODE:
+                raise
+        return self._list_once(grant, parts, request)
+
+    def _list_once(
+        self, grant: RootGrant, parts: tuple[str, ...], request: ListRequest
+    ) -> FileListing:
+        listing = _Listing(request)
         with (
             self._root(grant) as root,
             listing_directory(root, parts, listing) as directory,
@@ -371,7 +437,10 @@ class DarwinFileAccess:
                 root, parts, name, top, aliases
             )
             listing.walk(directory)
-        return listing.result(parts)
+        result = listing.result(parts)
+        return UnreadableListing(
+            result.entries, result.truncated, tuple(sorted(listing.unreadable))
+        )
 
     def nearby_hint(
         self, grant: RootGrant, relative_path: str, *, max_entries: int

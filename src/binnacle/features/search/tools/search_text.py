@@ -4,6 +4,7 @@ import hashlib
 import logging
 import subprocess as _subprocess
 import time
+from dataclasses import replace
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -16,9 +17,9 @@ from binnacle.errors import CodedToolError
 from binnacle.features.files.paths import (
     FileToolAccess,
     full_match,
-    nearby_hint,
     resolve_path,
 )
+from binnacle.features.files.rg_env import noting_unreadable
 from binnacle.features.search.search_text_adaptive import (
     build_adaptive_result,
     log_adaptive_result,
@@ -55,6 +56,8 @@ from binnacle.features.search.search_text_telemetry import (
     timed_attach_context as _timed_attach_context_impl,
 )
 from binnacle.features.search.search_text_verify import (
+    candidate_files,
+    require_searchable,
     verify_adaptive,
     verify_exact_scan,
 )
@@ -347,6 +350,8 @@ def _search_exact_impl(
             metrics.adaptive_budget_trimmed = adaptive.budget_trimmed
             metrics.result_bytes = adaptive.result_bytes
             payload = verify_adaptive(adaptive.payload, resolved)
+            total = payload.get("count", total)
+            adaptive = replace(adaptive, candidate_files=candidate_files(payload))
             log_adaptive_result(
                 log,
                 call=current_call.get(),
@@ -388,6 +393,7 @@ def _search_exact_impl(
     return ToolResult(content=summary, structured_content=payload)
 
 
+@noting_unreadable  # Partial result plus one note (R-OS1-F1).
 def search_text_impl(
     pattern: str,
     path: str,
@@ -427,11 +433,7 @@ def search_text_impl(
             settings,
         )
     resolved = resolve_path(path, roots=roots)
-    if not resolved.exists():
-        raise CodedToolError(
-            "path_not_found",
-            f"Path not found: {resolved}.{nearby_hint(resolved.parent, roots=roots)}",
-        )
+    require_searchable(resolved, roots)
     max_results = max(1, min(max_results, settings.max_results_cap))
 
     # mode stays in the line for journal readers; since the removal of the

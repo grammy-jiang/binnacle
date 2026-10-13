@@ -17,7 +17,7 @@ import pytest
 
 from binnacle.platform.contracts import process_contracts as pc
 from binnacle.platform.darwin import job_group_fence as fence
-from binnacle.platform.darwin import job_manager_entry as entry
+from binnacle.platform.darwin import job_manager_procinfo as procinfo
 from binnacle.platform.darwin import job_manager_service as svc
 from binnacle.platform.darwin import job_process_owner as jpo
 from binnacle.platform.darwin.job_process_owner import DarwinJobProcessOwner
@@ -35,7 +35,9 @@ from tests.platform.darwin.test_job_manager_service import (
     stop_req,
 )
 
-NATIVE = pytest.mark.skipif(sys.platform != "darwin", reason="Darwin J1 owner, A3")
+NATIVE = pytest.mark.skipif(
+    sys.platform != "darwin" or not hasattr(os, "waitid"), reason="Darwin J1 owner, A3"
+)
 
 
 def test_release_only_after_the_terminal_record_is_durable(tmp_path, monkeypatch):
@@ -237,9 +239,9 @@ def test_f1_argc_beyond_fields_falls_back_to_comm(owned_j1g, monkeypatch):
     owner, spawn, _ = owned_j1g
     spawn("job-c", "exec sleep 30")
     assert wait_for(lambda: owner.processes("job-c")[0].get("cmd") == "sleep 30")
-    real, short = entry._sysctl, procargs(9, b"/bin/sleep", b"sleep", b"30")
+    real, short = procinfo._sysctl, procargs(9, b"/bin/sleep", b"sleep", b"30")
     monkeypatch.setattr(
-        entry, "_sysctl", lambda mib, n: short if mib[1] == 49 else real(mib, n)
+        procinfo, "_sysctl", lambda mib, n: short if mib[1] == 49 else real(mib, n)
     )
     assert owner.processes("job-c")[0]["cmd"] == "sleep"  # (c) comm, fail closed
 

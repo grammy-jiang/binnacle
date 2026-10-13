@@ -77,10 +77,22 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
-      - name: Install ripgrep
-        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
-        with:
-          tool: ripgrep
+      - name: Install ripgrep (pinned, checksum verified)
+        env:
+          RG_VERSION: "15.2.0"
+          RG_SHA256: 33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c
+        run: |
+          set -euo pipefail
+          archive="ripgrep-${RG_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/${archive}"
+          echo "${RG_SHA256}  $RUNNER_TEMP/$archive" | sha256sum --check -
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" --strip-components=1 \
+            "ripgrep-${RG_VERSION}-x86_64-unknown-linux-musl/rg"
+          install -m 0755 "$RUNNER_TEMP/rg" "$HOME/.local/bin/rg"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/rg" --version | head -1 | grep -F "ripgrep ${RG_VERSION}"
 
       - name: Sync development dependencies
         run: uv sync --locked --group dev
@@ -128,10 +140,22 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
-      - name: Install ripgrep
-        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
-        with:
-          tool: ripgrep
+      - name: Install ripgrep (pinned, checksum verified)
+        env:
+          RG_VERSION: "15.2.0"
+          RG_SHA256: 33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c
+        run: |
+          set -euo pipefail
+          archive="ripgrep-${RG_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/${archive}"
+          echo "${RG_SHA256}  $RUNNER_TEMP/$archive" | sha256sum --check -
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" --strip-components=1 \
+            "ripgrep-${RG_VERSION}-x86_64-unknown-linux-musl/rg"
+          install -m 0755 "$RUNNER_TEMP/rg" "$HOME/.local/bin/rg"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/rg" --version | head -1 | grep -F "ripgrep ${RG_VERSION}"
 
       - name: Sync development dependencies
         run: uv sync --locked --group dev

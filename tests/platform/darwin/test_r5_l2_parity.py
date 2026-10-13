@@ -24,7 +24,7 @@ from binnacle.features.commands.tools import run_command as rc
 from binnacle.features.commands.tools import stop_job as sj
 from binnacle.platform import composition
 from binnacle.platform.contracts.process_contracts import OwnedJobExit
-from binnacle.platform.darwin import job_manager_service as svc
+from binnacle.platform.darwin import job_manager_records as records
 from tests.platform.darwin.test_durable_tool_wiring import _manager
 from tests.platform.darwin.test_job_manager_service import (
     ReferenceOwner,
@@ -51,11 +51,13 @@ def _record(**extra):
 
 @pytest.mark.parametrize("code,number", [(None, 15), (None, 9), (0, None)])
 def test_owner_restart_records_no_exit_status_like_linux(code, number):
-    meta = svc._exit_meta(_record(), OwnedJobExit("j", code, number, "owner_restart"))
+    meta = records._exit_meta(
+        _record(), OwnedJobExit("j", code, number, "owner_restart")
+    )
     got = (meta["exit_code"], meta["signal"], meta["termination_reason"])
     assert got == (None, None, "owner_restart")
     stopped = _record(stop_requested=True)
-    meta = svc._exit_meta(stopped, OwnedJobExit("j", code, number, "owner_restart"))
+    meta = records._exit_meta(stopped, OwnedJobExit("j", code, number, "owner_restart"))
     got = (meta["exit_code"], meta["signal"], meta["termination_reason"])
     assert got == (None, None, "stop_requested")  # recover_previous_owner order
 
@@ -69,7 +71,7 @@ def test_owner_restart_records_no_exit_status_like_linux(code, number):
     ],
 )
 def test_other_exits_keep_their_status(exited, want):
-    meta = svc._exit_meta(_record(), exited)
+    meta = records._exit_meta(_record(), exited)
     assert (meta["exit_code"], meta.get("signal"), meta["termination_reason"]) == want
 
 
@@ -149,7 +151,7 @@ def test_owner_restart_record_renders_linux_text(tmp_path):
     job_id = started.structured_content["job_id"]
     meta = meta_of(settings.jobs.dir, job_id)
     exited = OwnedJobExit(job_id, None, 15, "owner_restart")  # close() TERM
-    backend.client._write(job_id, svc._exit_meta(meta, exited))
+    backend.client._write(job_id, records._exit_meta(meta, exited))
     status = js.job_status_impl(job_id, 10, backend=backend)
     text = status.content[0].text
     assert text.startswith(f"Job {job_id} interrupted (owner_restart) after ")

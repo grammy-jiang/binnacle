@@ -109,7 +109,9 @@ def test_list_files_rg_and_glob_error_codes(tmp_path, monkeypatch):
     assert _code(exc) == "rg_failed"
 
     monkeypatch.setattr(
-        lf, "full_match", lambda *a, **k: (_ for _ in ()).throw(ValueError("bad"))
+        lf.list_files_glob,
+        "full_match",
+        lambda *a, **k: (_ for _ in ()).throw(ValueError("bad")),
     )
     monkeypatch.setattr(
         lf.subprocess,

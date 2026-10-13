@@ -7,7 +7,12 @@ from pathlib import Path
 import orjson
 
 from binnacle.errors import CodedToolError
-from binnacle.features.search.rg_env import NO_CONFIG, rg_env
+from binnacle.features.files.rg_env import (
+    NO_CONFIG,
+    accept_denied,
+    rejection_message,
+    rg_env,
+)
 from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
 
 
@@ -35,6 +40,8 @@ def run_rg(
             cmd,
             capture_output=True,
             text=True,
+            # rg's JSON is UTF-8; stderr names any byte (R-PX1-3).
+            errors="surrogateescape",
             timeout=timeout_s,
             check=False,
             env=rg_env(),
@@ -54,11 +61,12 @@ def run_rg(
         if metrics is not None:
             metrics.rg_subprocess_ms += ExactSearchMetrics.elapsed_ms(started_ns)
 
-    if proc.returncode == 2 or (proc.returncode not in (0, 1) and proc.stderr):
+    if (
+        proc.returncode == 2 or (proc.returncode not in (0, 1) and proc.stderr)
+    ) and not accept_denied(proc.stderr, root):
         raise CodedToolError(
             "rg_rejected",
-            f"ripgrep rejected the search: {proc.stderr.strip()[-300:]}. "
-            "Fix the pattern, or use fixed_strings for literal text.",
+            rejection_message(proc.stderr),
         )
 
     if metrics is not None:

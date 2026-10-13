@@ -393,10 +393,13 @@ _ForegroundRunner(3, 3).run_foreground(
         terminate_owned(manager)
         terminate_owned(witness_process)
         before = heartbeat.stat().st_size
-        time.sleep(0.08)
-        assert (
-            heartbeat.stat().st_size > before
-        )  # orphan still running after both handles die
+        # Under parallel QA, scheduling can delay a live orphan for longer
+        # than one fixed sleep. Require progress within a bounded window,
+        # preserving the lost-manager/no-adoption assertion.
+        deadline = time.monotonic() + 1.5
+        while heartbeat.stat().st_size <= before and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert heartbeat.stat().st_size > before
         historic = json.loads(ready.read_text())
 
         def no_adoption(*args):

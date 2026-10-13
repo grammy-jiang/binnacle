@@ -308,7 +308,9 @@ def _duration(nanos: int) -> dict[str, int | str]:
 
 
 def _aggregate(
-    events: Sequence[Mapping[str, object]], elapsed: int, counts: dict[str, int]
+    events: Sequence[Mapping[str, object]],
+    elapsed: int,
+    counts: Mapping[str, object],
 ) -> list[Mapping[str, object]]:
     """Reduce child summaries once; match/context/end records retain rg shape."""
     totals = dict.fromkeys(
@@ -365,7 +367,7 @@ class DarwinSearchAccess:
 
     def _paths(
         self, grant: RootGrant, request: SearchRequest
-    ) -> tuple[list[str], bool]:
+    ) -> tuple[list[str], bool, list[str]]:
         parts = validate_relative_path(request.relative_path)
         if parts:
             try:
@@ -373,7 +375,7 @@ class DarwinSearchAccess:
                     paths = ["/".join(parts)]
                     if request.glob and not glob_matches(parts[-1], request.glob):
                         paths = []
-                    return paths, False
+                    return paths, False, []
             except UnsafePath as exc:
                 if exc.code != "path_is_directory":
                     raise
@@ -392,9 +394,13 @@ class DarwinSearchAccess:
             (entry.relative_path for entry in listing.entries if entry.kind == "file"),
             key=os.fsencode,
         )
-        return paths[: request.max_files], listing.truncated or len(
-            paths
-        ) > request.max_files
+        truncated = listing.truncated or len(paths) > request.max_files
+        # Directories the walk could not open, for the shared note (F1).
+        return (
+            paths[: request.max_files],
+            truncated,
+            [*getattr(listing, "unreadable", ())],
+        )
 
     def search(self, grant: RootGrant, request: SearchRequest) -> SearchBatch:
         require_positive(request.max_bytes, MAX_BYTES)
@@ -408,7 +414,7 @@ class DarwinSearchAccess:
         if "\0" in request.pattern:
             raise unavailable("rg_invalid_pattern")
         argv = _command(self._rg_bin, request)
-        paths, truncated = self._paths(grant, request)
+        paths, truncated, unreadable = self._paths(grant, request)
         collector = _Collector()
         files_searched = unreadable_files_skipped = 0
         binary_files_skipped = 0  # NUL files are searched as text
@@ -425,6 +431,7 @@ class DarwinSearchAccess:
                 if path == request.relative_path:
                     raise
                 unreadable_files_skipped += 1
+                unreadable.append(path)
                 continue
             except UnsafePath as exc:
                 if path == request.relative_path or exc.code not in {
@@ -458,6 +465,7 @@ class DarwinSearchAccess:
                 "skipped_io_error": skipped_io_error,
                 "binary_files_skipped": binary_files_skipped,
                 "unreadable_files_skipped": unreadable_files_skipped,
+                "unreadable_paths": sorted(unreadable),
             },
         )
         return SearchBatch(
