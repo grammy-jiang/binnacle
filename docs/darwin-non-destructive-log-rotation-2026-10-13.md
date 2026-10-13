@@ -109,3 +109,16 @@ reliable justification to interrupt the currently running development jobs.
 6. Defer actual host reboot, runtime tokenizer/manager upgrade and
    fault injection until active jobs and unrelated development are
    truly quiescent.
+
+## Follow-up: verified offline compressed staging
+
+A separate `darwin_log_archive_stage` module can generate an integrity-
+verified `.bz2.pending` snapshot of a raw archive without changing or
+deleting the writer's source inode. It is an **explicit manual operation**,
+not a service or automatic pruning process. Pending copies are excluded
+from the statistics reader so metrics are not doubled. See
+[darwin-log-archive-staging-2026-10-13.md](darwin-log-archive-staging-2026-10-13.md).
+
+Deletion or promotion of raw archives is still gated by a demonstrated
+writer-coordinated quiet window; no one-shot lsof observation is sufficient
+to prove a stream can never be reopened.
