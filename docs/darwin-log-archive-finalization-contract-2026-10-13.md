@@ -81,3 +81,68 @@ rotation, compression, deletion or service restart on the Mac.
 - Automatic cleanup/scheduling/live pruning: **NOT ENABLED**.
 - Issue #30 cannot be marked completely resolved on the basis of the
   injectable protocol and tests alone.
+
+## 2026-10-13 follow-up: native launchd lifecycle acceptance
+
+The additional darwin_log_writer_hold.py module implements
+**LaunchdFixtureWriterHold**, a narrowly allowlisted, real system-domain
+test provider. Unlike the earlier synthetic hold, it exercises actual
+macOS launchctl bootstrap and bootout with a temporary
+com.binnacle.archivefixture.TESTIDENTIFIER LaunchDaemon. Its plist must be owned by
+root:wheel, be mode 0644, have one link, reside at the exact
+/private/tmp/com.binnacle.archivefixture.TESTIDENTIFIER.plist path, launch under the
+test account, and declare the exact synthetic stdout/stderr paths.
+The provider cannot be constructed for com.binnacle.mcp, Jobs, or any
+other production label. There is no production CLI or scheduler.
+
+The provider proves the selected launchd service is UNLOADED while held
+(KeepAlive cannot restart it) and checks the original inode's open FDs
+using native macOS lsof -nP -F pafn. Every matching FD must have a
+confirmed read-only access mode. A writable, read-write, absent, unknown,
+or malformed descriptor mode refuses the operation. This detects an
+uncoordinated external writer retaining the renamed inode. Checks
+repeat while held, including immediately before raw unlink. Exact
+source dev/inode and the fixture's owner, mode and label are checked.
+After release, it proves a different live launchd PID generation.
+
+A finalizer exception attempts restoration in context-manager exit.
+A bootout error that partially unloaded the label also triggers
+restoration. Failed bootstrap or uncertain producer identity reports
+an error, never false recovery success.
+
+Native test acceptance includes the rename-only old-FD case, ongoing
+KeepAlive being blocked while booted out, external-writer refusal,
+partial bootout error, simulated failure between canonical publication
+and raw removal, restoration and independently verified compressed bytes.
+The isolated holder test suite passed 43 cases, with 91.44% combined
+statement/branch coverage. The test fixture uses sudo only for its
+allowlisted temporary test label and securely removes its plist; it
+never touches real Binnacle services or production logs.
+
+### Remaining production prerequisites (Issue #30 is still OPEN)
+
+This isolated lifecycle acceptance is not production enablement.
+The production implementation still requires:
+
+1. A reviewed out-of-band controller with exclusive admission and
+   J7 maintenance/deployment locking; concurrent privileged bootstrap
+   actors, launchd KeepAlive and the Binnacle watchdog must be coordinated.
+   A point-in-time lsof census alone is not a lease.
+2. A crash-durable recovery supervisor. Python finally cannot restore
+   a service after SIGKILL or a host failure midway through bootout.
+   Production must prove a bounded independent restoration mechanism.
+3. A signed-off production root-owned plist and PID/generation inventory,
+   an authoritative complete writer-FD census (including descendants),
+   exact stdout/stderr paths and safe refusal on unknown state.
+4. No active/unknown/unfinished durable jobs or in-flight tool/RPC calls,
+   both before and after the admission barrier, without interrupting
+   ongoing development.
+5. Bounded large-file maintenance downtime, conflict prevention with
+   normal newsyslog GN rotations, correct mixed raw/canonical statistics
+   and replay of interrupted publication/prune.
+6. Independent review, exact-SHA protected CI, and explicit opt-in native
+   Mac production acceptance before any real deletion or service stop.
+
+The producer model assumes cooperative administrators and services;
+it does not claim hostile same-UID or root-level isolation. Automatic
+cleanup and production compression, pruning and restarts remain DISABLED.
