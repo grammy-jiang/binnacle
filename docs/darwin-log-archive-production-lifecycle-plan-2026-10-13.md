@@ -99,6 +99,7 @@ does not grant authority to prune real logs.
 The isolated guardian now enforces an exact-match fixture bootstrap plan:
 root:wheel 0644 single-link plist with a fixed allowlisted label, the
 non-root test user's name/group, one pinned Python fixture command,
+and an explicit refusal of root or mixed UID/eUID guardian invocation,
 RunAtLoad/KeepAlive, and only two specifically named stdout/stderr
 paths beneath an owned private 0700 private-logs directory. An
 unexpected plist key, changed command, root-run writer, environment

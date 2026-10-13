@@ -90,6 +90,8 @@ def _read_verified(path: Path) -> dict[str, Any]:
 
 
 def _policy(record: dict[str, Any], base: Path) -> tuple[str, Path]:
+    if os.getuid() == 0 or os.geteuid() != os.getuid():
+        raise ArchiveFinalizeRefused("fixture guardian must be unprivileged")
     if record.get("version") != 1 or record.get("state") not in {
         "armed",
         "disarmed",

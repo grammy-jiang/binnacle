@@ -148,3 +148,19 @@ def test_guardian_policy_refuses_bad_plist_owner(
         m.setattr(Path, "lstat", bad_owner)
         with pytest.raises(ArchiveFinalizeRefused, match="ownership"):
             guardian._policy(record, root)
+
+
+@pytest.mark.parametrize("identity", ["root", "uid_mismatch"])
+def test_guardian_refuses_privileged_or_setuid_invocation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, identity: str
+) -> None:
+    root = _root(tmp_path)
+    with monkeypatch.context() as m:
+        record = _trusted_plist(m, root)
+        actual = os.getuid()
+        if identity == "root":
+            m.setattr(guardian.os, "getuid", lambda: 0)
+        else:
+            m.setattr(guardian.os, "geteuid", lambda: actual + 1)
+        with pytest.raises(ArchiveFinalizeRefused, match="unprivileged"):
+            guardian._policy(record, root)
