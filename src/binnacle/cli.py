@@ -364,22 +364,30 @@ def doctor(
         checks. Use binnacle-watchdog doctor for layered uplink probes.
     """
     from binnacle.diagnostics import doctor as checks
+    from binnacle.platform.composition import host_os_family
 
     serve_cfg = get_settings().serve
-    provisioner = _provisioner()
-    dep = checks.Deployment(
-        server_unit=SERVER_UNIT,
-        unit_path=provisioner.unit_path(SERVER_UNIT),
-        render_unit=render_server_unit,
-        jobs_unit=JOBS_UNIT,
-        jobs_unit_path=provisioner.unit_path(JOBS_UNIT),
-        render_jobs_unit=render_job_manager_unit,
-        jobs_socket=get_settings().jobs.socket_path,
-        token_file=TOKEN_FILE,
-        server_url=f"http://{serve_cfg.host}:{serve_cfg.port}/mcp",
-        user_bin=Path.home() / ".local" / "bin",
-    )
-    results = checks.run_all(dep, since=since, probe=probe)
+    url = f"http://{serve_cfg.host}:{serve_cfg.port}/mcp"
+    if host_os_family() == "darwin":
+        # Installed Mac services are root-owned LaunchDaemons, not systemd.
+        from binnacle.diagnostics import darwin_doctor
+
+        results = darwin_doctor.run_all(server_url=url, token_file=TOKEN_FILE)
+    else:
+        provisioner = _provisioner()
+        dep = checks.Deployment(
+            server_unit=SERVER_UNIT,
+            unit_path=provisioner.unit_path(SERVER_UNIT),
+            render_unit=render_server_unit,
+            jobs_unit=JOBS_UNIT,
+            jobs_unit_path=provisioner.unit_path(JOBS_UNIT),
+            render_jobs_unit=render_job_manager_unit,
+            jobs_socket=get_settings().jobs.socket_path,
+            token_file=TOKEN_FILE,
+            server_url=url,
+            user_bin=Path.home() / ".local" / "bin",
+        )
+        results = checks.run_all(dep, since=since, probe=probe)
     text, code = (checks.render_json if as_json else checks.render)(results)
     print(text)
     raise SystemExit(code)
