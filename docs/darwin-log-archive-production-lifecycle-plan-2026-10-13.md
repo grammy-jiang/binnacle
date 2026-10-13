@@ -121,3 +121,22 @@ independently reviewed controller and J7-compatible maintenance
 authority, running-job/connection admission barrier, production
 identity/generation proof, privileged FD census, liveness/lease-break
 and crash-durable recovery remain required before Issue #30 closes.
+
+## Independent atomic-receipt review follow-up
+
+Review found a recovery-liveness hazard in the test-only guardian: deriving
+temporary receipt names solely from PID could collide with a partial record
+left by an abruptly killed previous guardian after PID reuse. The private
+journal and readiness receipt now share an atomically publishing helper
+using a fresh UUID sibling temporary, exclusive no-follow 0600 creation,
+full-write retry, file and directory fsync, and cleanup of files actually
+created by this attempt. Existing destination bytes are not modified
+before successful replace; on an exclusive-create collision a foreign
+file is never deleted. Abandoned historical temporary files are retained
+rather than heuristically pruned.
+
+Regression cases inject short and zero-length writes, OSError on write,
+fsync and publish, existing foreign temp and symlink collisions,
+simulated leftover old-PID temp files, and readiness replacement failure.
+These do not access real Binnacle services. Recovery after an actual
+SIGKILL is still exercised only in isolated native fixture tests.

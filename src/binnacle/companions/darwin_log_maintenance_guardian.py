@@ -20,6 +20,7 @@ import pwd
 import stat
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -160,29 +161,49 @@ def _policy(record: dict[str, Any], base: Path) -> tuple[str, Path]:
     return f"system/{label}", plist
 
 
-def _write_record(path: Path, record: dict[str, Any]) -> None:
+def _publish_private(path: Path, payload: bytes, *, prefix: str) -> None:
+    """Replace one private record atomically, cleaning failure intermediates.
+
+    A SIGKILL may leave a temporary inode. A fresh unpredictable name on
+    every retry prevents a later PID reuse from blocking recovery. Never
+    delete an older abandoned temp automatically; it may be foreign data.
+    """
     base = path.parent
-    temp = base / f".guardian-{os.getpid():d}.tmp"
-    data = json.dumps(record, sort_keys=True).encode("utf-8")
-    if len(data) > MAX_RECORD_BYTES:
-        raise ArchiveFinalizeRefused("guardian record too large")
-    fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    temp = base / f".{prefix}-{uuid.uuid4().hex}.tmp"
+    fd = -1
+    created = False
     try:
-        view = memoryview(data)
+        fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        created = True
+        view = memoryview(payload)
         while view:
             count = os.write(fd, view)
             if count <= 0:
-                raise ArchiveFinalizeRefused("guardian record short write")
+                raise ArchiveFinalizeRefused("guardian private record short write")
             view = view[count:]
         os.fsync(fd)
-    finally:
         os.close(fd)
-    os.replace(temp, path)
-    dirfd = os.open(base, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    try:
-        os.fsync(dirfd)
+        fd = -1
+        os.replace(temp, path)
+        dirfd = os.open(base, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(dirfd)
+        finally:
+            os.close(dirfd)
     finally:
-        os.close(dirfd)
+        if fd >= 0:
+            os.close(fd)
+        # An O_EXCL collision is not our file and must never be deleted.
+        # After a successful open, cleanup is safe even if publishing failed.
+        if created:
+            temp.unlink(missing_ok=True)
+
+
+def _write_record(path: Path, record: dict[str, Any]) -> None:
+    data = json.dumps(record, sort_keys=True).encode("utf-8")
+    if len(data) > MAX_RECORD_BYTES:
+        raise ArchiveFinalizeRefused("guardian record too large")
+    _publish_private(path, data, prefix="guardian")
 
 
 def _ready(base: Path, token: str) -> None:
@@ -198,19 +219,7 @@ def _ready(base: Path, token: str) -> None:
             or stat.S_IMODE(prior.st_mode) != 0o600
         ):
             raise ArchiveFinalizeRefused("foreign guardian readiness receipt")
-    temp = base / f".ready-{os.getpid()}.tmp"
-    fd = os.open(temp, os.O_WRONLY | os.O_EXCL | os.O_CREAT | os.O_NOFOLLOW, 0o600)
-    try:
-        os.write(fd, str(os.getpid()).encode("ascii"))
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-    os.replace(temp, path)
-    dirfd = os.open(base, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    try:
-        os.fsync(dirfd)
-    finally:
-        os.close(dirfd)
+    _publish_private(path, str(os.getpid()).encode("ascii"), prefix="ready")
 
 
 def supervise(path: Path, *, max_wait_s: float = 20.0) -> str:
