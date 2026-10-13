@@ -23,6 +23,7 @@ _SERVER_COMMON = (
     "binnacle.deployment.server_unit",
     "binnacle.deployment.units",
     "binnacle.diagnostics",
+    "binnacle.diagnostics.darwin_doctor",
     "binnacle.diagnostics.doctor",
     "binnacle.diagnostics.doctor_common",
     "binnacle.diagnostics.doctor_config_keys",

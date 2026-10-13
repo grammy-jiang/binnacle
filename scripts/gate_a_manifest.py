@@ -182,6 +182,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "diagnostics/doctor_provenance.py",
             "diagnostics/doctor_config_keys.py",
             "diagnostics/doctor_connectivity.py",
+            "diagnostics/darwin_doctor.py",
             "diagnostics/doctor.py",
             "diagnostics/doctor_common.py",
             "diagnostics/doctor_jobs.py",
