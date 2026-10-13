@@ -83,6 +83,7 @@ import_runtime_modules(on_failure=_record_import_failure)
 from fastmcp import FastMCP
 
 from binnacle.config import get_settings
+from binnacle.features.commands.commands_server import create_commands_server
 from binnacle.features.commands.run_command_telemetry import (
     AUTO_BACKGROUND_SEMANTICS_VERSION,
     auto_background_behavior_hash,
@@ -260,7 +261,6 @@ def create_server() -> FastMCP:
     """Maintain the Linux production factory contract and its token bootstrap."""
     from binnacle.application import compose_native_tools, create_application
     from binnacle.features.commands.command_backend import create_command_backend
-    from binnacle.features.commands.commands_server import create_commands_server
     from binnacle.platform.composition import host_os_family
 
     file_access = None

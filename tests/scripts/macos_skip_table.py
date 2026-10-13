@@ -116,6 +116,7 @@ unit/tools/test_r6w2_x3a2_guards.py | T0: R6W2-T3 per-test Linux fd_walk.open_ve
 unit/tools/test_r6w2_x3b_read_verify.py | T0: R6W2-T3 per-test Linux read path, read_file_impl without file_access over fd_walk.open_walked (r6 W2 X3b); Darwin reads through DarwinFileAccess; the unraced, nested-root and Darwin-dispatch tests run everywhere
 unit/tools/test_r6w2_x3b2_read_bounds.py | T0: R6W2-T3 per-test Linux read path over fd_walk.open_walked identity and bounded read (r6 W2 X3b-a2); the leak, at-limit and within-limit reads run everywhere
 unit/tools/test_r6w2_x3b3_special_files.py | T0: R6W2-T3 per-test Linux read path beside the Darwin path on one host (r6 W2 X3b-a3); native Darwin counterpart tests/platform/darwin/test_r6w2_t3_special_files.py
+unit/core/test_r6w3_e1h_preentry_guard.py | T0: R6W3-01 real process-entry fault injection selects Linux job-manager -m only on Linux and Darwin launchd -m only on macOS; the other three early entry variants run everywhere
 platform/darwin/test_r6w2_t3_special_files.py | B0: R6W2-T3 per-test Darwin read_file special files and mode 000 through DarwinFileAccess (r6 W2 T3 item 3)
 """
 ALLOWED_PLATFORM_SKIPS = {
@@ -145,6 +146,8 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_job_manager_service_stop_e2e.py": 1,
     "tests/platform/darwin/test_job_manager_entry.py": 1,
     "tests/platform/darwin/test_job_manager_entry_owner.py": 1,
+    # Two local pytest.skip branches exercise host-specific manager -m paths.
+    "tests/unit/core/test_r6w3_e1h_preentry_guard.py": 2,
     "tests/platform/darwin/test_durable_jobs_e2e.py": 1,
     "tests/platform/darwin/test_durable_jobs_launchd_restart.py": 1,
     "tests/platform/darwin/test_j1g_leader_fence.py": 1,

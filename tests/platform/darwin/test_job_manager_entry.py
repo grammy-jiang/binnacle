@@ -112,7 +112,12 @@ def test_moved_names_live_only_in_their_new_homes():
     assert entry.serve_job_manager.__module__ == entry.__name__
     for name in ("DarwinJobClient", "DarwinJobManagerError", "serve_job_manager"):
         assert not hasattr(svc, name), name  # a stale import fails loudly
-    assert svc.main.__module__ == svc.__name__  # the launchd -m delegate stays
+    # The -m startup guard precedes business imports in job_manager_service;
+    # the callable delegate's new canonical home is the small startup module.
+    from binnacle.platform.darwin import job_manager_start as start_home
+
+    assert svc.main is start_home.main
+    assert start_home.main.__module__ == start_home.__name__
     fresh = (  # a new interpreter: every home imports without a cycle
         "import binnacle.platform.darwin.job_manager_service, "
         "binnacle.platform.darwin.job_manager_client, "
