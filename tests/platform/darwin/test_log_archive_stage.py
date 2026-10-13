@@ -252,6 +252,15 @@ def test_cli_explicit_darwin_stage_and_missing_source_refusal(
     root = root_dir(tmp_path)
     raw_archive(root)
     monkeypatch.setattr(stage.platform, "system", lambda: "Darwin")
+    # CI Linux runners may have less than the 100 GiB *production* reserve.
+    # Only this temp-fixture CLI test bypasses the reserve; the real CLI
+    # and stage_archive defaults remain fail-closed.
+    actual_stage = stage.stage_archive
+    monkeypatch.setattr(
+        stage,
+        "stage_archive",
+        lambda path, name: actual_stage(path, name, min_free_bytes=0),
+    )
     assert stage.main(["--root", str(root), "--stage", NAME]) == 0
     assert json.loads(capsys.readouterr().out)["snapshot"] == NAME + ".bz2.pending"
     assert stage.main(["--root", str(root), "--stage", "tunnel.stdout.log.0"]) == 2
