@@ -125,6 +125,49 @@ def _validate_published(fd: int) -> None:
         raise ArchiveFinalizeRefused("canonical archive is not private and single-link")
 
 
+def _stable_canonical(
+    dfd: int,
+    name: str,
+    expected: os.stat_result,
+    *,
+    links: int,
+) -> None:
+    """Fail closed if a verified compressed pathname was switched.
+
+    A resumed archive must have one link. A freshly published archive has
+    two links until its unique private temp sibling is removed in finally.
+    The opened inode's full identity, mode and link count must still match
+    the name immediately before pruning the original raw source.
+    """
+    try:
+        current = os.stat(name, dir_fd=dfd, follow_symlinks=False)
+        if (
+            stage._identity(current) != stage._identity(expected)
+            or not stat.S_ISREG(current.st_mode)
+            or current.st_uid != os.getuid()
+            or current.st_nlink != links
+            or stat.S_IMODE(current.st_mode) != 0o600
+        ):
+            raise ArchiveFinalizeRefused("canonical archive pathname changed")
+    except OSError as exc:
+        raise ArchiveFinalizeRefused("canonical archive identity unavailable") from exc
+
+
+def _unlink_owned_temp(dfd: int, temp: str, fd: int) -> None:
+    """Prune only the opened temporary inode, never a foreign pathname.
+
+    An O_EXCL collision produces no owned FD and must not trigger cleanup.
+    If another actor swapped the pathname after creation, retain it.
+    """
+    try:
+        named = os.stat(temp, dir_fd=dfd, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    if stage._identity(named) != stage._identity(os.fstat(fd)):
+        raise ArchiveFinalizeRefused("temporary archive pathname changed")
+    os.unlink(temp, dir_fd=dfd)
+
+
 def _make_temp(
     dfd: int, srcfd: int, temp: str, initial: os.stat_result
 ) -> tuple[int, str, int]:
@@ -152,7 +195,12 @@ def _make_temp(
         os.fsync(fd)
         return fd, h.hexdigest(), size
     except BaseException:
-        os.close(fd)
+        # O_EXCL already succeeded, so this is the temp that this attempt
+        # created. Its inode must still match before cleanup.
+        try:
+            _unlink_owned_temp(dfd, temp, fd)
+        finally:
+            os.close(fd)
         raise
 
 
@@ -182,10 +230,10 @@ def finalize_archive(
         raise ArchiveFinalizeRefused(str(exc)) from exc
     srcfd = -1
     tempfd = -1
-    created = False
     temp = "." + name + "." + uuid.uuid4().hex + ".bz2.tmp"
     canonical = name + ".bz2"
     resumed = False
+    canonical_reference: os.stat_result | None = None
     try:
         srcfd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dfd)
         initial = os.fstat(srcfd)
@@ -214,11 +262,11 @@ def finalize_archive(
                 try:
                     _validate_published(canonical_fd)
                     _check_compressed(canonical_fd, digest, total)
+                    canonical_reference = os.fstat(canonical_fd)
                 finally:
                     os.close(canonical_fd)
             else:
                 os.lseek(srcfd, 0, os.SEEK_SET)
-                created = True
                 tempfd, compressed_digest, compressed_bytes = _make_temp(
                     dfd, srcfd, temp, initial
                 )
@@ -241,10 +289,16 @@ def finalize_archive(
                     follow_symlinks=False,
                 )
                 os.fsync(dfd)
+                canonical_reference = os.fstat(tempfd)
             # A cooperative writer must be unable to resume until after the
             # source has been removed. Re-verify just before pruning.
             _verify_hold(hold, name, initial)
             _stable_raw(dfd, srcfd, name, initial)
+            if canonical_reference is None:
+                raise ArchiveFinalizeRefused("canonical verification incomplete")
+            _stable_canonical(
+                dfd, canonical, canonical_reference, links=1 if resumed else 2
+            )
             os.unlink(name, dir_fd=dfd)
             os.fsync(dfd)
             return FinalizedArchive(
@@ -259,13 +313,13 @@ def finalize_archive(
             "finalization refused; raw retained unless canonical already published"
         ) from exc
     finally:
-        if tempfd >= 0:
-            os.close(tempfd)
-        if srcfd >= 0:
-            os.close(srcfd)
-        if created:
-            try:
-                os.unlink(temp, dir_fd=dfd)
-            except FileNotFoundError:
-                pass
-        os.close(dfd)
+        try:
+            if tempfd >= 0:
+                try:
+                    _unlink_owned_temp(dfd, temp, tempfd)
+                finally:
+                    os.close(tempfd)
+        finally:
+            if srcfd >= 0:
+                os.close(srcfd)
+            os.close(dfd)
