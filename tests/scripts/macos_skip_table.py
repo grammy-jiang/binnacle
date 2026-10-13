@@ -101,6 +101,7 @@ platform/darwin/test_search_parity.py | A4: in-body skip when APFS rejects a non
 platform/darwin/test_package_install.py | A6: per-test Apple-silicon (arm64) native package install
 platform/darwin/test_jobs_launchd_plan.py | A6: J3 per-test Darwin kern.maxprocperuid default for the com.binnacle.jobs plist NumberOfProcesses limit
 platform/darwin/test_composition_contract.py | B0: in-body skip of the real-socket peer check off Darwin
+unit/core/test_r6w3_e1h_preentry_guard.py | B0: two per-case native Linux/Darwin manager -m entry fault checks; CLI fault checks execute on both hosts
 unit/tools/test_command_characterization.py | T0: Linux durable job-engine characterization; Darwin counterpart tests/platform/darwin/test_foreground_commands.py::test_native_normal_exit_cwd_stdin_binary_combined_output
 unit/tools/test_stop_job_edges.py | T0: Linux durable job_owner.stop_job; Darwin counterpart tests/platform/darwin/test_native_smoke_mcp.py::test_stop_job_is_unavailable_never_enabled
 integration/test_files_settings.py | T0: Files child over Linux pathname Core (CR0-06); Darwin counterpart tests/platform/darwin/test_files_roots.py::test_escaping_paths_rejected
@@ -178,6 +179,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/unit/tools/test_r6w2_x3b2_read_bounds.py": 1,
     "tests/unit/tools/test_r6w2_x3b3_special_files.py": 1,
     "tests/platform/darwin/test_r6w2_t3_special_files.py": 1,
+    "tests/unit/core/test_r6w3_e1h_preentry_guard.py": 2,
     "tests/unit/tools/test_command_characterization.py": 1,
     "tests/unit/tools/test_stop_job_edges.py": 1,
     "tests/integration/test_files_settings.py": 1,

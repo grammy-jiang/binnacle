@@ -112,7 +112,12 @@ def test_moved_names_live_only_in_their_new_homes():
     assert entry.serve_job_manager.__module__ == entry.__name__
     for name in ("DarwinJobClient", "DarwinJobManagerError", "serve_job_manager"):
         assert not hasattr(svc, name), name  # a stale import fails loudly
-    assert svc.main.__module__ == svc.__name__  # the launchd -m delegate stays
+    # R6W3-01 places the launchd delegate in a short dedicated module so
+    # job_manager_service remains within the 500-line module size policy.
+    from binnacle.platform.darwin import job_manager_start
+
+    assert svc.main is job_manager_start.main
+    assert svc.main.__module__ == job_manager_start.__name__
     fresh = (  # a new interpreter: every home imports without a cycle
         "import binnacle.platform.darwin.job_manager_service, "
         "binnacle.platform.darwin.job_manager_client, "
