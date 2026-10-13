@@ -439,7 +439,7 @@ def test_compressor_fails_on_raw_growing_past_initial_stat(tmp_path):
             append.write(b"more bytes")
         with pytest.raises(finish.ArchiveFinalizeRefused, match="raw log grew"):
             finish._make_temp(parent, stream, temp, initial)
-        assert (root / temp).exists()  # the caller owns temp cleanup
+        assert not (root / temp).exists()  # the owning compressor cleans on error
     finally:
         os.close(stream)
         os.close(parent)

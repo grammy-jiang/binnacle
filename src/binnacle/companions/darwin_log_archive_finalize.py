@@ -153,6 +153,21 @@ def _stable_canonical(
         raise ArchiveFinalizeRefused("canonical archive identity unavailable") from exc
 
 
+def _unlink_owned_temp(dfd: int, temp: str, fd: int) -> None:
+    """Prune only the opened temporary inode, never a foreign pathname.
+
+    An O_EXCL collision produces no owned FD and must not trigger cleanup.
+    If another actor swapped the pathname after creation, retain it.
+    """
+    try:
+        named = os.stat(temp, dir_fd=dfd, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    if stage._identity(named) != stage._identity(os.fstat(fd)):
+        raise ArchiveFinalizeRefused("temporary archive pathname changed")
+    os.unlink(temp, dir_fd=dfd)
+
+
 def _make_temp(
     dfd: int, srcfd: int, temp: str, initial: os.stat_result
 ) -> tuple[int, str, int]:
@@ -180,7 +195,12 @@ def _make_temp(
         os.fsync(fd)
         return fd, h.hexdigest(), size
     except BaseException:
-        os.close(fd)
+        # O_EXCL already succeeded, so this is the temp that this attempt
+        # created. Its inode must still match before cleanup.
+        try:
+            _unlink_owned_temp(dfd, temp, fd)
+        finally:
+            os.close(fd)
         raise
 
 
@@ -210,7 +230,6 @@ def finalize_archive(
         raise ArchiveFinalizeRefused(str(exc)) from exc
     srcfd = -1
     tempfd = -1
-    created = False
     temp = "." + name + "." + uuid.uuid4().hex + ".bz2.tmp"
     canonical = name + ".bz2"
     resumed = False
@@ -248,7 +267,6 @@ def finalize_archive(
                     os.close(canonical_fd)
             else:
                 os.lseek(srcfd, 0, os.SEEK_SET)
-                created = True
                 tempfd, compressed_digest, compressed_bytes = _make_temp(
                     dfd, srcfd, temp, initial
                 )
@@ -295,13 +313,13 @@ def finalize_archive(
             "finalization refused; raw retained unless canonical already published"
         ) from exc
     finally:
-        if tempfd >= 0:
-            os.close(tempfd)
-        if srcfd >= 0:
-            os.close(srcfd)
-        if created:
-            try:
-                os.unlink(temp, dir_fd=dfd)
-            except FileNotFoundError:
-                pass
-        os.close(dfd)
+        try:
+            if tempfd >= 0:
+                try:
+                    _unlink_owned_temp(dfd, temp, tempfd)
+                finally:
+                    os.close(tempfd)
+        finally:
+            if srcfd >= 0:
+                os.close(srcfd)
+            os.close(dfd)

@@ -48,3 +48,30 @@ writer-generation barriers still needed by Issue #30. A malicious
 same-UID actor racing exactly between this final check and unlink remains
 outside the declared cooperative threat model; directory ownership and
 real maintenance serialization remain essential.
+
+## Follow-up: temporary-file cleanup ownership
+
+The same review found a separate refusal-path problem: the fresh archive
+branch previously set its created cleanup flag *before* the exclusive
+O_EXCL temp creation succeeded. If another private-file owner had already
+created that uncommon UUID-based name, the failing finalizer could have
+unlinked that existing file during its unconditional cleanup.
+
+The new code does not infer ownership from a temporary name.
+_make_temp cleans up only after it successfully opened the new temp
+descriptor, and only while that descriptor still names the same path inode.
+The successful fresh path retains its temp descriptor until the final
+verified publication/prune phase; its finally also compares the pathname
+with the exact open inode before cleanup. An O_EXCL collision never
+removes a pre-existing file. A swapped regular file or symlink remains
+untouched while the raw source is retained if the transaction fails.
+
+Regression coverage includes: collision with a pre-existing 0600 file,
+disk-full/short-write simulation after successful temp creation,
+replacement of an opened temp pathname with a foreign regular file or
+symlink, a direct compressor fsync failure, and both normal fresh and
+resumed finalization. The existing test for raw growth now expects the
+owning compressor to clean *its own* partial temp on failure.
+
+This is a defensive coding correction for the default-disabled data
+plane. It does not enable any production file deletion.
