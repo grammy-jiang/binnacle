@@ -33,6 +33,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "mcp/__init__.py",
             "mcp/identity.py",
             "mcp/logging_middleware.py",
+            "mcp/tool_admission_drain.py",
             "mcp/visibility.py",
             "mcp/callctx.py",
             "mcp/tool_order.py",
