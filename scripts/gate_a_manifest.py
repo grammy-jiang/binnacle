@@ -163,6 +163,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "platform/darwin/job_manager_lifecycle.py",
             "platform/darwin/job_manager_records.py",
             "platform/darwin/job_manager_service.py",
+            "platform/darwin/job_manager_maintenance_fence.py",
             "platform/darwin/job_manager_telemetry.py",
             "platform/darwin/daemon_logstats.py",
             "platform/darwin/job_manager_start.py",

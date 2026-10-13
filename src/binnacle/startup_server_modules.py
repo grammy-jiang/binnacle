@@ -189,6 +189,7 @@ _SERVER_EXTRA_DARWIN = (
     "binnacle.platform.darwin.job_manager_config",
     "binnacle.platform.darwin.job_manager_entry",
     "binnacle.platform.darwin.job_manager_lifecycle",
+    "binnacle.platform.darwin.job_manager_maintenance_fence",
     "binnacle.platform.darwin.job_manager_procinfo",
     "binnacle.platform.darwin.job_manager_queue",
     "binnacle.platform.darwin.job_manager_records",
