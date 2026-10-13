@@ -20,6 +20,7 @@ import stat
 import subprocess
 import time
 import uuid
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -350,6 +351,11 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=Path.home() / ".local/state/binnacle/service-watchdog.pause",
     )
+    parser.add_argument(
+        "--maintenance-pause-dir",
+        type=Path,
+        help="opt-in private, fenced pause/ACK protocol for isolated maintenance",
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(
         level=logging.INFO,
@@ -380,6 +386,16 @@ def main(argv: list[str] | None = None) -> int:
         log.error("event=service_watchdog_start_refused reason=%s", type(exc).__name__)
         return 2
     try:
+        from binnacle.companions.service_watchdog_maintenance import (
+            WatchdogMaintenanceFence,
+            WatchdogPauseRefused,
+        )
+
+        maintenance = (
+            WatchdogMaintenanceFence(args.maintenance_pause_dir)
+            if args.maintenance_pause_dir is not None
+            else None
+        )
         watchdog = Watchdog(
             Supervisor(host),
             policy=policy,
@@ -396,7 +412,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         while True:
             result = watchdog.cycle(now_mono=time.monotonic(), now_wall=time.time())
-            if args.pause_file.exists():
+            maintenance_paused = maintenance.safely_paused() if maintenance else False
+            if maintenance_paused or args.pause_file.exists():
                 log.warning("event=service_watchdog_recovery_paused")
                 result = dict.fromkeys(result, "paused")
             attempted = False
@@ -433,24 +450,43 @@ def main(argv: list[str] | None = None) -> int:
                         reason,
                     )
                     continue
-                now = time.time()
-                watchdog.state.last_attempt[service] = now
                 try:
-                    _persist_attempts(args.state_file, watchdog.state.last_attempt)
-                except OSError:
-                    log.exception(
-                        "event=service_watchdog_recovery_blocked service=%s "
-                        "reason=state_not_durable",
+                    fence = maintenance.action() if maintenance else nullcontext(True)
+                    with fence as can_restart:
+                        if not can_restart or args.pause_file.exists():
+                            log.info(
+                                "event=service_watchdog_restart_deferred "
+                                "service=%s reason=maintenance_pause",
+                                service,
+                            )
+                            continue
+                        now = time.time()
+                        watchdog.state.last_attempt[service] = now
+                        try:
+                            _persist_attempts(
+                                args.state_file, watchdog.state.last_attempt
+                            )
+                        except OSError:
+                            log.exception(
+                                "event=service_watchdog_recovery_blocked service=%s "
+                                "reason=state_not_durable",
+                                service,
+                            )
+                            continue
+                        ok = watchdog.supervisor.restart(service)
+                        log.warning(
+                            "event=service_watchdog_restart service=%s success=%s",
+                            service,
+                            ok,
+                        )
+                        watchdog.state.failures[service] = 0
+                except WatchdogPauseRefused:
+                    log.error(
+                        "event=service_watchdog_restart_deferred service=%s "
+                        "reason=maintenance_fence_unknown",
                         service,
                     )
                     continue
-                ok = watchdog.supervisor.restart(service)
-                log.warning(
-                    "event=service_watchdog_restart service=%s success=%s",
-                    service,
-                    ok,
-                )
-                watchdog.state.failures[service] = 0
             if args.once:
                 return 0
             time.sleep(policy.interval_s)
