@@ -14,18 +14,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastmcp import FastMCP
-
-from binnacle.config import get_settings
-from binnacle.features.commands.commands_server import create_commands_server
-from binnacle.features.commands.run_command_telemetry import (
-    AUTO_BACKGROUND_SEMANTICS_VERSION,
-    auto_background_behavior_hash,
-    auto_background_policy_hash,
-)
-from binnacle.features.files.files_server import create_files_server
-from binnacle.features.search.search_server import create_search_server
-from binnacle.provenance import runtime_provenance
 from binnacle.startup_imports import (
     StartupImportFailed,
     clear_record,
@@ -75,14 +63,34 @@ def _record_import_failure(failure: StartupImportFailed) -> None:
     if not _serving_process():
         return
     try:
-        root = state_root_of(get_settings().jobs.dir)
+        # The guard executes before the normal config import; load config
+        # only when recording a failure, and preserve the structured log
+        # when the failed module itself prevents config import.
+        from binnacle.config import get_settings as failure_settings
+
+        root = state_root_of(failure_settings().jobs.dir)
     except Exception:  # noqa: BLE001 - no configured root: the log line remains
         logger.error("event=startup_import_record_error process=mcp-server")
         return
     record_start_failure("mcp-server", failure, root)
 
 
+# Fail closed while every required Binnacle import is still guarded.
+# Loading business/framework modules before this call lets SyntaxError escape
+# without the required exit=70 or durable failure record (R6W3-01).
 import_runtime_modules(on_failure=_record_import_failure)
+
+from fastmcp import FastMCP
+
+from binnacle.config import get_settings
+from binnacle.features.commands.run_command_telemetry import (
+    AUTO_BACKGROUND_SEMANTICS_VERSION,
+    auto_background_behavior_hash,
+    auto_background_policy_hash,
+)
+from binnacle.features.files.files_server import create_files_server
+from binnacle.features.search.search_server import create_search_server
+from binnacle.provenance import runtime_provenance
 
 TOKEN_FILE = get_settings().auth.token_file
 
@@ -252,6 +260,7 @@ def create_server() -> FastMCP:
     """Maintain the Linux production factory contract and its token bootstrap."""
     from binnacle.application import compose_native_tools, create_application
     from binnacle.features.commands.command_backend import create_command_backend
+    from binnacle.features.commands.commands_server import create_commands_server
     from binnacle.platform.composition import host_os_family
 
     file_access = None

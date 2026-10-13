@@ -119,7 +119,10 @@ def test_only_the_entry_points_write_or_clear_the_record():
         "platform/darwin/job_manager_entry.py",
     }
     assert _callers("clear_record") == entries
-    assert _callers("record_start_failure") == entries
+    # The guarded process entry writes an import-failure record before
+    # its usual manager module can be imported (R6W3-01). No other source
+    # may write or clear these records.
+    assert _callers("record_start_failure") == entries | {"manager_bootstrap.py"}
     library = ast.parse((SRC / "startup_imports.py").read_text(encoding="utf-8"))
     for node in library.body:
         if isinstance(node, ast.FunctionDef) and node.name in {

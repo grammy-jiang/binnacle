@@ -61,16 +61,15 @@ power, login, FileVault, TCC, installed launchd services or unrelated jobs.
 The macOS native command owner (com.binnacle.jobs) requires CPython 3.13+
 with os.waitid. The MCP frontend may import and run on Python 3.10–3.12,
 but those interpreters cannot safely operate the Darwin job manager.
-This is an explicit capability limitation, not evidence of full tool parity.
-Run binnacle doctor with the same interpreter selected by the service plist:
-its jobs-python check is FAIL if the manager lacks this capability, OK
-when CPython 3.13+ exposes os.waitid. Never silently substitute a lower
-interpreter or switch to an embedded process owner.
+This is an explicit manager capability limit, not evidence of full tool parity.
 
-Authenticated manager ping also reports the manager's own Python version
-and os.waitid capability. The doctor checks those values independently of
-the frontend interpreter, which might be a different executable. The final
-deployment still verifies the actual launchd plist and running revision.
+Authenticated manager ping reports the actual manager Python version and
+os.waitid support. binnacle doctor checks these values independently of the
+frontend interpreter; it must not report a healthy manager as unsupported
+merely because the frontend uses an older interpreter. A manager launch
+preflight still requires Python 3.13+ and os.waitid. The final deployment
+also verifies the actual launchd plist and running revision. Never silently
+substitute a lower manager interpreter or switch to embedded ownership.
 
 The real-manager-only test nodes in tests/platform/darwin use a per-test
 platform/capability skip on Darwin without os.waitid. Unit-level negative

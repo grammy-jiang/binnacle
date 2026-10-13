@@ -53,8 +53,8 @@ Issues = "https://github.com/grammy-jiang/binnacle/issues"
 Releases = "https://github.com/grammy-jiang/binnacle/releases"
 
 [project.scripts]
-binnacle = "binnacle.cli:main"
-binnacle-jobs = "binnacle.features.commands.job_manager:main"
+binnacle = "binnacle.entrypoint:main"
+binnacle-jobs = "binnacle.job_manager_cli:main"
 binnacle-watchdog = "binnacle.companions.watchdog.watchdog_cli:main"
 binnacle-tunnel = "binnacle.companions.tunnel.tunnel_cli:main"
 

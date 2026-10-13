@@ -280,7 +280,10 @@ def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list
     checks += check_provenance(provenance)
     checks += check_startup_imports()  # E1-a4: last start-up import failure
     checks += check_config()
-    checks += check_darwin_job_python()
+    # The front-end may run Python 3.10–3.12 while com.binnacle.jobs uses
+    # its own 3.13+ interpreter. Authenticated manager ping below reports
+    # the manager's actual Python/waitid capability (SD-97, R6W3-02);
+    # do not turn this frontend interpreter into a false jobs-python FAIL.
     checks += check_config_keys()
     checks += check_rg_version(s.rg_bin)
     checks += check_token(dep.token_file)

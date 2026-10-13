@@ -25,3 +25,25 @@ def test_darwin_313_with_waitid_and_314_are_supported():
         (check,) = check_darwin_job_python("darwin", (3, minor), True)
         assert check.status == "ok"
         assert "supported" in check.detail
+
+
+def test_doctor_does_not_apply_manager_python_floor_to_frontend():
+    """A healthy 3.13 manager may serve a 3.12 frontend (R6W3-02)."""
+    import ast
+    from pathlib import Path
+
+    from binnacle.diagnostics import doctor
+
+    module = ast.parse(Path(doctor.__file__).read_text(encoding="utf-8"))
+    function = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef) and node.name == "run_all"
+    )
+    calls = [
+        node.func.id
+        for node in ast.walk(function)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    ]
+    assert "check_darwin_job_python" not in calls
+    assert "check_job_manager" in calls

@@ -48,6 +48,9 @@ _ALWAYS_EXCLUDED = (
     "binnacle.server",  # builds and starts the ASGI application on import
     "binnacle.cli",
     "binnacle.companions",
+    # Webmin is optional operational/companion IO; the core MCP server
+    # must not import it, even when importing its frozen runtime set.
+    "binnacle.observability.linux.webminstats",
 )
 _EXCLUDED_BY_OS = {
     "Linux": (
@@ -87,6 +90,9 @@ def manager_entry_closure_allowed(system: str) -> tuple[str, ...]:
 
 _MANAGER_COMMON = (
     "binnacle",
+    # Both manager entries need a verified configured state root for
+    # failures in later imports; it must be loaded under the same guard.
+    "binnacle.config",
     "binnacle.platform",
     "binnacle.platform.contracts",
     "binnacle.platform.contracts.capability_contracts",
@@ -96,6 +102,7 @@ _MANAGER_COMMON = (
     "binnacle.platform.contracts.runtime_path_contracts",
     "binnacle.provenance",
     "binnacle.startup_imports",
+    "binnacle.manager_bootstrap",
     "binnacle.startup_server_modules",
 )
 MANAGER_MODULES = {
@@ -105,7 +112,6 @@ MANAGER_MODULES = {
             _MANAGER_COMMON
             + (
                 "binnacle.auto_background_shell",
-                "binnacle.config",
                 "binnacle.features",
                 "binnacle.features.commands",
                 "binnacle.features.commands.job_client",
@@ -139,6 +145,9 @@ MANAGER_MODULES = {
         sorted(
             _MANAGER_COMMON
             + (
+                # config imports this helper even for Darwin settings;
+                # pin its transitive closure instead of claiming it absent.
+                "binnacle.auto_background_shell",
                 "binnacle.platform.darwin",
                 "binnacle.platform.darwin.generation_publish",
                 "binnacle.platform.darwin.generation_runtime",
@@ -150,6 +159,7 @@ MANAGER_MODULES = {
                 "binnacle.platform.darwin.job_manager_queue",
                 "binnacle.platform.darwin.job_manager_records",
                 "binnacle.platform.darwin.job_manager_service",
+                "binnacle.platform.darwin.job_manager_start",
                 "binnacle.platform.darwin.job_manager_stopping",
                 "binnacle.platform.darwin.job_process_owner",
                 "binnacle.platform.darwin.process_authority",

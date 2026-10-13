@@ -58,7 +58,6 @@ and other worktrees. No remaining gate is implicitly satisfied by a successful
 targeted test. Do not change the original run ledger to claim that a suspended
 session performed this work.
 
-
 ## 2026-10-13 follow-up integration (local only)
 
 - R1D's config-keys doctor warning implementation 212f89c and legacy

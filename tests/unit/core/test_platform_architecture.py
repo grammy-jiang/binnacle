@@ -20,6 +20,7 @@ MODULE_PATHS = {
     "job_owner": "features/commands/job_owner.py",
     "job_manager": "features/commands/job_manager.py",
     "startup_imports": "startup_imports.py",
+    "manager_bootstrap": "manager_bootstrap.py",
     "startup_server_modules": "startup_server_modules.py",
 }
 EDGES = {
@@ -56,7 +57,10 @@ EDGES = {
         "provenance",
         # E1 eager start-up imports (SD-89: approved architecture edge).
         "startup_imports",
+        # Only the __main__ manager process takes this early entry edge.
+        "manager_bootstrap",
     },
+    "manager_bootstrap": {"startup_imports", "config"},
     # E1 eager start-up imports: no features, no platform modules, no server.
     "startup_imports": {"provenance", "startup_server_modules"},
     # SD-90: the generated literal server set imports nothing at all.

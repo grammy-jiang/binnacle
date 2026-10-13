@@ -9,6 +9,11 @@ Serving lives in ``job_manager_entry``; the client in ``job_manager_client``.
 
 from __future__ import annotations
 
+if __name__ == "__main__":
+    from binnacle.manager_bootstrap import bootstrap_manager_entry
+
+    bootstrap_manager_entry("Darwin")
+
 import errno
 import fcntl
 import hashlib
@@ -489,12 +494,7 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
         return exits
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """``python -m binnacle.platform.darwin.job_manager_service`` (launchd argv)."""
-    from binnacle.platform.darwin.job_manager_entry import main as serve_main
-
-    return serve_main(argv)
-
+from binnacle.platform.darwin.job_manager_start import main
 
 if __name__ == "__main__":
     raise SystemExit(main())

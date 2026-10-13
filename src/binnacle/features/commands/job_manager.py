@@ -6,6 +6,12 @@ systemd user service and owns the ``Popen`` wait/reaper lifecycle for commands.
 
 from __future__ import annotations
 
+# A -m execution runs as __main__ before importing any business backend.
+if __name__ == "__main__":
+    from binnacle.manager_bootstrap import bootstrap_manager_entry
+
+    bootstrap_manager_entry("Linux")
+
 import json
 import logging
 import os

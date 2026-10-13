@@ -83,10 +83,12 @@ writes nor clears it.
 | Linux manager `main()` | via `on_failure` | after the jobs socket is bound and announced (`serve_forever`) |
 | Darwin manager `main()` | in the `except StartupImportFailed` handler | once the endpoint this process published appears (the `.auth` file carries this pid and lease generation) |
 
-How the MCP server recognises itself. `binnacle serve` marks the process by an
-explicit act, not an argv guess: `cli.serve` runs `uvicorn.run` inside
-`startup_imports.serving_entry()`, which is active while uvicorn imports
-`binnacle.server` and ends when `uvicorn.run` returns. `server.py` then writes
+How the MCP server recognises itself. The installed binnacle console entry
+starts at binnacle.entrypoint:main: for the serve subcommand it activates
+startup_imports.serving_entry() and verifies pinned modules before importing
+the main CLI. A failure importing the CLI itself aborts with exit 70 and a
+redacted event. Then cli.serve runs uvicorn.run inside its own serving_entry()
+scope, active until uvicorn.run returns. server.py then writes
 the record on a failed import and, because binnacle owns the uvicorn server
 there, wraps `uvicorn.Server.startup` to clear the record once `started` is
 True, and only while the explicit serving mark is active and the server's
@@ -139,3 +141,18 @@ whole session, makes any in-process path to the real
 before and after the session (a child process cannot be patched). It does not
 snapshot the rest of `~/.local/state/binnacle`: production jobs state there
 changes legitimately while a suite runs.
+
+### Earliest process-entry import boundary (R6W3-01)
+
+The CLI entrypoint and Linux binnacle-jobs console entry must not import
+business modules before the pinned startup check. Manual Python module
+entrypoints on Linux and Darwin guard before service/backends load;
+ordinary library imports remain inert. The server guards required imports
+before importing its FastMCP adapters and tool factories.
+
+When the configured state root is initialized, early failures write the
+structured record. If config itself cannot initialize, there is no
+trustworthy state root: exit 70 and the redacted log remain mandatory, while
+a missing receipt is explicitly logged rather than written to a guessed
+HOME/XDG path. Do not restore the original unguarded console targets:
+binnacle.entrypoint:main and binnacle.job_manager_cli:main are required.

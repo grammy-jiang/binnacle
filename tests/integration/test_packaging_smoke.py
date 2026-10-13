@@ -26,8 +26,8 @@ def test_distribution_exposes_runtime_console_entry_points():
         ep.name: ep.value for ep in dist.entry_points if ep.group == "console_scripts"
     }
 
-    assert scripts["binnacle"] == "binnacle.cli:main"
-    assert scripts["binnacle-jobs"] == "binnacle.features.commands.job_manager:main"
+    assert scripts["binnacle"] == "binnacle.entrypoint:main"
+    assert scripts["binnacle-jobs"] == "binnacle.job_manager_cli:main"
     assert (
         scripts["binnacle-watchdog"] == "binnacle.companions.watchdog.watchdog_cli:main"
     )

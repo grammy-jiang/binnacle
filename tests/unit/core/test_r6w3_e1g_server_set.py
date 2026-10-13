@@ -184,3 +184,12 @@ def test_the_generator_walk_imports_no_binnacle_module():
         check=False,
     )
     assert done.returncode == 0, (done.stdout, done.stderr[-2000:])
+
+
+def test_optional_webmin_companion_never_enters_required_core_server_set():
+    """E1 eager imports preserve the pre-existing core/companion boundary."""
+    for system in SYSTEMS:
+        assert (
+            "binnacle.observability.linux.webminstats"
+            not in startup_imports.runtime_module_names(system)
+        )
