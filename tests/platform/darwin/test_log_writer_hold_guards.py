@@ -232,3 +232,193 @@ def test_restore_failure_remains_explicit_and_does_not_claim_success(
         hold._restore()
     assert hold._booted_out  # recovery still required
     assert not hold._held
+
+
+def _simulated_native_hold(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> tuple[writer.LaunchdFixtureWriterHold, dict[str, object]]:
+    """Cross-OS lifecycle model; no actual launchctl processes or log mutations."""
+    hold = _fake_fixture_hold(monkeypatch, tmp_path)
+    state: dict[str, object] = {"loaded": True, "old_pid": 101, "new_pid": 202}
+    monkeypatch.setattr(hold, "_plist_identity", lambda: None)
+    monkeypatch.setattr(writer, "_loaded", lambda target: bool(state["loaded"]))
+    monkeypatch.setattr(
+        writer,
+        "_running_pid",
+        lambda target: (
+            state["old_pid"] if not state.get("restarted") else state["new_pid"]
+        ),
+    )
+    monkeypatch.setattr(writer, "_no_writer_fds", lambda path: None)
+
+    def emulate(argv: list[str], timeout: float = 12):
+        if argv[-2:] == ["bootout", hold.target]:
+            state["loaded"] = False
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        if argv[-3:] == ["bootstrap", "system", str(hold.plist)]:
+            state["loaded"] = True
+            state["restarted"] = True
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        raise AssertionError("unexpected launchctl invocation")
+
+    monkeypatch.setattr(writer, "_run", emulate)
+    return hold, state
+
+
+def test_simulated_native_hold_enters_verifies_and_restores_on_linux(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    hold, state = _simulated_native_hold(monkeypatch, tmp_path)
+    source = tmp_path / "mcp.stderr.log.0"
+    source.write_bytes(b"frozen")
+    with hold as owned:
+        assert owned is hold
+        assert not state["loaded"]
+        assert hold._held and hold._booted_out
+        hold.verify(source.name, source.stat())
+    assert state["loaded"] and state["restarted"]
+    assert not hold._held and not hold._booted_out
+
+
+def test_simulated_native_partial_bootout_failure_restores_writer(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    hold, state = _simulated_native_hold(monkeypatch, tmp_path)
+    original_run = writer._run
+
+    def error_after_bootout(argv: list[str], timeout: float = 12):
+        finished = original_run(argv, timeout)
+        if argv[-2:] == ["bootout", hold.target]:
+            return subprocess.CompletedProcess(argv, 1, "", "synthetic refusal")
+        return finished
+
+    monkeypatch.setattr(writer, "_run", error_after_bootout)
+    with pytest.raises(finish.ArchiveFinalizeRefused, match="bootout"):
+        hold.__enter__()
+    assert state["loaded"] and state["restarted"]
+    assert not hold._booted_out and not hold._held
+
+
+def test_simulated_native_hold_busy_inode_times_out_and_restores(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    hold, state = _simulated_native_hold(monkeypatch, tmp_path)
+    hold.wait_s = 0.01
+
+    def busy(path):
+        raise finish.ArchiveFinalizeRefused("other process still writing")
+
+    monkeypatch.setattr(writer, "_no_writer_fds", busy)
+    with pytest.raises(finish.ArchiveFinalizeRefused, match="still writing"):
+        hold.__enter__()
+    assert state["loaded"] and state["restarted"]
+    assert not hold._booted_out and not hold._held
+
+
+def test_simulated_native_restore_fails_closed_without_claiming_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    hold, state = _simulated_native_hold(monkeypatch, tmp_path)
+    original_run = writer._run
+
+    def refuse_bootstrap(argv: list[str], timeout: float = 12):
+        if argv[-3:] == ["bootstrap", "system", str(hold.plist)]:
+            return subprocess.CompletedProcess(argv, 5, "", "synthetic error")
+        return original_run(argv, timeout)
+
+    monkeypatch.setattr(writer, "_run", refuse_bootstrap)
+    with pytest.raises(finish.ArchiveFinalizeRefused, match="restoration"), hold:
+        assert not state["loaded"]
+    assert not state["loaded"]
+    assert hold._booted_out
+    assert not hold._held
+
+
+def test_simulated_native_delayed_restoration_rechecks_real_pid(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    hold, state = _simulated_native_hold(monkeypatch, tmp_path)
+    old_pid = writer._running_pid
+    count = [0]
+
+    def delayed(target):
+        if state.get("restarted"):
+            count[0] += 1
+            if count[0] <= 2:
+                raise finish.ArchiveFinalizeRefused("not ready")
+        return old_pid(target)
+
+    monkeypatch.setattr(writer, "_running_pid", delayed)
+    with hold:
+        assert not state["loaded"]
+    assert count[0] >= 3
+    assert state["loaded"]
+
+
+def test_simulated_native_restore_deadline_does_not_claim_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    hold, state = _simulated_native_hold(monkeypatch, tmp_path)
+    old_pid = writer._running_pid
+
+    def stuck(target):
+        if state.get("restarted"):
+            return 101
+        return old_pid(target)
+
+    monkeypatch.setattr(writer, "_running_pid", stuck)
+    with (
+        pytest.raises(finish.ArchiveFinalizeRefused, match="generation unprovable"),
+        hold,
+    ):
+        assert not state["loaded"]
+    assert hold._booted_out
+    assert not hold._held
+
+
+def test_valid_fixture_plist_plan_accepts_only_exact_pinned_fields(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import grp
+    import os
+    import plistlib
+    import pwd
+    from types import SimpleNamespace
+
+    hold = _fake_fixture_hold(monkeypatch, tmp_path)
+    good = {
+        "Label": hold.label,
+        "StandardOutPath": str(tmp_path / "mcp.stdout.log"),
+        "StandardErrorPath": str(tmp_path / "mcp.stderr.log"),
+        "UserName": pwd.getpwuid(os.getuid()).pw_name,
+        "GroupName": grp.getgrgid(os.getgid()).gr_name,
+        "RunAtLoad": True,
+        "KeepAlive": True,
+        "ProgramArguments": ["/usr/bin/true"],
+    }
+    original_lstat = Path.lstat
+    original_read = Path.read_bytes
+
+    def stat_plist(p: Path):
+        if p == hold.plist:
+            return SimpleNamespace(st_mode=0o100644, st_uid=0, st_gid=0, st_nlink=1)
+        return original_lstat(p)
+
+    wire = [plistlib.dumps(good)]
+
+    def read_plist(p: Path):
+        if p == hold.plist:
+            return wire[0]
+        return original_read(p)
+
+    with monkeypatch.context() as m:
+        m.setattr(Path, "lstat", stat_plist)
+        m.setattr(Path, "read_bytes", read_plist)
+        hold._plist_identity()
+        bad = {**good, "StandardOutPath": "/tmp/foreign.log"}
+        wire[0] = plistlib.dumps(bad)
+        with pytest.raises(finish.ArchiveFinalizeRefused, match="untrusted"):
+            hold._plist_identity()
+        wire[0] = b"invalid plist"
+        with pytest.raises(finish.ArchiveFinalizeRefused, match="unreadable"):
+            hold._plist_identity()
