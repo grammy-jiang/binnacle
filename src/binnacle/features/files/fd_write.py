@@ -106,8 +106,6 @@ def _parent(
     except OSError as exc:
         if exc.errno in (errno.ELOOP, errno.ENOTDIR, errno.ENOENT):
             raise fd_walk.path_changed(path, tool) from exc
-        if exc.errno in (errno.EACCES, errno.EPERM):
-            raise fd_walk.permission_denied(path) from exc
         raise
 
 

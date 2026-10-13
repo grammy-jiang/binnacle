@@ -140,8 +140,8 @@ def test_edit_same_bytes_inode_change_conflicts(allowed, monkeypatch):
     original = fd_write.write_bytes
 
     def raced_write(*args, **kwargs):
-        path.unlink()
-        path.write_text("old")  # same bytes, different inode
+        path.rename(root / "previous-inode")  # hold the original inode allocated
+        path.write_text("old")  # same bytes, provably different inode
         return original(*args, **kwargs)
 
     monkeypatch.setattr(fd_write, "write_bytes", raced_write)
