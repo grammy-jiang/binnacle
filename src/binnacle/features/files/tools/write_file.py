@@ -6,6 +6,7 @@ reported loudly (action + previous_bytes) and gated by ChatGPT's own
 per-write confirmation.
 """
 
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -16,6 +17,7 @@ from pydantic import Field
 
 from binnacle.config import RootsSettings, get_settings
 from binnacle.errors import CodedToolError
+from binnacle.features.files import fd_write
 from binnacle.features.files.error_text import followed
 from binnacle.features.files.paths import FileToolAccess, resolve_path
 from binnacle.platform.contracts.file_access_contracts import RootGrant
@@ -70,13 +72,31 @@ def write_file_impl(
         if resolved.exists() and not resolved.is_file():
             # A FIFO, socket or device: never opened for writing (r6 W3 PX1).
             raise CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)
-        previous_bytes = resolved.stat().st_size if resolved.exists() else None
         data = content.encode("utf-8")
-        try:
-            resolved.parent.mkdir(parents=True, exist_ok=True)
-            resolved.write_bytes(data)
-        except OSError as e:
-            raise ToolError(f"Could not write {resolved}: {e.strerror or e}.") from e
+        if sys.platform == "linux":
+            try:
+                receipt = fd_write.write_bytes(
+                    resolved,
+                    (
+                        get_settings().roots if roots is None else roots
+                    ).canonical_allowed,
+                    data,
+                    create_parents=True,
+                )
+            except OSError as e:
+                raise ToolError(
+                    f"Could not write {resolved}: {e.strerror or e}."
+                ) from e
+            previous_bytes = receipt.previous_bytes
+        else:
+            previous_bytes = resolved.stat().st_size if resolved.exists() else None
+            try:
+                resolved.parent.mkdir(parents=True, exist_ok=True)
+                resolved.write_bytes(data)
+            except OSError as e:
+                raise ToolError(
+                    f"Could not write {resolved}: {e.strerror or e}."
+                ) from e
 
     if previous_bytes is None:
         payload = {"path": str(resolved), "bytes": len(data), "action": "created"}

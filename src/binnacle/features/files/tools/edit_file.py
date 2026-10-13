@@ -8,6 +8,7 @@ the edit, CRLF and typographic quotes are matched byte-for-byte
 """
 
 import hashlib
+import sys
 from typing import Annotated
 
 from fastmcp import FastMCP
@@ -17,6 +18,7 @@ from pydantic import Field
 
 from binnacle.config import EditFileSettings, RootsSettings, get_settings
 from binnacle.errors import CodedToolError
+from binnacle.features.files import fd_write
 from binnacle.features.files.paths import FileToolAccess, nearby_hint, resolve_path
 from binnacle.platform.contracts.special_file_contracts import (
     PATH_IS_DIRECTORY_CODE,
@@ -158,8 +160,22 @@ def edit_file_impl(
     if old_string == new_string:
         raise ToolError("old_string and new_string are identical; nothing to change.")
 
+    read_identity = None
     if file_access is None:
-        original = resolved.read_bytes()
+        if sys.platform == "linux":
+            try:
+                original, read_identity = fd_write.read_for_edit(
+                    resolved,
+                    (
+                        get_settings().roots if roots is None else roots
+                    ).canonical_allowed,
+                )
+            except OSError as exc:
+                raise ToolError(
+                    f"Could not read {resolved}: {exc.strerror or exc}."
+                ) from exc
+        else:
+            original = resolved.read_bytes()
     text, bom, codec = _decode_for_edit(original, resolved)
 
     match_tier = "exact"
@@ -215,7 +231,19 @@ def edit_file_impl(
     data = bom + new_text.encode(codec)
     try:
         if file_access is None:
-            resolved.write_bytes(data)
+            if sys.platform == "linux":
+                fd_write.write_bytes(
+                    resolved,
+                    (
+                        get_settings().roots if roots is None else roots
+                    ).canonical_allowed,
+                    data,
+                    create_parents=False,
+                    expected_sha256=hashlib.sha256(original).hexdigest(),
+                    expected_identity=read_identity,
+                )
+            else:
+                resolved.write_bytes(data)
         else:
             # resolved is the target of an in-root link that read followed.
             with file_access.operation(str(resolved)) as (grant, relative, _):

@@ -51,6 +51,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "features/files/error_text.py",
             "features/files/textio.py",
             "features/files/fd_walk.py",
+            "features/files/fd_write.py",
             "features/files/fd_chain.py",
             "features/files/rg_env.py",
         },
