@@ -110,7 +110,7 @@
     "LINUX": 67
   },
   "coverage_complete": true,
-  "implementation_commit": "515c8fa2e6a2ff253cb94114be57998bfe3f5453",
+  "implementation_commit": "827f32bd31d88e1aaed97cb8ba64af965eacdb33",
   "production_module_count": 233,
   "rows": [
     {
@@ -1958,6 +1958,7 @@
         "os",
         "pathlib",
         "pathlib.Path",
+        "re",
         "stat"
       ],
       "lexical_host_tokens": [],
@@ -1966,7 +1967,7 @@
       "owner": "LINUX",
       "path": "src/binnacle/companions/darwin_log_privacy.py",
       "rationale": "Linux-specific host, service or companion implementation; core must never import it directly",
-      "sha256": "699d3925e323d6f71d478da7428b263bc179332f5dc5eb0c0d7acd18b3aa3dad",
+      "sha256": "b10e103edaea9df2f30d80b81f9e1b7731909993be66534d397d983310d93643",
       "stage": "OS6",
       "was_in_baseline": false
     },
