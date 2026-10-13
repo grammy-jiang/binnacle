@@ -12,6 +12,42 @@ import os
 import stat
 from pathlib import Path
 
+# Darwin newsyslog thresholds are per file, unlike journald's total budget.
+# Large SSD capacity permits a broad log window. A rotating launchd-owned file
+# is not lossless until the writer has closed its old descriptor: warn early,
+# but never force newsyslog from within this companion.
+ROTATION_SIZE_KIB = 10 * 1024 * 1024  # 10 GiB per active file
+ROTATION_WARNING_BYTES = 8 * 1024**3  # maintenance-window advisory
+MIN_DISK_FREE_BYTES = 100 * 1024**3  # mirror Linux's keep-free objective
+ARCHIVE_COUNT = 7
+
+
+def render_newsyslog_rule(
+    home: Path,
+    *,
+    user: str,
+    group: str = "staff",
+    size_kib: int = ROTATION_SIZE_KIB,
+    archives: int = ARCHIVE_COUNT,
+) -> str:
+    """Pure policy renderer; never install or rotate an active log file.
+
+    The GNJ flags match the legacy Binnacle rule: glob, no signal, bzip2.
+    This rule cannot by itself guarantee no loss if launchd still holds an FD.
+    """
+    if (
+        not home.is_absolute()
+        or any(c.isspace() for c in str(home))
+        or not user
+        or not group
+        or not all(c.isalnum() or c in "_-" for c in user + group)
+        or not 1 <= archives <= 50
+        or not 1024 <= size_kib <= 100 * 1024**2
+    ):
+        raise ValueError("unsafe Darwin log retention policy")
+    root = home / "Library/Logs/binnacle"
+    return f"{root}/*.log {user}:{group} 600 {archives} {size_kib} * GNJ"
+
 
 def harden_private_logs(root: Path, *, max_files: int = 64) -> tuple[str, ...]:
     """Make safe, user-owned *.log files 0600; reject ambiguity as a unit."""
@@ -61,7 +97,7 @@ def harden_private_logs(root: Path, *, max_files: int = 64) -> tuple[str, ...]:
 
 
 def logs_nearing_rotation(
-    root: Path, *, warn_bytes: int = 768 * 1024 * 1024
+    root: Path, *, warn_bytes: int = ROTATION_WARNING_BYTES
 ) -> tuple[tuple[str, int], ...]:
     """Report files near the installed newsyslog size limit; never rotate them."""
     if warn_bytes <= 0:
