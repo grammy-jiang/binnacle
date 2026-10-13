@@ -26,6 +26,7 @@ import json
 import logging
 import os
 import platform
+import sys
 import time
 import traceback
 from collections.abc import Callable, Iterator
@@ -34,7 +35,6 @@ from pathlib import Path
 from types import ModuleType
 
 import binnacle
-from binnacle.provenance import runtime_provenance
 from binnacle.startup_server_modules import SERVER_MODULES
 
 log = logging.getLogger("binnacle.startup_imports")
@@ -287,6 +287,25 @@ def serving_entry_marked() -> bool:
     return _serving_entry
 
 
+def _loaded_source_revision() -> str:
+    """Never first-import the REQUIRED provenance module while recording error.
+
+    During an import failure the module can be broken or partially initialized.
+    A missing revision is preferable to replacing exit 70 with an exception.
+    """
+    source = sys.modules.get("binnacle.provenance")
+    getter = getattr(source, "runtime_provenance", None)
+    if callable(getter):
+        try:
+            value = getter().revision
+            if isinstance(value, str) and value:
+                return value
+        except BaseException as exc:
+            if isinstance(exc, KeyboardInterrupt):
+                raise
+    return "unknown"
+
+
 def record_start_failure(
     process: str, failure: StartupImportFailed, state_root: Path
 ) -> bool:
@@ -298,7 +317,7 @@ def record_start_failure(
     record = {
         "process": process,
         "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "revision": runtime_provenance().revision,
+        "revision": _loaded_source_revision(),
         "module": failure.module,
         "error_class": failure.error_class,
         "where": failure.where,
@@ -346,7 +365,16 @@ def _fail_fast(
             EX_STARTUP_IMPORT,
         )
         if on_failure is not None:  # the entry point's record write
-            on_failure(failure)
+            try:
+                on_failure(failure)
+            except BaseException as exc:
+                if isinstance(exc, KeyboardInterrupt):
+                    raise
+                log.error(
+                    "event=startup_import_record_error process=%s error_class=%s",
+                    process,
+                    type(exc).__name__,
+                )
         raise
     return ()
 

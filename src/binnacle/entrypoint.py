@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import logging
 import sys
+from pathlib import Path
 from typing import NoReturn
 
 
-def _serve_import_failed(exc: BaseException) -> NoReturn:
+def _serve_import_failed(exc: BaseException, root: Path | None) -> NoReturn:
     from binnacle import startup_imports
     from binnacle.manager_bootstrap import record_early_failure
 
@@ -27,7 +28,7 @@ def _serve_import_failed(exc: BaseException) -> NoReturn:
         failure.where,
         startup_imports.EX_STARTUP_IMPORT,
     )
-    record_early_failure("mcp-server", failure)
+    record_early_failure("mcp-server", failure, root)
     raise failure from None
 
 
@@ -40,7 +41,10 @@ def main() -> None:
         return
 
     from binnacle import startup_imports
-    from binnacle.manager_bootstrap import record_early_failure
+    from binnacle.manager_bootstrap import (
+        capture_startup_root,
+        record_early_failure,
+    )
 
     logging.basicConfig(
         level=logging.INFO,
@@ -48,15 +52,19 @@ def main() -> None:
         datefmt="%Y-%m-%dT%H:%M:%S",
     )
 
+    root = capture_startup_root(process="mcp-server", system="")
+
     def on_failure(failure: startup_imports.StartupImportFailed) -> None:
-        record_early_failure("mcp-server", failure)
+        record_early_failure("mcp-server", failure, root)
 
     with startup_imports.serving_entry():
         startup_imports.import_runtime_modules(on_failure=on_failure)
         try:
             from binnacle.cli import main as cli_main
-        except (KeyboardInterrupt, SystemExit):
+        except KeyboardInterrupt:
             raise
-        except BaseException as exc:  # noqa: BLE001 - convert import failure safely
-            _serve_import_failed(exc)
+        except startup_imports.StartupImportFailed:
+            raise
+        except BaseException as exc:  # noqa: BLE001 - convert SystemExit safely
+            _serve_import_failed(exc, root)
         cli_main()

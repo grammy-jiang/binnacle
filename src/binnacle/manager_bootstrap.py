@@ -7,52 +7,100 @@ when the manager is still inside its startup-import failure boundary.
 from __future__ import annotations
 
 import logging
-import sys
+from pathlib import Path
 
 from binnacle.startup_imports import (
+    EX_STARTUP_IMPORT,
     StartupImportFailed,
+    _raising_frame,
+    _required_import,
     import_manager_modules,
     record_start_failure,
     state_root_of,
 )
 
 
-def record_early_failure(process: str, failure: StartupImportFailed) -> bool:
-    """Use only a fully initialized configuration for early failure receipts.
+def capture_startup_root(*, process: str, system: str) -> Path | None:
+    """Load the appropriate configured root under a redacted import boundary.
 
-    Never import config while it itself may be failing: if its state root
-    cannot be verified, retain the redacted log and exit 70.
+    Linux MCP and jobs use the same Settings source as production. The Darwin
+    job manager instead uses its strict *file-only* ManagerConfig, never the
+    frontend's env-override-enabled Settings. Only a successful, one-time
+    snapshot is used for subsequent failure receipts.
     """
+    manager_darwin = process == "job-manager" and system == "Darwin"
+    name = (
+        "binnacle.platform.darwin.job_manager_config"
+        if manager_darwin
+        else "binnacle.config"
+    )
     try:
-        config = sys.modules.get("binnacle.config")
-        settings = getattr(config, "get_settings", None)
-        if not callable(settings):
-            raise TypeError("configured state root unavailable")
-        state = state_root_of(settings().jobs.dir)
-        if record_start_failure(process, failure, state):
-            return True
-    except Exception as exc:  # noqa: BLE001 - no trustworthy config, fail closed
+        module = _required_import(name)
+        settings = module.read_config() if manager_darwin else module.get_settings()
+        return state_root_of(settings.jobs.dir)
+    except (ValueError, OSError):
+        # Preserve the existing config-invalid path in the serving entry.
+        # Without a valid configuration, no failure-receipt path is trusted.
+        return None
+    except BaseException as exc:
+        if isinstance(exc, KeyboardInterrupt):
+            raise
+        failure = (
+            exc
+            if isinstance(exc, StartupImportFailed)
+            else StartupImportFailed(
+                name, type(exc).__name__, _raising_frame(exc, name)
+            )
+        )
+        logging.getLogger("binnacle.startup_imports").error(
+            "event=startup_import_failed process=%s module=%s "
+            "error_class=%s at=%s exit=%d",
+            process,
+            failure.module,
+            failure.error_class,
+            failure.where,
+            EX_STARTUP_IMPORT,
+        )
+        raise failure from None
+
+
+def record_early_failure(
+    process: str, failure: StartupImportFailed, state_root: Path | None
+) -> bool:
+    """Use only the previously verified state root; NEVER reload configuration.
+
+    A secondary exception, even SystemExit, must not mask the original
+    StartupImportFailed or leak its message to stderr.
+    """
+    if state_root is None:
+        logging.getLogger("binnacle.manager_bootstrap").error(
+            "event=startup_import_record_error process=%s reason=no_trusted_root",
+            process,
+        )
+        return False
+    try:
+        return record_start_failure(process, failure, state_root)
+    except BaseException as exc:
+        if isinstance(exc, KeyboardInterrupt):
+            raise
         logging.getLogger("binnacle.manager_bootstrap").error(
             "event=startup_import_record_error process=%s error_class=%s",
             process,
             type(exc).__name__,
         )
         return False
-    logging.getLogger("binnacle.manager_bootstrap").error(
-        "event=startup_import_record_error process=%s", process
-    )
-    return False
 
 
 def bootstrap_manager_entry(system: str) -> None:
-    """Guard a real -m manager start before its heavy module imports.
+    """Validate the installed -m/console startup before importing backends.
 
-    Called only in the __main__ path. Importing the manager as a library
-    remains inert; the canonical module is included in the pinned set.
+    Library imports remain inert; an invalid manager configuration stays an
+    ordinary manager configuration error, not an arbitrary writable path.
     """
+    root = capture_startup_root(process="job-manager", system=system)
 
     def failed(failure: StartupImportFailed) -> None:
-        record_early_failure("job-manager", failure)
+        record_early_failure("job-manager", failure, root)
 
     output = (
         "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s"

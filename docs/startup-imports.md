@@ -150,9 +150,20 @@ entrypoints on Linux and Darwin guard before service/backends load;
 ordinary library imports remain inert. The server guards required imports
 before importing its FastMCP adapters and tool factories.
 
-When the configured state root is initialized, early failures write the
-structured record. If config itself cannot initialize, there is no
-trustworthy state root: exit 70 and the redacted log remain mandatory, while
-a missing receipt is explicitly logged rather than written to a guessed
-HOME/XDG path. Do not restore the original unguarded console targets:
-binnacle.entrypoint:main and binnacle.job_manager_cli:main are required.
+At process entry, the configured state root is resolved ONCE, inside an
+import-failure boundary, before the rest of the pinned REQUIRED modules are
+loaded. Linux uses its normal Settings; Darwin's manager uses the same
+file-only ManagerConfig as the real running service. When the configured
+state root is valid, early failures write the structured record at that
+saved root. The failure callback NEVER rebuilds settings or follows an
+unverified environment override. If config itself cannot initialize there
+is no trustworthy state root: exit 70 and the redacted log remain mandatory,
+with an explicit log-only record error instead of a guessed HOME/XDG path.
+
+The required provenance module is not imported by startup_imports on its
+own; it is loaded inside the protected pinned module set. If provenance
+cannot initialize, the failure record uses revision unknown rather than
+re-importing it while reporting an existing fault. Import-time SystemExit
+in the serve CLI is converted to exit 70 and does not leak its message.
+Do not restore unguarded console targets: binnacle.entrypoint:main and
+binnacle.job_manager_cli:main are required.

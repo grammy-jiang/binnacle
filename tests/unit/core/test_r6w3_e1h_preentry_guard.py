@@ -22,10 +22,12 @@ DRIVER = textwrap.dedent(
     """
     import importlib.abc, os, runpy, sys
 
-    entry, target = sys.argv[1:]
+    entry, target, kind = sys.argv[1:]
     class BrokenRequiredModule(importlib.abc.MetaPathFinder):
         def find_spec(self, fullname, path=None, target=None):
             if fullname == REQUIRED:
+                if kind == "exit":
+                    raise SystemExit("sensitive_external_text")
                 raise SyntaxError("sensitive_external_text")
             return None
 
@@ -58,18 +60,87 @@ DRIVER = textwrap.dedent(
     raise AssertionError("required import error did not abort before entry")
     """
 )
+# (entry, module, process, failure kind, trusted receipt, override mode)
 CASES = (
-    ("server", "binnacle.features.commands.commands_server", "mcp-server"),
-    ("server-console", "binnacle.features.commands.commands_server", "mcp-server"),
-    ("server-console", "binnacle.cli", "mcp-server"),
-    ("linux-console", "binnacle.features.commands.job_store", "job-manager"),
-    ("linux-module", "binnacle.features.commands.job_store", "job-manager"),
-    ("darwin-module", "binnacle.platform.darwin.job_manager_records", "job-manager"),
+    (
+        "server",
+        "binnacle.features.commands.commands_server",
+        "mcp-server",
+        "syntax",
+        True,
+        "",
+    ),
+    (
+        "server-console",
+        "binnacle.features.commands.commands_server",
+        "mcp-server",
+        "syntax",
+        True,
+        "",
+    ),
+    ("server-console", "binnacle.cli", "mcp-server", "syntax", True, ""),
+    (
+        "linux-console",
+        "binnacle.features.commands.job_store",
+        "job-manager",
+        "syntax",
+        True,
+        "",
+    ),
+    (
+        "linux-module",
+        "binnacle.features.commands.job_store",
+        "job-manager",
+        "syntax",
+        True,
+        "",
+    ),
+    (
+        "darwin-module",
+        "binnacle.platform.darwin.job_manager_records",
+        "job-manager",
+        "syntax",
+        True,
+        "",
+    ),
+    # R6W3-01: provenance MUST be part of the guarded REQUIRED set, never a
+    # top-level dependency of startup_imports or its thin wrappers.
+    ("server-console", "binnacle.provenance", "mcp-server", "syntax", True, ""),
+    ("linux-console", "binnacle.provenance", "job-manager", "syntax", True, ""),
+    ("darwin-module", "binnacle.provenance", "job-manager", "syntax", True, ""),
+    # R6W3-03: a CLI import SystemExit, unlike intentional main() exit, is
+    # an import-time failure that must be converted to 70 and redacted.
+    ("server-console", "binnacle.cli", "mcp-server", "exit", True, ""),
+    # R6W3-04: get_settings' first construction may import composition; it
+    # is guarded too. With no configured socket we do not guess a record root.
+    (
+        "linux-console",
+        "binnacle.platform.composition",
+        "job-manager",
+        "exit",
+        False,
+        "no-socket",
+    ),
+    # R6W3-05: the Darwin manager rejects env-overridden jobs dir: never
+    # write an early import failure to the forbidden override's parent.
+    (
+        "darwin-module",
+        "binnacle.platform.darwin.job_manager_records",
+        "job-manager",
+        "syntax",
+        False,
+        "env-override",
+    ),
 )
 
 
-@pytest.mark.parametrize(("entry", "missing", "process"), CASES)
-def test_real_entry_guards_initial_required_imports(entry, missing, process):
+@pytest.mark.parametrize(
+    ("entry", "missing", "process", "kind", "receipt_expected", "override"),
+    CASES,
+)
+def test_real_entry_guards_initial_required_imports(
+    entry, missing, process, kind, receipt_expected, override
+):
     if entry == "linux-module" and sys.platform != "linux":
         pytest.skip("Linux-only -m entry (Darwin uses a separate service)")
     if entry == "darwin-module" and sys.platform != "darwin":
@@ -80,13 +151,20 @@ def test_real_entry_guards_initial_required_imports(entry, missing, process):
         config = state / "config.toml"
         config.write_text(
             f'[jobs]\ndir = "{state / "jobs"}"\n'
-            f'socket_path = "{state / "manager.sock"}"\nowner = "embedded"\n',
+            + (
+                ""
+                if override == "no-socket"
+                else f'socket_path = "{state / "manager.sock"}"\n'
+            )
+            + 'owner = "embedded"\n',
             encoding="utf-8",
         )
         env = {k: v for k, v in os.environ.items() if not k.startswith("BINNACLE_")}
         env.update(BINNACLE_CONFIG_FILE=str(config), XDG_STATE_HOME=str(state / "xdg"))
+        if override == "env-override":
+            env["BINNACLE_JOBS__DIR"] = str(state / "not-authorized" / "jobs")
         child = subprocess.run(
-            [sys.executable, "-c", DRIVER, entry, missing],
+            [sys.executable, "-c", DRIVER, entry, missing, kind],
             env=env,
             capture_output=True,
             text=True,
@@ -96,15 +174,21 @@ def test_real_entry_guards_initial_required_imports(entry, missing, process):
         output = child.stdout + child.stderr
         assert child.returncode == 70, output[-1500:]
         assert "event=startup_import_failed" in output, output[-1500:]
-        assert "error_class=SyntaxError" in output, output[-1500:]
+        error_name = "SystemExit" if kind == "exit" else "SyntaxError"
+        assert f"error_class={error_name}" in output, output[-1500:]
         assert "sensitive_external_text" not in output
         assert "Traceback" not in output
         record = state / "startup-import" / f"{process}.json"
-        assert record.is_file(), f"missing configured failure receipt; {output[-1500:]}"
-        data = json.loads(record.read_text(encoding="utf-8"))
-        assert data["process"] == process
-        assert data["error_class"] == "SyntaxError"
-        assert data["module"].startswith("binnacle.")
+        assert record.is_file() is receipt_expected, output[-1500:]
+        if receipt_expected:
+            data = json.loads(record.read_text(encoding="utf-8"))
+            assert data["process"] == process
+            assert data["error_class"] == error_name
+            assert data["module"].startswith("binnacle.")
+        elif override == "env-override":
+            # Never write the failure record to a rejected env-overridden root.
+            assert "event=startup_import_record_error" in output
+        assert not (state / "not-authorized").exists()
     finally:
         # Only the test-owned fixture is removed, never a parent state root.
         import shutil
