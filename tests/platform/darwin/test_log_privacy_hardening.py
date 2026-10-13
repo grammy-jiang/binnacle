@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import stat
+from pathlib import Path
 
 import pytest
 
@@ -160,3 +161,80 @@ def test_log_growth_nonexistent_or_foreign_root_refused(tmp_path, monkeypatch):
     monkeypatch.setattr(os, "getuid", lambda: -10000)
     with pytest.raises(RuntimeError, match="unsafe"):
         logs_nearing_rotation(root)
+
+
+def test_retention_policy_matches_long_lived_mac_ssd():
+    from binnacle.companions.darwin_log_privacy import (
+        ARCHIVE_COUNT,
+        MIN_DISK_FREE_BYTES,
+        ROTATION_SIZE_KIB,
+        ROTATION_WARNING_BYTES,
+        render_newsyslog_rule,
+    )
+
+    root = Path("/Users/auser")
+    text = render_newsyslog_rule(root, user="auser")
+    assert text == (
+        "/Users/auser/Library/Logs/binnacle/*.log auser:staff 600 7 10485760 * GNJ"
+    )
+    assert ARCHIVE_COUNT == 7
+    assert ROTATION_SIZE_KIB * 1024 == 10 * 1024**3
+    assert ROTATION_WARNING_BYTES == 8 * 1024**3
+    assert ROTATION_WARNING_BYTES < ROTATION_SIZE_KIB * 1024
+    assert MIN_DISK_FREE_BYTES == 100 * 1024**3
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"home": Path("relative"), "user": "auser"},
+        {"home": Path("/Users/space in name"), "user": "auser"},
+        {"home": Path("/Users/auser"), "user": "bad:name"},
+        {"home": Path("/Users/auser"), "user": ""},
+        {"home": Path("/Users/auser"), "user": "auser", "group": "staff;rm"},
+        {"home": Path("/Users/auser"), "user": "auser", "archives": 0},
+        {"home": Path("/Users/auser"), "user": "auser", "size_kib": 0},
+        {"home": Path("/Users/auser"), "user": "auser", "size_kib": 100 * 1024**2 + 1},
+    ],
+)
+def test_retention_renderer_rejects_unsafe_inputs(kwargs):
+    from binnacle.companions.darwin_log_privacy import render_newsyslog_rule
+
+    with pytest.raises(ValueError, match="unsafe"):
+        render_newsyslog_rule(**kwargs)
+
+
+def test_default_warning_matches_new_policy_without_allocating_gigabytes(tmp_path):
+    from binnacle.companions import darwin_log_privacy as privacy
+
+    root = private_root(tmp_path)
+    log = root / "mcp.stderr.log"
+    log.write_text("x")
+    assert privacy.logs_nearing_rotation(root) == ()
+    with pytest.MonkeyPatch.context() as mp:
+        # Stub filesystem size only; opening & reading remain real and safe.
+        actual_stat = privacy.os.stat
+
+        def near_limit(path, **kwargs):
+            observed = actual_stat(path, **kwargs)
+            if path == "mcp.stderr.log":
+                return os.stat_result(
+                    (
+                        observed.st_mode,
+                        observed.st_ino,
+                        observed.st_dev,
+                        observed.st_nlink,
+                        observed.st_uid,
+                        observed.st_gid,
+                        privacy.ROTATION_WARNING_BYTES + 1,
+                        observed.st_atime,
+                        observed.st_mtime,
+                        observed.st_ctime,
+                    )
+                )
+            return observed
+
+        mp.setattr(privacy.os, "stat", near_limit)
+        assert privacy.logs_nearing_rotation(root) == (
+            ("mcp.stderr.log", privacy.ROTATION_WARNING_BYTES + 1),
+        )

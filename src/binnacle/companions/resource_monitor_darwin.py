@@ -17,6 +17,8 @@ import subprocess
 import time
 from pathlib import Path
 
+from binnacle.companions.darwin_log_privacy import MIN_DISK_FREE_BYTES
+
 log = logging.getLogger("binnacle.resource_monitor")
 _VM_PAGE_SIZE = re.compile(r"page size of (\d+) bytes")
 _VM_PAGE = re.compile(
@@ -99,6 +101,17 @@ def emit_snapshot(*, reader=snapshot) -> dict[str, int | float]:
     else:
         rendered = " ".join(f"{key}={value}" for key, value in sorted(data.items()))
         log.info("event=resource_snapshot host=darwin %s", rendered)
+        free_bytes = data.get("disk_free_bytes")
+        if (
+            isinstance(free_bytes, (int, float))
+            and 0 <= free_bytes < MIN_DISK_FREE_BYTES
+        ):
+            log.warning(
+                "event=resource_disk_space_low host=darwin free_bytes=%d "
+                "keep_free_bytes=%d action=maintenance_required",
+                int(free_bytes),
+                MIN_DISK_FREE_BYTES,
+            )
     return data
 
 

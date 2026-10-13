@@ -288,3 +288,27 @@ def test_growth_audit_failure_never_prevents_resource_samples(monkeypatch, caplo
         assert res.main(["--once"]) == 0
     assert samples == [1]
     assert "event=resource_log_rotation_check_unavailable" in caplog.text
+
+
+def test_low_disk_space_warns_at_linux_keep_free_equivalent(caplog):
+    from binnacle.companions.darwin_log_privacy import MIN_DISK_FREE_BYTES
+
+    with caplog.at_level(logging.WARNING, logger="binnacle.resource_monitor"):
+        res.emit_snapshot(reader=lambda: {"disk_free_bytes": MIN_DISK_FREE_BYTES - 1})
+    assert "event=resource_disk_space_low" in caplog.text
+    assert f"keep_free_bytes={MIN_DISK_FREE_BYTES}" in caplog.text
+
+
+def test_disk_free_healthy_or_missing_does_not_warn(caplog):
+    from binnacle.companions.darwin_log_privacy import MIN_DISK_FREE_BYTES
+
+    with caplog.at_level(logging.WARNING, logger="binnacle.resource_monitor"):
+        res.emit_snapshot(reader=lambda: {"disk_free_bytes": MIN_DISK_FREE_BYTES})
+        res.emit_snapshot(reader=lambda: {"cpu_count": 8})
+    assert "event=resource_disk_space_low" not in caplog.text
+
+
+def test_negative_disk_free_is_unknown_not_low_space(caplog):
+    with caplog.at_level(logging.WARNING, logger="binnacle.resource_monitor"):
+        res.emit_snapshot(reader=lambda: {"disk_free_bytes": -1})
+    assert "event=resource_disk_space_low" not in caplog.text
