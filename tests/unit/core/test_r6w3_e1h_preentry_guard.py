@@ -113,9 +113,17 @@ def test_real_entry_guards_initial_required_imports(entry, missing, process):
 
 
 def test_console_script_import_is_bootstrapped():
-    import tomllib
+    import re
 
     project = Path(__file__).resolve().parents[3] / "pyproject.toml"
-    scripts = tomllib.loads(project.read_text(encoding="utf-8"))["project"]["scripts"]
-    assert scripts["binnacle-jobs"] == "binnacle.job_manager_cli:main"
-    assert scripts["binnacle"] == "binnacle.entrypoint:main"
+    source = project.read_text(encoding="utf-8")
+    assert re.search(
+        r'^binnacle-jobs = "binnacle.job_manager_cli:main"$',
+        source,
+        flags=re.MULTILINE,
+    )
+    assert re.search(
+        r'^binnacle = "binnacle.entrypoint:main"$',
+        source,
+        flags=re.MULTILINE,
+    )
