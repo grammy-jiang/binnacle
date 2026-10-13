@@ -175,11 +175,11 @@ def test_retention_policy_matches_long_lived_mac_ssd():
     root = Path("/Users/auser")
     text = render_newsyslog_rule(root, user="auser")
     assert text == (
-        "/Users/auser/Library/Logs/binnacle/*.log auser:staff 600 7 10485760 * GNJ"
+        "/Users/auser/Library/Logs/binnacle/*.log auser:staff 600 2 52428800 * GN"
     )
-    assert ARCHIVE_COUNT == 7
-    assert ROTATION_SIZE_KIB * 1024 == 10 * 1024**3
-    assert ROTATION_WARNING_BYTES == 8 * 1024**3
+    assert ARCHIVE_COUNT == 2
+    assert ROTATION_SIZE_KIB * 1024 == 50 * 1024**3
+    assert ROTATION_WARNING_BYTES == 40 * 1024**3
     assert ROTATION_WARNING_BYTES < ROTATION_SIZE_KIB * 1024
     assert MIN_DISK_FREE_BYTES == 100 * 1024**3
 
@@ -238,3 +238,68 @@ def test_default_warning_matches_new_policy_without_allocating_gigabytes(tmp_pat
         assert privacy.logs_nearing_rotation(root) == (
             ("mcp.stderr.log", privacy.ROTATION_WARNING_BYTES + 1),
         )
+
+
+def test_retention_prohibits_immediate_compression_of_live_descriptors():
+    from binnacle.companions.darwin_log_privacy import (
+        ROTATION_FLAGS,
+        render_newsyslog_rule,
+    )
+
+    rule = render_newsyslog_rule(Path("/Users/tester"), user="tester")
+    assert ROTATION_FLAGS == "GN"
+    assert rule.endswith(" * GN")
+    assert "J" not in ROTATION_FLAGS and "Z" not in ROTATION_FLAGS
+
+
+def test_safely_harden_rotated_raw_files_alongside_live_logs(tmp_path):
+    root = private_root(tmp_path)
+    current = root / "mcp.stderr.log"
+    rotated = root / "mcp.stderr.log.0"
+    compressed = root / "mcp.stderr.log.1.bz2"
+    current.write_bytes(b"")
+    rotated.write_bytes(b"writes stay in old inode")
+    compressed.write_bytes(b"compressed history placeholder")
+    for path in (current, rotated, compressed):
+        path.chmod(0o644)
+    assert harden_private_logs(root) == ("mcp.stderr.log", "mcp.stderr.log.0")
+    assert stat.S_IMODE(current.stat().st_mode) == 0o600
+    assert stat.S_IMODE(rotated.stat().st_mode) == 0o600
+    assert stat.S_IMODE(compressed.stat().st_mode) == 0o644
+    assert rotated.read_bytes() == b"writes stay in old inode"
+
+
+def test_guard_detects_rotated_archive_growth_when_new_active_log_is_empty(tmp_path):
+    from binnacle.companions import darwin_log_privacy as privacy
+
+    root = private_root(tmp_path)
+    (root / "mcp.stderr.log").write_bytes(b"")
+    (root / "mcp.stderr.log.0").write_bytes(b"x" * 100)
+    (root / "mcp.stderr.log.1").write_bytes(b"y" * 20)
+    (root / "mcp.stderr.log.0.bz2").write_bytes(b"z" * 200)
+    assert privacy.logs_nearing_rotation(root, warn_bytes=50) == (
+        ("mcp.stderr.log.0", 100),
+    )
+    assert privacy.logs_nearing_rotation(root, warn_bytes=10) == (
+        ("mcp.stderr.log.0", 100),
+        ("mcp.stderr.log.1", 20),
+    )
+
+
+def test_guard_rejects_symlinked_rotated_archive(tmp_path):
+    from binnacle.companions.darwin_log_privacy import logs_nearing_rotation
+
+    root = private_root(tmp_path)
+    (root / "mcp.stderr.log.0").symlink_to(root / "not-owned")
+    with pytest.raises(RuntimeError, match="unsafe"):
+        logs_nearing_rotation(root, warn_bytes=1)
+
+
+def test_guard_ignores_other_files_not_rotated_log_archives(tmp_path):
+    from binnacle.companions.darwin_log_privacy import logs_nearing_rotation
+
+    root = private_root(tmp_path)
+    (root / "mcp.stderr.log.backup").write_bytes(b"x" * 50)
+    (root / "mcp.stderr.log.0.bz2").write_bytes(b"x" * 50)
+    (root / "mcp.stderr.log.random").write_bytes(b"x" * 50)
+    assert logs_nearing_rotation(root, warn_bytes=10) == ()

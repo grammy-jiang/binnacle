@@ -9,17 +9,23 @@ Never follow symlinks, change owner or touch unrelated directories.
 from __future__ import annotations
 
 import os
+import re
 import stat
 from pathlib import Path
 
-# Darwin newsyslog thresholds are per file, unlike journald's total budget.
-# Large SSD capacity permits a broad log window. A rotating launchd-owned file
-# is not lossless until the writer has closed its old descriptor: warn early,
-# but never force newsyslog from within this companion.
-ROTATION_SIZE_KIB = 10 * 1024 * 1024  # 10 GiB per active file
-ROTATION_WARNING_BYTES = 8 * 1024**3  # maintenance-window advisory
-MIN_DISK_FREE_BYTES = 100 * 1024**3  # mirror Linux's keep-free objective
-ARCHIVE_COUNT = 7
+# Large Mac SSD: bound worst-case raw data while reserving ample free space.
+# We do NOT compress an archive which may still be receiving launchd writes.
+# 12 observed streams * (1 active + 2 archives) * 50 GiB = 1,800 GiB,
+# below the 2.4 TiB free at deployment. Archive growth can exceed this if
+# launchd keeps a rotated inode open: monitor both active and raw archives.
+ROTATION_SIZE_KIB = 50 * 1024 * 1024  # 50 GiB per live log
+ROTATION_WARNING_BYTES = 40 * 1024**3
+MIN_DISK_FREE_BYTES = 100 * 1024**3
+ARCHIVE_COUNT = 2
+# Keep GN: G = glob, N = do not signal. In particular OMIT J and Z, which
+# compress open inodes and destroy writes after rotation.
+ROTATION_FLAGS = "GN"
+_RAW_LOG = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*\.log(?:\.[0-9]+)?$")
 
 
 def render_newsyslog_rule(
@@ -32,8 +38,11 @@ def render_newsyslog_rule(
 ) -> str:
     """Pure policy renderer; never install or rotate an active log file.
 
-    The GNJ flags match the legacy Binnacle rule: glob, no signal, bzip2.
-    This rule cannot by itself guarantee no loss if launchd still holds an FD.
+    GN performs a *rename-only* rotation: no J/Z compression or signals.
+    A launchd process holding the original descriptor keeps writing into the
+    renamed .log.0 inode; content is retained rather than compressed early.
+    An offline, writer-coordinated maintenance pass may later compress it.
+
     """
     if (
         not home.is_absolute()
@@ -46,7 +55,7 @@ def render_newsyslog_rule(
     ):
         raise ValueError("unsafe Darwin log retention policy")
     root = home / "Library/Logs/binnacle"
-    return f"{root}/*.log {user}:{group} 600 {archives} {size_kib} * GNJ"
+    return f"{root}/*.log {user}:{group} 600 {archives} {size_kib} * {ROTATION_FLAGS}"
 
 
 def harden_private_logs(root: Path, *, max_files: int = 64) -> tuple[str, ...]:
@@ -61,7 +70,7 @@ def harden_private_logs(root: Path, *, max_files: int = 64) -> tuple[str, ...]:
             or directory.st_mode & 0o077
         ):
             raise RuntimeError("unsafe Binnacle log directory")
-        names = sorted(name for name in os.listdir(dfd) if name.endswith(".log"))
+        names = sorted(name for name in os.listdir(dfd) if _RAW_LOG.fullmatch(name))
         if len(names) > max_files or max_files <= 0:
             raise RuntimeError("too many Binnacle log files")
         # Validate every target first to avoid partially accepting a planted
@@ -99,7 +108,7 @@ def harden_private_logs(root: Path, *, max_files: int = 64) -> tuple[str, ...]:
 def logs_nearing_rotation(
     root: Path, *, warn_bytes: int = ROTATION_WARNING_BYTES
 ) -> tuple[tuple[str, int], ...]:
-    """Report files near the installed newsyslog size limit; never rotate them."""
+    """Report growing live and rotated-but-still-open raw logs, read only."""
     if warn_bytes <= 0:
         raise ValueError("invalid rotation warning threshold")
     dfd = -1
@@ -110,7 +119,7 @@ def logs_nearing_rotation(
             raise RuntimeError("unsafe Binnacle log directory")
         out = []
         for name in sorted(os.listdir(dfd)):
-            if not name.endswith(".log"):
+            if not _RAW_LOG.fullmatch(name):
                 continue
             info = os.stat(name, dir_fd=dfd, follow_symlinks=False)
             if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():

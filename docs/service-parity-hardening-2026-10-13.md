@@ -1,5 +1,10 @@
 # Cross-host Binnacle hardening — recovery, privacy and Darwin resource monitoring
 
+**Historical deployment note:** The 1 GiB and 768 MiB log figures below
+describe the original round. The current, tested policy uses 50 GiB rename-only
+rotation with a 40 GiB warning and no immediate compression. See
+[darwin-non-destructive-log-rotation-2026-10-13.md](darwin-non-destructive-log-rotation-2026-10-13.md).
+
 Date: 2026-10-13. Scope: service-observability companions, **no new MCP tools**.
 Source: independent worktree `ops/log-watchdog-hardening-20261013`.
 
