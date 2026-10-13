@@ -242,3 +242,49 @@ An isolated candidate worktree addresses these as follows:
 - No production restart, broad Git merge or CI override is permitted on
   the basis of this local repair. Independent exact-commit review,
   coverage and managed Mac/Pi acceptance remain required.
+
+## Seventh independent review: 1e428a1 (REVISE)
+
+An independent read-only reviewer checked exact signed SHA
+1e428a177250b469aff2ab859f63783c40a9556a. The original metadata
+read failure was FIXED; owner-release retry and bounded completion history
+were PARTIAL, with two P2 findings:
+
+- A snapshot of pending unrecorded exits did not pin all entries at the time
+  of the snapshot. After thousands of other successful commits evicted the
+  completion mark, a later pending entry could requeue and log a duplicate
+  exit. The already-reviewed reaper batch had a pin mechanism, but the retry
+  batch did not.
+- Permanent owner.release failure could accumulate an unbounded ack backlog.
+  Every reaper pass attempted every pending acknowledgment with no limit,
+  backoff or stop policy. This grew memory and degraded the unique reaper's
+  latency despite the completed exit history having its own limit.
+
+These were reproduced by the reviewer with test-owned in-memory method
+substitutions, not by interacting with production services.
+
+## Eighth repair: pinned retry snapshots and bounded fail-closed owner ack
+
+The pending-exit retry batch now captures and pins all its entries while
+holding the queue mutex, before processing any record. The shared pin helper
+covers reaper and retry batches, with exception-safe release. An in-flight
+stale writer remains pinned through unrelated commits and cannot revive an
+already durable exit after cache eviction.
+
+Owner release acknowledgments have an explicit 1024-ID admission ceiling and
+a 16-ID retry budget per pass. Repeated failures use exponential backoff
+(up to 30 seconds) and rate-limited warnings. At the ceiling the manager
+raises a structured backlog-overflow event and sets its shared stopping
+event: the launched service stops admitting work and follows its existing
+guarded stop/restart path rather than allowing unbounded memory growth or
+silently discarding responsibility.
+
+Three newly added negative regressions first failed against 1e428a1.
+They now pass, including an actual retry snapshot containing 1000 pending
+exits and more than 5000 unrelated completions, and synthetic permanent
+ack failures. The expanded 31 Darwin tests also passed under Python 3.10,
+3.13 and 3.14, and source size and MyPy checks are green.
+
+This is local implementation evidence only. Independent exact-SHA code
+review, GitHub CI 7/7, full Mac/Pi acceptance, original J7m-a5 quiet window,
+idle-jobs and guarded rollback gate remain requirements before any release.

@@ -23,6 +23,9 @@ from binnacle.platform.darwin.job_manager_lifecycle import (
 # A paused timed-out writer must not resurrect its job after thousands of
 # other commits. Pins are proportional to concurrent calls, not lifetime jobs.
 ACK_HISTORY_LIMIT = 2048
+ACK_BACKLOG_LIMIT = 1024
+ACK_RETRY_BATCH = 16
+ACK_BACKOFF_MAX_S = 30.0
 
 
 class ExitQueueStorage:
@@ -33,6 +36,9 @@ class ExitQueueStorage:
     _acknowledged_exits: OrderedDict[str, None]
     _active_attempts: dict[str, int]
     _ack_pending: set[str]
+    _ack_failures: dict[str, int]
+    _ack_due: dict[str, float]
+    stopping: threading.Event
 
     def _queue(self, exited: OwnedJobExit) -> None:
         with self._queue_lock:
@@ -62,6 +68,29 @@ class ExitQueueStorage:
                 self._acknowledged_exits.popitem(last=False)
             examined -= 1
 
+    @contextmanager
+    def _pinned_batch(
+        self, exits: Sequence[OwnedJobExit] | None = None
+    ) -> Iterator[tuple[OwnedJobExit, ...]]:
+        """Snapshot the queue and pin EVERY writer in one mutex section."""
+        with self._queue_lock:
+            chosen = tuple(self._unrecorded.values()) if exits is None else tuple(exits)
+            for exited in chosen:
+                name = exited.job_id
+                self._active_attempts[name] = self._active_attempts.get(name, 0) + 1
+        try:
+            yield chosen
+        finally:
+            with self._queue_lock:
+                for exited in chosen:
+                    name = exited.job_id
+                    left = self._active_attempts[name] - 1
+                    if left:
+                        self._active_attempts[name] = left
+                    else:
+                        del self._active_attempts[name]
+                self._trim_acked_locked()
+
     def _process_reaped_batch(
         self,
         exits: Sequence[OwnedJobExit],
@@ -70,13 +99,9 @@ class ExitQueueStorage:
     ) -> None:
         """Pin reaper callbacks until their queue/write choice has completed."""
         log = logging.getLogger("binnacle.job_manager")
-        with self._queue_lock:
-            for exited in exits:
-                job_id = exited.job_id
-                self._active_attempts[job_id] = self._active_attempts.get(job_id, 0) + 1
-        try:
+        with self._pinned_batch(exits) as pinned:
             busy = False
-            for exited in exits:
+            for exited in pinned:
                 if busy:
                     self._queue(exited)
                     log.warning(
@@ -85,28 +110,55 @@ class ExitQueueStorage:
                     )
                 else:
                     busy = record(exited, wait_s) is None
-        finally:
-            with self._queue_lock:
-                for exited in exits:
-                    job_id = exited.job_id
-                    remaining = self._active_attempts[job_id] - 1
-                    if remaining:
-                        self._active_attempts[job_id] = remaining
-                    else:
-                        del self._active_attempts[job_id]
-                self._trim_acked_locked()
 
-    def _ack_later(self, job_id: str) -> None:
+    def _ack_later(self, job_id: str) -> int:
+        """Schedule bounded owner acknowledgement; stop if backpressure fills.
+
+        Terminal metadata and job_exit were already committed. Overflow must
+        stop this manager rather than drop the durable owner responsibility
+        invisibly or grow indefinitely.
+        """
+        overflow = False
         with self._queue_lock:
-            self._ack_pending.add(job_id)
+            if job_id not in self._ack_pending:
+                if len(self._ack_pending) >= ACK_BACKLOG_LIMIT:
+                    overflow = True
+                else:
+                    self._ack_pending.add(job_id)
+            if not overflow:
+                count = self._ack_failures.get(job_id, 0) + 1
+                self._ack_failures[job_id] = count
+                backoff = min(ACK_BACKOFF_MAX_S, 0.5 * (2 ** min(8, count - 2)))
+                self._ack_due[job_id] = time.monotonic() + (
+                    0 if count == 1 else backoff
+                )
+        if overflow:
+            if not self.stopping.is_set():
+                self.stopping.set()
+                logging.getLogger("binnacle.job_manager").error(
+                    "event=job_release_backlog_exceeded pending=%d action=stop",
+                    ACK_BACKLOG_LIMIT,
+                )
+            return 0
+        return count
 
     def _ack_complete(self, job_id: str) -> None:
         with self._queue_lock:
             self._ack_pending.discard(job_id)
+            self._ack_failures.pop(job_id, None)
+            self._ack_due.pop(job_id, None)
 
     def _ack_snapshot(self) -> tuple[str, ...]:
+        now = time.monotonic()
         with self._queue_lock:
-            return tuple(self._ack_pending)
+            due = (
+                job_id
+                for job_id in sorted(self._ack_pending)
+                if self._ack_due[job_id] <= now
+            )
+            return tuple(
+                job_id for _, job_id in zip(range(ACK_RETRY_BATCH), due, strict=False)
+            )
 
     def _needs_retry(self) -> bool:
         with self._queue_lock:
@@ -117,12 +169,16 @@ class ExitQueueStorage:
         try:
             release_owned_exit(self.owner, job_id, log)
         except Exception as exc:  # noqa: BLE001 - the terminal fsync is committed
-            self._ack_later(job_id)
-            log.warning(
-                "event=job_release_retry job_id=%s error_class=%s",
-                job_id,
-                type(exc).__name__,
-            )
+            failures = self._ack_later(job_id)
+            # Exponential warning cadence prevents an unreachable owner from
+            # emitting unbounded reaper log volume while the retry slows down.
+            if failures and not failures & (failures - 1):
+                log.warning(
+                    "event=job_release_retry job_id=%s error_class=%s attempt=%d",
+                    job_id,
+                    type(exc).__name__,
+                    failures,
+                )
         else:
             self._ack_complete(job_id)
 

@@ -102,6 +102,8 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
         self._acknowledged_exits: OrderedDict[str, None] = OrderedDict()
         self._active_attempts: dict[str, int] = {}
         self._ack_pending: set[str] = set()
+        self._ack_failures: dict[str, int] = {}
+        self._ack_due: dict[str, float] = {}
         # RL1: guards ``_unrecorded`` only, never held across I/O or ``_lock``,
         # so a reaper that gave up on a busy ``_lock`` can still queue.
         self._queue_lock = threading.Lock()
@@ -372,11 +374,10 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
 
     def retry_unrecorded(self, wait_s: float | None = None) -> int:
         """Retry unsynced exits, then deferred owner acknowledgements."""
-        with self._queue_lock:
-            queued = tuple(self._unrecorded.values())
-        for exited in queued:
-            if self._record_guarded(exited, wait_s) is None:
-                break
+        with self._pinned_batch() as queued:
+            for exited in queued:
+                if self._record_guarded(exited, wait_s) is None:
+                    break
         self._retry_acks()
         with self._queue_lock:
             return len(self._unrecorded)
