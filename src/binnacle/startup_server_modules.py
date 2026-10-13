@@ -110,6 +110,7 @@ _SERVER_COMMON = (
     "binnacle.mcp.job_awareness_hint_schema",
     "binnacle.mcp.job_awareness_hint_walk",
     "binnacle.mcp.logging_middleware",
+    "binnacle.mcp.tool_admission_drain",
     "binnacle.mcp.tool_order",
     "binnacle.mcp.visibility",
     "binnacle.observability",
