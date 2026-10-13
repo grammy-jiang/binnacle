@@ -65,6 +65,13 @@ def test_terminal_replace_then_fsync_eio_retries_to_durable_once(
     assert job_id in manager._unrecorded
     assert job_id not in owner.released
     assert events == []
+    assert manager.state(job_id) == "unknown"  # visible is not durable
+    assert manager.job_counts() == (0, 1)
+    assert manager.handle({"version": 1, "op": "stop", "job_id": job_id}) == {
+        "ok": True,
+        "job_id": job_id,
+        "state": "unknown",
+    }
     assert len(syncs) == 1
 
     for _ in range(initial_sync_failures - 1):
@@ -72,11 +79,14 @@ def test_terminal_replace_then_fsync_eio_retries_to_durable_once(
         assert job_id in manager._unrecorded
         assert job_id not in owner.released
         assert events == []
+        assert manager.state(job_id) == "unknown"
 
     assert manager.retry_unrecorded() == 0
     assert len(syncs) == initial_sync_failures + 1
     assert job_id not in manager._unrecorded
     assert job_id in owner.released
+    assert manager.state(job_id) == "exited"
+    assert manager.job_counts() == (0, 0)
     assert len(events) == 1
     assert events[0][0] == job_id
     assert events[0][1]["termination_reason"] == "normal_exit"

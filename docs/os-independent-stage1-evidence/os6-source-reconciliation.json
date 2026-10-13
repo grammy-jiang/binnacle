@@ -110,7 +110,7 @@
     "LINUX": 67
   },
   "coverage_complete": true,
-  "implementation_commit": "d67de7445f016217663f5ac5d01f88d55582d660",
+  "implementation_commit": "e62e63306db0fab97cf4ee5cc52aefc54874007e",
   "production_module_count": 233,
   "rows": [
     {
@@ -7959,7 +7959,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/platform/darwin/job_manager_service.py",
       "rationale": "No native OS mechanisms required; portable application logic or Python package marker",
-      "sha256": "57e0d264e7c1ba948222d968250204f85edf2ed1a95c71fd095ccc1249be29c7",
+      "sha256": "09283b6e373667aa530bbef404d2565c82bd4dc06d84f07a1f194f69774cad45",
       "stage": "OS6",
       "was_in_baseline": false
     },

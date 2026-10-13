@@ -291,7 +291,11 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
             if lost or (foreign and not _terminal(meta)):
                 log.warning("event=job_stop_owner_lost job_id=%s", job_id)
                 return {"ok": False, "error": pc.OWNER_LOST_STOP_REFUSED}
-            state = "exited" if _terminal(meta) else self._stop_owned(job_id, call_id)
+            state = (
+                self.state(job_id)
+                if _terminal(meta)
+                else self._stop_owned(job_id, call_id)
+            )
         except Partial as exc:
             log.warning("event=job_manager_stop_partial job_id=%s", job_id)
             return {"ok": False, "error": f"job stop partially failed: {exc}"}
@@ -316,7 +320,7 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
         if meta is None or meta.get(AUTHORITY_FIELD) == AUTHORITY_UNKNOWN:
             return "unknown"
         if _terminal(meta):
-            return "exited"
+            return "unknown" if self._is_queued(job_id) else "exited"
         if meta.get("owner_instance_id") != self.owner_instance_id:
             return "unknown"
         seen = self.owner.authority(job_id)
@@ -329,11 +333,7 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
         return states.count("running"), states.count("unknown")
 
     def record_exit(self, exited: OwnedJobExit, wait_s: float | None = None) -> bool:
-        """Idempotent terminal write for this incarnation's own records only.
-
-        I/O or lock failure queues retry; state remains uncertain until
-        durable. RL1 bounds reaper lock waits by wait_s.
-        """
+        """Idempotent durable exit; bounded waits queue unconfirmed writes."""
         return self._try_record(exited, wait_s) is True
 
     def _try_record(self, exited: OwnedJobExit, wait_s: float | None) -> bool | None:

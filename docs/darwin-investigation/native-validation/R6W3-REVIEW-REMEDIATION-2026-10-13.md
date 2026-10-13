@@ -118,6 +118,9 @@ dce2b9ff0ddade094f188901012d19426e56f62b:
   job exit was queued. Retry then observed the visible terminal JSON, skipped
   fsync, dequeued the exit, released the owner and emitted zero terminal
   job_exit events.
+  A further native API regression verifies that a visible but not-yet-fsynced
+  terminal record reports UNKNOWN to state, job_counts and stop_job until
+  the queued fsync succeeds. Duplicate terminal notifications remain inert.
 
 The review also confirmed that the R6W3-06 test file duplicated the
 R6W3 E1 lifecycle suite. The dedicated replacement test commit d67de74
