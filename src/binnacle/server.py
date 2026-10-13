@@ -5,8 +5,80 @@ Their adapters and shared helpers live in binnacle.features.
 Tool contracts are documented in docs/tools/ and docs/agent-toolset-design.md.
 """
 
+import asyncio
 import logging
 import os
+import sys
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
+
+from binnacle.startup_imports import (
+    StartupImportFailed,
+    clear_record,
+    import_runtime_modules,
+    record_start_failure,
+    serving_entry_marked,
+    state_root_of,
+)
+
+# binnacle's own lines (event=tool_call/tool_result/job_*/config) go through
+# the root handler as single lines with a millisecond local timestamp, so
+# `journalctl -o cat` output stays self-describing; fastmcp's request lines
+# keep their rich handler. Preserve journal names for existing log consumers.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+logger = logging.getLogger("binnacle.server")
+
+# E1: import the whole runtime tree now, after logging is configured, so this
+# process never first-imports binnacle source that a later deploy synced.
+# E1-a4: a required import failure raises StartupImportFailed (exit 70) here,
+# before uvicorn binds the port.
+
+
+def _argv_serving_process() -> bool:
+    """True when argv names the uvicorn CLI (the dev unit), which serves
+    ``binnacle.server:app`` but hands binnacle no Server object. Never a test,
+    ``python -c``, ``binnacle`` itself (``binnacle serve`` marks itself instead)
+    or any other importer."""
+    entry = Path(sys.argv[0])
+    return entry.name == "uvicorn" or (
+        entry.name == "__main__.py" and entry.parent.name == "uvicorn"
+    )
+
+
+def _serving_process() -> bool:
+    """True only in a process that serves ``binnacle.server:app``: the one
+    ``binnacle serve`` marked (the deployed entry on the Mac and in the Linux
+    prod unit), or one argv names (:func:`_argv_serving_process`)."""
+    return serving_entry_marked() or _argv_serving_process()
+
+
+def _record_import_failure(failure: StartupImportFailed) -> None:
+    """E1-a5: the serving process's own record write (never an importer's)."""
+    if not _serving_process():
+        return
+    try:
+        # The guard executes before the normal config import; load config
+        # only when recording a failure, and preserve the structured log
+        # when the failed module itself prevents config import.
+        from binnacle.config import get_settings as failure_settings
+
+        root = state_root_of(failure_settings().jobs.dir)
+    except Exception:  # noqa: BLE001 - no configured root: the log line remains
+        logger.error("event=startup_import_record_error process=mcp-server")
+        return
+    record_start_failure("mcp-server", failure, root)
+
+
+# Fail closed while every required Binnacle import is still guarded.
+# Loading business/framework modules before this call lets SyntaxError escape
+# without the required exit=70 or durable failure record (R6W3-01).
+import_runtime_modules(on_failure=_record_import_failure)
 
 from fastmcp import FastMCP
 
@@ -20,17 +92,6 @@ from binnacle.features.commands.run_command_telemetry import (
 from binnacle.features.files.files_server import create_files_server
 from binnacle.features.search.search_server import create_search_server
 from binnacle.provenance import runtime_provenance
-
-# binnacle's own lines (event=tool_call/tool_result/job_*/config) go through
-# the root handler as single lines with a millisecond local timestamp, so
-# `journalctl -o cat` output stays self-describing; fastmcp's request lines
-# keep their rich handler. Preserve journal names for existing log consumers.
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S",
-)
-logger = logging.getLogger("binnacle.server")
 
 TOKEN_FILE = get_settings().auth.token_file
 
@@ -222,6 +283,61 @@ mcp = create_server()
 log_effective_config()
 
 app = mcp.http_app()
+
+# The start-up import record is cleared only after a successful start of the
+# serving process. ``binnacle serve`` (marked) owns its uvicorn server: the
+# record is cleared when the public ``uvicorn.Server.started`` turns True, which
+# uvicorn sets after the lifespan startup AND the bind. The uvicorn CLI (the dev
+# unit) hands binnacle no Server object, so there the record is cleared
+# START_CONFIRM_S after the ASGI lifespan startup if the process is still alive
+# (uvicorn binds right after the lifespan and exits on a bind error). Under
+# ``uvicorn --reload`` the supervisor binds first; this applies to the worker.
+START_CONFIRM_S = 1.0
+
+
+def _clear_record_after_start() -> None:
+    try:
+        root = state_root_of(get_settings().jobs.dir)
+    except Exception:  # noqa: BLE001 - no configured root: nothing to clear
+        return
+    clear_record("mcp-server", root)
+
+
+def _clear_record_when_server_started() -> None:
+    """Clear the record once the uvicorn.Server this process runs has started."""
+    import uvicorn
+
+    original = uvicorn.Server.startup
+
+    async def startup(self: Any, *args: Any, **kwargs: Any) -> None:
+        await original(self, *args, **kwargs)
+        configured_app = getattr(getattr(self, "config", None), "app", None)
+        if (
+            self.started
+            and serving_entry_marked()
+            and (configured_app is app or configured_app == "binnacle.server:app")
+        ):
+            # The hook is on uvicorn.Server globally: an unrelated server
+            # must never clear Binnacle's durable failure record.
+            _clear_record_after_start()
+
+    uvicorn.Server.startup = startup  # type: ignore[method-assign]
+
+
+if serving_entry_marked():
+    _clear_record_when_server_started()
+elif _argv_serving_process():
+    _inner_lifespan = app.router.lifespan_context
+
+    @asynccontextmanager
+    async def _lifespan(application: Any) -> AsyncIterator[Any]:
+        async with _inner_lifespan(application) as state:
+            asyncio.get_running_loop().call_later(
+                START_CONFIRM_S, _clear_record_after_start
+            )
+            yield state
+
+    app.router.lifespan_context = _lifespan
 
 
 if __name__ == "__main__":

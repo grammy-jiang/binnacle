@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 from fastmcp.exceptions import ToolError
 
-from binnacle.config import RootsSettings
+from binnacle.config import ReadFileSettings, RootsSettings
 from binnacle.errors import CodedToolError
 from binnacle.features.files.tools import read_file as rf
 
@@ -207,11 +207,15 @@ def test_a_parent_symlink_to_an_outside_dir_opens_nothing_outside(tree, monkeypa
 
 @LINUX_READ
 @pytest.mark.timeout(10)  # r6 blocks in open(2) on the FIFO without a writer.
-def test_a_fifo_swapped_in_is_refused_by_identity_first(tree, monkeypatch):
-    # Checks run root -> identity -> type: a different object is path_changed.
+def test_a_fifo_swapped_in_is_refused_by_type_first(tree, monkeypatch):
+    # Checks run root -> type -> identity on both OSes (FDW-B1-a2 R1, SD-91):
+    # a FIFO is special_file_unsupported even when it is another object.
     fifo = swap_in(tree["file"], os.mkfifo)
     fired = before_open(monkeypatch, tree["file"], fifo)
-    assert outcome(tree["roots"], tree["file"]) == ("refused", "path_changed")
+    assert outcome(tree["roots"], tree["file"]) == (
+        "refused",
+        "special_file_unsupported",
+    )
     assert fired
 
 
@@ -267,10 +271,17 @@ def test_the_root_check_runs_before_the_identity_check(tree, monkeypatch):
 @x3b_only
 @pytest.mark.timeout(10)
 def test_the_root_check_runs_before_the_type_check(tree, monkeypatch):
+    # read_file_impl refuses a FIFO by its pre-open stat (r6 W3 RF1,
+    # SRC-W2-01), so the race step is called directly.
     os.mkfifo(tree["root"] / "d" / "fifo")
     after_open(monkeypatch, lambda: os.rename(tree["root"] / "d", tree["out"] / "m"))
     fifo = tree["root"] / "d" / "fifo"
-    assert outcome(tree["roots"], fifo) == ("refused", "path_outside_root")
+    info = os.lstat(fifo)
+    with pytest.raises(CodedToolError) as exc:
+        rf._read_checked(
+            fifo, (info.st_dev, info.st_ino), tree["roots"], ReadFileSettings()
+        )
+    assert exc.value.telemetry_code == "path_outside_root"
 
 
 @x3b_only
@@ -388,7 +399,8 @@ def test_open_walked_opens_nothing_for_a_path_outside_every_root(tree, monkeypat
         assert exc.value.telemetry_code == "path_outside_root"
     with pytest.raises(CodedToolError) as exc:
         fd_walk.open_walked(tree["root"], (tree["root"],), ident(tree["root"]))
-    assert exc.value.telemetry_code == "not_a_regular_file"
+    assert exc.value.telemetry_code == "path_is_directory"
+    assert "Use list_files to browse it." in str(exc.value)
     assert opened == []
 
 
@@ -398,8 +410,11 @@ def test_open_verified_never_runs_off_linux(tree, monkeypatch, opener):
     opened: list[object] = []
     monkeypatch.setattr(fd_walk.os, "open", lambda *a, **k: opened.append(a))
     monkeypatch.setattr(fd_walk.sys, "platform", "darwin")
+    extra = {"parent_fd": -1} if opener == "open_verified" else {}  # SRC-W2-03
     with pytest.raises(RuntimeError, match="Linux-only"):
-        getattr(fd_walk, opener)(tree["file"], (tree["root"],), ident(tree["file"]))
+        getattr(fd_walk, opener)(
+            tree["file"], (tree["root"],), ident(tree["file"]), **extra
+        )
     assert opened == []
 
 

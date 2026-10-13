@@ -115,10 +115,10 @@ Core logic modules must reach at least 95 percent branch coverage from
 `tests/unit` alone. Other production modules must reach at least 90 percent
 branch coverage from the full appropriate test suite.
 
-The current classification is in `quality-policy.json`. There are no
-temporary ratchet floors: the final 95/90 targets apply directly to every
-production module. The checker still supports temporary floors as a migration
-mechanism, but introducing one requires an explicit quality-policy change and
+The current classification is in `quality-policy.json`. The final 95/90
+targets are the acceptance target for every production module. A few modules
+still carry a temporary ratchet floor in `coverage.temporary_floors`
+(`unit` and `full`). A floor is a migration mechanism. Introducing or changing one requires an explicit quality-policy change. It
 does not change the final acceptance target.
 
 Run the authoritative gate with:

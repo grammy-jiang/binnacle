@@ -24,9 +24,17 @@ import stat
 from collections.abc import Iterable
 from pathlib import Path
 
+from binnacle.config import RootsSettings
 from binnacle.errors import CodedToolError
-from binnacle.features.search.fd_chain import EXHAUSTED, DirectoryChain
+from binnacle.features.files.fd_chain import EXHAUSTED, DirectoryChain
+from binnacle.features.files.paths import nearby_hint
 from binnacle.features.search.search_text_stream_reduce import ExactScanResult
+from binnacle.platform.contracts.special_file_contracts import (
+    SPECIAL_FILE_CODE,
+    SPECIAL_FILE_TEXT,
+    TOO_MANY_OPEN_FILES_CODE,
+    too_many_open_files_text,
+)
 
 
 def components(path: str) -> list[str] | None:
@@ -60,9 +68,12 @@ def is_regular(chain: DirectoryChain, parts: list[str]) -> bool:
     except OSError as exc:
         if exc.errno in EXHAUSTED:
             raise CodedToolError(
-                "too_many_open_files",
-                "search_text could not check the reported files: the server "
-                "has too many open files. Retry, or narrow the search.",
+                TOO_MANY_OPEN_FILES_CODE,
+                too_many_open_files_text(
+                    "search_text",
+                    "check the reported files",
+                    "Retry, or narrow the search.",
+                ),
             ) from exc
         return False
     return stat.S_ISREG(info.st_mode)
@@ -115,7 +126,12 @@ def verify_exact_scan(scan: ExactScanResult, base: Path) -> ExactScanResult:
 
 
 def verify_adaptive(payload: dict, base: Path) -> dict:
-    """Drop the adaptive entries of every file that fails."""
+    """Drop the adaptive entries of every file that fails.
+
+    Like the exact path, the dropped matches leave the payload count. Every
+    entry of a file carries that file's match count, so one entry per
+    dropped file is subtracted.
+    """
     entries = payload.get("entries", [])
     files = list(
         dict.fromkeys(
@@ -125,7 +141,46 @@ def verify_adaptive(payload: dict, base: Path) -> dict:
     good = checked_files(files, base)
     if len(good) == len(files):
         return payload
-    return {
+    counted: dict[str, int] = {}
+    for entry in entries:
+        file = entry.get("file")
+        if isinstance(file, str) and file not in good and file not in counted:
+            counted[file] = entry.get("count", 0)
+    dropped = sum(counted.values())
+    adjusted = {
         **payload,
         "entries": [entry for entry in entries if entry.get("file") in good],
     }
+    if isinstance(payload.get("count"), int):
+        adjusted["count"] = payload["count"] - dropped
+        note = payload.get("note")
+        if isinstance(note, str):
+            adjusted["note"] = note.replace(
+                f"for {payload['count']} matches", f"for {adjusted['count']} matches", 1
+            )
+    return adjusted
+
+
+def candidate_files(payload: dict) -> int:
+    """The distinct files left in an adaptive payload."""
+    return len(
+        {
+            entry.get("file")
+            for entry in payload.get("entries", [])
+            if isinstance(entry, dict) and isinstance(entry.get("file"), str)
+        }
+    )
+
+
+def require_searchable(resolved: Path, roots: RootsSettings) -> None:
+    """The Linux path's refusals for the search base itself.
+
+    A missing base is path_not_found with the nearby hint; a FIFO, socket or
+    device is special_file_unsupported with the shared text, before rg could
+    block on or fail at it (r6 W3 PX1).
+    """
+    if not resolved.exists():
+        hint = nearby_hint(resolved.parent, roots=roots)
+        raise CodedToolError("path_not_found", f"Path not found: {resolved}.{hint}")
+    if not resolved.is_dir() and not resolved.is_file():
+        raise CodedToolError(SPECIAL_FILE_CODE, SPECIAL_FILE_TEXT)

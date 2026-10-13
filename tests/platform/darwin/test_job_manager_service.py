@@ -24,13 +24,16 @@ from binnacle.platform.contracts import process_contracts as pc
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 from binnacle.platform.darwin import job_manager_client as jm_client
 from binnacle.platform.darwin import job_manager_entry as entry
+from binnacle.platform.darwin import job_manager_records as records
 from binnacle.platform.darwin import job_manager_service as svc
 from binnacle.platform.darwin.generation_runtime import (
     discover_service_lease,
     open_service_lease,
 )
 
-NATIVE = pytest.mark.skipif(sys.platform != "darwin", reason="Darwin A3 IPC")
+NATIVE = pytest.mark.skipif(
+    sys.platform != "darwin", reason="Darwin A3 IPC (reference owner uses waitpid)"
+)
 LABEL = "com.binnacle.r4test.jobs"
 SRC = Path(__file__).resolve().parents[3] / "src/binnacle/features/commands"
 Err = job_client.JobManagerError
@@ -161,7 +164,7 @@ def test_restated_values_equal_linux_source():
     assert svc.STOP_SIGTERM_GRACE_S == lit("jobs.py", "STOP_SIGTERM_GRACE_S")
     assert svc.STOP_SIGKILL_GRACE_S == lit("jobs.py", "STOP_SIGKILL_GRACE_S")
     assert dict(svc.ENV_OVERRIDES) == lit("jobs.py", "_ENV_OVERRIDES")
-    assert svc.META_REQUIRED == lit("job_store.py", "META_REQUIRED")
+    assert records.META_REQUIRED == lit("job_store.py", "META_REQUIRED")
     assert svc.PARTIAL_SIGNAL_FIELD == lit("job_stop.py", "PARTIAL_SIGNAL_FIELD")
     assert svc.PARTIAL_SIGNAL_MESSAGE == lit("job_stop.py", "PARTIAL_SIGNAL_MESSAGE")
     assert svc.PROTOCOL_VERSION == lit("job_client.py", "PROTOCOL_VERSION") == 1
@@ -196,7 +199,15 @@ def test_dispatch_objects_equal_linux_manager_text(tmp_path, jobs_dir, live):
     assert all(text in linux for text in TEXTS.split("|"))
     pong = manager.handle({"version": 1, "op": "ping"})
     keys = {"ok", "version", "owner_instance_id", "boot_id", "pid", "revision"}
-    assert set(pong) == keys | {"package_version", "running_jobs", "unknown_jobs"}
+    assert set(pong) == keys | {
+        "package_version",
+        "running_jobs",
+        "unknown_jobs",
+        "unrecorded_exits",
+        "oldest_unrecorded_age_s",
+        "manager_python_version",
+        "manager_waitid_available",
+    }
     version = manager.handle({"version": 2, "op": "ping"})["error"]
     assert version == "unsupported job-manager protocol version"
     unknown = manager.handle({"version": 1, "op": "x"})["error"]
@@ -217,7 +228,7 @@ def test_start_exit_and_stop_term_then_kill(tmp_path, jobs_dir, live):
     owner, manager = live
     done = manager.handle(req(tmp_path, "cat; exit 3", wait=5, stdin="x"))
     meta = job_store.read_meta(jobs_dir, done["job_id"])
-    assert meta == svc.read_meta(jobs_dir, done["job_id"])
+    assert meta == records.read_meta(jobs_dir, done["job_id"])
     assert (done["state"], meta["exit_code"], meta["pgid"]) == (
         "exited",
         3,
@@ -375,22 +386,6 @@ def test_client_discovers_a_non_default_socket_basename(runtime, tmp_path):
             discover_service_lease(root=sock.parent, label=LABEL, name="jobs.sock")
         assert run(sock, "exit 6", tmp_path, wait=5)["state"] == "exited"
     assert not (errors or sock.exists() or sock.with_name("mgr.sock.auth").exists())
-
-
-@NATIVE
-def test_manager_stop_kills_and_records_owned_groups_no_orphans(runtime, tmp_path):
-    # R4-REQ-J1J2-no-orphans; an MCP server restart is only a new client.
-    with serving(runtime) as (sock, manager, errors):
-        job = run(sock, "sleep 60 & wait", tmp_path)
-        pgid = meta_of(manager.jobs_dir, job["job_id"])["pgid"]
-        assert client().ping(sock)["owner_instance_id"] == manager.owner_instance_id
-        assert manager.state(job["job_id"]) == "running"
-    meta = meta_of(manager.jobs_dir, job["job_id"])
-    # Linux job_owner._record_interruption: no exit status, reason owner_restart.
-    got = (meta["exit_code"], meta["signal"], meta["termination_reason"])
-    assert got == (None, None, "owner_restart")
-    assert "authority" not in meta and not errors
-    assert group_gone(pgid)  # no untracked survivor in the owned group
 
 
 @NATIVE

@@ -23,14 +23,6 @@ from binnacle.features.search.tools import search_text as st
 
 # The process descriptor table: /proc/self/fd on Linux, /dev/fd on Darwin.
 FD_DIR = "/proc/self/fd" if os.path.isdir("/proc/self/fd") else "/dev/fd"
-# Parity finding PF-T3-01 (R6W2-T3): Darwin keeps TRAVERSE_FLAGS = O_RDONLY
-# (fd_walk.py, DARWIN-FOLLOWUP-exec-only-dirs), so an execute-only directory
-# differs from Linux; reported to the Supervisor, never loosened.
-PF_T3_01 = pytest.mark.xfail(
-    sys.platform == "darwin",
-    strict=True,
-    reason="PF-T3-01: execute-only directory parity (DARWIN-FOLLOWUP-exec-only-dirs)",
-)
 RG = shutil.which("rg") or "rg"
 
 
@@ -284,7 +276,6 @@ def test_a_search_base_reached_through_a_cross_root_link_is_unchanged(tmp_path):
     assert [e["text"] for e in outer["entries"]] == ["needle b"]
 
 
-@PF_T3_01
 def test_nested_roots_and_an_execute_only_ancestor_are_unchanged(tmp_path):
     if os.geteuid() == 0:
         pytest.skip("root ignores modes")

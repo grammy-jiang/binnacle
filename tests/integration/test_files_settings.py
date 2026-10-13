@@ -271,6 +271,7 @@ def test_list_binary_and_timeout_are_captured(tmp_path, monkeypatch):
 
     monkeypatch.setattr(list_files.subprocess, "run", run)
     monkeypatch.setattr(list_files, "get_settings", fail_global)
+    monkeypatch.setattr(list_files.list_files_glob, "get_settings", fail_global)
 
     async def go():
         async with Client(child) as client:

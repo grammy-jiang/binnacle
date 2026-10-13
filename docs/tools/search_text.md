@@ -85,8 +85,9 @@ budget.` / `No matches for 'foo' under /x.`
 
 **Behavior**: resolve path (shared guard). Run
 `rg --json --smart-case [-F] [-C n]` on the path, 20 s timeout; parse the
-event stream (`match`/`context`) with `orjson`; apply the Python-side glob filter; stop
-at `max_results`. Auto-context: when the first pass yields 1–3 matches with
+event stream (`match`/`context`) with `orjson`; apply the Python-side glob filter; keep the
+first `max_results` matches in (file, line) order, so the same tree gives the
+same subset on every call (`count` and `truncated` are unchanged). Auto-context: when the first pass yields 1–3 matches with
 no explicit `context_lines` and not `names_only`, re-run with `-C 50`
 (1 match) or `-C 15` (2–3). After the ordinary result is assembled, measure
 its compact-JSON UTF-8 size. If it exceeds `result_max_bytes`, binary-search
@@ -122,7 +123,8 @@ chain of the current path is open, so the descriptors held are bounded by
 the path depth. A file that fails either check (outside the base, swapped
 for a symlink, removed, or no longer a regular file) is omitted with all
 its lines, and its retained matches are subtracted from `count`. Adaptive
-discovery checks every file in its final entries the same way. The text of
+discovery checks every file in its final entries the same way; the matches of a
+dropped file leave the adaptive `count` and `candidate_files`. The text of
 each reported line is rg's text, as in r6. If the server has too many open
 files to check a path, the call fails with `too_many_open_files`; no entry
 is dropped silently. Benign results are unchanged, including a search base
@@ -148,6 +150,12 @@ to an outside file that already exists inside a root is an in-root path, as
 in r6. ripgrep is run with `--no-config` and without `--follow`, and
 `RIPGREP_CONFIG_PATH` is removed from its environment. On macOS the tool
 uses the native search adapter, not this path.
+
+**Unreadable paths (r6 W3 PX1, R-OS1-F1/F4)**: a recursive search over a directory holding a directory (or, for search, a file) the server cannot read returns the readable part, with no tool error, plus one note on both OSes: "Skipped N unreadable path(s) (permission denied): P1, ..., P5 and M more. Results exclude their contents." (sorted, first five named; also appended to the summary). On Linux a ripgrep exit 2 whose stderr holds only permission errors is parsed into that note (`rg_env.accept_denied`), never `rg_failed` or `rg_rejected`; Darwin reports the directories its descriptor walk could not open. An unreadable base is an error: `permission_denied` on Linux, Darwin keeps its code `permission_denied_tcc_possible` (SD-77), with the same sentence on both: "Permission denied: PATH. The server cannot open this path; check its permissions or choose another path." The whole stderr is scanned, never a tail (r6 W3 PX1b, R-PX1-1): every permission line is counted and only the five smallest paths are kept, and any other line anywhere keeps rg's failure; glob and search give the same answer, and a stderr above 16 MiB keeps the failure. rg output is decoded with surrogateescape, never strictly (R-PX1-3): a name that is not UTF-8 is shown in the note with a `\xNN` escape, and a matching file whose name is not UTF-8 is omitted from the result (a JSON result is UTF-8). A newline in a directory name can still mislead the line-based stderr parse (follow-up R-PX1-2).
+
+**search_text path through an in-root symlink on Darwin (r6 W3 PX1b, PF-PX1-1)**: a `path` that is, or passes through, an in-root symlink (relative, absolute or chained link text, or a link to a directory on the way) is searched as its resolved target on both OSes, and the reported `path` and every entry name the target, as Linux's `resolve_path` does. The Darwin walk never follows a link; `FileToolAccess` resolves the request once and opens the in-root target with the same no-follow descriptor walk from its grant (`error_text.followed`, as read_file does since R-OS1-F3). A target outside every root is `path_outside_root` on both OSes; a dangling link names its missing target, and a link loop or a component that is a file is `path_not_found` with the Linux text. Only one hop is followed: a link swapped after the resolve is refused by the second no-follow walk (`path_outside_root` for an outside target, otherwise `path_changed` with the shared text "Directory changed during the search: PATH. A path component was replaced by a link; search it again."). The bare adapter code text `symlink_or_wrong_path_type.` is never returned. A `..` component stays a lexical refusal on Darwin (follow-up PX1B-F1).
+
+**Shared refusal texts (r6 W3 PX1)**: a FIFO, socket or device is `special_file_unsupported` with the one text `SPECIAL_FILE_TEXT` from `platform/contracts/special_file_contracts.py` on both OSes, for read_file, edit_file, write_file, list_files (list and glob) and search_text; nothing opens it. Every descriptor shortage is `too_many_open_files`, worded from the one template `TOO_MANY_OPEN_FILES_TEXT` there: "{tool} could not {task}: the server has too many open files. {advice}".
 
 ## 4. Test checklist (tests/unit/tools/test_search_text.py)
 

@@ -83,8 +83,11 @@ def serve(
     # Darwin uses the stdlib loop: reserve SIGCHLD for the A2 sole reaper.
     # Linux retains its pinned uvloop/httptools production stack.
     from binnacle.platform.composition import host_os_family, native_service_output
+    from binnacle.startup_imports import serving_entry
 
-    with native_service_output():
+    # This process is the serving entry while uvicorn imports binnacle.server:
+    # the record is written on a failed start and cleared on Server.started.
+    with native_service_output(), serving_entry():
         uvicorn.run(
             "binnacle.server:app",
             host=host,

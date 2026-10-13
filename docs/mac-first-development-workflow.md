@@ -56,6 +56,27 @@ lock order is global shared then resource-specific exclusive. Set bounded
 timeouts, own-resource manifests and positive cleanup criteria. Never modify
 power, login, FileVault, TCC, installed launchd services or unrelated jobs.
 
+### macOS manager interpreter compatibility (SD-97)
+
+The macOS native command owner (com.binnacle.jobs) requires CPython 3.13+
+with os.waitid. The MCP frontend may import and run on Python 3.10–3.12,
+but those interpreters cannot safely operate the Darwin job manager.
+This is an explicit manager capability limit, not evidence of full tool parity.
+
+Authenticated manager ping reports the actual manager Python version and
+os.waitid support. binnacle doctor checks these values independently of the
+frontend interpreter; it must not report a healthy manager as unsupported
+merely because the frontend uses an older interpreter. A manager launch
+preflight still requires Python 3.13+ and os.waitid. The final deployment
+also verifies the actual launchd plist and running revision. Never silently
+substitute a lower manager interpreter or switch to embedded ownership.
+
+The real-manager-only test nodes in tests/platform/darwin use a per-test
+platform/capability skip on Darwin without os.waitid. Unit-level negative
+tests that simulate the missing call remain enabled, as do all Linux tests.
+Only switch com.binnacle.jobs between interpreters during a reviewed,
+job-quiet deployment with a rollback plan.
+
 ### 2. Create a clean Mac worktree and locked environment
 
 For an already cloned Mac repository, perform this *on Mac*, substituting a

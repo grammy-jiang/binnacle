@@ -16,7 +16,9 @@ import pytest
 
 from binnacle import config
 from binnacle.features.commands import job_client
+from binnacle.platform.darwin import job_manager_config
 from binnacle.platform.darwin import job_manager_entry as entry
+from binnacle.platform.darwin import job_manager_procinfo as procinfo
 from binnacle.platform.darwin import job_manager_service as svc
 from binnacle.platform.darwin.job_manager_client import DarwinJobClient
 from tests.platform.darwin.test_job_manager_service import (
@@ -28,7 +30,9 @@ from tests.platform.darwin.test_job_manager_service import (
     write_record,
 )
 
-NATIVE = pytest.mark.skipif(sys.platform != "darwin", reason="Darwin J1 owner, A3")
+NATIVE = pytest.mark.skipif(
+    sys.platform != "darwin" or not hasattr(os, "waitid"), reason="Darwin J1 owner, A3"
+)
 MODULE = "binnacle.platform.darwin.job_manager_service"
 PING_FIELDS = {"ok", "version", "owner_instance_id", "boot_id", "pid"}
 PING_FIELDS |= {"package_version", "revision", "running_jobs", "unknown_jobs"}
@@ -55,16 +59,16 @@ def test_config_reader_is_pinned_to_binnacle_settings(tmp_path, monkeypatch, tom
     if toml is not None:
         path.write_text(toml)
     monkeypatch.setenv(config.CONFIG_FILE_ENV, str(path))
-    ours, theirs = entry.read_config(), config.Settings()
+    ours, theirs = job_manager_config.read_config(), config.Settings()
     assert ours.jobs.socket_path == theirs.jobs.socket_path
     assert ours.jobs.dir == theirs.jobs.dir
     assert ours.jobs.keep_newest == theirs.jobs.keep_newest
     assert ours.run_command.wait_max_s == theirs.run_command.wait_max_s
-    assert entry.CONFIG_FILE_ENV == config.CONFIG_FILE_ENV
+    assert job_manager_config.CONFIG_FILE_ENV == config.CONFIG_FILE_ENV
     for override in ("BINNACLE_JOBS__DIR", "BINNACLE_RUNTIME_DIR"):  # RJ2D-F4
         monkeypatch.setenv(override, "/elsewhere")
         with pytest.raises(ValueError, match="config file only"):
-            entry.read_config()
+            job_manager_config.read_config()
         monkeypatch.delenv(override)
 
 
@@ -108,7 +112,12 @@ def test_moved_names_live_only_in_their_new_homes():
     assert entry.serve_job_manager.__module__ == entry.__name__
     for name in ("DarwinJobClient", "DarwinJobManagerError", "serve_job_manager"):
         assert not hasattr(svc, name), name  # a stale import fails loudly
-    assert svc.main.__module__ == svc.__name__  # the launchd -m delegate stays
+    # The -m startup guard precedes business imports in job_manager_service;
+    # the callable delegate's new canonical home is the small startup module.
+    from binnacle.platform.darwin import job_manager_start as start_home
+
+    assert svc.main is start_home.main
+    assert start_home.main.__module__ == start_home.__name__
     fresh = (  # a new interpreter: every home imports without a cycle
         "import binnacle.platform.darwin.job_manager_service, "
         "binnacle.platform.darwin.job_manager_client, "
@@ -137,17 +146,17 @@ def test_unreadable_boot_session_is_never_fabricated(monkeypatch):
         def sysctlbyname(self, *_):
             return -1
 
-    monkeypatch.setattr(entry.ctypes, "CDLL", lambda *_, **__: NoSysctl())
+    monkeypatch.setattr(procinfo.ctypes, "CDLL", lambda *_, **__: NoSysctl())
     with pytest.raises(OSError, match="sysctl kern.bootsessionuuid failed"):
-        entry.boot_id()
+        procinfo.boot_id()
 
 
 @NATIVE
 def test_boot_identity_is_the_public_boot_session_sysctl():
     argv = ["/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"]
     session = subprocess.run(argv, capture_output=True, text=True, check=True)
-    assert entry.boot_id() == session.stdout.strip().upper()
-    assert entry.BOOT_SESSION.fullmatch(entry.boot_id())
+    assert procinfo.boot_id() == session.stdout.strip().upper()
+    assert procinfo.BOOT_SESSION.fullmatch(procinfo.boot_id())
 
 
 def test_stop_marker_must_name_this_incarnation():
@@ -210,7 +219,7 @@ def test_entry_point_serves_pings_and_exits_per_launchd_contract():
                 0,
                 0,
             )
-            assert pong["boot_id"] == entry.boot_id()  # kern.bootsessionuuid
+            assert pong["boot_id"] == procinfo.boot_id()  # kern.bootsessionuuid
             probe = "printenv PATH; test -e /dev/fd/77 && echo leaked || echo clean"
             kw = {"workdir": base, "stdin": None, "call_id": "c"}
             done = client.start(sock, command=probe, wait_seconds=10, **kw)

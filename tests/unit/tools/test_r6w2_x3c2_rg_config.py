@@ -20,11 +20,11 @@ import pytest
 
 from binnacle.config import RootsSettings, get_settings
 from binnacle.errors import CodedToolError
+from binnacle.features.files.rg_env import CONFIG_ENV, NO_CONFIG, rg_env
 from binnacle.features.files.tools import list_files as lf
 from binnacle.features.search import search_text_collect as stc
 from binnacle.features.search import search_text_rg as str_rg
 from binnacle.features.search import search_text_stream as sts
-from binnacle.features.search.rg_env import CONFIG_ENV, NO_CONFIG, rg_env
 from binnacle.features.search.tools import search_text as st
 
 RG = shutil.which("rg") or "rg"
@@ -284,7 +284,7 @@ def test_every_linux_rg_call_site_uses_the_helper():
         text = path.read_text()
         starts = "subprocess.run(" in text or "subprocess.Popen(" in text
         uses_rg = "rg_bin" in text
-        helper = "from binnacle.features.search.rg_env import" in text
+        helper = "from binnacle.features.files.rg_env import" in text
         if starts and uses_rg and not helper:
             offenders.append(str(path.relative_to(features)))
     assert offenders == []

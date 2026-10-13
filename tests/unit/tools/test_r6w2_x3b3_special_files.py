@@ -28,6 +28,7 @@ from binnacle.errors import CodedToolError
 from binnacle.features.files import fd_walk, paths
 from binnacle.features.files.tools import read_file as rf
 from binnacle.platform.contracts.capability_contracts import Capability, CapabilityState
+from binnacle.platform.contracts.special_file_contracts import SPECIAL_FILE_TEXT
 from binnacle.platform.darwin import file_traversal
 from binnacle.platform.darwin.file_access import DarwinFileAccess
 
@@ -38,12 +39,17 @@ LINUX_READ = pytest.mark.skipif(
     sys.platform != "linux", reason="Linux read path (fd_walk.open_walked)"
 )
 CODE = "special_file_unsupported"
+TEXT = SPECIAL_FILE_TEXT  # r6 W3 RF1: the shared, actionable text.
 
 
 @pytest.fixture
 def root() -> Iterator[Path]:
-    # A short /tmp path: an AF_UNIX socket path is limited to 108 bytes.
-    base = Path(tempfile.mkdtemp(prefix="r6w2-x3b3-", dir="/tmp")).resolve()
+    # AF_UNIX paths have a tight byte limit; use a short, test-owned
+    # directory instead of an MCP-readable /tmp or any production root.
+    state = Path.home() / ".local/state/bt/x3b3"
+    state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    state.chmod(0o700)
+    base = Path(tempfile.mkdtemp(prefix="s-", dir=state)).resolve()
     try:
         yield base
     finally:
@@ -85,20 +91,20 @@ def in_root(root: Path) -> RootsSettings:
 
 
 def test_the_helper_equals_the_darwin_rendering():
-    # FileToolAccess.operation words an adapter refusal it has no Linux
-    # sentence for as f"{code}."; special_file_unsupported is one of them.
+    # Darwin raises the same code; read_file words it with the shared text
+    # on both OSes (r6 W3 RF1) until the Darwin call site uses it (wave B).
     darwin = file_traversal.unsafe(CODE)
     assert darwin.code == CODE
     rendered = rf.special_file_unsupported()
     assert rendered.telemetry_code == darwin.code
-    assert str(rendered) == f"{darwin.code}."
+    assert str(rendered) == TEXT
 
 
 @LINUX_READ
 @pytest.mark.timeout(10)
 def test_a_fifo_is_refused_as_on_darwin(root):
     os.mkfifo(root / "fifo")
-    assert both(in_root(root), root / "fifo") == (CODE, f"{CODE}.")
+    assert both(in_root(root), root / "fifo") == (CODE, TEXT)
 
 
 @LINUX_READ
@@ -107,7 +113,7 @@ def test_a_fifo_is_refused_as_on_darwin(root):
 def test_an_unreadable_fifo_is_refused_as_on_darwin(root):
     # The open fails with EACCES; the entry is still the checked FIFO.
     os.mkfifo(root / "fifo", 0o000)
-    assert both(in_root(root), root / "fifo") == (CODE, f"{CODE}.")
+    assert both(in_root(root), root / "fifo") == (CODE, TEXT)
 
 
 @LINUX_READ
@@ -115,7 +121,7 @@ def test_a_socket_is_refused_as_on_darwin(root):
     # open(2) of a socket is ENXIO; r6 W2 X3b-a2 said file_io_failed.
     with socket.socket(socket.AF_UNIX) as server:
         server.bind(str(root / "sock"))
-        assert both(in_root(root), root / "sock") == (CODE, f"{CODE}.")
+        assert both(in_root(root), root / "sock") == (CODE, TEXT)
 
 
 @LINUX_READ
@@ -130,7 +136,7 @@ def test_a_character_device_is_refused_as_on_darwin():
             " root because a device node cannot be created without privilege"
         )
     roots = RootsSettings(default_root=Path("/dev"), extra_roots=())
-    assert both(roots, Path("/dev/null")) == (CODE, f"{CODE}.")
+    assert both(roots, Path("/dev/null")) == (CODE, TEXT)
 
 
 @LINUX_READ
@@ -149,7 +155,7 @@ def test_a_block_device_is_refused_as_on_darwin():
             " device node cannot be created without privilege"
         )
     roots = RootsSettings(default_root=Path("/dev"), extra_roots=())
-    assert both(roots, found[0]) == (CODE, f"{CODE}.")
+    assert both(roots, found[0]) == (CODE, TEXT)
 
 
 @LINUX_READ
@@ -177,8 +183,9 @@ def test_a_regular_file_still_reads(root):
 
 @LINUX_READ
 def test_a_socket_swapped_in_keeps_the_identity_refusal(root, monkeypatch):
-    # Identity first: the open fails (ENXIO) on an object that is not the
-    # checked file, so the special-file wording does not apply.
+    # FDW-B1-a3: the open itself may refuse a newly swapped-in socket
+    # (ENXIO/EOPNOTSUPP). Descriptor-relative lstat identifies the socket,
+    # and both operating systems must return the shared special-file text.
     target = root / "f.txt"
     target.write_text("checked")
     real = fd_walk.open_walked
@@ -191,8 +198,8 @@ def test_a_socket_swapped_in_keeps_the_identity_refusal(root, monkeypatch):
 
     monkeypatch.setattr(fd_walk, "open_walked", swapped)
     with server:
-        code, _text = refusal(in_root(root), target, darwin=False)
-    assert code == "file_io_failed"
+        code, text = refusal(in_root(root), target, darwin=False)
+    assert (code, text) == (CODE, TEXT)
 
 
 @LINUX_READ
@@ -200,6 +207,8 @@ def test_a_socket_swapped_in_keeps_the_identity_refusal(root, monkeypatch):
 def test_path_refusals_on_the_checked_fifo_are_never_reworded(root, monkeypatch, code):
     # RX3b3-F2: the lstat shows the unchanged checked FIFO, so only the code
     # decides; path_changed and path_outside_root keep their code and text.
+    # read_file_impl refuses a FIFO by its pre-open stat (r6 W3 RF1,
+    # SRC-W2-01), so the race step is called directly.
     fifo = root / "fifo"
     os.mkfifo(fifo)
     before = os.lstat(fifo)
@@ -213,7 +222,9 @@ def test_path_refusals_on_the_checked_fifo_are_never_reworded(root, monkeypatch,
 
     monkeypatch.setattr(fd_walk, "open_walked", refuse)
     with pytest.raises(CodedToolError) as exc:
-        rf.read_file_impl(str(fifo), 1, None, roots=in_root(root))
+        rf._read_checked(
+            fifo, (before.st_dev, before.st_ino), in_root(root), ReadFileSettings()
+        )
     after = os.lstat(fifo)
     assert seen == [(before.st_dev, before.st_ino)]
     assert (after.st_dev, after.st_ino) == seen[0] and stat.S_ISFIFO(after.st_mode)

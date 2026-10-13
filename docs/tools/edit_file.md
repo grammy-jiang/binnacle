@@ -60,9 +60,15 @@ the matched block's first line. Occurrence rules per tier: exactly one
 unless `replace_all`. Re-encode with the original codec, re-attach the
 original BOM bytes, write.
 
+**Execute-only directories on Darwin (r6 W3 OS1)**: directories the edit only passes through are opened with `O_SEARCH`, as on Linux. An edit of a file in a write+execute-only (0o300) directory now succeeds on Darwin where it was refused; the file must still be readable, since the edit reads it first.
+
 **Errors**: 0 matches (re-read + whitespace + prefix warning); N matches
 with line numbers; identical old/new; missing file; directory; binary;
 lossy; outside roots.
+
+**In-root symlinks on Darwin (r6 W3 PX1, R-OS1-F3)**: a edit through a link whose target lies in a configured root edits the target and keeps the link, as on Linux; the reported path is the target. `FileToolAccess` resolves the request once and opens the in-root target with the no-follow descriptor walk (one hop only). A target outside every root is `path_outside_root`.
+
+**Shared refusal texts (r6 W3 PX1)**: a FIFO, socket or device is `special_file_unsupported` with the one text `SPECIAL_FILE_TEXT` from `platform/contracts/special_file_contracts.py` on both OSes, for read_file, edit_file, write_file, list_files (list and glob) and search_text; nothing opens it. Every descriptor shortage is `too_many_open_files`, worded from the one template `TOO_MANY_OPEN_FILES_TEXT` there: "{tool} could not {task}: the server has too many open files. {advice}".
 
 ## 4. Test checklist (tests/unit/tools/test_edit_file.py)
 
