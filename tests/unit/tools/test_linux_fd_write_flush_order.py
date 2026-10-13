@@ -42,6 +42,7 @@ def test_revalidated_overwrite_flushes_final_mode_before_publish(
     actual_chmod = fd_write.os.fchmod
     actual_fsync = fd_write.os.fsync
     actual_replace = fd_write.os.replace
+    actual_verify = fd_write._verify_parent
     events = []
 
     def chmod(fd, mode):
@@ -52,11 +53,17 @@ def test_revalidated_overwrite_flushes_final_mode_before_publish(
         events.append(("fsync", stat.S_IMODE(os.fstat(fd).st_mode)))
         return actual_fsync(fd)
 
+    def check_parent(fd, path, tool):
+        if "fchmod" in events:
+            events.append("parent-check")
+        return actual_verify(fd, path, tool)
+
     def replace(*args, **kwargs):
         events.append("rename")
         return actual_replace(*args, **kwargs)
 
     with monkeypatch.context() as patch:
+        patch.setattr(fd_write, "_verify_parent", check_parent)
         patch.setattr(fd_write.os, "fchmod", chmod)
         patch.setattr(fd_write.os, "fsync", fsync)
         patch.setattr(fd_write.os, "replace", replace)
@@ -69,7 +76,7 @@ def test_revalidated_overwrite_flushes_final_mode_before_publish(
             target, (allowed,), b"after", create_parents=False, **kwargs
         )
 
-    assert events == ["fchmod", ("fsync", 0o664), "rename"]
+    assert events == ["fchmod", ("fsync", 0o664), "parent-check", "rename"]
     assert receipt.action == "overwritten"
     assert target.read_bytes() == b"after"
     assert stat.S_IMODE(target.stat().st_mode) == 0o664
@@ -158,6 +165,41 @@ def test_new_file_flushes_data_once_without_mode_change(allowed, monkeypatch):
 
     assert events == ["fsync", "rename"]
     assert target.read_bytes() == b"new"
+
+
+@LINUX_ONLY
+def test_parent_retarget_during_fsync_is_refused_before_rename(
+    allowed, tmp_path, monkeypatch
+):
+    """A moved parent after the slow sync must be rechecked before publish."""
+    parent = allowed / "parent"
+    parent.mkdir()
+    target = parent / "target"
+    target.write_bytes(b"before")
+    moved = tmp_path / "moved"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "target").write_bytes(b"outside")
+    actual_fsync = fd_write.os.fsync
+    raced = False
+
+    def relocate_during_sync(fd):
+        nonlocal raced
+        if not raced:
+            raced = True
+            parent.rename(moved)
+            parent.symlink_to(outside, target_is_directory=True)
+        return actual_fsync(fd)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(fd_write.os, "fsync", relocate_during_sync)
+        with pytest.raises(ToolError, match="changed"):
+            fd_write.write_bytes(target, (allowed,), b"ours", create_parents=False)
+
+    assert raced
+    assert (moved / "target").read_bytes() == b"before"
+    assert (outside / "target").read_bytes() == b"outside"
+    assert not list(moved.glob(".binnacle-write-*"))
 
 
 def test_non_linux_write_dispatch_keeps_path_fallback(tmp_path, monkeypatch):

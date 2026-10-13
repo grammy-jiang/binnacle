@@ -250,11 +250,11 @@ def write_bytes(
                 )
             if current is not None:
                 os.fchmod(tempfd, stat.S_IMODE(current.st_mode))
-            # Verify the held parent has not visibly been renamed or detached.
-            # Descriptor-relative replacement also never follows a final link.
-            _verify_parent(parent, path.parent, tool)
-            # Flush the final mode and payload only after all refusal checks.
+            # Flush final data and permissions after destination revalidation.
             os.fsync(tempfd)
+            # Check the held parent directly before rename, not before a
+            # potentially slow fsync; never widen the parent-retarget race.
+            _verify_parent(parent, path.parent, tool)
             os.replace(temporary, name, src_dir_fd=parent, dst_dir_fd=parent)
             published = True
             return WriteReceipt(
