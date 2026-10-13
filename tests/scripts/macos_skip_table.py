@@ -78,6 +78,7 @@ platform/darwin/test_job_manager_entry.py | A3: per-test Darwin com.binnacle.job
 platform/darwin/test_job_manager_entry_owner.py | A3: per-test Darwin J1 owner behind the com.binnacle.jobs manager: J1r handoff and J1g repairs (r6 T1, split from test_job_manager_entry.py); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
 platform/darwin/test_durable_jobs_e2e.py | A3: per-test Darwin kqueue/getpeereid job-manager E2E over the real J1 owner and J2 manager (R4 J5); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
 platform/darwin/test_durable_jobs_launchd_restart.py | A3: per-test Darwin native launchd restart, split from J5 to retain 500-line module limit; SD-97 manager requires os.waitid
+platform/darwin/test_log_guardian_recovery.py | B0: per-test isolated Mac system launchd guardian bootstrap and SIGKILL recovery; all guardian policy tests run on Linux
 platform/darwin/test_j1g_leader_fence.py | A2: per-test Darwin waitid(WNOWAIT)/KERN_PROC_PGRP leader-exit fence, stopping event and killpg guard (R4 J1g, SD-43); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
 platform/darwin/test_j1g_e2e_survival.py | B0: per-test Darwin real com.binnacle.jobs background-member survival E2E (R4 J1g, SD-43 JCRP-F1); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
 platform/darwin/test_job_manager_resilience.py | A3: per-test Darwin libproc verified-teardown negative test (R4 J2t, RULE-NO-PKILL); the rest of the module runs everywhere
@@ -151,6 +152,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/unit/core/test_r6w3_e1h_preentry_guard.py": 2,
     "tests/platform/darwin/test_durable_jobs_e2e.py": 1,
     "tests/platform/darwin/test_durable_jobs_launchd_restart.py": 1,
+    "tests/platform/darwin/test_log_guardian_recovery.py": 1,
     "tests/platform/darwin/test_j1g_leader_fence.py": 1,
     "tests/platform/darwin/test_j1g_e2e_survival.py": 1,
     "tests/platform/darwin/test_job_manager_resilience.py": 1,
