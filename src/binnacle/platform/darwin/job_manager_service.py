@@ -42,6 +42,7 @@ from binnacle.platform.darwin.job_manager_records import (
     _exit_meta,
     _flock,
     _flock_bounded,
+    fsync_meta_directory,
     list_job_ids,
     manager_ping_metadata,
     read_meta,
@@ -144,11 +145,7 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
             os.replace(temp, directory / "meta.json")
         finally:
             temp.unlink(missing_ok=True)
-        dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(dir_fd)
-        finally:
-            os.close(dir_fd)
+        fsync_meta_directory(directory)
 
     def _meta(self, job_id: str) -> dict[str, Any] | None:
         return read_meta(self.jobs_dir, job_id)
@@ -334,10 +331,8 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
     def record_exit(self, exited: OwnedJobExit, wait_s: float | None = None) -> bool:
         """Idempotent terminal write for this incarnation's own records only.
 
-        An I/O failure (including the jobs-dir lock open) keeps the exit queued
-        for the reaper's retry; the record stays non-terminal, so ``state`` says
-        ``unknown`` (the owner no longer reports OWNED), never ``exited``.
-        RL1: with ``wait_s`` a lock busy past it is such a failure too.
+        I/O or lock failure queues retry; state remains uncertain until
+        durable. RL1 bounds reaper lock waits by wait_s.
         """
         return self._try_record(exited, wait_s) is True
 
@@ -354,6 +349,10 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
                 if not _terminal(meta):  # first writer wins; never overwritten
                     recorded = _exit_meta(meta, exited)
                     self._write_meta(exited.job_id, recorded)
+                elif self._is_queued(exited.job_id):
+                    # An earlier replace was visible, but fsync may have failed.
+                    fsync_meta_directory(self.jobs_dir / exited.job_id)
+                    recorded = meta
                 self._dequeue(exited.job_id)
                 self._release(exited.job_id)
         except OSError as exc:

@@ -207,7 +207,9 @@ def test_bootstrap_eager_set_after_root_capture_with_right_format(
     assert calls[0][1] == {"process": "job-manager", "system": system}
     assert calls[1][1]["system"] == system
     assert calls[1][1]["process"] == "job-manager"
-    assert ("%(asctime)s" in calls[1][1]["log_format"]) is (system == "Linux")
+    assert calls[1][1]["log_format"] == (
+        "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s"
+    )
     assert calls[-1][1] == ("job-manager", failure, tmp_path)
 
 

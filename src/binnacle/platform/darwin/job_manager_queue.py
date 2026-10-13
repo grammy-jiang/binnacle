@@ -26,3 +26,8 @@ class ExitQueueStorage:
         with self._queue_lock:
             self._unrecorded.pop(job_id, None)
             self._unrecorded_since.pop(job_id, None)
+
+    def _is_queued(self, job_id: str) -> bool:
+        """Read pending receipt state under the same queue mutex as updates."""
+        with self._queue_lock:
+            return job_id in self._unrecorded

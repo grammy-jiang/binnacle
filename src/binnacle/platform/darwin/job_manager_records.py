@@ -114,6 +114,20 @@ def jobs_dir_writer(jobs_dir: Path) -> Any:
     return _flock(jobs_dir / ".manager.lock", fcntl.LOCK_EX | fcntl.LOCK_NB, busy)
 
 
+def fsync_meta_directory(directory: Path) -> None:
+    """Confirm the directory entry of a replaced terminal metadata file.
+
+    Reusable during a retry when an earlier replace succeeded but its
+    directory fsync did not. Never follow a substituted directory symlink.
+    """
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    fd = os.open(directory, flags)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def read_meta(root: Path, job_id: str) -> dict[str, Any] | None:
     """``job_store.read_meta``: a complete record, or None when unusable."""
     try:

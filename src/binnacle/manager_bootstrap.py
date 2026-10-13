@@ -102,11 +102,9 @@ def bootstrap_manager_entry(system: str) -> None:
     def failed(failure: StartupImportFailed) -> None:
         record_early_failure("job-manager", failure, root)
 
-    output = (
-        "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s"
-        if system == "Linux"
-        else "%(levelname)s %(message)s"
-    )
+    # Install the SAME timestamped format that the operational Darwin
+    # telemetry config uses. basicConfig is inert once an early handler exists.
+    output = "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s"
     import_manager_modules(
         system=system,
         process="job-manager",

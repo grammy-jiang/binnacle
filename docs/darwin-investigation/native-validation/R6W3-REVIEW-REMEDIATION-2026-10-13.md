@@ -104,3 +104,47 @@ STALE as designed.
 
 Release remains unapproved until exact-SHA qualification and independent
 review of this follow-up on top of the concurrent production master.
+
+## Fourth independent exact-SHA review: dce2b9f (REVISE)
+
+The independent reviewer found two P2 errors on
+dce2b9ff0ddade094f188901012d19426e56f62b:
+
+- TIMESTAMP-P2: the Darwin manager bootstrap installed a timestamp-free root
+  logging formatter before the operational telemetry configuration. Python
+  basicConfig leaves an existing handler alone, so exit events had no parseable
+  timestamp and could be omitted from the time-window log analyzer.
+- FSYNC-P2: after metadata replace succeeded but directory fsync failed, the
+  job exit was queued. Retry then observed the visible terminal JSON, skipped
+  fsync, dequeued the exit, released the owner and emitted zero terminal
+  job_exit events.
+
+The review also confirmed that the R6W3-06 test file duplicated the
+R6W3 E1 lifecycle suite. The dedicated replacement test commit d67de74
+removes the duplicate and checks the actual record -> doctor -> W3 parser
+chain (41 affected tests passed).
+
+## Fourth review P2 remediation in isolated topic branch
+
+- The early manager bootstrap uses the timestamped operational format on both
+  Darwin and Linux. A new fresh-process test configures startup logging then
+  operational logging and passes the actual emitted event to the Darwin
+  time parser; the parser extracts a valid timestamp on both operating systems.
+- Metadata fsync is extracted into a descriptor-only, no-follow directory sync
+  helper. The retry path recognizes that a terminal JSON is visible but has a
+  queued unconfirmed exit, retries the directory fsync under the same writer
+  transaction, and only then dequeues, acknowledges and logs the terminal
+  event. Duplicate notifications after acknowledged persistence never log
+  another exit.
+- New test-owned synthetic EIO tests first reproduced both failures against
+  the old implementation; after the fix, failures on the first or first two
+  directory sync attempts remain queued and unacknowledged until the next
+  successful fsync. Exactly one durable exit event follows.
+- The Darwin service module stays within the 500-line source ceiling. The
+  tracked OS6 mutable source reconciliation is refreshed for the newly split
+  modules; the immutable OS0 baseline manifest is unchanged and the OS6 check
+  reports zero architecture violations.
+- These results do not authorize deployment. The exact repaired SHA still
+  requires fresh Mac/Pi testing, seven green CI jobs and an independent code
+  reviewer APPROVE before considering the original quiet, idle-job and
+  rollback-controlled J7m-a5 production gate.
