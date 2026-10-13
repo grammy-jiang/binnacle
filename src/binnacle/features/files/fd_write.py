@@ -236,7 +236,6 @@ def write_bytes(
                 if count <= 0:
                     raise OSError(errno.EIO, "short write")
                 rest = rest[count:]
-            os.fsync(tempfd)
             current = _destination(parent, name, path, tool, digest=expected_sha256)
             if (before is None) != (current is None) or (
                 before is not None
@@ -251,8 +250,10 @@ def write_bytes(
                 )
             if current is not None:
                 os.fchmod(tempfd, stat.S_IMODE(current.st_mode))
-            # Verify the held parent has not visibly been renamed or detached.
-            # Descriptor-relative replacement also never follows a final link.
+            # Flush final data and permissions after destination revalidation.
+            os.fsync(tempfd)
+            # Check the held parent directly before rename, not before a
+            # potentially slow fsync; never widen the parent-retarget race.
             _verify_parent(parent, path.parent, tool)
             os.replace(temporary, name, src_dir_fd=parent, dst_dir_fd=parent)
             published = True
