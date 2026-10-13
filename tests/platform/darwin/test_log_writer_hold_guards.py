@@ -177,8 +177,13 @@ def test_holder_verifies_exact_source_generation(
     monkeypatch.setattr(hold, "_no_writers", lambda: None)
     initial = raw.stat()
     hold.verify(raw.name, initial)
-    raw.unlink()
+    # Keep the old inode referenced: unlink+recreate can legitimately reuse
+    # the same inode immediately on Linux. Renaming avoids that false proof.
+    preserved = tmp_path / "old-inode-preserved"
+    raw.rename(preserved)
     raw.write_bytes(b"after")
+    assert preserved.stat().st_ino == initial.st_ino
+    assert raw.stat().st_ino != initial.st_ino
     with pytest.raises(finish.ArchiveFinalizeRefused, match="inode"):
         hold.verify(raw.name, initial)
 
