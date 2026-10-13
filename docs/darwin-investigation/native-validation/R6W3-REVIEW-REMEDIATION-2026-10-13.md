@@ -151,3 +151,50 @@ chain (41 affected tests passed).
   requires fresh Mac/Pi testing, seven green CI jobs and an independent code
   reviewer APPROVE before considering the original quiet, idle-job and
   rollback-controlled J7m-a5 production gate.
+
+## Fifth independent review: c385365 (REVISE, three P2 races)
+
+The independent reviewer checked signed
+c385365e0e0e6483ab87146697d9512f0a94b944 and confirmed the sequential
+post-replace directory fsync retry and timestamp fixes, but found three
+concurrent durability defects:
+
+- A replaced terminal JSON was visible before a pending marker was published.
+  A second request could report EXITED or acknowledge ownership before the
+  first directory fsync was confirmed.
+- An earlier writer that timed out acquiring the record lock could enqueue a
+  stale exit after a competing writer had successfully committed. The stale
+  entry caused state to regress from EXITED to UNKNOWN and could cause a
+  second terminal event.
+- A launch-retention prune could delete terminal metadata that was visible
+  after an unsuccessful directory fsync, losing the pending exit.
+
+No production rollout or commit to master was approved for c385365.
+
+## Sixth repair: atomic pending/commit/ack transaction
+
+The next isolated repair marks the exit pending before replacing terminal
+JSON. A failing transaction inserts the retry marker before releasing the
+writer lock; a lock-acquisition failure uses the queue's committed-ID
+tombstones to reject stale late arrivals. Success atomically removes the
+pending marker and remembers committed job IDs before release. Terminal
+status, job counts and stop remain UNKNOWN until the directory fsync is
+confirmed. Retention explicitly excludes queued exits, including visible
+terminal records whose metadata directory is not yet synced.
+
+The new test-owned deterministic interleaving cases cover:
+
+- pausing inside directory fsync after atomic replace and observing UNKNOWN;
+- suspending the failing writer inside retry enqueue and proving the writer
+  lock remains held;
+- a late timed-out writer arriving AFTER another writer commits, with exactly
+  one terminal event and no state regression;
+- retention of an undurable terminal record despite keep_newest=1;
+- duplicate exit notifications, which cannot enqueue or emit another event.
+
+The five core concurrent interleavings passed 15 consecutive replays, and
+54 affected native manager tests plus MyPy and all 25 architecture imports
+passed on the local repair worktree. This is preliminary local validation;
+fresh CI, final Mac/Pi qualification and independent APPROVE on the exact
+signed SHA remain mandatory. The original J7m-a5 quiet/rollback gate must
+still pass before any production deployment.

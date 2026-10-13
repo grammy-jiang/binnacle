@@ -110,7 +110,7 @@
     "LINUX": 67
   },
   "coverage_complete": true,
-  "implementation_commit": "e62e63306db0fab97cf4ee5cc52aefc54874007e",
+  "implementation_commit": "c385365e0e0e6483ab87146697d9512f0a94b944",
   "production_module_count": 233,
   "rows": [
     {
@@ -7848,6 +7848,11 @@
         "__future__.annotations",
         "binnacle.platform.contracts.process_contracts",
         "binnacle.platform.contracts.process_contracts.OwnedJobExit",
+        "collections.abc",
+        "collections.abc.Iterator",
+        "contextlib",
+        "contextlib.AbstractContextManager",
+        "contextlib.contextmanager",
         "threading",
         "time"
       ],
@@ -7857,7 +7862,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/platform/darwin/job_manager_queue.py",
       "rationale": "No native OS mechanisms required; portable application logic or Python package marker",
-      "sha256": "77df7e0b73e97b198cd27474b461c4a80efd5c5c4701b2a18d4e4323861a02a7",
+      "sha256": "3da55e439026609a65ed0052f68499fb27ea3dfbbc68c00e22aff86e455ed04d",
       "stage": "OS6",
       "was_in_baseline": false
     },
@@ -7959,7 +7964,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/platform/darwin/job_manager_service.py",
       "rationale": "No native OS mechanisms required; portable application logic or Python package marker",
-      "sha256": "09283b6e373667aa530bbef404d2565c82bd4dc06d84f07a1f194f69774cad45",
+      "sha256": "ed6e12fa9eeea1dc04ec09013373b03956d4d555ab66b3eeb92ef1d891646e17",
       "stage": "OS6",
       "was_in_baseline": false
     },

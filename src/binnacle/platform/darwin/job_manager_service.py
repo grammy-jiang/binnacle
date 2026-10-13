@@ -101,6 +101,7 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
         self._lock = threading.RLock()
         self._unrecorded: dict[str, OwnedJobExit] = {}  # reaped, not yet durable
         self._unrecorded_since: dict[str, float] = {}
+        self._acknowledged_exits: set[str] = set()
         # RL1: guards ``_unrecorded`` only, never held across I/O or ``_lock``,
         # so a reaper that gave up on a busy ``_lock`` can still queue.
         self._queue_lock = threading.Lock()
@@ -113,11 +114,7 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
 
     @contextmanager
     def _transaction(self, wait_s: float | None = None) -> Iterator[None]:
-        """A process-local lock alone is insufficient; add the jobs-dir flock.
-
-        RL1: ``wait_s`` (the reaper's) bounds both waits; a busy lock raises
-        BlockingIOError, an OSError, so the caller queues as for any I/O error.
-        """
+        """Hold process lock and jobs-dir flock; wait_s bounds both acquisitions."""
         if wait_s is None:
             with self._lock, _flock(self.jobs_dir / ".lock", fcntl.LOCK_EX):
                 yield
@@ -340,23 +337,23 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
         """``record_exit``; None when the exit was queued on a busy lock."""
         recorded: dict[str, Any] | None = None
         try:
-            with self._transaction(wait_s):
+            with self._persist_or_queue(exited, self._transaction(wait_s)):
                 meta, owner_id = self._meta(exited.job_id), self.owner_instance_id
                 if meta is None or meta.get("owner_instance_id") != owner_id:
                     self._dequeue(exited.job_id)  # never ours to write
                     log.warning("event=job_exit_unrecorded job_id=%s", exited.job_id)
                     return False
                 if not _terminal(meta):  # first writer wins; never overwritten
+                    self._queue(exited)  # visible before the atomic terminal replace
                     recorded = _exit_meta(meta, exited)
                     self._write_meta(exited.job_id, recorded)
                 elif self._is_queued(exited.job_id):
                     # An earlier replace was visible, but fsync may have failed.
                     fsync_meta_directory(self.jobs_dir / exited.job_id)
                     recorded = meta
-                self._dequeue(exited.job_id)
+                self._dequeue(exited.job_id, committed=True)
                 self._release(exited.job_id)
         except OSError as exc:
-            self._queue(exited)
             event = "event=job_exit_unrecorded job_id=%s errno=%s retry=queued"
             log.warning(
                 event + " reason=%s",
@@ -428,7 +425,11 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
             return
         for stale in dirs[keep:]:
             meta = self._meta(stale.name) or {"exit_code": 0}  # unusable: deletable
-            if _terminal(meta) and meta.get(AUTHORITY_FIELD) != AUTHORITY_UNKNOWN:
+            if (
+                _terminal(meta)
+                and meta.get(AUTHORITY_FIELD) != AUTHORITY_UNKNOWN
+                and not self._is_queued(stale.name)
+            ):
                 shutil.rmtree(stale, ignore_errors=True)
 
     def reap_forever(self, stop: threading.Event) -> None:
