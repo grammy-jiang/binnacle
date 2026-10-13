@@ -67,3 +67,13 @@ Use focused unit tests for timing, false positives, refusal/permissions, log
 parsing, archive, duplication and bounded memory. Apply no network/USB fault
 injection to the production hosts. After isolated tests and a clean committed
 branch, check all live Git HEADs and active jobs again before any master merge.
+
+## Subsequent Darwin lossless-rename improvement
+
+The previously documented `newsyslog` compression hazard was reproduced
+against synthetic open file descriptors. On 2026-10-13, a later isolated
+test confirmed that `newsyslog` `GN` (rename-only, no immediate compression)
+preserves writes to the original `.log.0` inode, and the Darwin stats reader
+can still consume those records. See
+[darwin-non-destructive-log-rotation-2026-10-13.md](darwin-non-destructive-log-rotation-2026-10-13.md).
+No existing MCP, Jobs or Tunnel process was interrupted for this change.

@@ -1,5 +1,11 @@
 # Binnacle boot-readiness and large-disk log retention
 
+**Update (2026-10-13):** The Mac policy below was superseded by the
+**50 GiB rename-only rotation policy** in
+[darwin-non-destructive-log-rotation-2026-10-13.md](darwin-non-destructive-log-rotation-2026-10-13.md).
+Its original 10 GiB / immediate-bzip2 design was unsafe with open launchd
+descriptors; the latest policy preserves writes in raw `.log.0` archives.
+
 **Date:** 2026-10-13
 **Scope:** Existing MacBook Pro, original Raspberry Pi, and sextant.
 **Safety:** This is not authorisation to interrupt active work or reboot a host.
@@ -53,7 +59,7 @@ Linux journald on both Pis is configured for `Storage=persistent`,
 These numbers are for **journald's aggregate storage**, not per-file sizes.
 
 The Mac has a large SSD with approximately 2.4 TiB free at the inspection.
-Its native `newsyslog` is per-file. The approved Binnacle policy:
+Its native `newsyslog` is per-file. The previous policy (recorded here for historical comparison):
 
 | Setting | Value |
 | --- | --- |
@@ -77,10 +83,10 @@ it can compress the old inode while writes continue. This was reproduced
 against a fully isolated temporary fixture: post-rotation data was absent
 from both the newly active path and compressed archive.
 
-Increasing the threshold reduces the immediate likelihood of a lossy
-rotation; it does **not** make rotation lossless or impose a hard aggregate
-50 GiB cap. The read-only Darwin resource monitor warns at 8 GiB and when
-remaining disk free space falls below 100 GiB. If the warning fires, arrange
+The legacy threshold alone only reduced the likelihood of data loss.
+The later rename-only policy removes early compression of the live inode,
+and the monitor now checks raw `.log.N` archives as well as active logs.
+The monitor warns at 40 GiB and when remaining disk space is below 100 GiB. If the warning fires, arrange
 a coordinated quiet window. Do not force a live rotation or replace this
 with `copytruncate` and claim it is lossless. A proper writer-coordinated
 reopen protocol remains a separate design and acceptance item.

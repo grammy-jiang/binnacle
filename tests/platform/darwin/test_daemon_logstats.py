@@ -170,3 +170,24 @@ def test_invalid_windows_fail_explicitly(tmp_path):
         source(tmp_path).read_spec(
             "binnacle-mcp", "2026-10-13 12:00:00", "2026-10-13 11:00:00"
         )
+
+
+def test_rename_only_rotation_continues_ingestion_from_live_raw_archive(tmp_path):
+    """The original launchd FD remains on .0; the new .log may be empty."""
+    original = tmp_path / "mcp.stderr.log"
+    create(
+        tmp_path,
+        "mcp.stderr.log",
+        "2026-10-13T07:59:59.000 INFO: event=tool_call call=before\n",
+    )
+    # newsyslog GN renames the inode without compressing or signalling.
+    original.rename(tmp_path / "mcp.stderr.log.0")
+    create(tmp_path, "mcp.stderr.log", "")
+    with (tmp_path / "mcp.stderr.log.0").open("a") as oldfd:
+        oldfd.write("2026-10-13T08:00:00.000 INFO: event=tool_result call=after\n")
+    text = source(tmp_path).read_spec(
+        "binnacle-mcp", "2026-10-13 07:00:00", "2026-10-13 09:00:00"
+    )
+    assert text.count("call=before") == 1
+    assert text.count("call=after") == 1
+    assert text.index("call=before") < text.index("call=after")
