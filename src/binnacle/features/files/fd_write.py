@@ -236,7 +236,6 @@ def write_bytes(
                 if count <= 0:
                     raise OSError(errno.EIO, "short write")
                 rest = rest[count:]
-            os.fsync(tempfd)
             current = _destination(parent, name, path, tool, digest=expected_sha256)
             if (before is None) != (current is None) or (
                 before is not None
@@ -254,6 +253,8 @@ def write_bytes(
             # Verify the held parent has not visibly been renamed or detached.
             # Descriptor-relative replacement also never follows a final link.
             _verify_parent(parent, path.parent, tool)
+            # Flush the final mode and payload only after all refusal checks.
+            os.fsync(tempfd)
             os.replace(temporary, name, src_dir_fd=parent, dst_dir_fd=parent)
             published = True
             return WriteReceipt(

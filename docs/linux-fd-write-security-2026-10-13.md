@@ -20,8 +20,12 @@ knobs, host restarts or changes to the Darwin provider.
   `O_NONBLOCK`, check the actual descriptor is a regular file, and refuse
   links, directories and special files. Read/edit only that verified FD.
 - Generate an exclusive private temporary sibling; write all UTF-8 bytes
-  without newline/BOM transformation, `fsync` and atomically `renameat`
-  to the destination. Keep the previous mode and receipt sizes.
+  without newline/BOM transformation, atomically `renameat` to the
+  destination. Only after the final destination/parent revalidation and
+  retained-mode `fchmod`, `fsync` the temporary FD before `renameat`.
+  Discarded conflict candidates are never unnecessarily synced; the
+  committed file's data and final permission bits share one flush. Keep
+  the previous mode and receipt sizes.
 - For edits, compare original content SHA-256 **and** the inode/device of
   the object initially read, and recheck the destination immediately before
   replacement. Report any observed conflict instead of overwriting it.
