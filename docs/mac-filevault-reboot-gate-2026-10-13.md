@@ -1,5 +1,14 @@
 # MacBook Pro: unresolved FileVault reboot and runtime-version admission
 
+**Later operational update, 2026-10-13:** The owner subsequently remained
+at the Mac and explicitly authorized a single reboot. At **16:19:56 AEDT**
+the Mac booted successfully, and independent Pi/sextant SSH, all five
+LaunchDaemons and actual ChatGPT MCP tool calls recovered. FileVault
+unlock is no longer the current blocker. A later guarded runtime release
+encountered the separate Darwin doctor defect and automatically rolled back.
+See [Darwin doctor compatibility](darwin-doctor-j7w3-runtime-fix-2026-10-13.md)
+for the new remediation and mandatory release checks.
+
 **Recorded:** 2026-10-13. **Status:** Mac was not rebooted. Original Pi
 and sextant rebooted separately and passed their hardware acceptance.
 
