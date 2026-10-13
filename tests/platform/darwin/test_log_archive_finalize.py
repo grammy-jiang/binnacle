@@ -353,3 +353,118 @@ def test_hold_revoked_after_publication_keeps_raw_for_recovery(tmp_path, monkeyp
     monkeypatch.setattr(finish.os, "link", original_link)
     assert finalize(root, hold).resumed_publication
     assert not raw.exists()
+
+
+def test_matching_canonical_but_public_permissions_cannot_be_recovered(tmp_path):
+    root, raw, hold = fixture(tmp_path)
+    published = root / (NAME + ".bz2")
+    published.write_bytes(bz2.compress(EVENTS))
+    published.chmod(0o644)
+    with pytest.raises(finish.ArchiveFinalizeRefused, match="not private"):
+        finalize(root, hold)
+    assert raw.read_bytes() == EVENTS
+    assert bz2.decompress(published.read_bytes()) == EVENTS
+
+
+def test_injected_source_hash_size_drift_refuses_before_publishing(
+    tmp_path, monkeypatch
+):
+    root, raw, hold = fixture(tmp_path)
+    original = finish.stage._hash_open_file
+
+    def wrong_size(fd):
+        digest, length = original(fd)
+        return digest, length + 1
+
+    monkeypatch.setattr(finish.stage, "_hash_open_file", wrong_size)
+    with pytest.raises(finish.ArchiveFinalizeRefused, match="size changed"):
+        finalize(root, hold)
+    assert raw.read_bytes() == EVENTS
+    assert not (root / (NAME + ".bz2")).exists()
+
+
+def test_raw_digest_changes_during_compression_refuses(tmp_path, monkeypatch):
+    root, raw, hold = fixture(tmp_path)
+    original = finish.stage._hash_open_file
+    calls = [0]
+
+    def stale_second(fd):
+        digest, length = original(fd)
+        calls[0] += 1
+        if calls[0] >= 2:
+            return "0" * 64, length
+        return digest, length
+
+    monkeypatch.setattr(finish.stage, "_hash_open_file", stale_second)
+    with pytest.raises(finish.ArchiveFinalizeRefused, match="source bytes changed"):
+        finalize(root, hold)
+    assert raw.read_bytes() == EVENTS
+    assert not (root / (NAME + ".bz2")).exists()
+    assert calls[0] >= 2
+
+
+def test_compression_receipt_must_match_original_raw_bytes(tmp_path, monkeypatch):
+    root, raw, hold = fixture(tmp_path)
+    original = finish._make_temp
+
+    def fake_receipt(*args):
+        fd, digest, count = original(*args)
+        return fd, digest, count - 1
+
+    monkeypatch.setattr(finish, "_make_temp", fake_receipt)
+    with pytest.raises(finish.ArchiveFinalizeRefused, match="source changed"):
+        finalize(root, hold)
+    assert raw.read_bytes() == EVENTS
+    assert not list(root.glob(".*.tmp"))
+
+
+def test_large_incompressible_archive_streams_partial_blocks(tmp_path):
+    root, raw, hold = fixture(tmp_path)
+    content = os.urandom(2 * 1024 * 1024)
+    raw.write_bytes(content)
+    archive = finalize(root, hold)
+    assert bz2.decompress((root / archive.canonical).read_bytes()) == content
+    assert archive.source_bytes == len(content)
+    assert not raw.exists()
+
+
+def test_compressor_fails_on_raw_growing_past_initial_stat(tmp_path):
+    root, raw, _ = fixture(tmp_path)
+    parent = finish.stage._safe_directory(root)
+    stream = os.open(NAME, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent)
+    temp = ".growing.bz2.tmp"
+    initial = os.fstat(stream)
+    try:
+        with raw.open("ab") as append:
+            append.write(b"more bytes")
+        with pytest.raises(finish.ArchiveFinalizeRefused, match="raw log grew"):
+            finish._make_temp(parent, stream, temp, initial)
+        assert (root / temp).exists()  # the caller owns temp cleanup
+    finally:
+        os.close(stream)
+        os.close(parent)
+        (root / temp).unlink(missing_ok=True)
+
+
+def test_compressed_output_exceeding_expected_budget_rejected(tmp_path):
+    root, _, _ = fixture(tmp_path)
+    archive = root / "manual.bz2"
+    archive.write_bytes(bz2.compress(b"abcdef"))
+    archive.chmod(0o600)
+    fd = os.open(archive, os.O_RDONLY)
+    try:
+        with pytest.raises(finish.ArchiveFinalizeRefused, match="length mismatch"):
+            finish._check_compressed(fd, hashlib.sha256(b"ab").hexdigest(), 2)
+    finally:
+        os.close(fd)
+
+
+def test_corrupt_matching_canonical_retains_raw_source(tmp_path):
+    root, raw, hold = fixture(tmp_path)
+    published = root / (NAME + ".bz2")
+    published.write_bytes(b"not a bzip2 stream")
+    published.chmod(0o600)
+    with pytest.raises(finish.ArchiveFinalizeRefused, match="unreadable"):
+        finalize(root, hold)
+    assert raw.read_bytes() == EVENTS
+    assert published.read_bytes() == b"not a bzip2 stream"

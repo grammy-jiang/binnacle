@@ -190,8 +190,6 @@ def finalize_archive(
         srcfd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dfd)
         initial = os.fstat(srcfd)
         stage._validate_source(initial, max_bytes=max_bytes)
-        if not initial.st_size:
-            raise ArchiveFinalizeRefused("empty raw log cannot be finalized")
         with hold:
             _verify_hold(hold, name, initial)
             _stable_raw(dfd, srcfd, name, initial)
