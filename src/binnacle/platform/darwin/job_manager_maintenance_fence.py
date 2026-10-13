@@ -17,9 +17,21 @@ import os
 import re
 import stat
 import time
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
+
+
+class _ManagerSnapshot(Protocol):
+    owner_instance_id: str
+
+    def _transaction(
+        self, wait_s: float | None = None
+    ) -> AbstractContextManager[None]: ...
+
+    def job_counts(self) -> tuple[int, int]: ...
+
 
 _TOKEN = re.compile(r"^[0-9a-f]{32}$")
 _BYTES_MAX = 512
@@ -131,6 +143,33 @@ class ManagerStartFence:
                 os.close(fd)
             if dfd >= 0:
                 os.close(dfd)
+
+    def synchronized_ping(
+        self, manager: _ManagerSnapshot, reply: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Add private authenticated ping fields under the SAME start lock.
+
+        A reader may report a paused nonce only after all earlier job-start
+        transactions exit. The returned counts are observed under that lock
+        rather than from the stale initial ping snapshot. A future controller
+        must still own J7, Watchdog and MCP barriers and recheck uncertainty.
+        This helper is never installed in the production Manager by default.
+        """
+        with manager._transaction():
+            state = self.inspect()
+            if (
+                manager.owner_instance_id != self.owner_instance_id
+                or self.pid != os.getpid()
+            ):
+                state = MaintenanceObservation("unknown")
+            running, unknown = manager.job_counts()
+            report = dict(reply)
+            report["running_jobs"], report["unknown_jobs"] = running, unknown
+            report["maintenance_admission"] = {
+                "state": state.state,
+                "nonce": state.nonce,
+            }
+            return report
 
     def refusal(self) -> dict[str, Any] | None:
         """Not present -> legacy behavior; otherwise NO new start is allowed."""
