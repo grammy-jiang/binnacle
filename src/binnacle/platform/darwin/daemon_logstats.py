@@ -124,11 +124,26 @@ class DarwinDaemonLogStatsSource:
         except OSError as exc:
             raise ServiceLogError("macOS service log directory unavailable") from exc
         known = _LOGS[service]
-        selected = []
+        # During a verified finalization both .log.N and .log.N.bz2 may
+        # coexist between atomic publication and unlink. Treat them as ONE
+        # logical generation: raw wins while present (it may have grown);
+        # only after the raw source disappears can the compressed copy win.
+        # Do not let a stale pending snapshot replace live evidence.
+        generations: dict[tuple[str, str | None], Path] = {}
         for child in children:
             match = _ARCHIVE.fullmatch(child.name)
-            if match and match.group("base") in known:
-                selected.append(child)
+            if match is None or match.group("base") not in known:
+                continue
+            key = match.group("base"), match.group("num")
+            current = generations.get(key)
+
+            # Raw wins if the archive is still writable; bz2 wins over gz.
+            def rank(item: Path) -> int:
+                return {".bz2": 1, ".gz": 2}.get(item.suffix, 0)
+
+            if current is None or rank(child) < rank(current):
+                generations[key] = child
+        selected = list(generations.values())
         if not any(p.name == known[0] for p in selected):
             raise ServiceLogError(f"macOS service log missing: {known[0]}")
         # Oldest archives before active files, across both streams; final merge

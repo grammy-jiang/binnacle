@@ -191,3 +191,23 @@ def test_rename_only_rotation_continues_ingestion_from_live_raw_archive(tmp_path
     assert text.count("call=before") == 1
     assert text.count("call=after") == 1
     assert text.index("call=before") < text.index("call=after")
+
+
+def test_raw_and_canonical_compressed_same_generation_never_double_count(tmp_path):
+    event = "2026-10-13T07:00:00.000 INFO: event=tool_call call=single\n"
+    create(tmp_path, "mcp.stderr.log", "")
+    create(tmp_path, "mcp.stderr.log.0", event)
+    compressed = tmp_path / "mcp.stderr.log.0.bz2"
+    compressed.write_bytes(bz2.compress(event.encode("utf-8")))
+    stats = source(tmp_path)
+    first = stats.read_spec("binnacle-mcp", "2026-10-13 06:00", "2026-10-13 08:00")
+    assert first.count("call=single") == 1
+    # A write received by the old fd before pruning wins over a stale .bz2.
+    with (tmp_path / "mcp.stderr.log.0").open("a") as stream:
+        stream.write("2026-10-13T07:01:00.000 INFO: event=tool_call call=raw_tail\n")
+    middle = stats.read_spec("binnacle-mcp", "2026-10-13 06:00", "2026-10-13 08:00")
+    assert middle.count("call=raw_tail") == 1
+    (tmp_path / "mcp.stderr.log.0").unlink()
+    last = stats.read_spec("binnacle-mcp", "2026-10-13 06:00", "2026-10-13 08:00")
+    assert last.count("call=single") == 1
+    assert "call=raw_tail" not in last

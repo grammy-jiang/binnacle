@@ -229,6 +229,8 @@ def manifest_groups() -> dict[str, set[str]]:
         },
         "watchdog": {
             "companions/darwin_log_archive_stage.py",
+            "companions/darwin_log_archive_finalize.py",
+            "companions/darwin_log_writer_hold.py",
             "companions/darwin_log_privacy.py",
             "companions/resource_monitor_darwin.py",
             "companions/service_watchdog.py",
