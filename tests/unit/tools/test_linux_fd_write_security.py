@@ -221,3 +221,262 @@ def test_permission_denied_preserves_no_temp_artifact(allowed):
         assert not list(locked.iterdir())
     finally:
         locked.chmod(0o700)
+
+
+@LINUX_ONLY
+def test_direct_fd_root_scope_and_directory_target_refuse(allowed, tmp_path):
+    root, _ = allowed
+    with pytest.raises(ToolError, match="outside allowed roots"):
+        fd_write.write_bytes(
+            tmp_path / "not-allowed", (root,), b"x", create_parents=True
+        )
+    with pytest.raises(ToolError, match="directory"):
+        fd_write.write_bytes(root, (root,), b"x", create_parents=True)
+
+
+@LINUX_ONLY
+def test_linux_only_backend_refuses_other_platform_before_mutations(
+    allowed, monkeypatch
+):
+    root, _ = allowed
+    monkeypatch.setattr(fd_write.sys, "platform", "darwin")
+    with pytest.raises(RuntimeError, match="Linux-only"):
+        fd_write.write_bytes(root / "f", (root,), b"x", create_parents=True)
+    assert not (root / "f").exists()
+
+
+@LINUX_ONLY
+def test_missing_parent_on_edit_refuses_without_creation(allowed):
+    root, _ = allowed
+    with pytest.raises(ToolError, match="changed"):
+        fd_write.read_for_edit(root / "missing" / "file", (root,))
+    assert not (root / "missing").exists()
+
+
+@LINUX_ONLY
+def test_concurrent_parent_creation_reopened_nofollow(allowed, monkeypatch):
+    root, roots = allowed
+    real_mkdir = os.mkdir
+    calls = []
+
+    def other_writer_created(name, *args, **kwargs):
+        if name == "race" and kwargs.get("dir_fd") is not None:
+            calls.append(name)
+            real_mkdir(name, *args, **kwargs)
+            raise FileExistsError("concurrent creator")
+        return real_mkdir(name, *args, **kwargs)
+
+    monkeypatch.setattr(fd_write.os, "mkdir", other_writer_created)
+    assert write(root / "race" / "child.txt", "ok", roots)["action"] == "created"
+    assert calls == ["race"]
+
+
+@LINUX_ONLY
+def test_regular_ancestor_write_existing_error_and_edit_refusal(allowed):
+    root, roots = allowed
+    parent = root / "parent-is-file"
+    parent.write_bytes(b"hello")
+    with pytest.raises(ToolError, match="File exists"):
+        write(parent / "child", "bad", roots)
+    with pytest.raises(ToolError, match="changed"):
+        fd_write.read_for_edit(parent / "child", (root,))
+    assert parent.read_bytes() == b"hello"
+
+
+@LINUX_ONLY
+def test_direct_edit_target_missing_after_resolution_refuses(allowed):
+    root, _ = allowed
+    with pytest.raises(ToolError, match="changed"):
+        fd_write.write_bytes(
+            root / "missing.txt",
+            (root,),
+            b"new",
+            create_parents=False,
+            expected_sha256="bad",
+            expected_identity=(1, 2),
+        )
+
+
+@LINUX_ONLY
+def test_open_target_denial_rechecks_regular_and_rejects_unknown(allowed, monkeypatch):
+    root, _ = allowed
+    file = root / "f"
+    file.write_bytes(b"old")
+    original_open = fd_write.os.open
+    original_stat = fd_write.os.stat
+
+    def deny(path, *args, **kwargs):
+        if path == "f" and kwargs.get("dir_fd") is not None:
+            raise PermissionError("test-only injected EACCES")
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(fd_write.os, "open", deny)
+    with pytest.raises(PermissionError):
+        fd_write.write_bytes(file, (root,), b"x", create_parents=True)
+
+    def gone(path, *args, **kwargs):
+        if path == "f" and kwargs.get("dir_fd") is not None:
+            raise FileNotFoundError("test-only disappeared after denial")
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(fd_write.os, "stat", gone)
+    with pytest.raises(PermissionError):
+        fd_write.write_bytes(file, (root,), b"x", create_parents=True)
+    assert file.read_bytes() == b"old"
+
+
+@LINUX_ONLY
+def test_read_for_edit_nofollow_final_swap_and_denied_open(allowed, monkeypatch):
+    root, _ = allowed
+    file = root / "target.txt"
+    file.write_bytes(b"old")
+    original_open = fd_write.os.open
+    error = [OSError(os.ELOOP if hasattr(os, "ELOOP") else 40, "link swapped")]
+
+    def inject(path, *args, **kwargs):
+        if path == "target.txt" and kwargs.get("dir_fd") is not None:
+            raise error[0]
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(fd_write.os, "open", inject)
+    with pytest.raises(ToolError, match="changed"):
+        fd_write.read_for_edit(file, (root,))
+    error[0] = PermissionError("injected read refusal")
+    with pytest.raises(PermissionError):
+        fd_write.read_for_edit(file, (root,))
+    assert file.read_bytes() == b"old"
+
+
+@LINUX_ONLY
+def test_read_for_edit_failed_special_fd_is_never_read(allowed, monkeypatch):
+    root, _ = allowed
+    file = root / "device-shaped"
+    file.write_bytes(b"old")
+    original_open = fd_write.os.open
+
+    def deny(path, *args, **kwargs):
+        if path == "device-shaped" and kwargs.get("dir_fd") is not None:
+            raise PermissionError("simulated special device open refusal")
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(fd_write.os, "open", deny)
+    monkeypatch.setattr(fd_write.fd_walk, "_failed_open_special", lambda *_: True)
+    with pytest.raises(ToolError, match="special_file_unsupported"):
+        fd_write.read_for_edit(file, (root,))
+    assert file.read_bytes() == b"old"
+
+
+@LINUX_ONLY
+def test_read_for_edit_final_inode_changed_before_stat(allowed, monkeypatch):
+    root, _ = allowed
+    file = root / "f"
+    file.write_bytes(b"old")
+    old_stat = fd_write.os.stat
+    moved = [False]
+
+    def change_at_stat(path, *args, **kwargs):
+        if path == "f" and kwargs.get("dir_fd") is not None and not moved[0]:
+            moved[0] = True
+            file.rename(root / "original")
+            file.write_bytes(b"old")
+        return old_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(fd_write.os, "stat", change_at_stat)
+    with pytest.raises(ToolError, match="changed"):
+        fd_write.read_for_edit(file, (root,))
+    assert moved[0]
+    assert (root / "original").read_bytes() == b"old"
+
+
+@LINUX_ONLY
+def test_read_for_edit_modified_while_reading_refuses(allowed, monkeypatch):
+    root, _ = allowed
+    file = root / "f"
+    file.write_bytes(b"old")
+    original_read = fd_write.os.read
+    once = [False]
+
+    def race(fd, size):
+        chunk = original_read(fd, size)
+        if chunk and not once[0]:
+            once[0] = True
+            with file.open("ab") as stream:
+                stream.write(b"late")
+        return chunk
+
+    monkeypatch.setattr(fd_write.os, "read", race)
+    with pytest.raises(ToolError, match="changed"):
+        fd_write.read_for_edit(file, (root,))
+    assert file.read_bytes() == b"oldlate"
+
+
+@LINUX_ONLY
+def test_zero_write_is_io_failure_and_temp_removed(allowed, monkeypatch):
+    root, roots = allowed
+    file = root / "target"
+    original = fd_write.os.write
+    called = [False]
+
+    def zero(fd, data):
+        if not called[0]:
+            called[0] = True
+            return 0
+        return original(fd, data)
+
+    monkeypatch.setattr(fd_write.os, "write", zero)
+    with pytest.raises(ToolError, match="Could not write"):
+        write(file, "abc", roots)
+    assert called[0]
+    assert not file.exists()
+    assert not list(root.glob(".binnacle-write-*"))
+
+
+@LINUX_ONLY
+def test_write_detects_target_changed_during_temp_write(allowed, monkeypatch):
+    root, roots = allowed
+    file = root / "f"
+    file.write_bytes(b"old")
+    real_write = fd_write.os.write
+    mutated = [False]
+
+    def writer(fd, data):
+        result = real_write(fd, data)
+        if not mutated[0]:
+            mutated[0] = True
+            file.write_bytes(b"concurrent external update")
+        return result
+
+    monkeypatch.setattr(fd_write.os, "write", writer)
+    with pytest.raises(ToolError, match="changed"):
+        write(file, "new", roots)
+    assert file.read_bytes() == b"concurrent external update"
+    assert not list(root.glob(".binnacle-write-*"))
+
+
+@LINUX_ONLY
+def test_expected_edit_digest_and_identity_need_agree(allowed):
+    root, _ = allowed
+    file = root / "f"
+    file.write_bytes(b"old")
+    st = file.stat()
+    with pytest.raises(ToolError, match="changed"):
+        fd_write.write_bytes(
+            file,
+            (root,),
+            b"new",
+            create_parents=False,
+            expected_sha256="bad",
+            expected_identity=(st.st_dev, st.st_ino),
+        )
+
+
+@LINUX_ONLY
+def test_linux_write_io_error_uses_prior_surface_sentence(allowed, monkeypatch):
+    root, roots = allowed
+
+    def no_space(*args, **kwargs):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(fd_write, "write_bytes", no_space)
+    with pytest.raises(ToolError, match="Could not write .*No space left"):
+        write(root / "f", "data", roots)
