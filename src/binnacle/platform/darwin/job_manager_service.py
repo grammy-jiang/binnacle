@@ -113,6 +113,8 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
         self.stopping = threading.Event()
         # D2: the entry's stop-marker probe: a typed refusal, or None to start.
         self.stop_pending: Callable[[], dict[str, Any] | None] = lambda: None
+        self.maintenance_fence: Callable[[], dict[str, Any] | None] | None = None
+        self.maintenance_probe: Callable[[dict[str, Any]], dict[str, Any]] | None = None
 
     @contextmanager
     def _transaction(self, wait_s: float | None = None) -> Iterator[None]:
@@ -171,6 +173,8 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
             reply["pid"] = os.getpid()
             reply["package_version"] = self.provenance.package_version
             reply["running_jobs"], reply["unknown_jobs"] = self.job_counts()
+            if self.maintenance_probe is not None:
+                reply = self.maintenance_probe(reply)
             with self._queue_lock:
                 reply.update(
                     manager_ping_metadata(self._unrecorded_since, time.monotonic())
@@ -230,6 +234,8 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
         SR6-F2: the D2 stop-marker check runs inside it, before any record.
         """
         with self._transaction():
+            if self.maintenance_fence and (refusal := self.maintenance_fence()):
+                return refusal
             self._prune(reserve=1)
             if refusal := self.stop_pending():
                 return refusal
