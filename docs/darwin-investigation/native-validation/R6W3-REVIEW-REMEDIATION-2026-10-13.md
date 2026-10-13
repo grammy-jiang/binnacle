@@ -288,3 +288,29 @@ ack failures. The expanded 31 Darwin tests also passed under Python 3.10,
 This is local implementation evidence only. Independent exact-SHA code
 review, GitHub CI 7/7, full Mac/Pi acceptance, original J7m-a5 quiet window,
 idle-jobs and guarded rollback gate remain requirements before any release.
+
+## Eighth independent review: 515c8fa (REVISE; ACK fairness)
+
+The independent read-only review of the exact signed commit
+515c8fa2e6a2ff253cb94114be57998bfe3f5453 confirmed that
+the retry snapshot pin was FIXED. The owner ACK backlog had a genuine
+P2 starvation defect: lexicographically low IDs repeatedly filled the
+16-attempt budget even when a high-ID owner became available. An in-memory
+replay with 1024 pending IDs and 3600 periodic passes never retried the
+last recoverable ID.
+
+The next isolated repair sorts the ACK candidates by their earliest retry
+deadline (with job ID as a deterministic tie-break), not by job ID alone.
+This retains the 16-attempt bounded reaper work and exponential backoff,
+but guarantees eligible IDs with earlier deadlines cannot be displaced by
+frequently failing lower IDs.
+
+A new test first reproduced the starvation on 515c8fa. With earliest-due
+selection, the last recovered owner is acknowledged without overflowing the
+queue; 26 related tests pass, including the previous bounded-backoff case.
+The code's 1024 cap, fail-closed stopping event and redacted log contract
+are unchanged.
+
+This remains a development candidate, not an accepted production release.
+The exact final SHA still requires a new independent PASS, GitHub 7/7, full
+Mac/Pi verification and the guarded J7m-a5 deployment gate.

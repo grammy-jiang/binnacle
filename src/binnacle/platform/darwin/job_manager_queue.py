@@ -151,9 +151,13 @@ class ExitQueueStorage:
     def _ack_snapshot(self) -> tuple[str, ...]:
         now = time.monotonic()
         with self._queue_lock:
+            # Earliest due first: lexicographic ordering can endlessly
+            # recycle failing low IDs and starve a recovered higher ID.
             due = (
                 job_id
-                for job_id in sorted(self._ack_pending)
+                for job_id in sorted(
+                    self._ack_pending, key=lambda name: (self._ack_due[name], name)
+                )
                 if self._ack_due[job_id] <= now
             )
             return tuple(

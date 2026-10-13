@@ -89,6 +89,48 @@ def test_ack_retry_is_bounded_and_backed_off(tmp_path, monkeypatch):
     assert attempts.count(first) == 1
     assert len(manager._ack_pending) == queue.ACK_RETRY_BATCH * 3
     clock[0] += 60.0
-    manager._retry_acks()
+    # Untouched entries with an older due time take priority before the
+    # previously failing first ID. All still get another bounded attempt.
+    for _ in range(4):
+        manager._retry_acks()
     assert attempts.count(first) >= 2
     assert not manager.stopping.is_set()
+
+
+def test_ack_retry_is_fair_to_late_recovered_owner_entries(
+    tmp_path, monkeypatch, caplog
+):
+    """Earliest ready due time, not ID lexicographic order, wins each budget.
+
+    First 1,023 owners remain unavailable; the final owner is recoverable.
+    It must not starve for an hour while the first IDs repeatedly fail.
+    """
+    manager = _manager(tmp_path)
+    clock = [1000.0]
+    monkeypatch.setattr(queue.time, "monotonic", lambda: clock[0])
+    ids = [f"unreleased-{i:04}" for i in range(queue.ACK_BACKLOG_LIMIT)]
+    for job_id in ids:
+        manager._ack_later(job_id)
+    last = ids[-1]
+    released = []
+    calls = []
+
+    def release(job_id):
+        calls.append((clock[0], job_id))
+        if job_id != last:
+            raise OSError("synthetic persistent owner issue")
+        released.append(job_id)
+
+    monkeypatch.setattr(manager.owner, "release", release)
+    import logging
+
+    with caplog.at_level(logging.CRITICAL, logger="binnacle.job_manager"):
+        for _ in range(96):  # 96 * 16 attempts > backlog size
+            manager._retry_acks()
+            clock[0] += 1.0
+    assert released == [last], (
+        "a recovered late owner was starved behind repeated early failures"
+    )
+    assert last not in manager._ack_pending
+    assert not manager.stopping.is_set()
+    assert len(calls) <= 96 * queue.ACK_RETRY_BATCH
