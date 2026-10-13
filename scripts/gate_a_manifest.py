@@ -231,6 +231,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "companions/darwin_log_archive_stage.py",
             "companions/darwin_log_archive_finalize.py",
             "companions/darwin_log_maintenance_admission.py",
+            "companions/darwin_log_j7_interlocks.py",
             "companions/darwin_log_writer_hold.py",
             "companions/darwin_log_maintenance_guardian.py",
             "companions/darwin_log_privacy.py",
