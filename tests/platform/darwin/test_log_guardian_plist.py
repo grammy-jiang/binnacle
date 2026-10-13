@@ -59,7 +59,15 @@ def test_guardian_rejects_foreign_log_root_even_when_plist_matches(
     root = _root(tmp_path)
     with monkeypatch.context() as m:
         record = _trusted_plist(m, root)
-        with pytest.raises(ArchiveFinalizeRefused, match="root"):
+        # Use an existing, private but non-fixture directory on both OSes:
+        # a Linux host need not have the real macOS Library/Logs tree.
+        foreign = tmp_path / "binnacle"
+        foreign.mkdir(mode=0o700)
+        with pytest.raises(ArchiveFinalizeRefused, match="unsafe"):
+            guardian._policy({**record, "log_root": str(foreign)}, root)
+        # The exact production path is likewise always refused, whether the
+        # directory exists on the host or not.
+        with pytest.raises(ArchiveFinalizeRefused):
             guardian._policy(
                 {**record, "log_root": str(Path.home() / "Library/Logs/binnacle")},
                 root,
