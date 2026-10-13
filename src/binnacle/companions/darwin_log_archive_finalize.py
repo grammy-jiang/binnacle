@@ -17,8 +17,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from typing_extensions import Self
-
 from binnacle.companions import darwin_log_archive_stage as stage
 from binnacle.companions.darwin_log_privacy import MIN_DISK_FREE_BYTES
 
@@ -52,7 +50,7 @@ class WriterHold(Protocol):
 
     producer: str
 
-    def __enter__(self) -> Self: ...
+    def __enter__(self) -> object: ...
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None: ...
 
