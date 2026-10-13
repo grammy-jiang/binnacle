@@ -480,3 +480,19 @@ def test_linux_write_io_error_uses_prior_surface_sentence(allowed, monkeypatch):
     monkeypatch.setattr(fd_write, "write_bytes", no_space)
     with pytest.raises(ToolError, match="Could not write .*No space left"):
         write(root / "f", "data", roots)
+
+
+@LINUX_ONLY
+def test_non_linux_file_dispatch_preserves_pathname_fallback(allowed, monkeypatch):
+    """Dispatch regression: simulated non-Linux without a native provider."""
+    root, roots = allowed
+    monkeypatch.setattr(write_file.sys, "platform", "darwin")
+    file = root / "sub" / "text"
+    assert write(file, "new", roots)["action"] == "created"
+    assert write(file, "later", roots)["previous_bytes"] == 3
+    assert file.read_text() == "later"
+    parent_file = root / "file-as-dir"
+    parent_file.write_text("old")
+    with pytest.raises(ToolError, match="Could not write .*File exists"):
+        write(parent_file / "child", "bad", roots)
+    assert parent_file.read_text() == "old"
