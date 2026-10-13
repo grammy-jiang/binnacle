@@ -16,7 +16,9 @@ from binnacle.config import RootsSettings
 from binnacle.features.files import fd_write
 from binnacle.features.files.tools import edit_file, write_file
 
-pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="Linux FD walk")
+# Per-test platform pin, rather than a collection-wide skip: the repository
+# deliberately forbids false-green all-skipped files (macos_skip_table).
+LINUX_ONLY = pytest.mark.skipif(sys.platform != "linux", reason="Linux FD walk")
 
 
 @pytest.fixture
@@ -36,6 +38,7 @@ def edit(path, old, new, roots):
     ).structured_content
 
 
+@LINUX_ONLY
 def test_nested_create_empty_unicode_and_overwrite_preserve_permissions(allowed):
     root, roots = allowed
     path = root / "a" / "b" / "text"
@@ -49,6 +52,7 @@ def test_nested_create_empty_unicode_and_overwrite_preserve_permissions(allowed)
     assert not list(root.rglob(".binnacle-write-*"))
 
 
+@LINUX_ONLY
 def test_in_root_symlink_to_file_and_nested_dir_preserve_semantics(allowed):
     root, roots = allowed
     actual = root / "actual"
@@ -61,6 +65,7 @@ def test_in_root_symlink_to_file_and_nested_dir_preserve_semantics(allowed):
     assert (root / "alias").is_symlink()
 
 
+@LINUX_ONLY
 def test_out_of_root_symlink_rejected_with_no_mutation(allowed, tmp_path):
     root, roots = allowed
     outside = tmp_path / "not-allowed"
@@ -74,6 +79,7 @@ def test_out_of_root_symlink_rejected_with_no_mutation(allowed, tmp_path):
     assert (outside / "target").read_bytes() == b"private"
 
 
+@LINUX_ONLY
 def test_final_component_symlink_swap_is_refused_before_mutating_target(
     allowed, tmp_path, monkeypatch
 ):
@@ -101,6 +107,7 @@ def test_final_component_symlink_swap_is_refused_before_mutating_target(
     assert not list(root.glob(".binnacle-write-*"))
 
 
+@LINUX_ONLY
 def test_parent_rename_and_symlink_retarget_refuses_and_cleans_temp(
     allowed, tmp_path, monkeypatch
 ):
@@ -133,6 +140,7 @@ def test_parent_rename_and_symlink_retarget_refuses_and_cleans_temp(
     assert not list(outside.glob(".binnacle-write-*"))
 
 
+@LINUX_ONLY
 def test_edit_same_bytes_inode_change_conflicts(allowed, monkeypatch):
     root, roots = allowed
     path = root / "editable"
@@ -150,6 +158,7 @@ def test_edit_same_bytes_inode_change_conflicts(allowed, monkeypatch):
     assert path.read_text() == "old"
 
 
+@LINUX_ONLY
 def test_edit_conflict_for_content_change_before_commit(allowed, monkeypatch):
     root, roots = allowed
     path = root / "editable"
@@ -166,6 +175,7 @@ def test_edit_conflict_for_content_change_before_commit(allowed, monkeypatch):
     assert path.read_text() == "changed"
 
 
+@LINUX_ONLY
 def test_fifo_refused_without_opening_blocking_writer(allowed):
     root, roots = allowed
     fifo = root / "fifo"
@@ -176,6 +186,7 @@ def test_fifo_refused_without_opening_blocking_writer(allowed):
         edit(fifo, "old", "new", roots)
 
 
+@LINUX_ONLY
 def test_directory_target_and_missing_edit_retained(allowed):
     root, roots = allowed
     with pytest.raises(ToolError, match="Use list_files"):
@@ -184,6 +195,7 @@ def test_directory_target_and_missing_edit_retained(allowed):
         edit(root / "missing", "x", "y", roots)
 
 
+@LINUX_ONLY
 def test_short_writes_are_completed_without_corrupt_bytes(allowed, monkeypatch):
     root, roots = allowed
     target = root / "target"
@@ -198,6 +210,7 @@ def test_short_writes_are_completed_without_corrupt_bytes(allowed, monkeypatch):
     assert target.read_text() == content
 
 
+@LINUX_ONLY
 def test_permission_denied_preserves_no_temp_artifact(allowed):
     root, roots = allowed
     locked = root / "locked"

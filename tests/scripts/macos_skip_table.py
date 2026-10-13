@@ -111,6 +111,7 @@ integration/test_search_settings.py | T0: Search child over Linux pathname Core 
 integration/test_setup_units.py | B0: systemd unit inspector; Darwin launchd inspector is follow-up DARWIN-FOLLOWUP-service-inspector (per-test LINUX_ONLY on the 6 binnacle mode tests that build it; R4 J4, Supervisor ruling A, PO-J4-3)
 contracts/test_darwin_interface.py | B0: Darwin root-grant lifecycle tests need native descriptors (R2D-T0A6-01 fix ecf6aea)
 platform/darwin/test_missing_roots.py | B0: Darwin missing-root lifespan tests need native descriptors (SD-24 fix 8132d8d)
+unit/tools/test_linux_fd_write_security.py | T0: SEC-FU-14: per-test Linux FD-relative parent and atomic write race fixtures; the Darwin provider uses opened grants instead
 unit/tools/test_r6w2_x3a2_permissions.py | T0: R6W2-T3 per-test Linux fd_walk mechanism, open_verified (Linux-only, RX3a2-N4) and the O_PATH traverse flags (r6 W2 X3a-a2); the list permission and link-walk tests run everywhere
 unit/tools/test_r6w2_x3a2_guards.py | T0: R6W2-T3 per-test Linux fd_walk.open_verified component checks (RX3a2-N3, Linux-only RX3a2-N4); the list link-walk swap test runs everywhere
 unit/tools/test_r6w2_x3b_read_verify.py | T0: R6W2-T3 per-test Linux read path, read_file_impl without file_access over fd_walk.open_walked (r6 W2 X3b); Darwin reads through DarwinFileAccess; the unraced, nested-root and Darwin-dispatch tests run everywhere
@@ -175,6 +176,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_composition_contract.py": 3,
     "tests/contracts/test_darwin_interface.py": 1,
     "tests/platform/darwin/test_missing_roots.py": 1,
+    "tests/unit/tools/test_linux_fd_write_security.py": 1,
     "tests/unit/tools/test_r6w2_x3a2_permissions.py": 1,
     "tests/unit/tools/test_r6w2_x3a2_guards.py": 1,
     "tests/unit/tools/test_r6w2_x3b_read_verify.py": 2,

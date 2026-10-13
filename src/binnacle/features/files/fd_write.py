@@ -97,6 +97,17 @@ def _parent(
                         except FileExistsError:
                             pass  # A simultaneous creator must still pass no-follow.
                         child = os.open(name, fd_walk.TRAVERSE_FLAGS, dir_fd=fd)
+                    except NotADirectoryError as exc:
+                        # Existing regular ancestor: preserve the former
+                        # Path.mkdir(exist_ok=True) EEXIST message (R4 parity).
+                        # A link that races into this position is a different
+                        # condition and must still fail closed.
+                        info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                        if create and stat.S_ISREG(info.st_mode):
+                            raise FileExistsError(
+                                errno.EEXIST, os.strerror(errno.EEXIST), str(path)
+                            ) from exc
+                        raise
                     os.close(fd)
                     fd = child
                 _verify_parent(fd, path.parent, tool)

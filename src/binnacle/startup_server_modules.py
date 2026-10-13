@@ -73,6 +73,7 @@ _SERVER_COMMON = (
     "binnacle.features.files.error_text",
     "binnacle.features.files.fd_chain",
     "binnacle.features.files.fd_walk",
+    "binnacle.features.files.fd_write",
     "binnacle.features.files.file_tool_access",
     "binnacle.features.files.files_server",
     "binnacle.features.files.list_files_glob",
