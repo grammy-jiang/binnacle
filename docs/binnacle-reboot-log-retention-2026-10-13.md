@@ -23,7 +23,10 @@ The script is **strictly read-only**. It reports two separate facts:
 `boot_ready` means boot-time service definitions, launch agent paths, and
 running/enablement status pass a static inspection.
 `reboot_now_candidate` additionally requires no active/unknown Binnacle
-jobs and no detected Claude, Codex or pytest development processes.
+jobs. **Local Claude Code/Codex clusters are not considered a default
+blocker**, because long-lived agent processes do not prove active work.
+The optional `--check-external-processes` flag enables that broader
+read-only diagnostic explicitly when desired.
 Any inaccessible service, absent job metadata, failed process enumeration,
 unexpected OS or ambiguous owner is a blocker, not a success.
 
