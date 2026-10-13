@@ -408,7 +408,7 @@ def test_simulated_bootstrap_error_stays_outside_source_files(
     assert guardian._read_verified(path)["state"] == "armed"
 
 
-def test_already_loaded_old_generation_is_not_accepted(
+def test_already_loaded_original_generation_is_disarmed_without_restart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _root(tmp_path)
@@ -421,8 +421,11 @@ def test_already_loaded_old_generation_is_not_accepted(
     monkeypatch.setattr(guardian, "_policy", lambda r, b: (TARGET, PLIST))
     monkeypatch.setattr(guardian, "_loaded", lambda target: True)
     monkeypatch.setattr(guardian, "_running_pid", lambda target: 123)
-    with pytest.raises(ArchiveFinalizeRefused, match="reused"):
-        guardian.supervise(path, max_wait_s=0.5)
+    assert guardian.supervise(path, max_wait_s=0.5) == "disarmed"
+    final = guardian._read_verified(path)
+    assert final["state"] == "disarmed"
+    assert final["outcome"] == "producer-never-stopped"
+    assert final["restored_pid"] == 123
 
 
 def test_invalid_guardian_lease_file_refuses_without_bootout(

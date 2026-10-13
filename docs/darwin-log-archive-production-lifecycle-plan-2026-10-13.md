@@ -48,6 +48,10 @@ one raw archive, its producer and accept one bounded service outage.
   the supervisor; recovery must also work when the controller is
   SIGKILLed after bootout, or when canonical archive is published and
   raw source still exists.
+- If the controller exits before bootout, the guardian must observe the
+  same running producer generation, durably disarm without rebootstrapping,
+  and leave the original rotated log inode untouched. A new active
+  filename must not be fabricated merely to make the test appear healthy.
 - If guardian readiness cannot be independently verified before
   bootout, production hold is refused without touching producer.
 

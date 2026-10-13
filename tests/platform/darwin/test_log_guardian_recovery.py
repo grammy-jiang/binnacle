@@ -85,9 +85,11 @@ def _guardian_plist(tmp_path: Path, *, state: Path) -> tuple[str, Path]:
 
 @NATIVE
 @pytest.mark.parametrize("restart_guardian", [False, True])
+@pytest.mark.parametrize("abort_before_bootout", [False, True])
 def test_independent_guardian_recovers_after_controller_sigkill(
     tmp_path: Path,
     restart_guardian: bool,
+    abort_before_bootout: bool,
 ) -> None:
     root, active, label, plist = _fixture(tmp_path)
     target = f"system/{label}"
@@ -126,6 +128,7 @@ def test_independent_guardian_recovers_after_controller_sigkill(
         controller_script = (
             "import fcntl,os,pathlib,subprocess,sys,time;"
             "lk,held,ready,stopped,target=map(pathlib.Path,sys.argv[1:6]);"
+            "abort=sys.argv[6]=='1';"
             "fd=os.open(lk,os.O_RDWR);fcntl.flock(fd,fcntl.LOCK_EX);"
             "held.write_text('locked');"
             "deadline=time.time()+12;"
@@ -133,9 +136,9 @@ def test_independent_guardian_recovers_after_controller_sigkill(
             '  assert time.time()<deadline, "guardian not ready"\\n'
             "  time.sleep(.05)');"
             "p=subprocess.run(['/usr/bin/sudo','-n','/bin/launchctl',"
-            "'bootout',str(target)],capture_output=True);"
-            "assert p.returncode==0,p.stderr;"
-            "stopped.write_text('bootedout');"
+            "'bootout',str(target)],capture_output=True) if not abort else None;"
+            "assert p is None or p.returncode==0,(p.stderr if p else '');"
+            "stopped.write_text('aborted' if abort else 'bootedout');"
             "time.sleep(60)"
         )
         ready = guard_root / ("ready-" + nonce)
@@ -150,6 +153,7 @@ def test_independent_guardian_recovers_after_controller_sigkill(
                 str(ready),
                 str(stopped),
                 target,
+                "1" if abort_before_bootout else "0",
             ],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
@@ -159,8 +163,13 @@ def test_independent_guardian_recovers_after_controller_sigkill(
         guardlabel, guardplist = _guardian_plist(tmp_path, state=state)
         assert _launchctl("bootstrap", "system", str(guardplist)).returncode == 0
         assert _until(ready.exists, 9), "independent launchd guardian not ready"
-        assert _until(stopped.exists, 9), "controller did not stop test writer"
-        assert _launchctl("print", target).returncode == 113
+        assert _until(stopped.exists, 9), "controller did not reach fixture checkpoint"
+        if abort_before_bootout:
+            assert stopped.read_text() == "aborted"
+            assert _running_pid(target) == old
+        else:
+            assert stopped.read_text() == "bootedout"
+            assert _launchctl("print", target).returncode == 113
 
         if restart_guardian:
             old_guardian_pid = _running_pid(f"system/{guardlabel}")
@@ -178,20 +187,36 @@ def test_independent_guardian_recovers_after_controller_sigkill(
                 new_guardian_generation,
                 10,
             ), "isolated guardian did not restart after SIGKILL"
-            assert _launchctl("print", target).returncode == 113
+            if abort_before_bootout:
+                assert _running_pid(target) == old
+            else:
+                assert _launchctl("print", target).returncode == 113
 
         controller.kill()  # Only the test-owned controller subprocess.
         controller.wait(timeout=5)
         controller = None
+        desired_state = "disarmed" if abort_before_bootout else "recovered"
         assert _until(
-            lambda: json.loads(state.read_text()).get("state") == "recovered", 12
-        ), "guardian failed to restore test service"
+            lambda: json.loads(state.read_text()).get("state") == desired_state,
+            12,
+        ), "guardian failed to preserve or restore test service"
         result = json.loads(state.read_text())
-        assert result["outcome"] == "bootstrapped"
-        assert result["restored_pid"] != old
+        assert result["outcome"] == (
+            "producer-never-stopped" if abort_before_bootout else "bootstrapped"
+        )
+        if abort_before_bootout:
+            assert result["restored_pid"] == old
+        else:
+            assert result["restored_pid"] != old
         assert _running_pid(target) == result["restored_pid"]
         assert raw.read_bytes() == original
-        assert _until(lambda: active.exists() and active.stat().st_size > 0)
+        if abort_before_bootout:
+            # The original writer never reopened the new pathname after the
+            # GN-style rename, so the rotated inode is still its active log.
+            assert not active.exists()
+            assert _running_pid(target) == old
+        else:
+            assert _until(lambda: active.exists() and active.stat().st_size > 0)
     finally:
         if controller is not None and controller.poll() is None:
             controller.kill()

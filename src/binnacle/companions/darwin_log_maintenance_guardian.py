@@ -221,7 +221,14 @@ def supervise(path: Path, *, max_wait_s: float = 20.0) -> str:
             if _loaded(target):
                 now = _running_pid(target)
                 if now == current["previous_pid"]:
-                    raise ArchiveFinalizeRefused("restoration reused original PID")
+                    # The test controller exited before bootout. No producer
+                    # interruption occurred, so finish with an explicit
+                    # durable no-op rather than a crash-looping guardian.
+                    current["state"] = "disarmed"
+                    current["outcome"] = "producer-never-stopped"
+                    current["restored_pid"] = now
+                    _write_record(path, current)
+                    return "disarmed"
                 outcome = "already-running"
             else:
                 response = _run(
