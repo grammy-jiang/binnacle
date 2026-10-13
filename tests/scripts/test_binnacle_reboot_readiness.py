@@ -220,7 +220,7 @@ def test_reboot_admission_fails_closed(monkeypatch, activity, dev_processes, blo
     monkeypatch.setattr(probe, "_mac_boot_checks", lambda: {"mcp": True})
     monkeypatch.setattr(probe, "_job_activity", lambda host: activity)
     monkeypatch.setattr(probe, "_developer_processes", lambda: dev_processes)
-    got = probe.inspect(system="Darwin")
+    got = probe.inspect(system="Darwin", check_external_processes=True)
     assert got.boot_ready is True
     assert got.blocker_reasons == blockers
     assert got.reboot_now_candidate is (not blockers)
@@ -244,7 +244,9 @@ def test_main_prints_json_and_exits_blocked(monkeypatch, capsys):
     monkeypatch.setattr(
         probe,
         "inspect",
-        lambda: probe.Readiness("darwin", {"mcp": True}, ("jobs_still_active",)),
+        lambda **kwargs: probe.Readiness(
+            "darwin", {"mcp": True}, ("jobs_still_active",)
+        ),
     )
     assert probe.main(["--json"]) == 2
     report = json.loads(capsys.readouterr().out)
@@ -256,9 +258,48 @@ def test_main_prints_json_and_exits_blocked(monkeypatch, capsys):
 
 def test_main_readable_and_can_return_candidate(monkeypatch, capsys):
     monkeypatch.setattr(
-        probe, "inspect", lambda: probe.Readiness("linux", {"boot": True}, ())
+        probe, "inspect", lambda **kwargs: probe.Readiness("linux", {"boot": True}, ())
     )
     assert probe.main([]) == 0
     result = capsys.readouterr().out
     assert "boot_ready=True" in result
     assert "not a command to reboot" in result
+
+
+def test_ignore_local_agents_by_default_even_when_many_exist(monkeypatch):
+    monkeypatch.setattr(probe, "_mac_boot_checks", lambda: {"mcp": True})
+    monkeypatch.setattr(probe, "_job_activity", lambda host: 0)
+    checked = []
+    monkeypatch.setattr(
+        probe,
+        "_developer_processes",
+        lambda: checked.append("consulted") or 47,
+    )
+    result = probe.inspect(system="Darwin")
+    assert result.reboot_now_candidate
+    assert result.blocker_reasons == ()
+    assert checked == []
+
+
+def test_unknown_jobs_still_block_when_external_agent_check_disabled(monkeypatch):
+    monkeypatch.setattr(probe, "_linux_boot_checks", lambda: {"boot": True})
+    monkeypatch.setattr(probe, "_job_activity", lambda host: None)
+    monkeypatch.setattr(
+        probe,
+        "_developer_processes",
+        lambda: (_ for _ in ()).throw(AssertionError("must not scan agents")),
+    )
+    result = probe.inspect(system="Linux")
+    assert result.blocker_reasons == ("job_activity_unknown",)
+
+
+def test_cli_opt_in_external_processes_switch(monkeypatch, capsys):
+    seen = []
+    monkeypatch.setattr(
+        probe,
+        "inspect",
+        lambda **kw: seen.append(kw) or probe.Readiness("darwin", {"boot": True}, ()),
+    )
+    assert probe.main(["--check-external-processes", "--json"]) == 0
+    assert seen == [{"check_external_processes": True}]
+    assert "boot_ready" in capsys.readouterr().out

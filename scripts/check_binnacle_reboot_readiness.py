@@ -25,6 +25,8 @@ from pathlib import Path
 _MAC_SERVICES = ("mcp", "jobs", "tunnel", "service-watchdog", "resource-monitor")
 _LINUX_CORE = ("mcp", "jobs", "tunnel", "resource-monitor")
 _DEV_AGENTS = frozenset(("claude", "codex", "pytest", "claude-code"))
+# Local coding agents are not Binnacle-owned jobs. External inspection is
+# available as opt-in diagnostics only; it must not silently veto a check.
 
 
 @dataclass(frozen=True)
@@ -146,7 +148,9 @@ def _job_activity(host: str) -> int | None:
         return None
 
 
-def inspect(*, system: str | None = None) -> Readiness:
+def inspect(
+    *, system: str | None = None, check_external_processes: bool = False
+) -> Readiness:
     platform_name = platform.system() if system is None else system
     if platform_name not in {"Darwin", "Linux"}:
         return Readiness(platform_name, {"supported_host": False}, ("unknown_host",))
@@ -158,19 +162,28 @@ def inspect(*, system: str | None = None) -> Readiness:
         blockers.append("job_activity_unknown")
     elif activity > 0:
         blockers.append("jobs_still_active")
-    agents = _developer_processes()
-    if agents is None:
-        blockers.append("developer_process_scan_unavailable")
-    elif agents > 0:
-        blockers.append("other_development_processes_running")
+    # Binnacle job activity remains authoritative; local Claude/Codex
+    # processes may be long-lived, idle development agents unrelated to
+    # this service. Their presence must not block normal admission.
+    if check_external_processes:
+        agents = _developer_processes()
+        if agents is None:
+            blockers.append("developer_process_scan_unavailable")
+        elif agents > 0:
+            blockers.append("other_development_processes_running")
     return Readiness(host, checks, tuple(blockers))
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="machine-readable summary")
+    parser.add_argument(
+        "--check-external-processes",
+        action="store_true",
+        help="opt in to checking unrelated local development agents",
+    )
     args = parser.parse_args(argv)
-    status = inspect()
+    status = inspect(check_external_processes=args.check_external_processes)
     if args.json:
         print(json.dumps(status.report(), sort_keys=True))
     else:

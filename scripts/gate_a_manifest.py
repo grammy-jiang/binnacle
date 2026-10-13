@@ -226,6 +226,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "companions/tunnel/tunnel_unit.py",
         },
         "watchdog": {
+            "companions/darwin_log_archive_stage.py",
             "companions/darwin_log_privacy.py",
             "companions/resource_monitor_darwin.py",
             "companions/service_watchdog.py",
