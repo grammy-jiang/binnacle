@@ -77,3 +77,25 @@ validate launchd current writer generations and writable FDs, and
 prove clean restart/readiness after compressed verification. The
 fixture rehearsal is not sufficient to run production log pruning.
 Issue #30 therefore remains OPEN and production cleanup DISABLED.
+
+## Native authenticated IPC admission receipt acceptance
+
+A separate set of Mac native tests now exercises the already reviewed A3
+authenticated UNIX socket protocol, against a wholly synthetic Jobs Manager.
+The socket, private runtime directory, HMAC credentials, generation lease
+and fake manager record storage are all temporary test-owned files. No test
+uses the installed Binnacle jobs.sock endpoint or a real launchd label.
+
+These tests prove an authenticated Manager ping can transport the
+transaction-coherent pause ACK (owner instance ID, PID, paused nonce and
+zero active/unknown Jobs) over the *real protocol*. A separately spawned
+Python client with the same cooperative UID obtains the same bound proof.
+The client cannot start a Job through a paused Manager, including when
+the private pause record is malformed. An unrecognized maintenance
+unpause operation is refused without changing the request or resuming
+admission.
+
+This remains a **read-only external receipt test**, not authorization
+to let arbitrary same-UID callers start a live maintenance transaction.
+A separately owned control socket, peer authorization, lease and
+crash-durable restoration remain outside this fixture.
