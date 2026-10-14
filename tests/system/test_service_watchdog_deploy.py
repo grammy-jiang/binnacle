@@ -84,3 +84,45 @@ def test_linux_watchdog_can_pin_private_source_without_touching_live_checkout():
     assert "Wants=" not in text
     with pytest.raises(ValueError):
         linux_user_unit(Path("/usr/bin/python3"), module_root=Path("relative/src"))
+
+
+def test_mac_watchdog_optional_maintenance_fence_is_explicit_and_default_off():
+    basic = plistlib.loads(
+        mac_system_plist(
+            python=Path("/usr/bin/python3"),
+            home=Path("/Users/me"),
+            username="me",
+        )
+    )
+    assert "--maintenance-pause-dir" not in basic["ProgramArguments"]
+    enabled = plistlib.loads(
+        mac_system_plist(
+            python=Path("/usr/bin/python3"),
+            home=Path("/Users/me"),
+            username="me",
+            maintenance_pause_dir=Path(
+                "/Users/me/.local/state/binnacle/maintenance-pause"
+            ),
+        )
+    )
+    args = enabled["ProgramArguments"]
+    assert args[-2:] == [
+        "--maintenance-pause-dir",
+        "/Users/me/.local/state/binnacle/maintenance-pause",
+    ]
+    assert enabled["UserName"] == basic["UserName"]
+    assert enabled["KeepAlive"] == basic["KeepAlive"]
+    with pytest.raises(ValueError, match="absolute"):
+        mac_system_plist(
+            python=Path("/usr/bin/python3"),
+            home=Path("/Users/me"),
+            username="me",
+            maintenance_pause_dir=Path("../unsafe"),
+        )
+    with pytest.raises(ValueError, match="absolute"):
+        mac_system_plist(
+            python=Path("/usr/bin/python3"),
+            home=Path("/Users/me"),
+            username="me",
+            maintenance_pause_dir=Path("/tmp/unsafe path"),
+        )

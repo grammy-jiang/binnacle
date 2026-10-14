@@ -27,6 +27,7 @@ class _Jobs(BaseModel):
         default_factory=lambda: Path.home() / ".local" / "state" / "binnacle" / "jobs"
     )
     keep_newest: int = Field(50, ge=1)
+    maintenance_fence_dir: Path | None = None
 
 
 class _RunCommand(BaseModel):

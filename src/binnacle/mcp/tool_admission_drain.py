@@ -22,6 +22,8 @@ from typing import Any
 from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 
+from binnacle.platform.contracts.maintenance_contracts import DrainSnapshot
+
 _NONCE = re.compile(r"^[0-9a-f]{32}$")
 
 
@@ -39,19 +41,6 @@ class AdmissionTicket:
 
     generation: str
     sequence: int
-
-
-@dataclass(frozen=True)
-class DrainSnapshot:
-    generation: str
-    pause_nonce: str | None
-    in_flight: int
-    drained: bool
-    shutdown_authorized: bool = False
-
-    def __post_init__(self) -> None:
-        if self.shutdown_authorized:
-            raise ValueError("in-memory drain never authorizes producer stop")
 
 
 class ToolAdmissionDrain:

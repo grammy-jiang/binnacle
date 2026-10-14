@@ -91,6 +91,7 @@ from binnacle.features.commands.run_command_telemetry import (
 )
 from binnacle.features.files.files_server import create_files_server
 from binnacle.features.search.search_server import create_search_server
+from binnacle.mcp.tool_admission_drain import ToolAdmissionDrain
 from binnacle.provenance import runtime_provenance
 
 TOKEN_FILE = get_settings().auth.token_file
@@ -257,20 +258,37 @@ def _load_token() -> str:
     return token
 
 
-def create_server() -> FastMCP:
+def create_server(*, admission_gate: ToolAdmissionDrain | None = None) -> FastMCP:
     """Maintain the Linux production factory contract and its token bootstrap."""
     from binnacle.application import compose_native_tools, create_application
     from binnacle.features.commands.command_backend import create_command_backend
-    from binnacle.platform.composition import host_os_family
+    from binnacle.platform.composition import (
+        create_native_mcp_maintenance_sidecar,
+        host_os_family,
+    )
 
+    settings = get_settings()
+    control = None
+    gate = admission_gate
+    if settings.mcp_maintenance.enabled:
+        if host_os_family() != "darwin" or admission_gate is not None:
+            raise RuntimeError("MCP maintenance control requires native Darwin")
+        gate = ToolAdmissionDrain()
+        if settings.mcp_maintenance.control_root is None:
+            raise RuntimeError("MCP maintenance control root missing")
+        control = create_native_mcp_maintenance_sidecar(
+            settings.mcp_maintenance.control_root, gate
+        )
     file_access = None
     if host_os_family() == "darwin":
-        file_access, backend = compose_native_tools(settings=get_settings())
+        file_access, backend = compose_native_tools(settings=settings)
     else:
         backend = create_command_backend()
     return create_application(
+        admission_gate=gate,
+        maintenance_runtime=control,
         file_access=file_access,
-        settings=get_settings(),
+        settings=settings,
         token=_load_token(),
         backend=backend,
         files_factory=create_files_server,

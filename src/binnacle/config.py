@@ -39,6 +39,7 @@ from pydantic_settings import (
 )
 
 from binnacle.auto_background_shell import shell_policy_code
+from binnacle.config_maintenance import MCPMaintenanceSettings
 
 CONFIG_FILE_ENV = "BINNACLE_CONFIG_FILE"
 DEFAULT_CONFIG_FILE = Path.home() / ".config" / "binnacle" / "config.toml"
@@ -353,6 +354,7 @@ class JobsSettings(BaseModel):
         ge=1,
         description="Base job-directory retention window; older running jobs are spared.",
     )
+    maintenance_fence_dir: Path | None = None
     listing_history_limit: int = Field(
         20, ge=0, description="Non-running jobs returned by a no-id job_status listing."
     )
@@ -410,6 +412,9 @@ class Settings(BaseSettings):
     edit_file: EditFileSettings = Field(default_factory=EditFileSettings)
     run_command: RunCommandSettings = Field(default_factory=RunCommandSettings)
     jobs: JobsSettings = Field(default_factory=JobsSettings)
+    mcp_maintenance: MCPMaintenanceSettings = Field(
+        default_factory=MCPMaintenanceSettings
+    )
     rg_bin: str = Field("rg", description="ripgrep binary for list/search.")
     client_tools: dict[str, tuple[str, ...]] = Field(
         default={
