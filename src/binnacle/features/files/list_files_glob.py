@@ -65,8 +65,9 @@ def glob_entries(root: Path, lines: list[str]) -> list[dict]:
     shortage that survives DirectoryChain's one retry is the
     too_many_open_files refusal, as in search_text (SRC-W2-04). A file that
     vanished after the listing (ENOENT) or cannot be stat-ed (EACCES, EPERM)
-    is omitted, as the Darwin walk omits it (PF-SP1-2). Any other failure
-    keeps the entry without bytes, as r6 did when p.stat() failed.
+    is omitted, as the Darwin walk omits it (PF-SP1-2). Other failures
+    refuse explicitly: an I/O fault cannot be represented as a healthy
+    unmeasured file.
     """
     entries: list[dict] = []
     # Plain string splitting: PurePath costs more than the walk itself. The
@@ -86,10 +87,16 @@ def glob_entries(root: Path, lines: list[str]) -> list[dict]:
                     raise descriptor_shortage(
                         "check the listed files", "Retry, or narrow the glob."
                     ) from exc
+                if isinstance(
+                    exc, (FileNotFoundError, NotADirectoryError, PermissionError)
+                ):
+                    continue
                 if exc.errno in OMITTED:
                     continue
-                entries.append(entry)
-                continue
+                raise CodedToolError(
+                    "file_io_failed",
+                    f"Cannot list {root}: {exc.strerror or exc}.",
+                ) from exc
             if not stat.S_ISREG(info.st_mode):
                 continue
             entry["bytes"] = info.st_size
