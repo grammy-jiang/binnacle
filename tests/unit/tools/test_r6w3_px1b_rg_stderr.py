@@ -104,6 +104,38 @@ def code_of(call) -> str | None:
     return getattr(exc.value, "telemetry_code", None)
 
 
+def assert_no_non_utf8_name_leak(result, *names: bytes) -> None:
+    """Inspect raw structured strings BEFORE JSON adds another escaping layer."""
+    payload = result.structured_content
+    json.dumps(payload, ensure_ascii=False).encode("utf-8", errors="strict")
+
+    def strings(value):
+        if isinstance(value, str):
+            yield value
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                yield from strings(key)
+                yield from strings(item)
+        elif isinstance(value, (tuple, list)):
+            for item in value:
+                yield from strings(item)
+
+    for value in (*strings(payload), *(block.text for block in result.content)):
+        value.encode("utf-8", errors="strict")
+        # Catch literal backslashes (including repeated JSON-escaped forms).
+        normalized = value
+        while "\\\\" in normalized:
+            normalized = normalized.replace("\\\\", "\\")
+        for raw in names:
+            name = os.fsdecode(raw)
+            for form in (
+                name,
+                name.encode("unicode_escape").decode("ascii"),
+                rg_env.shown(name),
+            ):
+                assert form not in normalized
+
+
 # R-PX1-1: the whole stderr decides, for glob and both search runners.
 
 
@@ -255,7 +287,7 @@ def test_multiple_non_utf8_glob_names_are_counted_without_disclosure(tmp_path, r
         "they cannot be represented in the result."
     )
     assert payload["note"] in result.content[0].text
-    assert "bad" not in payload["note"] and "other" not in payload["note"]
+    assert_no_non_utf8_name_leak(result, BAD, b"other\xfe")
 
 
 def test_non_utf8_glob_note_coexists_with_denied_path_note(tmp_path, root):
@@ -288,15 +320,7 @@ def test_glob_non_utf8_only_retains_empty_note_without_leaking_name(tmp_path, ro
         "Skipped 1 non-UTF-8 filename from the recursive listing; "
         "it cannot be represented in the result."
     )
-    # Proof must cover all outgoing JSON and all text blocks, not the
-    # directionally useless comparison of the note against repr(BAD).
-    serialized = json.dumps(payload, ensure_ascii=False)
-    serialized.encode("utf-8", errors="strict")
-    messages = [serialized, *(block.text for block in result.content)]
-    for message in messages:
-        assert os.fsdecode(BAD) not in message
-        assert r"bad\xff" not in message
-        assert r"bad\udcff" not in message
+    assert_no_non_utf8_name_leak(result, BAD)
 
 
 def test_non_utf8_glob_note_keeps_existing_truncation_note(tmp_path, root):
@@ -354,14 +378,27 @@ def test_truncated_permission_and_two_non_utf8_notes_compose_once(tmp_path, root
         "they cannot be represented in the result."
     )
     permission = "Skipped 1 unreadable path (permission denied)"
-    assert payload["note"].startswith("Showing first 1 of 3 matches;")
+    assert payload["note"].count("Showing first 1 of 3 matches;") == 1
+    assert result.content[0].text.count("showing newest 1.") == 1
     for text in (payload["note"], result.content[0].text):
         assert text.count(omission) == 1
         assert text.count(permission) == 1
-    serialized = json.dumps(payload, ensure_ascii=False)
-    serialized.encode("utf-8", errors="strict")
-    assert os.fsdecode(BAD) not in serialized
-    assert r"bad\xff" not in serialized
+    assert_no_non_utf8_name_leak(result, BAD, b"other\xfe")
+
+
+@pytest.mark.parametrize(
+    "escaped",
+    [r"bad\xff", r"bad\\xff", r"bad\udcff", r"bad\\udcff"],
+)
+def test_omission_leakage_check_catches_nested_escape_forms(escaped):
+    from fastmcp.tools.base import ToolResult
+
+    result = ToolResult(
+        content="safe",
+        structured_content={"entries": [{"path": escaped}], "note": "safe"},
+    )
+    with pytest.raises(AssertionError):
+        assert_no_non_utf8_name_leak(result, BAD)
 
 
 def test_valid_utf8_glob_does_not_claim_omissions(tmp_path, root):
