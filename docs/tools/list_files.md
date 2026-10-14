@@ -76,9 +76,11 @@ OpenAI's tool-design guidance, design doc §5.2.)
 **Non-UTF-8 names in recursive glob (PX1B-F4):** Ripgrep's output is
 decoded with surrogateescape, but a raw non-UTF-8 filename cannot be
 represented in UTF-8 JSON. Such names remain omitted; a counted, generic
-note now reports how many filenames were skipped without disclosing their
-raw bytes or names. This note coexists with permission-denied and truncation
-notes and does not alter valid-name ordering or returned entry counts.
+note now reports how many raw ripgrep listing rows were skipped **before**
+glob-pattern matching (including invalid names that would not match), without
+disclosing their raw bytes or names. This note coexists with permission-denied
+and truncation notes and does not alter valid-name ordering or returned entry
+counts.
 
 **Special entries in a listing (r6 W3 PX1)**: list mode omits a FIFO, socket or device on both OSes (Linux typed one as a `file` of 0 bytes; Darwin already omitted it), as glob mode does (SRC-W2-12). The cross-OS fixture `tests/contracts/test_r6w3_px1_xos.py` pins every list/glob/read/search case byte for byte on both OSes, except Darwin's TCC code.
 

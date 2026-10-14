@@ -18,6 +18,7 @@ so every case runs on both OSes; none is skipped. A real non-UTF-8 name
 cannot exist on APFS: the Pi runs the real-name probe (PX1B-REPORT.json).
 """
 
+import json
 import os
 import stat
 from pathlib import Path
@@ -238,7 +239,9 @@ def test_a_non_utf8_name_from_glob_is_omitted_not_a_crash(tmp_path, root, monkey
 def test_multiple_non_utf8_glob_names_are_counted_without_disclosure(tmp_path, root):
     rg = fake_rg(
         tmp_path,
-        stdout=BAD + b".txt\nother\xfe.txt\nm.txt\n",
+        # The second invalid name does not match *.txt, but still belongs
+        # to the raw recursive listing and must count toward omission.
+        stdout=BAD + b".txt\nother\xfe.md\nm.txt\n",
         stderr=b"",
         code=0,
     )
@@ -285,7 +288,15 @@ def test_glob_non_utf8_only_retains_empty_note_without_leaking_name(tmp_path, ro
         "Skipped 1 non-UTF-8 filename from the recursive listing; "
         "it cannot be represented in the result."
     )
-    assert payload["note"] not in repr(BAD)
+    # Proof must cover all outgoing JSON and all text blocks, not the
+    # directionally useless comparison of the note against repr(BAD).
+    serialized = json.dumps(payload, ensure_ascii=False)
+    serialized.encode("utf-8", errors="strict")
+    messages = [serialized, *(block.text for block in result.content)]
+    for message in messages:
+        assert os.fsdecode(BAD) not in message
+        assert r"bad\xff" not in message
+        assert r"bad\udcff" not in message
 
 
 def test_non_utf8_glob_note_keeps_existing_truncation_note(tmp_path, root):
@@ -315,6 +326,42 @@ def test_non_utf8_glob_note_keeps_existing_truncation_note(tmp_path, root):
         "Skipped 1 non-UTF-8 filename from the recursive listing; "
         "it cannot be represented in the result."
     )
+
+
+def test_truncated_permission_and_two_non_utf8_notes_compose_once(tmp_path, root):
+    (root / "n.txt").write_text("n")
+    (root / "o.txt").write_text("o")
+    rg = fake_rg(
+        tmp_path,
+        stdout=BAD + b".txt\nother\xfe.md\nm.txt\nn.txt\no.txt\n",
+        stderr=denied_lines(1),
+        code=2,
+    )
+    result = lf.list_files_impl(
+        str(root),
+        "*.txt",
+        1,
+        False,
+        roots=RootsSettings(default_root=root, extra_roots=()),
+        settings=ListFilesSettings(),
+        rg_bin=str(rg),
+    )
+    payload = result.structured_content
+    assert payload["truncated"] is True
+    assert payload["count"] == len(payload["entries"]) == 1
+    omission = (
+        "Skipped 2 non-UTF-8 filenames from the recursive listing; "
+        "they cannot be represented in the result."
+    )
+    permission = "Skipped 1 unreadable path (permission denied)"
+    assert payload["note"].startswith("Showing first 1 of 3 matches;")
+    for text in (payload["note"], result.content[0].text):
+        assert text.count(omission) == 1
+        assert text.count(permission) == 1
+    serialized = json.dumps(payload, ensure_ascii=False)
+    serialized.encode("utf-8", errors="strict")
+    assert os.fsdecode(BAD) not in serialized
+    assert r"bad\xff" not in serialized
 
 
 def test_valid_utf8_glob_does_not_claim_omissions(tmp_path, root):
