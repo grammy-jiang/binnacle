@@ -43,6 +43,8 @@ from binnacle.mcp.logging_middleware import (
     RequestLoggingMiddleware,
     ToolLoggingMiddleware,
 )
+from binnacle.mcp.maintenance_request_admission import FullRequestAdmissionMiddleware
+from binnacle.mcp.tool_admission_drain import ToolAdmissionDrain
 from binnacle.mcp.tool_order import PublicToolOrder
 from binnacle.mcp.visibility import ClientToolVisibility, ClientToolVisibilityTransform
 from binnacle.observability.log_safety import safe_request_payload
@@ -60,6 +62,7 @@ from binnacle.platform.contracts.darwin_release_scope import (
     release_scope_for_owner,
     resolve_darwin_job_owner,
 )
+from binnacle.platform.contracts.maintenance_contracts import MaintenanceSidecar
 from binnacle.platform.contracts.process_contracts import JobOwnerKind
 
 _COMMAND_TOOLS = ("run_command", "job_status", "stop_job")
@@ -161,9 +164,6 @@ _DARWIN_MANAGER_INSTRUCTIONS = (
 
 
 def _server_instructions(owner: JobOwnerKind | None = None) -> str:
-    # A tool map only. Workflow rules live in the ChatGPT Project's
-    # instructions; tool contracts live in the tool descriptions. First 512
-    # chars self-contained (OpenAI guidance).
     if platform.system() != "Darwin":
         return _LINUX_INSTRUCTIONS
     return _DARWIN_MANAGER_INSTRUCTIONS if owner == "manager" else _DARWIN_INSTRUCTIONS
@@ -178,6 +178,8 @@ def create_application(
     files_factory: Callable[..., FastMCP] = create_files_server,
     search_factory: Callable[..., FastMCP] = create_search_server,
     commands_factory: Callable[..., FastMCP] = create_commands_server,
+    admission_gate: ToolAdmissionDrain | None = None,
+    maintenance_runtime: MaintenanceSidecar | None = None,
 ) -> FastMCP:
     """Build a pure native FastMCP tree from supplied application dependencies."""
     if isinstance(backend, RestrictedCommandBackend):
@@ -195,18 +197,20 @@ def create_application(
 
         validate_native_command_states(backend.release_states, owner="manager")
     settings = settings.model_copy(deep=True)
-    # Root authorization is fixed for this app generation. A mutable symlink
-    # alias cannot silently grant new directories to an already running server.
     _ = settings.roots.canonical_allowed
 
     @asynccontextmanager
     async def lifespan(server):
-        # Each lifespan is an application generation: grants open on the first
-        # entry and close on the last exit; the next entry reopens them.
         if file_access is not None:
             file_access.enter()
         try:
-            yield {}
+            if maintenance_runtime is not None:
+                maintenance_runtime.start()
+            try:
+                yield {}
+            finally:
+                if maintenance_runtime is not None:
+                    maintenance_runtime.stop()
         finally:
             if file_access is not None:
                 file_access.exit()
@@ -245,6 +249,9 @@ def create_application(
         )
     )
     root.add_middleware(ClientToolVisibility(settings.client_tools, identity))
+    # Explicitly injected per-generation gate; installed default is None.
+    if admission_gate is not None:
+        root.add_middleware(FullRequestAdmissionMiddleware(admission_gate))
     root.add_transform(PublicToolOrder())
     root.add_transform(ClientToolVisibilityTransform())
     root.mount(
