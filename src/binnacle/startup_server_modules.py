@@ -203,6 +203,7 @@ _SERVER_EXTRA_DARWIN = (
     "binnacle.platform.darwin.job_process_owner",
     "binnacle.platform.darwin.log_cursor",
     "binnacle.platform.darwin.log_maintenance_fd_evidence",
+    "binnacle.platform.darwin.log_maintenance_installed_identity",
     "binnacle.platform.darwin.log_maintenance_observer",
     "binnacle.platform.darwin.log_maintenance_recovery_policy",
     "binnacle.platform.darwin.log_maintenance_recovery_rpc",

@@ -142,9 +142,10 @@ def edit_file_impl(
     else:
         resolved = resolve_path(path, roots=roots)
         if not resolved.exists():
-            raise ToolError(
+            raise CodedToolError(
+                "file_not_found",
                 f"File not found: {resolved}.{nearby_hint(resolved.parent, roots=roots)} "
-                f"To create a new file, use write_file."
+                f"To create a new file, use write_file.",
             )
         if resolved.is_dir():
             raise CodedToolError(
@@ -171,8 +172,9 @@ def edit_file_impl(
                     ).canonical_allowed,
                 )
             except OSError as exc:
-                raise ToolError(
-                    f"Could not read {resolved}: {exc.strerror or exc}."
+                raise CodedToolError(
+                    "file_io_failed",
+                    f"Could not read {resolved}: {exc.strerror or exc}.",
                 ) from exc
         else:
             original = resolved.read_bytes()
@@ -255,7 +257,9 @@ def edit_file_impl(
                     expected_sha256=hashlib.sha256(original).hexdigest(),
                 )
     except OSError as e:
-        raise ToolError(f"Could not write {resolved}: {e.strerror or e}.") from e
+        raise CodedToolError(
+            "write_failed", f"Could not write {resolved}: {e.strerror or e}."
+        ) from e
 
     snippet, snippet_first_line = _snippet_around(
         new_text, first_change_line, context_lines=settings.snippet_context_lines
