@@ -81,6 +81,7 @@ platform/darwin/test_durable_jobs_launchd_restart.py | A3: per-test Darwin nativ
 platform/darwin/test_log_guardian_recovery.py | B0: per-test isolated Mac system launchd guardian bootstrap and SIGKILL recovery; all guardian policy tests run on Linux
 platform/darwin/test_log_quiescence_authenticated_ipc.py | B0: per-test real Mac HMAC authenticated Unix socket with an isolated fake Jobs Manager; policy and provider identity tests remain available on Linux
 platform/darwin/test_log_writer_hold.py | B0: per-test native Mac launchd system-domain writer quiescence fixture for Issue #30; policy and descriptor parsing tests run on Linux
+platform/darwin/test_log_maintenance_fd_evidence_live.py | B0: Linux-only /usr/bin/lsof and SO/Linux proc FD live positive-control fixtures; Darwin lsof requires separate native, non-destructive acceptance
 platform/darwin/test_j1g_leader_fence.py | A2: per-test Darwin waitid(WNOWAIT)/KERN_PROC_PGRP leader-exit fence, stopping event and killpg guard (R4 J1g, SD-43); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
 platform/darwin/test_j1g_e2e_survival.py | B0: per-test Darwin real com.binnacle.jobs background-member survival E2E (R4 J1g, SD-43 JCRP-F1); SD-97 manager requires os.waitid (Darwin CPython >=3.13)
 platform/darwin/test_job_manager_resilience.py | A3: per-test Darwin libproc verified-teardown negative test (R4 J2t, RULE-NO-PKILL); the rest of the module runs everywhere
@@ -158,6 +159,7 @@ PLATFORM_SITE_COUNTS = {
     "tests/platform/darwin/test_log_guardian_recovery.py": 1,
     "tests/platform/darwin/test_log_quiescence_authenticated_ipc.py": 1,
     "tests/platform/darwin/test_log_writer_hold.py": 1,
+    "tests/platform/darwin/test_log_maintenance_fd_evidence_live.py": 1,
     "tests/platform/darwin/test_j1g_leader_fence.py": 1,
     "tests/platform/darwin/test_j1g_e2e_survival.py": 1,
     "tests/platform/darwin/test_job_manager_resilience.py": 1,
