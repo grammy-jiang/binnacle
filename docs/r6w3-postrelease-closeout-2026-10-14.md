@@ -13,7 +13,7 @@
 ## 核心里程碑（核销）
 
 | ID | 状态 | 对账证据 |
-|---|---|---|
+| --- | --- | --- |
 | R6-CORE | CLOSED | 原 24-lane 的 Mac 原生 Files/Search/Jobs/IPC、独立审核和 CI 已集成；PR #24–#28。 |
 | R6-D0 | CLOSED | Mac 047dc2f 受控发布回执 DEPLOYED、33/33 gate、0 中断，Doctor 24/24、Chat 实际调用。 |
 | SEC-FU-14 | CLOSED | Linux FD-relative 写入安全 PR #31 + fsync/parent 顺序 PR #33；复审与 CI 成功。 |
@@ -31,7 +31,7 @@
 ## 逐项清空的工程待办（完成一项即更新）
 
 | ID | 状态 | 独占源代码/执行位置 | 验收条件及证据 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | PX1B-F4-SEARCH | REVIEW | features/search reducer、materialized collector、输出包装；Mac 独立克隆 + Pi QA | 非 UTF-8 `rg --json` 文件名被静默省略时给出安全的计数提示；materialized/streaming、names-only、截断、permission、adaptive、glob；无路径/转义泄露。 |
 | PX1B-F3 | OPEN | Linux legacy edit_file/write_file 精确拒绝代码 | Linux/Darwin 公共拒绝有一致 `telemetry_code`、无文字破坏；限定被触及的错误。 |
 | FDW-6 | OPEN | Darwin file_traversal 的 held-parent errno/classification | ELOOP 与 ENOTDIR 按 held parent FD 的 no-follow fstat 区分，不用额外 pathname 探测，负例拒绝不降级。 |
@@ -45,7 +45,7 @@
 ## 无法通过普通代码提交完成的门禁（不允许假报）
 
 | ID | 状态 | 条件 |
-|---|---|---|
+| --- | --- | --- |
 | E1-WORK | EXTERNAL | Work 实际 UI 中对同一 MCP 的真实授权工具调用、回执；无外部客户端驱动时记录 NOT_VERIFIED。 |
 | A4-TCC | EXTERNAL | 经用户批准的 macOS 真实 TCC-denied 路径/权限样例；不运行 tccutil、不扩大 TCC grant。 |
 | RELEASE-CONVERGE | EXTERNAL | GitHub 3582653 vs 三台生产机 278af9c；只在其它会话完成开发与 Jobs Manager/MCP/RPC 归零、独立部署门禁合格时逐台安全更新。 |
@@ -56,5 +56,8 @@
 
 - 2026-10-14：新建本会话隔离收尾分支，已核查主版本为 3582653；先从 PX1B-F4-SEARCH 开始。每项后追加一个带精确 SHA、测试数、CI/审查状态的记录。
 
-
 - PX1B-F4-SEARCH：旧 SHA 3582653 上先 RED 8/10；实现后 Mac/Pi 各 67 selected PASS，Pi 真实系统 ripgrep 非 UTF-8 名称 streaming/materialized 均 PASS，Mac 完整 pre-commit PASS。独立源码审核待取得后才 CLOSED。
+
+- PX1B-F4-SEARCH 第二次独立复审 PASS：额外 P2（保留 Darwin skipped_changed/skipped_io_error）与 P3（最终拒绝不得记录成功终态）全部修复；新增精确回归。Mac/Pi 各 125 affected PASS；完整 MyPy/Ruff/Bandit/architecture hooks PASS。等待最终签名提交的 GitHub 7/7 CI 再核销 CLOSE。
+
+- DEV-TOOLS 只读检查：Mac rg 15.2.0、uv 0.12.22 在 pyproject 约束内、Doctor 24/24 OK；Pi/sextant uv 0.12.24，rg 14.1.1（均 Doctor WARN）；Pi Doctor 31 OK/2 WARN（rg,journal），sextant 32 OK/1 WARN（rg），两台 exit 0。版本安装/重启不在本会话直接执行。
