@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Annotated
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
 from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
@@ -84,8 +83,8 @@ def write_file_impl(
                     create_parents=True,
                 )
             except OSError as e:
-                raise ToolError(
-                    f"Could not write {resolved}: {e.strerror or e}."
+                raise CodedToolError(
+                    "write_failed", f"Could not write {resolved}: {e.strerror or e}."
                 ) from e
             previous_bytes = receipt.previous_bytes
         else:
@@ -94,8 +93,8 @@ def write_file_impl(
                 resolved.parent.mkdir(parents=True, exist_ok=True)
                 resolved.write_bytes(data)
             except OSError as e:
-                raise ToolError(
-                    f"Could not write {resolved}: {e.strerror or e}."
+                raise CodedToolError(
+                    "write_failed", f"Could not write {resolved}: {e.strerror or e}."
                 ) from e
 
     if previous_bytes is None:
