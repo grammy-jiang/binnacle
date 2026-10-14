@@ -5,6 +5,7 @@ None of these helpers resolves an absolute path or changes grant ownership.
 
 from __future__ import annotations
 
+import errno
 import os
 import stat
 
@@ -25,6 +26,34 @@ def failed_open_special(parent: int, name: str, exc: OSError) -> bool:
         stat.S_IFCHR,
         stat.S_IFBLK,
     )
+
+
+def open_directory_child(parent: int, name: str, flags: int) -> int:
+    """Clarify refused child type using only the held parent's no-follow stat.
+
+    Darwin may report either ELOOP or ENOTDIR for a no-follow directory open.
+    Metadata can change during diagnosis; a failed/ambiguous stat must never
+    trigger a retry, alter authority, or weaken the original refusal.
+    """
+    try:
+        return os.open(name, flags, dir_fd=parent)
+    except OSError as exc:
+        if exc.errno not in (errno.ELOOP, errno.ENOTDIR):
+            raise
+        try:
+            info = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        except OSError:
+            info = None
+        if info is not None:
+            if stat.S_ISLNK(info.st_mode):
+                diagnosed = errno.ELOOP
+            elif not stat.S_ISDIR(info.st_mode):
+                diagnosed = errno.ENOTDIR
+            else:
+                diagnosed = exc.errno
+            if diagnosed != exc.errno:
+                raise OSError(diagnosed, os.strerror(diagnosed)) from exc
+        raise
 
 
 def read_at_most(fd: int, maximum: int) -> bytes:
