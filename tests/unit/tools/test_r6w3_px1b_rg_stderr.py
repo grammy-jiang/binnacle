@@ -10,13 +10,15 @@ rg's failure.
 R-PX1-3: Linux glob decoded rg output strictly as UTF-8 (UnicodeDecodeError on
 a legitimate name). Now rg output is decoded with surrogateescape, as the
 search path decodes names; a name that is not UTF-8 is omitted from a result
-(a JSON result is UTF-8), and a note shows it with a \\x escape.
+(a JSON result is UTF-8); a count-only note reports omitted filenames
+without exposing them. Permission-denied paths still use escaped display.
 
 A fake rg (a Python script under tmp_path, non-secret) prints the exact bytes,
 so every case runs on both OSes; none is skipped. A real non-UTF-8 name
 cannot exist on APFS: the Pi runs the real-name probe (PX1B-REPORT.json).
 """
 
+import json
 import os
 import stat
 from pathlib import Path
@@ -100,6 +102,38 @@ def code_of(call) -> str | None:
     with pytest.raises(ToolError) as exc:
         call()
     return getattr(exc.value, "telemetry_code", None)
+
+
+def assert_no_non_utf8_name_leak(result, *names: bytes) -> None:
+    """Inspect raw structured strings BEFORE JSON adds another escaping layer."""
+    payload = result.structured_content
+    json.dumps(payload, ensure_ascii=False).encode("utf-8", errors="strict")
+
+    def strings(value):
+        if isinstance(value, str):
+            yield value
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                yield from strings(key)
+                yield from strings(item)
+        elif isinstance(value, (tuple, list)):
+            for item in value:
+                yield from strings(item)
+
+    for value in (*strings(payload), *(block.text for block in result.content)):
+        value.encode("utf-8", errors="strict")
+        # Catch literal backslashes (including repeated JSON-escaped forms).
+        normalized = value
+        while "\\\\" in normalized:
+            normalized = normalized.replace("\\\\", "\\")
+        for raw in names:
+            name = os.fsdecode(raw)
+            for form in (
+                name,
+                name.encode("unicode_escape").decode("ascii"),
+                rg_env.shown(name),
+            ):
+                assert form not in normalized
 
 
 # R-PX1-1: the whole stderr decides, for glob and both search runners.
@@ -228,6 +262,150 @@ def test_a_non_utf8_name_from_glob_is_omitted_not_a_crash(tmp_path, root, monkey
     payload = glob(root, rg).structured_content
     assert [e["path"] for e in payload["entries"]] == [str(root / "m.txt")]
     assert payload["count"] == 1
+    assert payload["note"] == (
+        "Skipped 1 non-UTF-8 filename from the recursive listing; "
+        "it cannot be represented in the result."
+    )
+
+
+def test_multiple_non_utf8_glob_names_are_counted_without_disclosure(tmp_path, root):
+    rg = fake_rg(
+        tmp_path,
+        # The second invalid name does not match *.txt, but still belongs
+        # to the raw recursive listing and must count toward omission.
+        stdout=BAD + b".txt\nother\xfe.md\nm.txt\n",
+        stderr=b"",
+        code=0,
+    )
+    result = glob(root, rg)
+    payload = result.structured_content
+    assert payload["count"] == 1
+    assert payload["truncated"] is False
+    assert [e["path"] for e in payload["entries"]] == [str(root / "m.txt")]
+    assert payload["note"] == (
+        "Skipped 2 non-UTF-8 filenames from the recursive listing; "
+        "they cannot be represented in the result."
+    )
+    assert payload["note"] in result.content[0].text
+    assert_no_non_utf8_name_leak(result, BAD, b"other\xfe")
+
+
+def test_non_utf8_glob_note_coexists_with_denied_path_note(tmp_path, root):
+    rg = fake_rg(
+        tmp_path,
+        stdout=BAD + b".txt\nm.txt\n",
+        stderr=denied_lines(1),
+        code=2,
+    )
+    result = glob(root, rg)
+    note = result.structured_content["note"]
+    assert note.startswith(
+        "Skipped 1 non-UTF-8 filename from the recursive listing; "
+        "it cannot be represented in the result. "
+    )
+    assert "Skipped 1 unreadable path (permission denied)" in note
+    assert result.structured_content["count"] == 1
+    assert note.endswith("Results exclude their contents.")
+
+
+def test_glob_non_utf8_only_retains_empty_note_without_leaking_name(tmp_path, root):
+    rg = fake_rg(tmp_path, stdout=BAD + b".txt\n", stderr=b"", code=0)
+    result = glob(root, rg)
+    payload = result.structured_content
+    assert payload["count"] == 0
+    assert payload["entries"] == []
+    assert payload["truncated"] is False
+    assert payload["note"].startswith("No files match")
+    assert payload["note"].endswith(
+        "Skipped 1 non-UTF-8 filename from the recursive listing; "
+        "it cannot be represented in the result."
+    )
+    assert_no_non_utf8_name_leak(result, BAD)
+
+
+def test_non_utf8_glob_note_keeps_existing_truncation_note(tmp_path, root):
+    (root / "n.txt").write_text("n")
+    (root / "o.txt").write_text("o")
+    rg = fake_rg(
+        tmp_path,
+        stdout=BAD + b".txt\nm.txt\nn.txt\no.txt\n",
+        stderr=b"",
+        code=0,
+    )
+    result = lf.list_files_impl(
+        str(root),
+        "*.txt",
+        1,
+        False,
+        roots=RootsSettings(default_root=root, extra_roots=()),
+        settings=ListFilesSettings(),
+        rg_bin=str(rg),
+    )
+    payload = result.structured_content
+    assert payload["count"] == 1
+    assert len(payload["entries"]) == 1
+    assert payload["truncated"] is True
+    assert payload["note"].startswith("Showing first 1 of 3 matches;")
+    assert payload["note"].endswith(
+        "Skipped 1 non-UTF-8 filename from the recursive listing; "
+        "it cannot be represented in the result."
+    )
+
+
+def test_truncated_permission_and_two_non_utf8_notes_compose_once(tmp_path, root):
+    (root / "n.txt").write_text("n")
+    (root / "o.txt").write_text("o")
+    rg = fake_rg(
+        tmp_path,
+        stdout=BAD + b".txt\nother\xfe.md\nm.txt\nn.txt\no.txt\n",
+        stderr=denied_lines(1),
+        code=2,
+    )
+    result = lf.list_files_impl(
+        str(root),
+        "*.txt",
+        1,
+        False,
+        roots=RootsSettings(default_root=root, extra_roots=()),
+        settings=ListFilesSettings(),
+        rg_bin=str(rg),
+    )
+    payload = result.structured_content
+    assert payload["truncated"] is True
+    assert payload["count"] == len(payload["entries"]) == 1
+    omission = (
+        "Skipped 2 non-UTF-8 filenames from the recursive listing; "
+        "they cannot be represented in the result."
+    )
+    permission = "Skipped 1 unreadable path (permission denied)"
+    assert payload["note"].count("Showing first 1 of 3 matches;") == 1
+    assert result.content[0].text.count("showing newest 1.") == 1
+    for text in (payload["note"], result.content[0].text):
+        assert text.count(omission) == 1
+        assert text.count(permission) == 1
+    assert_no_non_utf8_name_leak(result, BAD, b"other\xfe")
+
+
+@pytest.mark.parametrize(
+    "escaped",
+    [r"bad\xff", r"bad\\xff", r"bad\udcff", r"bad\\udcff"],
+)
+def test_omission_leakage_check_catches_nested_escape_forms(escaped):
+    from fastmcp.tools.base import ToolResult
+
+    result = ToolResult(
+        content="safe",
+        structured_content={"entries": [{"path": escaped}], "note": "safe"},
+    )
+    with pytest.raises(AssertionError):
+        assert_no_non_utf8_name_leak(result, BAD)
+
+
+def test_valid_utf8_glob_does_not_claim_omissions(tmp_path, root):
+    rg = fake_rg(tmp_path, stdout=b"m.txt\n", stderr=b"", code=0)
+    result = glob(root, rg)
+    assert result.structured_content["count"] == 1
+    assert "note" not in result.structured_content
 
 
 @MODES

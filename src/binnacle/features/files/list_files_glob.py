@@ -150,14 +150,20 @@ def glob_mode(
             f"Use run_command (find, ls) as a fallback.",
         )
 
+    skipped_non_utf8 = 0
     try:
-        # A name that is not UTF-8 cannot be reported in a UTF-8 JSON
-        # result: it is omitted, as search_text omits it (R-PX1-3).
-        lines = [
-            line
-            for line in proc.stdout.splitlines()
-            if line and shown(line) == line and full_match(line, pattern)
-        ]
+        # JSON cannot carry surrogateescaped filesystem bytes. Count their
+        # omissions without exposing unsendable or private raw filenames
+        # (PX1B-F4); preserve the same accepted-name and glob policy.
+        lines = []
+        for line in proc.stdout.splitlines():
+            if not line:
+                continue
+            if shown(line) != line:
+                skipped_non_utf8 += 1
+                continue
+            if full_match(line, pattern):
+                lines.append(line)
     except ValueError as e:
         raise CodedToolError(
             "invalid_glob", f"Invalid glob pattern {glob!r}: {e}"
@@ -190,4 +196,15 @@ def glob_mode(
         summary = (
             f"Found {len(entries)} files matching {glob!r} under {root} (newest first)."
         )
+    if skipped_non_utf8:
+        noun = "filename" if skipped_non_utf8 == 1 else "filenames"
+        pronoun = "it" if skipped_non_utf8 == 1 else "they"
+        omission = (
+            f"Skipped {skipped_non_utf8} non-UTF-8 {noun} from the recursive "
+            f"listing; {pronoun} cannot be represented in the result."
+        )
+        payload["note"] = (
+            f"{payload['note']} {omission}" if "note" in payload else omission
+        )
+        summary = f"{summary} {omission}"
     return ToolResult(content=summary, structured_content=payload)
