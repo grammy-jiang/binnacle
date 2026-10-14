@@ -46,6 +46,13 @@ final C1 test item remains OPEN.
 
 ### C2 — Independent authenticated native maintenance control plane
 
+A reusable ordered controller is now exercised against real private
+J7/Watchdog/MCP/Jobs/journal/BZ2 **Linux fixture** components, including
+single-attempt restoration and freshly admitting MCP generation proof.
+This is only the transaction sequence: the trusted installed native
+actuator and independent privileged recovery guardian do not yet exist.
+No C2 authorization item is accepted complete on that basis.
+
 - [ ] A controller not hosted by the service being stopped, with exact
   allowlisted service label, root:wheel 0644 pinned launchd plist and
   exact stderr/stdout source. No arbitrary path/command or broad sudo.
