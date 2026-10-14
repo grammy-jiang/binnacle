@@ -375,7 +375,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EX_FAILED
     try:
         configure_private_maintenance_admission(
-            manager, settings.jobs.maintenance_fence_dir
+            manager, getattr(settings.jobs, "maintenance_fence_dir", None)
         )
     except (OSError, ValueError):
         log.exception("event=job_manager_maintenance_config_refused")

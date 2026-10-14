@@ -270,7 +270,10 @@ def create_server(*, admission_gate: ToolAdmissionDrain | None = None) -> FastMC
     settings = get_settings()
     control = None
     gate = admission_gate
-    if settings.mcp_maintenance.enabled:
+    # Compatibility with existing restricted production bootstrap test
+    # settings that predate this strictly optional maintenance profile.
+    maintenance = getattr(settings, "mcp_maintenance", None)
+    if maintenance is not None and maintenance.enabled:
         if host_os_family() != "darwin" or admission_gate is not None:
             raise RuntimeError("MCP maintenance control requires native Darwin")
         gate = ToolAdmissionDrain()
