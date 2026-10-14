@@ -140,15 +140,26 @@ def _entry_info(
 ) -> os.stat_result | None:
     """ONE no-follow read of name, or of its contained target if it is a link.
 
-    The entry never re-follows the link: any lstat failure (Darwin
-    file_traversal.py walk: EACCES/ENOENT entries are omitted) or a link
-    whose target does not resolve inside the root being listed omits the
-    entry before it is counted (SD-60).
+    The entry never re-follows the link: races/permission errors (ENOENT,
+    ENOTDIR, ELOOP, EACCES, EPERM) omit the entry, like the Darwin walk.
+    FD shortages and other I/O failures are reported, not silently omitted.
     """
     try:
         info = os.lstat(name, dir_fd=fd)
-    except OSError:
-        return None
+    except OSError as exc:
+        # A synthetic/legacy PermissionError may not carry errno. Preserve
+        # the SD-60 omission policy without swallowing unknown I/O failures.
+        if isinstance(exc, (FileNotFoundError, NotADirectoryError, PermissionError)):
+            return None
+        if exc.errno in (
+            errno.ENOENT,
+            errno.ENOTDIR,
+            errno.ELOOP,
+            errno.EACCES,
+            errno.EPERM,
+        ):
+            return None
+        raise
     return follow(name) if stat.S_ISLNK(info.st_mode) else info
 
 
@@ -229,7 +240,21 @@ def _listed(
                 return fd_walk.link_target_info(
                     chain[0], parts, name, str(top), chain=chain, aliases=live
                 )
-            except OSError as exc:  # Only a descriptor shortage (FDW-B1 #9).
+            except OSError as exc:
+                # Link target metadata can be unreadable even after the
+                # named symlink was valid. Omit only expected path/denial races.
+                if isinstance(
+                    exc, (FileNotFoundError, NotADirectoryError, PermissionError)
+                ):
+                    return None
+                if exc.errno in (
+                    errno.ENOENT,
+                    errno.ENOTDIR,
+                    errno.ELOOP,
+                    errno.EACCES,
+                    errno.EPERM,
+                ):
+                    return None
                 raise _refusal(exc, root) from exc
 
         try:
@@ -239,7 +264,10 @@ def _listed(
         for name in names:
             if name == ".git" or (not include_hidden and name.startswith(".")):
                 continue
-            info = _entry_info(fd, name, follow)
+            try:
+                info = _entry_info(fd, name, follow)
+            except OSError as exc:
+                raise _refusal(exc, root) from exc
             if info is None or not (
                 stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)
             ):
