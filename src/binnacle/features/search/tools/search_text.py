@@ -19,7 +19,7 @@ from binnacle.features.files.paths import (
     full_match,
     resolve_path,
 )
-from binnacle.features.files.rg_env import noting_unreadable
+from binnacle.features.files.rg_env import noting_search_with_budget
 from binnacle.features.search.search_text_adaptive import (
     build_adaptive_result,
     log_adaptive_result,
@@ -393,7 +393,7 @@ def _search_exact_impl(
     return ToolResult(content=summary, structured_content=payload)
 
 
-@noting_unreadable  # Partial result plus one note (R-OS1-F1).
+@noting_search_with_budget  # Final cap after both omission/denied notes.
 def search_text_impl(
     pattern: str,
     path: str,

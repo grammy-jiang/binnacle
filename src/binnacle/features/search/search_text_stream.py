@@ -22,6 +22,7 @@ from binnacle.errors import CodedToolError
 from binnacle.features.files.rg_env import (
     NO_CONFIG,
     accept_denied,
+    observe_rg_event,
     rejection_message,
     rg_env,
 )
@@ -132,6 +133,7 @@ class RgJsonStream:
                 except orjson.JSONDecodeError:
                     self.stats.bad_json += 1
                     continue
+                observe_rg_event(event)
                 self.stats.events += 1
                 kind = event.get("type")
                 if kind == "match":

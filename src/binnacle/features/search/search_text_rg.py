@@ -10,6 +10,7 @@ from binnacle.errors import CodedToolError
 from binnacle.features.files.rg_env import (
     NO_CONFIG,
     accept_denied,
+    observe_rg_event,
     rejection_message,
     rg_env,
 )
@@ -80,6 +81,7 @@ def run_rg(
             if metrics is not None:
                 metrics.rg_bad_json += 1
             continue
+        observe_rg_event(event)
         events.append(event)
         if metrics is not None:
             metrics.rg_events += 1

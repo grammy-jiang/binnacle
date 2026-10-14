@@ -9,15 +9,20 @@ all other variables (PATH, LANG, ...) are inherited unchanged.
 
 import bisect
 import functools
+import hashlib
+import logging
 import os
 import re
 from collections.abc import Callable, Iterable
 from contextvars import ContextVar
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO, ParamSpec
 
+import orjson
 from fastmcp.tools.base import ToolResult
 
+from binnacle.errors import CodedToolError
 from binnacle.features.files.fd_walk import permission_denied
 
 P = ParamSpec("P")
@@ -206,3 +211,160 @@ def accept_denied(stderr: str | bytes | BinaryIO, base: Path) -> bool:
         raise permission_denied(base)
     record_unreadable(scan.names, scan.count - len(scan.names))
     return True
+
+
+# PX1B-F4: search-specific non-UTF-8 result omissions share this
+# config-free rg metadata boundary; no new startup import is required.
+MAX_NAME_IDENTITIES = 4096
+
+
+@dataclass
+class _Observed:
+    digests: set[bytes] = field(default_factory=set)
+    over_limit: bool = False
+
+
+_ACTIVE: ContextVar[_Observed | None] = ContextVar(
+    "search_unrepresentable", default=None
+)
+
+
+def observe_rg_event(event: dict) -> None:
+    """Count distinct byte-name match events before glob or result truncation.
+
+    The digest, not the filename, is retained; bound memory even if rg scans
+    millions of distinct filenames. Context lines and duplicate matches in
+    one file do not raise its distinct-file count.
+    """
+    active = _ACTIVE.get()
+    if active is None or event.get("type") != "match":
+        return
+    data = event.get("data")
+    if not isinstance(data, dict):
+        return
+    path = data.get("path")
+    if not isinstance(path, dict) or isinstance(path.get("text"), str):
+        return
+    encoded = path.get("bytes")
+    if not isinstance(encoded, str) or not encoded.isascii():
+        return
+    identity = hashlib.sha256(encoded.encode("ascii")).digest()[:16]
+    if identity in active.digests:
+        return
+    if len(active.digests) >= MAX_NAME_IDENTITIES:
+        active.over_limit = True
+    else:
+        active.digests.add(identity)
+
+
+def noting_non_utf8_search(impl: Callable[P, ToolResult]) -> Callable[P, ToolResult]:
+    """Extend one exact search result without granting authority to bad paths."""
+
+    @functools.wraps(impl)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> ToolResult:
+        state = _Observed()
+        token = _ACTIVE.set(state)
+        try:
+            result = impl(*args, **kwargs)
+        finally:
+            _ACTIVE.reset(token)
+        if not state.digests or not isinstance(result.structured_content, dict):
+            return result
+        count = len(state.digests)
+        word = "filename" if count == 1 else "filenames"
+        count_text = f"at least {count}" if state.over_limit else str(count)
+        note = (
+            f"Skipped {count_text} non-UTF-8 {word} from search results "
+            "before glob filtering."
+        )
+        payload = dict(result.structured_content)
+        payload["note"] = f"{payload['note']} {note}" if "note" in payload else note
+        text = getattr(result.content[0], "text", "") if result.content else ""
+        return ToolResult(content=f"{text} {note}".strip(), structured_content=payload)
+
+    return wrapper
+
+
+def noting_search_with_budget(impl: Callable[P, ToolResult]) -> Callable[P, ToolResult]:
+    """Finalize search after BOTH safe-omission and denied-path annotations.
+
+    Keep a compact wire-size upper bound even if a near-cap result acquires a
+    late note. A whole entry is removed at a time; the real total stays
+    unchanged. Do not drop safety notes to squeeze out one more match.
+    """
+    noted = noting_unreadable(noting_non_utf8_search(impl))
+
+    @functools.wraps(impl)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> ToolResult:
+        result = noted(*args, **kwargs)
+        payload = result.structured_content
+        if not isinstance(payload, dict):
+            return result
+        # Lazy config access prevents a circular import during application
+        # composition. The caller already resolved this same settings object.
+        from binnacle.config import SearchTextSettings, get_settings
+
+        supplied = kwargs.get("settings")
+        settings = (
+            supplied
+            if isinstance(supplied, SearchTextSettings)
+            else get_settings().search_text
+        )
+        limit = settings.result_max_bytes
+        current_bytes = len(orjson.dumps(payload))
+        if current_bytes <= limit:
+            return result
+        entries = payload.get("entries", [])
+        if not isinstance(entries, list):
+            raise CodedToolError(
+                "response_budget_exceeded",
+                "Search result metadata exceeds the configured response budget. "
+                "Use a shorter pattern or a more specific path.",
+            )
+        original_note = str(payload.get("note", ""))
+        total = payload.get("count", len(entries))
+
+        def candidate(n: int) -> dict:
+            message = (
+                f"{original_note} Additional entries trimmed to {n} "
+                "to satisfy the response budget."
+            )
+            return {
+                **payload,
+                "entries": entries[:n],
+                "truncated": True,
+                "note": message.strip(),
+            }
+
+        lo, hi = 0, len(entries)
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if len(orjson.dumps(candidate(mid))) <= limit:
+                lo = mid
+            else:
+                hi = mid - 1
+        fitted = candidate(lo)
+        final_bytes = len(orjson.dumps(fitted))
+        if final_bytes > limit:
+            raise CodedToolError(
+                "response_budget_exceeded",
+                "Search result metadata exceeds the configured response budget. "
+                "Use a shorter pattern or a more specific path.",
+            )
+        logging.getLogger("binnacle.search_text").info(
+            "event=search_final_output_budget count=%s returned_entries=%d "
+            "result_bytes=%d result_budget_bytes=%d",
+            total,
+            lo,
+            final_bytes,
+            limit,
+        )
+        return ToolResult(
+            content=(
+                f"Found {total} matches; showing {lo} result entries within "
+                f"the response budget. {fitted['note']}"
+            ),
+            structured_content=fitted,
+        )
+
+    return wrapper
