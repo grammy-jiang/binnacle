@@ -93,7 +93,13 @@ _MANAGER_COMMON = (
     # Both manager entries need a verified configured state root for
     # failures in later imports; it must be loaded under the same guard.
     "binnacle.config",
+    # The ordinary configuration and neutral platform-composition module
+    # now transitively import these inert maintenance schema definitions.
+    # Pin their complete startup closure rather than treating them as late
+    # imports or allowing unreviewed extra modules.
+    "binnacle.config_maintenance",
     "binnacle.platform",
+    "binnacle.platform.contracts.maintenance_contracts",
     "binnacle.platform.contracts",
     "binnacle.platform.contracts.capability_contracts",
     "binnacle.platform.contracts.darwin_contracts",

@@ -45,6 +45,7 @@ from binnacle.platform.darwin.generation_runtime import (
 )
 from binnacle.platform.darwin.job_group_fence import WAITID_REQUIRED
 from binnacle.platform.darwin.job_manager_config import read_config
+from binnacle.platform.darwin.job_manager_maintenance_fence import ManagerStartFence
 from binnacle.platform.darwin.job_manager_procinfo import (
     boot_id,
     group_listing,  # noqa: F401 - job_group_fence imports it from here (MS1 split)
@@ -76,6 +77,33 @@ STOP_MARKER_AGE_S = (-5.0, 300.0)  # SR6-F1: honored only for -5 s <= age < 300 
 SUN_PATH_MAX = 104  # Darwin sockaddr_un.sun_path bytes, terminating NUL included
 REBIND_DELAY_S = (0.1, 5.0)  # D1: first and longest wait before an endpoint rebind
 REBIND_WARN_S = 60.0  # SR6-F4: one endpoint-loss warning per code per 60 s
+
+
+def configure_private_maintenance_admission(
+    manager: DarwinJobManager, root: Path | None
+) -> None:
+    """Optional config-file-only J7-compatible Jobs start/ping barrier.
+
+    No runtime enablement in the default config. When explicitly enabled,
+    refuse an absent, symlinked or unsafe state root before the manager
+    begins accepting requests. The owner incarnation is minted by this
+    manager process, never taken from an untrusted request file.
+    """
+    if root is None:
+        return
+    if (
+        not root.is_absolute()
+        or root in (manager.jobs_dir, manager.jobs_dir.parent)
+        or root.resolve() != root
+    ):
+        raise ValueError("invalid configured Jobs maintenance root")
+    fence = ManagerStartFence(
+        root, owner_instance_id=manager.owner_instance_id, pid=os.getpid()
+    )
+    if fence.inspect().state == "unknown":
+        raise ValueError("configured Jobs maintenance root is untrusted")
+    manager.maintenance_fence = fence.refusal
+    manager.maintenance_probe = lambda reply: fence.synchronized_ping(manager, reply)
 
 
 def serve_job_manager(
@@ -345,6 +373,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     except Exception:
         log.exception("event=job_manager_owner_unavailable")
         return EX_FAILED
+    try:
+        configure_private_maintenance_admission(
+            manager, getattr(settings.jobs, "maintenance_fence_dir", None)
+        )
+    except (OSError, ValueError):
+        log.exception("event=job_manager_maintenance_config_refused")
+        return EX_CONFIG
     reaper = owner.reaper_running
     log.info("event=job_manager_compose owner_reaper_thread=%s", reaper)
     stop = threading.Event()

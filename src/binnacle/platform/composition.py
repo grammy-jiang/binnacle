@@ -27,6 +27,10 @@ from binnacle.platform.contracts.darwin_contracts import (
     OwnerGeneration,
 )
 from binnacle.platform.contracts.file_access_contracts import FileAccess, SearchAccess
+from binnacle.platform.contracts.maintenance_contracts import (
+    MaintenanceSidecar,
+    MCPAdmissionGate,
+)
 from binnacle.platform.contracts.native_service_contracts import (
     AuthenticatedChannel,
     NativeRequestHandler,
@@ -56,6 +60,20 @@ def host_os_family(system: str | None = None) -> Literal["linux", "darwin"]:
     if name not in ("Linux", "Darwin"):
         raise UnsupportedHostOS(f"Binnacle has no {name!r} platform adapter")
     return "linux" if name == "Linux" else "darwin"
+
+
+def create_native_mcp_maintenance_sidecar(
+    root: Path,
+    gate: MCPAdmissionGate,
+) -> MaintenanceSidecar:
+    """Explicit Darwin-only sidecar; no installed default or startup action."""
+    if host_os_family() != "darwin":
+        raise UnsupportedHostOS("MCP maintenance is native Darwin only")
+    from binnacle.platform.darwin.mcp_maintenance_admission_runtime import (
+        MCPMaintenanceAdmissionRuntime,
+    )
+
+    return MCPMaintenanceAdmissionRuntime(root, gate)
 
 
 def create_process_backend(*, witness: OwnedWitness | None = None) -> ProcessBackend:

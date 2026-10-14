@@ -52,6 +52,7 @@ def mac_system_plist(
     username: str,
     group: str = "staff",
     restart_enabled: bool = True,
+    maintenance_pause_dir: Path | None = None,
 ) -> bytes:
     if not username or not username.replace("-", "").replace("_", "").isalnum():
         raise ValueError("invalid service watchdog user")
@@ -67,6 +68,11 @@ def mac_system_plist(
             "-m",
             "binnacle.companions.service_watchdog",
             *(["--restart-enabled"] if restart_enabled else []),
+            *(
+                ["--maintenance-pause-dir", _path(maintenance_pause_dir)]
+                if maintenance_pause_dir is not None
+                else []
+            ),
         ],
         "WorkingDirectory": _path(home),
         "EnvironmentVariables": {
