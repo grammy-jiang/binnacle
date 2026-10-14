@@ -10,9 +10,9 @@
 | SEC-FU-14 Linux FD 写入安全 | 已完成 | Linux 回归/安全复审通过 | PR #31、#33 已合并 | 最新功能的再次同步未完成 |
 | PX1B-F4-GLOB | 已完成 | Mac/Pi 回归及 CI 全绿 | PR #49 合并至 3582653 | 三机当前版本旧于该提交 |
 | PX1B-F3 edit/write 错误遥测 | 已完成 | Mac/Pi 各 61 项、两组 CI 7/7 | PR #53 合并至 68999c5 | 尚未同步三机 |
-| PX1B-F4-SEARCH | 实现完成 | Mac/Pi 各 125 项、独立 P1/P2 复审通过 | PR #51 仍为 Draft，曾被非本范围 CI 失败阻断 | 未部署 |
-| FDW-8 list/glob lstat 错误分类 | 实现完成 | Mac/Pi 各 109 项、独立 P1/P2 复审通过 | PR #56 为 Draft，待精确 CI | 未部署 |
-| FDW-6 Darwin held-parent errno | 缺口已复现 2/3，未修复 | Mac 私有否定用例，源码变更受执行安全检查限制 | 无 | 不变 |
+| PX1B-F4-SEARCH | 已完成 | Mac/Pi 各 125 项、独立 P1/P2 复审、两组精确 CI 7/7 | PR #51 合并至 61a0657 | 未部署 |
+| FDW-8 list/glob lstat 错误分类 | 已完成 | Mac/Pi 各 109 项、独立 P1/P2 复审、两组精确 CI 7/7 | PR #56 合并至 469e31f | 未部署 |
+| FDW-6 Darwin held-parent errno | 缺口已复现 2/3，未修复；Issue #57 开放 | Mac 私有否定用例，源码变更受执行安全检查限制 | 无 | 不变 |
 | FDW-11 10k 文件性能调查 | 已完成调查，未做风险优化 | 同机私有基准和 cProfile | 非代码调查 | 无需部署 |
 | FDW-13 F_GETPATH 可行性 | NO_GO（安全语义不足） | rename、alias、unlink 原生负例及每次调用成本 | 非代码调查 | 禁止启用 |
 | FDW-A 一次 FD 链路审查 | NO_CHANGE | 私有 Darwin grant 的 open_read/write_bytes FD 次数核验通过 | 现有设计无需更改 | 保留现有路径 |
@@ -44,3 +44,9 @@
 - FDW-8 的 Mac fast pre-push 在未修改的 a5d87df 基线也出现 test_r6w3_e1d_manager_scope 两项导入模块预期差异：新维护 fence 模块不在旧的严格预期中。这不是本次 Files 源码引起，不能通过禁用质量门禁掩盖。
 - GitHub 最新保护分支的源码与三台运行机器的 278af9c 不一致。生产同步只能在独立审查、确认其他开发任务/Job Manager 零活动以及可回滚维护窗口下逐台进行。Mac 与两台 Pi 的生产目录从未在本次调查中直接改动。
 - Work UI 的独立 E1 验收和真实 macOS TCC 拒绝需要外部客户端及权限样本，本轮未获取证据，不得标记 PASS。Issue #30 主实现仍由另一会话负责。
+
+## 2026-10-14 集成收尾对账
+
+GitHub 在此时受保护 master 为 61a0657，其第一父提交 469e31f 集成 FDW-8，另一父提交 3ed2545 含 PX1B-F4-SEARCH 与独立本报告。PR #51/#56 各自在最终签名头提交上两组七项必需 CI 均通过。两个会话的文件所有权无冲突（PR #51 合并前以 Git 差异对比验证）；Mac/Pi/sextant 的运行代码没有自动同步。PR #51 的旧头 9136fcc 上曾重现的日志事务 flock 测试失败仍记为历史风险，不能据新代码集成推断真正的日志生产维护已获授权。
+
+仍需外部完成的工作：FDW-6 受工作站安全检查阻止实施，Issue #57 持续开放；Work UI 真实端到端和 TCC 实测拒绝无当前工具证据；三设备同步必须等维护窗口及 Job Manager 空闲。绝不因代码合并就声称已执行生产升级。

@@ -32,15 +32,15 @@
 
 | ID | 状态 | 独占源代码/执行位置 | 验收条件及证据 |
 | --- | --- | --- | --- |
-| PX1B-F4-SEARCH | BLOCKED_CI | features/search reducer、materialized collector、输出包装；Mac 独立克隆 + Pi QA | 非 UTF-8 `rg --json` 文件名被静默省略时给出安全的计数提示；materialized/streaming、names-only、截断、permission、adaptive、glob；无路径/转义泄露。 |
+| PX1B-F4-SEARCH | CLOSED | features/search reducer、materialized collector、输出包装；Mac 独立克隆 + Pi QA | 非 UTF-8 `rg --json` 文件名被静默省略时给出安全的计数提示；materialized/streaming、names-only、截断、permission、adaptive、glob；无路径/转义泄露。 |
 | PX1B-F3 | CLOSED | Linux legacy edit_file/write_file 精确拒绝代码 | Linux/Darwin 公共拒绝有一致 `telemetry_code`、无文字破坏；限定被触及的错误。 |
 | FDW-6 | BLOCKED_TOOL | Darwin file_traversal 的 held-parent errno/classification | ELOOP 与 ENOTDIR 按 held parent FD 的 no-follow fstat 区分，不用额外 pathname 探测，负例拒绝不降级。 |
-| FDW-8 | REVIEW | Files/Search listing 的 lstat/fstatat 错误策略 | 对 ENOENT、EMFILE、EACCES/EPERM、其他 OSError 的选择、丢弃/保留/附注一致；相同 Mac/Linux XOS rows。须保留不安全路径 fail-closed。 |
+| FDW-8 | CLOSED | Files/Search listing 的 lstat/fstatat 错误策略 | 对 ENOENT、EMFILE、EACCES/EPERM、其他 OSError 的选择、丢弃/保留/附注一致；相同 Mac/Linux XOS rows。须保留不安全路径 fail-closed。 |
 | FDW-11 | CLOSED | 完全隔离的原生 Mac 10,000 文件只读性能基准 | 与 Linux 同结构校验，记录硬件/次数/median/每文件相对比；仅 Darwin > 1.5x 时考虑专项优化。 |
 | FDW-13 | CLOSED | Darwin 内核 F_GETPATH 的评估/基准，不涉及服务 | 验证同一 FD 上根路径重检的安全收益、别名/搬迁/路径长度与耗时；若性能或安全证据不足，记录明确 NO_GO，不硬加。 |
 | FDW-A | CLOSED | File walk 一次开链路 API 设计核销 | 核对当前 FDW-B1 one-walk 消费者；仍存重复 resolve→open 则做小范围修复与 XOS 否定测试，否则记录 NO_CHANGE。 |
-| PX1B/TEST-STRICT | REVIEW | Files/Search 专属 tests/ 文档 | 回归可在 Mac/Linux 完全执行；对当前所有低优先级旧项逐个标记复现/已修/设计豁免，禁止重复开发。 |
-| R6-EVIDENCE | REVIEW | 独立关闭报告文档（非原 Supervisor 私有 ledger） | 四列区分实现、测试、合并与实装；重审全部旧清单，无剩余非阻断 OPEN。 |
+| PX1B/TEST-STRICT | CLOSED | Files/Search 专属 tests/ 文档 | 回归可在 Mac/Linux 完全执行；对当前所有低优先级旧项逐个标记复现/已修/设计豁免，禁止重复开发。 |
+| R6-EVIDENCE | CLOSED | 独立关闭报告文档（非原 Supervisor 私有 ledger） | 四列区分实现、测试、合并与实装；重审全部旧清单，无剩余非阻断 OPEN。 |
 
 ## 无法通过普通代码提交完成的门禁（不允许假报）
 
@@ -48,7 +48,7 @@
 | --- | --- | --- |
 | E1-WORK | EXTERNAL | Work 实际 UI 中对同一 MCP 的真实授权工具调用、回执；无外部客户端驱动时记录 NOT_VERIFIED。 |
 | A4-TCC | EXTERNAL | 经用户批准的 macOS 真实 TCC-denied 路径/权限样例；不运行 tccutil、不扩大 TCC grant。 |
-| RELEASE-CONVERGE | EXTERNAL | GitHub 当前 a5d87df（2026-10-14 20:53 的受保护分支）vs 三台生产机 278af9c；只在其它会话完成开发与 Jobs Manager/MCP/RPC 归零、独立部署门禁合格时逐台安全更新。 |
+| RELEASE-CONVERGE | EXTERNAL | GitHub 当前 61a0657（2026-10-14 21:23 的受保护分支）vs 三台生产机 278af9c；只在其它会话完成开发与 Jobs Manager/MCP/RPC 归零、独立部署门禁合格时逐台安全更新。 |
 | DEV-TOOLS | CLOSED | 各 OS uv/hooks、rg 版本实际 Doctor 状态复核，区分非致命 warning、真实阻断；不动生产环境。 |
 | ISSUE30 | BOUNDARY | macOS 日志归档、privileged controller、crash guardian 与生产 prune 由另一聊天会话独占；本表不领取任何源码写权限。 |
 
@@ -75,3 +75,9 @@
 - FDW-11 CLOSED (BENCHMARK + RECOMMENDATION): 私有 Mac 10k 文件、100 目录暖态 Darwin 0.22632 秒，rg --files + glob 0.06040 秒，差 3.747 倍；cProfile 的 glob_matches 20k 次是显著成本。两条不同语义路径不能直接按该比值证明安全冗余；先用等价 glob 编译缓存与权限负例做性能专项，不删除 no-follow/identity 校验。
 - FDW-13 CLOSED (NO_GO): F_GETPATH 可追踪 rename，但经 symlink 打开返回 canonical 名称、unlink 后仍可能返回已经不存在的旧路径，不能替代根目录 FD/grant identity 控制；测试成本约 587ns vs fstat 466ns。禁止仅凭字符串认为路径仍受授权。
 - DEV-TOOLS CLOSED (READONLY): Mac uv 0.12.22, rg 15.2.0, Doctor 24/24 OK；Pi、sextant uv 0.12.24，rg 14.1.1，Doctor 31 OK/2 WARN 与 32 OK/1 WARN，exit 0；不改变生产环境下其他活动进程可能使用的工具。
+
+- 2026-10-14 21:23 AEDT: FDW-8 PR #56 at signed 93c58a81 merged protected as 469e31f. Both 7/7 exact-head CI workflows SUCCESS; Mac/Pi each 109 affected tests and independent P1/P2 review PASS. It is code-integrated but not yet deployed on any node.
+- PX1B-F4-SEARCH PR #51 at signed final integration 3ed2545, two exact-head 7/7 GitHub workflows SUCCESS, merged protected as 61a0657. Previous unrelated E2E test lock failure on old head is historical; on the new merged-source head the Python 3.11 runs passed. Code integrated; post-merge master CI independently tracked, not a production claim.
+- FDW-6 still unresolved: evidence-only RED 2 failed/1 passed in standalone Mac private clone, issue [Issue #57](https://github.com/grammy-jiang/binnacle/issues/57) created. Source modification was blocked by workstation safety checks and was not attempted again by a different route. Keep BLOCKED_TOOL until a safely reviewed change truly passes tests/CI.
+- PX1B/TEST-STRICT CLOSED for this conversation's OWNED Files/Search regressions: both OS affected fixtures plus PR #49/#53/#56/#51 final exact-head protected 7/7; this does not imply that unrelated Issue #30 external/production tests are certified.
+- R6-EVIDENCE CLOSED as a source artifact: docs/r6w3-postrelease-evidence-2026-10-14.md is in protected master through PR #51, with code/test/merged/deployed columns and honest external status.
