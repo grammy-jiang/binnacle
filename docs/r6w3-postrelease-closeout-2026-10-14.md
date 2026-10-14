@@ -34,7 +34,7 @@
 | --- | --- | --- | --- |
 | PX1B-F4-SEARCH | CLOSED | features/search reducer、materialized collector、输出包装；Mac 独立克隆 + Pi QA | 非 UTF-8 `rg --json` 文件名被静默省略时给出安全的计数提示；materialized/streaming、names-only、截断、permission、adaptive、glob；无路径/转义泄露。 |
 | PX1B-F3 | CLOSED | Linux legacy edit_file/write_file 精确拒绝代码 | Linux/Darwin 公共拒绝有一致 `telemetry_code`、无文字破坏；限定被触及的错误。 |
-| FDW-6 | BLOCKED_TOOL | Darwin file_traversal 的 held-parent errno/classification | ELOOP 与 ENOTDIR 按 held parent FD 的 no-follow fstat 区分，不用额外 pathname 探测，负例拒绝不降级。 |
+| FDW-6 | CLOSED | Darwin file_traversal 的 held-parent errno/classification | ELOOP 与 ENOTDIR 按 held parent FD 的 no-follow fstat 区分，不用额外 pathname 探测，负例拒绝不降级。 |
 | FDW-8 | CLOSED | Files/Search listing 的 lstat/fstatat 错误策略 | 对 ENOENT、EMFILE、EACCES/EPERM、其他 OSError 的选择、丢弃/保留/附注一致；相同 Mac/Linux XOS rows。须保留不安全路径 fail-closed。 |
 | FDW-11 | CLOSED | 完全隔离的原生 Mac 10,000 文件只读性能基准 | 与 Linux 同结构校验，记录硬件/次数/median/每文件相对比；仅 Darwin > 1.5x 时考虑专项优化。 |
 | FDW-13 | CLOSED | Darwin 内核 F_GETPATH 的评估/基准，不涉及服务 | 验证同一 FD 上根路径重检的安全收益、别名/搬迁/路径长度与耗时；若性能或安全证据不足，记录明确 NO_GO，不硬加。 |
@@ -48,7 +48,7 @@
 | --- | --- | --- |
 | E1-WORK | EXTERNAL | Work 实际 UI 中对同一 MCP 的真实授权工具调用、回执；无外部客户端驱动时记录 NOT_VERIFIED。 |
 | A4-TCC | EXTERNAL | 经用户批准的 macOS 真实 TCC-denied 路径/权限样例；不运行 tccutil、不扩大 TCC grant。 |
-| RELEASE-CONVERGE | EXTERNAL | GitHub 当前 61a0657（2026-10-14 21:23 的受保护分支）vs 三台生产机 278af9c；只在其它会话完成开发与 Jobs Manager/MCP/RPC 归零、独立部署门禁合格时逐台安全更新。 |
+| RELEASE-CONVERGE | EXTERNAL | GitHub 截至 2026-10-14 23:35 的受保护分支 cefc072b vs 三台设备先前安装版本 278af9c；只在其它会话完成开发与 Jobs Manager/MCP/RPC 归零、独立部署门禁合格时逐台安全更新。 |
 | DEV-TOOLS | CLOSED | 各 OS uv/hooks、rg 版本实际 Doctor 状态复核，区分非致命 warning、真实阻断；不动生产环境。 |
 | ISSUE30 | BOUNDARY | macOS 日志归档、privileged controller、crash guardian 与生产 prune 由另一聊天会话独占；本表不领取任何源码写权限。 |
 
@@ -81,3 +81,10 @@
 - FDW-6 still unresolved: evidence-only RED 2 failed/1 passed in standalone Mac private clone, issue [Issue #57](https://github.com/grammy-jiang/binnacle/issues/57) created. Source modification was blocked by workstation safety checks and was not attempted again by a different route. Keep BLOCKED_TOOL until a safely reviewed change truly passes tests/CI.
 - PX1B/TEST-STRICT CLOSED for this conversation's OWNED Files/Search regressions: both OS affected fixtures plus PR #49/#53/#56/#51 final exact-head protected 7/7; this does not imply that unrelated Issue #30 external/production tests are certified.
 - R6-EVIDENCE CLOSED as a source artifact: docs/r6w3-postrelease-evidence-2026-10-14.md is in protected master through PR #51, with code/test/merged/deployed columns and honest external status.
+
+## 2026-10-14 23:36 AEDT — FDW-6 代码收尾核销
+
+- FDW-6 CLOSED：在新隔离 Mac 克隆的最新 master 基线上先重现原有 2 failed / 1 passed，再通过 held-parent os.stat(name, dir_fd=parent, follow_symlinks=False) 仅对已拒绝的 ELOOP/ENOTDIR 做诊断。无二次 pathname open；stat 失败或目录类型模糊时仍返回原错误；外部 UnsafePath 拒绝代码不变。
+- 签名提交 6475a9b，PR [#60](https://github.com/grammy-jiang/binnacle/pull/60) 已受保护合并至 cefc072b；Issue [#57](https://github.com/grammy-jiang/binnacle/issues/57) CLOSED。Mac 与独立 Pi 各 521 passed / 2 expected skipped；Mac Python 3.14.8 额外 160 passed；两台 pre-commit、双目标 MyPy、架构与安全检查通过。PR 精确头两组 CI 最终 17/17 成功。
+- 历史 CI 波动保留：PR #60 第一轮 Python 3.14 失败于非 FDW-6 的 Issue #30 log_transaction_controller/observer 锁竞争（flock EAGAIN），同一 SHA 重新运行通过。PR #58 合并后 master 曾在另一 Issue #30 recovery RPC socket fixture 出现 ConnectionRefusedError；Issue #30 的生产验收与测试稳定性不因本项合并而假报完成。
+- 本收尾范围无未分类的代码 OPEN、REVIEW 或 BLOCKED_TOOL；真正剩余三个 EXTERNAL：E1-WORK、A4-TCC、RELEASE-CONVERGE。Issue #30 仍是另一会话专属 BOUNDARY，自动日志 prune 保持 OFF。Mac/Pi/sextant 已安装服务没有因为 PR #60 合并而部署或重启。

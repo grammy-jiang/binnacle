@@ -12,7 +12,7 @@
 | PX1B-F3 edit/write 错误遥测 | 已完成 | Mac/Pi 各 61 项、两组 CI 7/7 | PR #53 合并至 68999c5 | 尚未同步三机 |
 | PX1B-F4-SEARCH | 已完成 | Mac/Pi 各 125 项、独立 P1/P2 复审、两组精确 CI 7/7 | PR #51 合并至 61a0657 | 未部署 |
 | FDW-8 list/glob lstat 错误分类 | 已完成 | Mac/Pi 各 109 项、独立 P1/P2 复审、两组精确 CI 7/7 | PR #56 合并至 469e31f | 未部署 |
-| FDW-6 Darwin held-parent errno | 缺口已复现 2/3，未修复；Issue #57 开放 | Mac 私有否定用例，源码变更受执行安全检查限制 | 无 | 不变 |
+| FDW-6 Darwin held-parent errno | 已修复，仅区分拒绝的 ELOOP/ENOTDIR | Mac/Pi 各 521 项通过、2 项预期跳过；Mac Python 3.14 定向 160 项通过；两组精确 CI 17/17 | PR #60 合并至 cefc072b，Issue #57 已关闭 | 尚未部署 |
 | FDW-11 10k 文件性能调查 | 已完成调查，未做风险优化 | 同机私有基准和 cProfile | 非代码调查 | 无需部署 |
 | FDW-13 F_GETPATH 可行性 | NO_GO（安全语义不足） | rename、alias、unlink 原生负例及每次调用成本 | 非代码调查 | 禁止启用 |
 | FDW-A 一次 FD 链路审查 | NO_CHANGE | 私有 Darwin grant 的 open_read/write_bytes FD 次数核验通过 | 现有设计无需更改 | 保留现有路径 |
@@ -49,4 +49,12 @@
 
 GitHub 在此时受保护 master 为 61a0657，其第一父提交 469e31f 集成 FDW-8，另一父提交 3ed2545 含 PX1B-F4-SEARCH 与独立本报告。PR #51/#56 各自在最终签名头提交上两组七项必需 CI 均通过。两个会话的文件所有权无冲突（PR #51 合并前以 Git 差异对比验证）；Mac/Pi/sextant 的运行代码没有自动同步。PR #51 的旧头 9136fcc 上曾重现的日志事务 flock 测试失败仍记为历史风险，不能据新代码集成推断真正的日志生产维护已获授权。
 
-仍需外部完成的工作：FDW-6 受工作站安全检查阻止实施，Issue #57 持续开放；Work UI 真实端到端和 TCC 实测拒绝无当前工具证据；三设备同步必须等维护窗口及 Job Manager 空闲。绝不因代码合并就声称已执行生产升级。
+截至原 21:23 快照，FDW-6 尚受工作站安全检查阻止；其后已在新的独立克隆完成安全修复、CI、合并及 Issue #57 核销，见以下 23:36 补充。仍需外部完成 Work UI 真实端到端、TCC 实测拒绝及维护窗口内的三设备安全同步。绝不因代码合并就声称已执行生产升级。
+
+## 2026-10-14 23:36 AEDT — FDW-6 及清单最终源码验收
+
+在 GitHub 受保护 master cefc072b，FDW-6 的 PR #60 已合并、Issue #57 已关闭。隔离分支先复现 RED 2/3，之后签名 6475a9b 修复使用持有父目录 FD 的无跟随 metadata 诊断，并保留原拒绝策略。Mac 与 Pi 各 521 passed / 2 expected skipped，Mac Python 3.14.8 额外 160 passed；双平台 MyPy 与 pre-commit、架构、模块大小、安全检查通过，两组精确头 GitHub CI 最终 17/17 成功。
+
+PR #60 第一轮 Python 3.14 中另一会话的 Issue #30 flock EAGAIN 测试失败，但在不跳过测试、不修改日志维护源码的情况下，同 SHA 正式重跑成功。原 master 65ece951 曾有独立 Issue #30 recovery RPC socket 拒绝的 CI 波动。这些测试风险交还 Issue #30 owner，不能把 FDW-6 合并当作日志维护稳定性或生产授权证据。
+
+本会话 Files/Search 代码收尾完成；外部 E1-WORK、A4-TCC 和 RELEASE-CONVERGE 仍为 NOT_VERIFIED/EXTERNAL。旧生产服务与实际配置不因 GitHub 更新自动升级，且 Issue #30 C1–C4 独立验收仍未闭环。
