@@ -40,7 +40,11 @@ from binnacle.platform.contracts.file_access_contracts import (
     ListRequest,
 )
 from binnacle.platform.contracts.special_file_contracts import SHORTAGE_CODES
-from binnacle.platform.darwin.file_io import failed_open_special, read_at_most
+from binnacle.platform.darwin.file_io import (
+    failed_open_special,
+    open_directory_child,
+    read_at_most,
+)
 
 MAX_BYTES = 64 * 1024 * 1024
 MAX_VISITED = 100_000
@@ -127,7 +131,7 @@ def directory_at(
     try:
         for part in parts:
             try:
-                child = os.open(part, TRAVERSE_FLAGS, dir_fd=fd)
+                child = open_directory_child(fd, part, TRAVERSE_FLAGS)
             except FileNotFoundError:
                 if not create:
                     raise
@@ -140,7 +144,7 @@ def directory_at(
                     created += 1
                 except FileExistsError:
                     pass  # A racer won; no-follow open still establishes authority.
-                child = os.open(part, TRAVERSE_FLAGS, dir_fd=fd)
+                child = open_directory_child(fd, part, TRAVERSE_FLAGS)
             os.close(fd)
             fd = child
         yield fd
