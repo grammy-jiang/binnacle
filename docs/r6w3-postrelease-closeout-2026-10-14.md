@@ -32,15 +32,15 @@
 
 | ID | 状态 | 独占源代码/执行位置 | 验收条件及证据 |
 | --- | --- | --- | --- |
-| PX1B-F4-SEARCH | REVIEW | features/search reducer、materialized collector、输出包装；Mac 独立克隆 + Pi QA | 非 UTF-8 `rg --json` 文件名被静默省略时给出安全的计数提示；materialized/streaming、names-only、截断、permission、adaptive、glob；无路径/转义泄露。 |
-| PX1B-F3 | OPEN | Linux legacy edit_file/write_file 精确拒绝代码 | Linux/Darwin 公共拒绝有一致 `telemetry_code`、无文字破坏；限定被触及的错误。 |
-| FDW-6 | OPEN | Darwin file_traversal 的 held-parent errno/classification | ELOOP 与 ENOTDIR 按 held parent FD 的 no-follow fstat 区分，不用额外 pathname 探测，负例拒绝不降级。 |
-| FDW-8 | OPEN | Files/Search listing 的 lstat/fstatat 错误策略 | 对 ENOENT、EMFILE、EACCES/EPERM、其他 OSError 的选择、丢弃/保留/附注一致；相同 Mac/Linux XOS rows。须保留不安全路径 fail-closed。 |
-| FDW-11 | OPEN | 完全隔离的原生 Mac 10,000 文件只读性能基准 | 与 Linux 同结构校验，记录硬件/次数/median/每文件相对比；仅 Darwin > 1.5x 时考虑专项优化。 |
-| FDW-13 | OPEN | Darwin 内核 F_GETPATH 的评估/基准，不涉及服务 | 验证同一 FD 上根路径重检的安全收益、别名/搬迁/路径长度与耗时；若性能或安全证据不足，记录明确 NO_GO，不硬加。 |
-| FDW-A | OPEN | File walk 一次开链路 API 设计核销 | 核对当前 FDW-B1 one-walk 消费者；仍存重复 resolve→open 则做小范围修复与 XOS 否定测试，否则记录 NO_CHANGE。 |
-| PX1B/TEST-STRICT | OPEN | Files/Search 专属 tests/ 文档 | 回归可在 Mac/Linux 完全执行；对当前所有低优先级旧项逐个标记复现/已修/设计豁免，禁止重复开发。 |
-| R6-EVIDENCE | OPEN | 独立关闭报告文档（非原 Supervisor 私有 ledger） | 四列区分实现、测试、合并与实装；重审全部旧清单，无剩余非阻断 OPEN。 |
+| PX1B-F4-SEARCH | BLOCKED_CI | features/search reducer、materialized collector、输出包装；Mac 独立克隆 + Pi QA | 非 UTF-8 `rg --json` 文件名被静默省略时给出安全的计数提示；materialized/streaming、names-only、截断、permission、adaptive、glob；无路径/转义泄露。 |
+| PX1B-F3 | CLOSED | Linux legacy edit_file/write_file 精确拒绝代码 | Linux/Darwin 公共拒绝有一致 `telemetry_code`、无文字破坏；限定被触及的错误。 |
+| FDW-6 | BLOCKED_TOOL | Darwin file_traversal 的 held-parent errno/classification | ELOOP 与 ENOTDIR 按 held parent FD 的 no-follow fstat 区分，不用额外 pathname 探测，负例拒绝不降级。 |
+| FDW-8 | REVIEW | Files/Search listing 的 lstat/fstatat 错误策略 | 对 ENOENT、EMFILE、EACCES/EPERM、其他 OSError 的选择、丢弃/保留/附注一致；相同 Mac/Linux XOS rows。须保留不安全路径 fail-closed。 |
+| FDW-11 | CLOSED | 完全隔离的原生 Mac 10,000 文件只读性能基准 | 与 Linux 同结构校验，记录硬件/次数/median/每文件相对比；仅 Darwin > 1.5x 时考虑专项优化。 |
+| FDW-13 | CLOSED | Darwin 内核 F_GETPATH 的评估/基准，不涉及服务 | 验证同一 FD 上根路径重检的安全收益、别名/搬迁/路径长度与耗时；若性能或安全证据不足，记录明确 NO_GO，不硬加。 |
+| FDW-A | CLOSED | File walk 一次开链路 API 设计核销 | 核对当前 FDW-B1 one-walk 消费者；仍存重复 resolve→open 则做小范围修复与 XOS 否定测试，否则记录 NO_CHANGE。 |
+| PX1B/TEST-STRICT | REVIEW | Files/Search 专属 tests/ 文档 | 回归可在 Mac/Linux 完全执行；对当前所有低优先级旧项逐个标记复现/已修/设计豁免，禁止重复开发。 |
+| R6-EVIDENCE | REVIEW | 独立关闭报告文档（非原 Supervisor 私有 ledger） | 四列区分实现、测试、合并与实装；重审全部旧清单，无剩余非阻断 OPEN。 |
 
 ## 无法通过普通代码提交完成的门禁（不允许假报）
 
@@ -48,8 +48,8 @@
 | --- | --- | --- |
 | E1-WORK | EXTERNAL | Work 实际 UI 中对同一 MCP 的真实授权工具调用、回执；无外部客户端驱动时记录 NOT_VERIFIED。 |
 | A4-TCC | EXTERNAL | 经用户批准的 macOS 真实 TCC-denied 路径/权限样例；不运行 tccutil、不扩大 TCC grant。 |
-| RELEASE-CONVERGE | EXTERNAL | GitHub 3582653 vs 三台生产机 278af9c；只在其它会话完成开发与 Jobs Manager/MCP/RPC 归零、独立部署门禁合格时逐台安全更新。 |
-| DEV-TOOLS | OPEN | 各 OS uv/hooks、rg 版本实际 Doctor 状态复核，区分非致命 warning、真实阻断；不动生产环境。 |
+| RELEASE-CONVERGE | EXTERNAL | GitHub 当前 a5d87df（2026-10-14 20:53 的受保护分支）vs 三台生产机 278af9c；只在其它会话完成开发与 Jobs Manager/MCP/RPC 归零、独立部署门禁合格时逐台安全更新。 |
+| DEV-TOOLS | CLOSED | 各 OS uv/hooks、rg 版本实际 Doctor 状态复核，区分非致命 warning、真实阻断；不动生产环境。 |
 | ISSUE30 | BOUNDARY | macOS 日志归档、privileged controller、crash guardian 与生产 prune 由另一聊天会话独占；本表不领取任何源码写权限。 |
 
 ## 本轮执行日志
@@ -61,3 +61,17 @@
 - PX1B-F4-SEARCH 第二次独立复审 PASS：额外 P2（保留 Darwin skipped_changed/skipped_io_error）与 P3（最终拒绝不得记录成功终态）全部修复；新增精确回归。Mac/Pi 各 125 affected PASS；完整 MyPy/Ruff/Bandit/architecture hooks PASS。等待最终签名提交的 GitHub 7/7 CI 再核销 CLOSE。
 
 - DEV-TOOLS 只读检查：Mac rg 15.2.0、uv 0.12.22 在 pyproject 约束内、Doctor 24/24 OK；Pi/sextant uv 0.12.24，rg 14.1.1（均 Doctor WARN）；Pi Doctor 31 OK/2 WARN（rg,journal），sextant 32 OK/1 WARN（rg），两台 exit 0。版本安装/重启不在本会话直接执行。
+
+- BLOCKED_CI means a code-complete item whose exact-SHA required GitHub tests fail; no merge/deploy until corrected and reverified.
+- 2026-10-14 19:37 AEDT: PX1B-F3 merged through protected PR #53 as 68999c5; Mac/Pi each 61 affected tests and two exact SHA workflows green. Only production convergence remains external.
+- PX1B-F4-SEARCH PR #51 exact SHA 9136fcc: run 38520926773 green; run 38520931697 Python 3.11 fails on both attempts (attempt 2 job 115759148919), Issue #30 log_e2e_transaction.py raw_unlink fixture gets flock EAGAIN. One failed and 6,879 passed. Recorded in PR #51 comment issuecomment-6164393735. Do not bypass CI or modify another session's Issue #30.
+- FDW-6: Private Mac RED 2/3 reproduces ELOOP vs ENOTDIR misclassification. Fix in an isolated new branch requires safe host file access implementation and independent tests; do not modify production.
+- FDW-11: 10k files / 100 dirs on private Mac, four trials (median last three): DarwinFileAccess 0.22632s, full system ripgrep glob path 0.0604s, ratio 3.747. Above 1.5 investigation threshold but semantic differences remain. cProfile shows 20k glob_matches consume 0.292s of 0.489s measured profiler time; 10,101 open calls. Do not remove security checks as speculative speed optimization.
+- FDW-13: Private Mac F_GETPATH on same fd tracks rename, median 587ns vs fstat 466ns (ratio 1.26), symlink alias canonicalized; after unlink an open fd can return old string while path is missing. No continuous-containment guarantee; security GO/NO_GO not yet issued.
+
+- 2026-10-14 21:10 AEDT: FDW-8 在受保护 master a5d87df 的独立开发分支复现 6 个 RED 用例，修复后 Mac/Pi 各 109 个 Files、race、symlink 定向用例通过。独立源码安全复审无 P1/P2，签名 93c58a81、Draft PR #56 正等 CI。所有实现保持 fd-relative/no-follow；合成 PermissionError 若不带 errno 也保留原 omission contract。
+- FDW-8 的 Mac 全量 pre-push 还受不相关的 Issue #30 模块导入清单测试失败阻挡；在完全未修改的 a5d87df 独立基线中可重现 2 个 test_r6w3_e1d_manager_scope 失败。不得因该基线问题推断本 PR 的 Files 代码错误，也不能绕过质量门禁。
+- FDW-A CLOSED (NO_CHANGE): 在 Mac 真实的 /private/tmp 私有根、打开的 DarwinFileAccess grant 中，open_read 子目录一次 + 正式文件一次；write_bytes 子目录一次且写入正常。既有 FDW-B1 tests 提供负例；不改内核 FD 策略。
+- FDW-11 CLOSED (BENCHMARK + RECOMMENDATION): 私有 Mac 10k 文件、100 目录暖态 Darwin 0.22632 秒，rg --files + glob 0.06040 秒，差 3.747 倍；cProfile 的 glob_matches 20k 次是显著成本。两条不同语义路径不能直接按该比值证明安全冗余；先用等价 glob 编译缓存与权限负例做性能专项，不删除 no-follow/identity 校验。
+- FDW-13 CLOSED (NO_GO): F_GETPATH 可追踪 rename，但经 symlink 打开返回 canonical 名称、unlink 后仍可能返回已经不存在的旧路径，不能替代根目录 FD/grant identity 控制；测试成本约 587ns vs fstat 466ns。禁止仅凭字符串认为路径仍受授权。
+- DEV-TOOLS CLOSED (READONLY): Mac uv 0.12.22, rg 15.2.0, Doctor 24/24 OK；Pi、sextant uv 0.12.24，rg 14.1.1，Doctor 31 OK/2 WARN 与 32 OK/1 WARN，exit 0；不改变生产环境下其他活动进程可能使用的工具。
