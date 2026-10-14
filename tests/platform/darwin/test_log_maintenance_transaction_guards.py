@@ -36,6 +36,18 @@ def mutate(root: Path, **changes: object) -> None:
     path.chmod(0o600)
 
 
+def test_valid_foreign_transaction_nonce_cannot_be_adopted(
+    root: Path,
+) -> None:
+    with journal.MaintenanceTransactionJournal(root) as lease:
+        begin(lease)
+        # Use a *valid* 32-character nonce and recompute the record digest.
+        # The journal must remain bound to its original txn-<nonce> directory.
+        mutate(root, nonce="b" * 32)
+        with pytest.raises(journal.MaintenanceJournalRefused, match="root nonce"):
+            lease.inspect()
+
+
 @pytest.mark.parametrize(
     ("changes", "reason"),
     [

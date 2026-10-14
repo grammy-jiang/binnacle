@@ -84,7 +84,13 @@ cleared on context exit. After SIGKILL, another process can acquire
 the released kernel lock to INSPECT the state but cannot adopt the
 old owner, even if the OS reuses its PID. Unfinished phases indicate
 external recovery is required, and phase producer_stopped or later
-additionally warns the producer may still be stopped.
+additionally warns the producer may still be stopped **from the
+guardian_armed phase onward**: the actual bootout can succeed and the
+controller can crash before the producer_stopped journal receipt has
+been written. Treat that uncertainty as requiring independent guardian
+recovery, never as permission to assume the producer remained active.
+The reader additionally binds the on-disk transaction nonce to the
+pre-created directory name, rejecting a valid but foreign journal swap.
 
 ## Validation and remaining work
 

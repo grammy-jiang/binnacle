@@ -105,6 +105,60 @@ def test_all_steps_strictly_linear_until_completed(root: Path) -> None:
             )
 
 
+def test_guardian_armed_warns_producer_may_be_down_after_crash(
+    root: Path,
+) -> None:
+    # Simulate controller SIGKILL in the gap: after launchctl bootout but
+    # before persisting "producer_stopped". Only "guardian_armed" is durable.
+    with journal.MaintenanceTransactionJournal(root) as lease:
+        begin(lease)
+        report = advance_to(lease, "guardian_armed")
+        assert report.phase == "guardian_armed"
+        assert report.needs_external_recovery
+        assert report.producer_may_be_stopped
+    with journal.MaintenanceTransactionJournal(root) as inspector:
+        old = inspector.inspect()
+        assert old is not None and old.producer_may_be_stopped
+        assert old.needs_external_recovery
+        with pytest.raises(journal.MaintenanceJournalRefused, match="owner/evidence"):
+            inspector.advance(
+                nonce=NONCE,
+                expected_revision=old.revision,
+                phase="producer_stopped",
+                receipt_digest=receipt("producer_stopped"),
+            )
+
+
+@pytest.mark.parametrize(
+    ("phase", "possibly_stopped"),
+    [
+        ("intent", False),
+        ("j7_locked", False),
+        ("watchdog_acked", False),
+        ("mcp_drained", False),
+        ("jobs_drained", False),
+        ("guardian_armed", True),
+        ("producer_stopped", True),
+        ("writer_fds_closed", True),
+        ("canonical_verified", True),
+        ("raw_pruned", True),
+        ("producer_restored", True),
+        ("complete", False),
+    ],
+)
+def test_recovery_warning_is_conservative_before_stop_receipt(
+    root: Path,
+    phase: str,
+    possibly_stopped: bool,
+) -> None:
+    with journal.MaintenanceTransactionJournal(root) as lease:
+        begin(lease)
+        state = lease.inspect() if phase == "intent" else advance_to(lease, phase)
+        assert state is not None
+        assert state.producer_may_be_stopped is possibly_stopped
+        assert state.production_authorized is False
+
+
 def test_after_writer_stop_an_unfinished_transaction_demands_external_recovery(
     root: Path,
 ) -> None:

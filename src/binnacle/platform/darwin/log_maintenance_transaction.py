@@ -101,8 +101,11 @@ class JournalSnapshot:
 
     @property
     def producer_may_be_stopped(self) -> bool:
+        # After guardian arming, a controller may have executed bootout but
+        # been SIGKILLed before persisting the producer_stopped receipt.
+        # The *previous* durable phase is therefore not proof it remained up.
         return (
-            _PHASES.index(self.phase) >= _PHASES.index("producer_stopped")
+            _PHASES.index(self.phase) >= _PHASES.index("guardian_armed")
             and self.phase != "complete"
         )
 
@@ -308,7 +311,9 @@ class MaintenanceTransactionJournal:
             value = json.loads(raw, object_pairs_hook=no_duplicate)
         except (ValueError, UnicodeDecodeError, TypeError) as exc:
             raise MaintenanceJournalRefused("malformed journal data") from exc
-        _check_record(value)
+        observed = _check_record(value)
+        if observed.nonce != self.root.name[4:]:
+            raise MaintenanceJournalRefused("journal transaction root nonce mismatch")
         return value
 
     def _publish(self, record: dict[str, Any], *, new: bool) -> None:
