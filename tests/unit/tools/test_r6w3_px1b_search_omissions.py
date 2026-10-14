@@ -298,3 +298,88 @@ def test_final_budget_includes_both_permission_and_utf8_notes():
         getattr(limited.content[0], "text", "").count("Skipped 1 non-UTF-8 filename")
         == 1
     )
+
+
+def test_final_budget_preserves_native_skip_reasons_in_summary():
+    from fastmcp.tools.base import ToolResult
+
+    from binnacle.features.files import rg_env
+
+    summary = "Found 1 matches. Skipped files: skipped_changed=1, skipped_io_error=2."
+
+    def produce(*, settings):
+        rg_env.record_unreadable(["/tmp/private-denied"])
+        return ToolResult(
+            content=summary,
+            structured_content={
+                "path": "/tmp/test",
+                "pattern": "needle",
+                "count": 1,
+                "truncated": False,
+                "entries": [{"file": "/tmp/test", "line": 1, "text": "x" * 3980}],
+            },
+        )
+
+    result = rg_env.noting_search_with_budget(produce)(
+        settings=SearchTextSettings(result_max_bytes=4096)
+    )
+    payload = result.structured_content
+    assert isinstance(payload, dict)
+    assert len(orjson.dumps(payload)) <= 4096
+    assert payload["truncated"] is True
+    assert payload["note"].count("Skipped 1 unreadable path") == 1
+    text = getattr(result.content[0], "text", "")
+    assert "skipped_changed=1" in text
+    assert "skipped_io_error=2" in text
+    assert "Additional entries trimmed" in text
+
+
+def test_final_metadata_refusal_has_failure_terminal_telemetry(caplog):
+    from fastmcp.exceptions import ToolError
+    from fastmcp.tools.base import ToolResult
+
+    from binnacle.features.files import rg_env
+    from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
+
+    def produce(*, settings):
+        metrics = ExactSearchMetrics(
+            call="px1b-f4-budget", scope="dir", context_requested="0"
+        )
+        metrics.start()
+        rg_env.start_search_metrics(metrics)
+        rg_env.observe_rg_event(
+            {"type": "match", "data": {"path": {"bytes": "YmFkL/8="}}}
+        )
+        return ToolResult(
+            content="Found 0 matches.",
+            structured_content={
+                "path": "/tmp/" + "x" * 4000,
+                "pattern": "needle",
+                "entries": [],
+                "count": 0,
+                "truncated": False,
+            },
+        )
+
+    import logging
+
+    with (
+        caplog.at_level(logging.INFO, logger="binnacle.search_text"),
+        pytest.raises(ToolError) as exc,
+    ):
+        rg_env.noting_search_with_budget(produce)(
+            settings=SearchTextSettings(result_max_bytes=4096)
+        )
+    assert getattr(exc.value, "telemetry_code", None) == "response_budget_exceeded"
+    terminal = [
+        r.message
+        for r in caplog.records
+        if "event=search_exact call=px1b-f4-budget" in r.message
+    ]
+    assert len(terminal) == 1
+    assert "outcome=error" in terminal[0]
+    assert "error_code=response_budget_exceeded" in terminal[0]
+    assert "budget_outcome=final_note_metadata_error" in terminal[0]
+    assert "returned_entries=0" in terminal[0]
+    assert "outcome=ok" not in terminal[0]
+    assert "result_bytes=0" not in terminal[0]  # attempted, not emitted bytes

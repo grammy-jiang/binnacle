@@ -19,7 +19,10 @@ from binnacle.features.files.paths import (
     full_match,
     resolve_path,
 )
-from binnacle.features.files.rg_env import noting_search_with_budget
+from binnacle.features.files.rg_env import (
+    noting_search_with_budget,
+    start_search_metrics,
+)
 from binnacle.features.search.search_text_adaptive import (
     build_adaptive_result,
     log_adaptive_result,
@@ -451,25 +454,20 @@ def search_text_impl(
         context_requested="omitted" if context_lines is None else str(context_lines),
     )
     metrics.start()
-    try:
-        result = _search_exact_impl(
-            pattern,
-            resolved,
-            glob,
-            fixed_strings,
-            context_lines,
-            names_only,
-            max_results,
-            line_numbers,
-            metrics,
-            settings=settings,
-            rg_bin=rg_bin,
-        )
-    except Exception as exc:
-        metrics.log_terminal(log, exc)
-        raise
-    metrics.log_terminal(log)
-    return result
+    start_search_metrics(metrics)
+    return _search_exact_impl(
+        pattern,
+        resolved,
+        glob,
+        fixed_strings,
+        context_lines,
+        names_only,
+        max_results,
+        line_numbers,
+        metrics,
+        settings=settings,
+        rg_bin=rg_bin,
+    )
 
 
 def register(

@@ -13,11 +13,12 @@ import hashlib
 import logging
 import os
 import re
+import time
 from collections.abc import Callable, Iterable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import BinaryIO, ParamSpec
+from typing import Any, BinaryIO, ParamSpec
 
 import orjson
 from fastmcp.tools.base import ToolResult
@@ -296,75 +297,135 @@ def noting_search_with_budget(impl: Callable[P, ToolResult]) -> Callable[P, Tool
 
     @functools.wraps(impl)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> ToolResult:
-        result = noted(*args, **kwargs)
-        payload = result.structured_content
-        if not isinstance(payload, dict):
+        token = _SEARCH_METRICS.set(None)
+        logger = logging.getLogger("binnacle.search_text")
+        annotated: ToolResult | None = None
+        try:
+            try:
+                annotated = noted(*args, **kwargs)
+                start = time.perf_counter_ns()
+                try:
+                    result, trimmed = _close_search_budget(annotated, dict(kwargs))
+                finally:
+                    metrics = _SEARCH_METRICS.get()
+                    if metrics is not None:
+                        metrics.budget_ms += (
+                            time.perf_counter_ns() - start
+                        ) / 1_000_000
+            except Exception as exc:
+                metrics = _SEARCH_METRICS.get()
+                if metrics is not None:
+                    if (
+                        annotated is not None
+                        and getattr(exc, "telemetry_code", None)
+                        == "response_budget_exceeded"
+                    ):
+                        payload = annotated.structured_content
+                        if isinstance(payload, dict):
+                            # This is the attempted fully annotated result
+                            # size, not an emitted result (failure is fail-closed).
+                            metrics.result_bytes = len(orjson.dumps(payload))
+                            metrics.mark_result(payload, strategy=metrics.strategy)
+                        metrics.budget_outcome = "final_note_metadata_error"
+                    metrics.log_terminal(logger, exc)
+                raise
+            metrics = _SEARCH_METRICS.get()
+            if metrics is not None:
+                payload = result.structured_content
+                if isinstance(payload, dict):
+                    metrics.result_bytes = len(orjson.dumps(payload))
+                    metrics.mark_result(payload, strategy=metrics.strategy)
+                if trimmed:
+                    metrics.budget_outcome = "final_note_entries_trimmed"
+                metrics.log_terminal(logger)
             return result
-        # Lazy config access prevents a circular import during application
-        # composition. The caller already resolved this same settings object.
-        from binnacle.config import SearchTextSettings, get_settings
-
-        supplied = kwargs.get("settings")
-        settings = (
-            supplied
-            if isinstance(supplied, SearchTextSettings)
-            else get_settings().search_text
-        )
-        limit = settings.result_max_bytes
-        current_bytes = len(orjson.dumps(payload))
-        if current_bytes <= limit:
-            return result
-        entries = payload.get("entries", [])
-        if not isinstance(entries, list):
-            raise CodedToolError(
-                "response_budget_exceeded",
-                "Search result metadata exceeds the configured response budget. "
-                "Use a shorter pattern or a more specific path.",
-            )
-        original_note = str(payload.get("note", ""))
-        total = payload.get("count", len(entries))
-
-        def candidate(n: int) -> dict:
-            message = (
-                f"{original_note} Additional entries trimmed to {n} "
-                "to satisfy the response budget."
-            )
-            return {
-                **payload,
-                "entries": entries[:n],
-                "truncated": True,
-                "note": message.strip(),
-            }
-
-        lo, hi = 0, len(entries)
-        while lo < hi:
-            mid = (lo + hi + 1) // 2
-            if len(orjson.dumps(candidate(mid))) <= limit:
-                lo = mid
-            else:
-                hi = mid - 1
-        fitted = candidate(lo)
-        final_bytes = len(orjson.dumps(fitted))
-        if final_bytes > limit:
-            raise CodedToolError(
-                "response_budget_exceeded",
-                "Search result metadata exceeds the configured response budget. "
-                "Use a shorter pattern or a more specific path.",
-            )
-        logging.getLogger("binnacle.search_text").info(
-            "event=search_final_output_budget count=%s returned_entries=%d "
-            "result_bytes=%d result_budget_bytes=%d",
-            total,
-            lo,
-            final_bytes,
-            limit,
-        )
-        return ToolResult(
-            content=(
-                f"Found {total} matches; showing {lo} result entries within "
-                f"the response budget. {fitted['note']}"
-            ),
-            structured_content=fitted,
-        )
+        finally:
+            _SEARCH_METRICS.reset(token)
 
     return wrapper
+
+
+_SEARCH_METRICS: ContextVar[Any] = ContextVar("search_final_metrics", default=None)
+
+
+def start_search_metrics(metrics: Any) -> None:
+    """Hand exact-search terminal metrics to the outer, final response gate."""
+    _SEARCH_METRICS.set(metrics)
+
+
+def _close_search_budget(
+    result: ToolResult, kwargs: dict[str, Any]
+) -> tuple[ToolResult, bool]:
+    payload = result.structured_content
+    if not isinstance(payload, dict):
+        return result, False
+    # Lazy config access prevents a circular import during application
+    # composition. The caller already resolved this same settings object.
+    from binnacle.config import SearchTextSettings, get_settings
+
+    supplied = kwargs.get("settings")
+    settings = (
+        supplied
+        if isinstance(supplied, SearchTextSettings)
+        else get_settings().search_text
+    )
+    limit = settings.result_max_bytes
+    current_bytes = len(orjson.dumps(payload))
+    if current_bytes <= limit:
+        return result, False
+    entries = payload.get("entries", [])
+    if not isinstance(entries, list):
+        raise CodedToolError(
+            "response_budget_exceeded",
+            "Search result metadata exceeds the configured response budget. "
+            "Use a shorter pattern or a more specific path.",
+        )
+    original_note = str(payload.get("note", ""))
+    total = payload.get("count", len(entries))
+
+    def candidate(n: int) -> dict:
+        message = (
+            f"{original_note} Additional entries trimmed to {n} "
+            "to satisfy the response budget."
+        )
+        return {
+            **payload,
+            "entries": entries[:n],
+            "truncated": True,
+            "note": message.strip(),
+        }
+
+    lo, hi = 0, len(entries)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if len(orjson.dumps(candidate(mid))) <= limit:
+            lo = mid
+        else:
+            hi = mid - 1
+    fitted = candidate(lo)
+    final_bytes = len(orjson.dumps(fitted))
+    if final_bytes > limit:
+        raise CodedToolError(
+            "response_budget_exceeded",
+            "Search result metadata exceeds the configured response budget. "
+            "Use a shorter pattern or a more specific path.",
+        )
+    logging.getLogger("binnacle.search_text").info(
+        "event=search_final_output_budget count=%s returned_entries=%d "
+        "result_bytes=%d result_budget_bytes=%d",
+        total,
+        lo,
+        final_bytes,
+        limit,
+    )
+    original_text = getattr(result.content[0], "text", "") if result.content else ""
+    return (
+        ToolResult(
+            content=(
+                f"{original_text} Additional entries trimmed to {lo} "
+                "to satisfy the response budget."
+            ),
+            structured_content=fitted,
+        ),
+        True,
+    )
