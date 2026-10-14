@@ -13,6 +13,7 @@ import hashlib
 import os
 import stat
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -65,6 +66,21 @@ class FinalizedArchive:
     source_bytes: int
     sha256: str
     resumed_publication: bool
+
+
+@dataclass(frozen=True)
+class FinalizeMilestones:
+    """Trusted caller's durable phase receipts, while writer hold is active.
+
+    The first callback is invoked after canonical identity/data verification
+    but before raw unlink. The second is invoked ONLY after raw unlink and
+    directory fsync. No callback can replace/skip the producer hold or grant
+    production authority. Failure before prune leaves raw intact; failure
+    after pruning means raw may already be gone and recovery is mandatory.
+    """
+
+    canonical_verified: Callable[[FinalizedArchive], None]
+    raw_pruned: Callable[[FinalizedArchive], None]
 
 
 def _verify_hold(hold: WriterHold, name: str, initial: os.stat_result) -> None:
@@ -211,6 +227,7 @@ def finalize_archive(
     hold: WriterHold,
     max_bytes: int = stage.DEFAULT_MAX_BYTES,
     min_free_bytes: int = MIN_DISK_FREE_BYTES,
+    milestones: FinalizeMilestones | None = None,
 ) -> FinalizedArchive:
     """Finalize a raw archive only under an authoritative held producer stop.
 
@@ -299,11 +316,24 @@ def finalize_archive(
             _stable_canonical(
                 dfd, canonical, canonical_reference, links=1 if resumed else 2
             )
-            os.unlink(name, dir_fd=dfd)
-            os.fsync(dfd)
-            return FinalizedArchive(
+            result = FinalizedArchive(
                 name, canonical, hold.producer, total, digest, resumed
             )
+            if milestones is not None:
+                # A prepared durable record MUST precede the irreversible
+                # raw-unlink boundary; the callback cannot be an observer
+                # which is called only after deletion.
+                milestones.canonical_verified(result)
+                _verify_hold(hold, name, initial)
+                _stable_raw(dfd, srcfd, name, initial)
+                _stable_canonical(
+                    dfd, canonical, canonical_reference, links=1 if resumed else 2
+                )
+            os.unlink(name, dir_fd=dfd)
+            os.fsync(dfd)
+            if milestones is not None:
+                milestones.raw_pruned(result)
+            return result
     except stage.ArchiveStageRefused as exc:
         if isinstance(exc, ArchiveFinalizeRefused):
             raise
