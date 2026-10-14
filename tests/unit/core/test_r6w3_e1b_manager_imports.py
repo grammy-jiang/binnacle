@@ -38,15 +38,22 @@ from pathlib import Path
 home, sock = Path(sys.argv[1]), Path(sys.argv[2])
 def binnacle_modules():
     return {m for m in list(sys.modules) if m.split(".")[0] == "binnacle"}
+def publish_json(name, value):
+    # The parent uses pathname existence to determine completion. write_text
+    # exposes an empty or partial file before the JSON is finished, so publish
+    # a private sibling atomically instead.
+    temporary = home / ("." + name + ".partial")
+    temporary.write_text(json.dumps(value))
+    temporary.replace(home / name)
 def watch():
     while not sock.exists():
         time.sleep(0.01)
     served = binnacle_modules()
-    (home / "served.json").write_text(json.dumps(sorted(served)))
+    publish_json("served.json", sorted(served))
     while not (home / "exercised").exists():
         time.sleep(0.01)
     late = sorted(binnacle_modules() - served)
-    (home / "late.json").write_text(json.dumps(late))
+    publish_json("late.json", late)
 threading.Thread(target=watch, daemon=True).start()
 sys.argv[1:] = []
 if platform.system() == "Darwin":
