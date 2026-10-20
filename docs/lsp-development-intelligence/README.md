@@ -20,6 +20,7 @@ Read only what is needed:
 | [Historical trajectory evaluation plan](historical-trajectory-evaluation-plan.md) | Reuse old tool/tunnel logs and session observer for opportunity mining, task replay and paired agent A/B |
 | [Implementation plan V2](implementation-plan.md) | Gated roadmap, executable work packages, dependencies, acceptance and release decisions |
 | [P0.5 resolution](p0-5-architecture-resolution-2026-10-21.md) | Seven design issues, binding decisions and retained runtime gates |
+| [P0.6 host inventory](p0-6-host-readiness-2026-10-21.md) | Read-only actual service-PATH/OS/provider locator evidence on MacBook and two Raspberry Pi hosts |
 | [Initial independent review](p0-5-independent-review-2026-10-21.md) | Initial read-only REWORK findings against pre-amendment code |
 | [Independent follow-up GO](p0-5-followup-review-2026-10-21.md) | Independent verification of seven amended contracts, permitting only P1 private fixtures |
 
