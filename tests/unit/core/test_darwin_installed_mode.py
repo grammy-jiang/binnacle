@@ -27,11 +27,19 @@ class FakeLaunchd:
         self.fail_install = False
         self.fail_bootout = False
         self.unhealthy_bootstrap_once = False
+        self.stale_after_bootout = 0
+        self.stale_remaining = 0
+        self.transient_bootstrap_failures = 0
+        self.ambiguous_bootstrap_once = False
 
     def __call__(self, argv):
         self.calls.append(argv)
         if argv == ("/bin/launchctl", "print", TARGET):
-            rc = 0 if self.running else 1
+            if self.stale_remaining:
+                self.stale_remaining -= 1
+                rc = 0
+            else:
+                rc = 0 if self.running else 1
         elif "/usr/bin/install" in argv:
             if self.fail_install:
                 rc = 1
@@ -43,9 +51,17 @@ class FakeLaunchd:
                 rc = 1
             else:
                 self.running = False
+                self.stale_remaining = self.stale_after_bootout
                 rc = 0
         elif "bootstrap" in argv and argv[-2] == "system":
-            if self.fail_bootstrap_all or self.fail_bootstrap:
+            if self.transient_bootstrap_failures:
+                self.transient_bootstrap_failures -= 1
+                rc = 1
+            elif self.ambiguous_bootstrap_once:
+                self.ambiguous_bootstrap_once = False
+                self.running = True
+                rc = 1
+            elif self.fail_bootstrap_all or self.fail_bootstrap:
                 self.fail_bootstrap = False
                 rc = 1
             else:
@@ -135,14 +151,16 @@ def test_force_and_rollback(installed):
     assert not any("com.binnacle.jobs" in str(c) for c in runner.calls)
 
 
-def test_bootstrap_failure_rolls_back_to_prior_service(installed):
+def test_single_transient_bootstrap_failure_is_retried(installed, monkeypatch):
     mode, runner, _, plist = installed
-    old = plist.read_bytes()
     runner.fail_bootstrap = True
-    with pytest.raises(InstalledMcpModeError, match="rollback"):
-        mode.apply(mode.plan("dev"), force=True)
-    assert plist.read_bytes() == old
+    monkeypatch.setattr(
+        "binnacle.deployment.darwin.installed_mode.time.sleep", lambda _: None
+    )
+    assert "switched to dev" in mode.apply(mode.plan("dev"), force=True)
     assert runner.running
+    assert plistlib.loads(plist.read_bytes())["ProgramArguments"][-1] == "--reload"
+    assert sum("bootstrap" in c for c in runner.calls) == 2
 
 
 @pytest.mark.parametrize(
@@ -369,7 +387,8 @@ def test_rollback_after_bootstrap_with_unhealthy_service(installed):
         mode.apply(mode.plan("dev"), force=True)
     assert plist.read_bytes() == prior
     assert runner.running
-    assert sum(c[-2:] == ("bootout", TARGET) for c in runner.calls) >= 2
+    # No duplicate bootout when the new bootstrap never registered a label.
+    assert sum(c[-2:] == ("bootout", TARGET) for c in runner.calls) == 1
 
 
 def test_both_bootstraps_fail_reports_incomplete_rollback(installed):
