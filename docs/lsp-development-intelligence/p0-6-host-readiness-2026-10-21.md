@@ -12,7 +12,7 @@
 | Shell Python | 3.14.8 | 3.13.5 | 3.13.5 |
 | Service system | launchd system daemon `com.binnacle.mcp` | user systemd `binnacle-mcp.service` | user systemd `binnacle-mcp.service` |
 | Service state observed | process PID 31576 under PID 1; label in `launchctl list` | user unit active/running, PID 343412 | user unit active/running, PID 434431 |
-| Service PATH evidence | launchd plist `EnvironmentVariables.PATH` (configured; runtime environ not read) | exact `/proc/343412/environ` PATH, **only** PATH printed | exact `/proc/434431/environ` PATH, **only** PATH printed |
+| Service PATH evidence | live process PID 31576 PATH extracted from `ps eww` (printed PATH only); matches launchd plist | exact `/proc/343412/environ` PATH, **only** PATH printed | exact `/proc/434431/environ` PATH, **only** PATH printed |
 | Platform process primitives | `ps`, `launchctl`, `sandbox-exec` present; confinement not proven | `setsid`, `ps`, cgroup filesystem present; confinement not proven | `setsid`, `ps`, cgroup filesystem present; confinement not proven |
 
 Mac configured service PATH:
@@ -21,9 +21,9 @@ Mac configured service PATH:
 Both Pi processes observed service PATH:
 `/home/grammy-jiang/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/games:/usr/games`.
 
-The Pi service executable refers to a separate `binnacle-deploy-fullcapture-20261021` checkout. The isolated development tree is **not** the deployed checkout. Service process and paths may change; P3 must revalidate at run time.
+The macOS live process PATH was later independently confirmed with a sanitized `ps eww -p 31576` probe; only the PATH field was displayed, and it matches the launchd plist. The Pi service executable refers to a separate `binnacle-deploy-fullcapture-20261021` checkout. The isolated development tree is **not** the deployed checkout. Service process and paths may change; P3 must revalidate at run time.
 
-**Important false lead:** `systemctl show binnacle-mcp.service` (system level) showed inactive and PID 0, but `systemctl --user show binnacle-mcp.service` verified the active real user units. Always probe correct service scope. On macOS the launchd plist PATH is a configuration value, not a verified read of the live process's environment.
+**Important false lead:** `systemctl show binnacle-mcp.service` (system level) showed inactive and PID 0, but `systemctl --user show binnacle-mcp.service` verified the active real user units. Always probe correct service scope. The macOS PATH observation is a point-in-time live-process value and must be rechecked if the service restarts.
 
 ## Discovery, versions and fingerprints (no provider executed)
 
