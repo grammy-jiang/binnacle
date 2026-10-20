@@ -18,6 +18,7 @@
 ## 2. Phase dependency map
 
 - **P0 Design reconciliation (NO CODE)** -> independent architecture and capability review.
+- **Evaluation track E0–E7 (staged)** -> privacy-safe historical trace mining, frozen-gold corpora, controlled tool and agent A/B; see [evaluation plan](historical-trajectory-evaluation-plan.md).
 - **P1 Deterministic test infrastructure** -> fake LSP/analyzer and reproducible benchmark/evidence harness.
 - **P2 Private protocol/runtime** -> process owner, strict JSON-RPC, session/lifespan, document sync, no MCP surface changes.
 - **P3 Audited provider profiles** -> Pyright first and breadth compatibility, OS/resource/side-effect evidence.
@@ -38,7 +39,7 @@ Each item must have one scoped code/evidence change, acceptance proof and a comm
 | P0.2 | Provider capability mapbook; service-vs-shell PATH distinction, upstream claims | P0.1 | All candidate languages, trust, evidence tags and gaps recorded (**draft complete**) |
 | P0.3 | V2 responsibilities, protocol/process/security and failures | P0.1 | Technical draft with trust/access/exception model (**draft complete**) |
 | P0.4 | Re-map V1 tasks and gates to current architecture, preserve V1 history | P0.1–P0.3 | This V2 plan and versioned V1 archive (**draft complete**) |
-| P0.5 | Independent design review: focused FastMCP child ADR, optional agent capability portfolio, architectural dependency, lifespan/process ownership, testability, READ and visibility policy | P0.1–P0.4 | Signed GO/REWORK record, open risks owner and targeted changes (**pending**) |
+| P0.5 | Independent design review: focused FastMCP child ADR, agent capability portfolio, privacy-safe evaluation track, architecture/lifespan ownership, testability, READ and visibility policy | P0.1–P0.4 | Signed GO/REWORK record, open risks owner and targeted changes (**pending**) |
 | P0.6 | Non-intrusive host readiness inventory: deployed service PATH, OS process primitives, versions | P0.5 | Service-context evidence and exact executable fingerprint (**pending; no provider start on production**) |
 | P1.1 | Minimal fake LSP stdio handshake, response framing | P0 GO | Deterministic initialize/shutdown/exit tests |
 | P1.2 | Fake capability/definition/references/symbol/hover payloads | P1.1 | Typed fixture cases including null/multiple/LocationLink |
