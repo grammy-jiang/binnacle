@@ -354,3 +354,31 @@ def test_sampler_rejects_changing_membership(monkeypatch):
     table[13] = {**table[12], "pid": 13}
     sampler.capture("cold")
     assert sampler.finish()["status"] == "invalid"
+
+
+@pytest.mark.parametrize(
+    "field", ["provider", "harness", "os", "python", "revision", "deadline", "interval"]
+)
+def test_structurally_valid_but_different_runs_are_incompatible(measured, field):
+    changed = copy.deepcopy(measured)
+    identity = changed["identity"]
+    if field == "provider":
+        identity["provider"]["sources"]["fake_stdio_server.py"] = "0" * 64
+        identity["provider"]["package_sha256"] = bench.digest(
+            bench.canonical(identity["provider"]["sources"])
+        )
+    elif field == "harness":
+        identity["harness"]["raw_benchmark.py"] = "0" * 64
+    elif field == "os":
+        identity["os"]["release"] = "different-release"
+    elif field == "python":
+        identity["python"]["version"] = "different-version"
+    elif field == "revision":
+        identity["repo_revision"] = "0" * 40
+    elif field == "deadline":
+        identity["measurement"]["deadline_s"] = 2
+    else:
+        identity["sampling"]["interval_s"] = 0.1
+        changed["resources"]["interval_s"] = 0.1
+    assert compare(changed, changed)["compatible"]
+    assert not compare(measured, changed)["compatible"]
