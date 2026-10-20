@@ -13,6 +13,7 @@ Read only what is needed:
 | Document | Purpose |
 | --- | --- |
 | [Current architecture review](current-architecture-review-2026-10-20.md) | Verified source baseline, current integration points, refactor gaps and open verification |
+| [Focused sub-server ADR (proposed)](adr-0001-focused-subserver.md) | Recommended fourth mounted child and root-owned runtime; pending P0.5 review |
 | [Functional and technical design V2](functional-technical-design-v2.md) | Responsibilities, protocol/lifecycle, security, results, failure handling and integration |
 | [Provider capability mapbook V2](capability-mapbook-v2.md) | Provider/language capabilities, evidence, trust, cost, host inventory and upgrade rules |
 | [Implementation plan V2](implementation-plan.md) | Gated roadmap, executable work packages, dependencies, acceptance and release decisions |
