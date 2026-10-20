@@ -213,6 +213,8 @@ def manifest_groups() -> dict[str, set[str]]:
             "deployment/darwin/plist.py",
             "deployment/darwin/provisioner.py",
             "deployment/darwin/setup.py",
+            "deployment/darwin/installed_cli.py",
+            "deployment/darwin/installed_mode.py",
         },
         "observability": {
             "observability/__init__.py",
