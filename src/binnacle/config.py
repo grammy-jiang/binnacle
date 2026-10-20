@@ -40,6 +40,10 @@ from pydantic_settings import (
 
 from binnacle.auto_background_shell import shell_policy_code
 from binnacle.config_maintenance import MCPMaintenanceSettings
+from binnacle.config_telemetry import (  # noqa: F401 - preserve public config imports
+    TelemetrySettings,
+    TokenizerTelemetrySettings,
+)
 
 CONFIG_FILE_ENV = "BINNACLE_CONFIG_FILE"
 DEFAULT_CONFIG_FILE = Path.home() / ".config" / "binnacle" / "config.toml"
@@ -118,31 +122,6 @@ class AuthSettings(BaseModel):
 class ServeSettings(BaseModel):
     host: str = "127.0.0.1"
     port: int = 8000
-
-
-class TokenizerTelemetrySettings(BaseModel):
-    """Optional model-tokenizer accounting in tool-result telemetry."""
-
-    enabled: bool = Field(
-        False,
-        description="Count result payload tokens for matching clients.",
-    )
-    encoding: str = Field(
-        "o200k_base",
-        min_length=1,
-        description="tiktoken encoding used for result-payload accounting.",
-    )
-    client_prefixes: tuple[str, ...] = Field(
-        default=("openai-mcp",),
-        min_length=1,
-        description="Client-name prefixes whose results receive tokenizer counts.",
-    )
-
-
-class TelemetrySettings(BaseModel):
-    tokenizer: TokenizerTelemetrySettings = Field(
-        default_factory=TokenizerTelemetrySettings
-    )
 
 
 class ReadFileSettings(BaseModel):

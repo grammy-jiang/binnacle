@@ -23,6 +23,13 @@ The unit of product value is a **completed development task with correct verifie
 | Historical Git objects and scoped test/coverage artifacts | Reconstruct committed source states, independent test or failure evidence | Uncommitted file states, ephemeral subprocess state and historic external dependencies | Gold reference and executable fixture snapshot when provable |
 | Future isolated A/B harness | Same task start state, tool schemas, tool outcomes, *full model* input/output token accounting where API makes it available, model steps, quality | May not reproduce opaque ChatGPT website internals perfectly | Causal comparison, not inferable from old logs |
 
+**Forward-looking capture:** A separately configurable, default-disabled
+`telemetry.full_capture` private JSONL sink was developed after this initial
+study. When enabled on a developer-owned server it preserves exact MCP
+request/tool arguments, returned content and exception details without changing
+the sanitized journal. Future experiments may use such records on that
+operator-controlled host; old scrubbed records cannot be reconstructed.
+
 **Era boundary:** As of the 2026-10-09 privacy refactor, `tool_call.args` and request logs redact raw `command`, `stdin`, path, search pattern, file contents and errors. Path digests persist for joins; the original `args_chars` length remains. `job_start.command` is redacted. Do **not** claim October data contains searchable command categories. Conversely, do not export September raw commands just because they survived in journald.
 
 The current session-observability database contains approximately 25.9k calls across October 6–20, but its `calls.turn` is usually one hashed full request ID per call. Derive workflow groups using **unambiguous `calls.request_hash -> tunnel_events.request_hash -> tunnel_events.base_hash`**, not `turn.split('/')` when hashes lack a slash. Fall back to `unknown_group` on collisions/incomplete lifecycle. A request group is not necessarily a single development task.

@@ -110,7 +110,7 @@ def log_effective_config() -> None:
         "event=config pid=%d version=%s revision=%s roots=%s jobs_dir=%s keep_newest=%d "
         "client_tools=%s auto_background=%s rg_bin=%s "
         "tokenizer_enabled=%s tokenizer_encoding=%s "
-        "tokenizer_clients=%s",
+        "tokenizer_clients=%s full_capture_enabled=%s",
         os.getpid(),
         provenance.package_version,
         provenance.revision,
@@ -126,6 +126,7 @@ def log_effective_config() -> None:
         str(s.telemetry.tokenizer.enabled).lower(),
         s.telemetry.tokenizer.encoding,
         ",".join(s.telemetry.tokenizer.client_prefixes),
+        str(s.telemetry.full_capture.enabled).lower(),
     )
     for section in s.removed_sections:
         logger.warning(

@@ -542,3 +542,91 @@ legacy usage-breakdown parser's command-text exclusion no longer recognizes
 these probes automatically; future usage-analysis changes should use a
 verified smoke marker rather than raw command strings. This is a measurement
 limitation, not a relaxation of Live Smoke validation.
+
+## 2026-10-20 — Opt-in full capture for a developer-owned Binnacle server
+
+The normal logging pipeline remains unchanged. \`RequestLoggingMiddleware\`
+keeps its 500-character, privacy-preserving \`request_start\` journal record;
+\`ToolLoggingMiddleware\` keeps the legacy, 500-character, sanitized \`tool_call\`
+and metadata-only \`tool_result\` records. The local \`binnacle mode dev\`
+checkout/reload switch is **not** a logging-security toggle.
+
+For explicitly authorized developer-owned hosts, configure a separate full
+capture sink. Its files contain complete MCP payloads and may include source
+code, command text, command input, return values, file contents, or credentials
+embedded in those arguments. Do **not** share these files or add them to Git.
+
+```toml
+[telemetry.full_capture]
+enabled = true
+# Omit directory to use ~/.local/state/binnacle/full-capture
+# directory = "/absolute/private/directory"
+fsync = false
+```
+
+Equivalent optional environment setting: \`BINNACLE_TELEMETRY__FULL_CAPTURE__ENABLED=true\`.
+Configuration is explicit and remains disabled by default on every OS and
+deployment mode. It is read when a new server instance is assembled. Do not
+restart or switch an active service merely to update a design worktree.
+
+### What is saved
+
+Daily UTF-8 JSONL under \`~/.local/state/binnacle/full-capture/YYYY-MM-DD.jsonl\`
+by default, with one complete record per event and **no 500-character
+truncation**:
+
+| \`event\` | Full evidence |
+| --- | --- |
+| \`mcp_request\` | MCP method, request payload and correlation, including tool parameters |
+| \`mcp_response\` | Result returned by the FastMCP middleware; tool/resource/prompt definitions use their protocol representation |
+| \`mcp_error\` | Unredacted exception text and traceback from request handling |
+| \`tool_call\` | Exact original arguments, tool name, client and Binnacle call ID |
+| \`tool_result\` | Complete returned content blocks, structured content, metadata and error flag |
+| \`tool_error\` | Original error text, traceback and tool-call correlation |
+
+Rows include schema version, UTC timestamp and process PID; tools also carry
+\`server_gen\`, \`call\`, \`session\`, \`request_id\` and any available tunnel
+correlation. Tool results are the exact middleware-visible result: if the
+public MCP tool intentionally clips its output, that original job's complete
+subprocess output may reside in the separate durable Jobs spool; full capture
+does not undo the tool's own output limits.
+
+This records MCP-level messages **available to Binnacle**, not HTTP bearer
+tokens, hidden model thinking, complete ChatGPT prompts, server-internal stdout
+before tool shaping, or other process activity outside MCP. Consequently it
+provides a much better future trace corpus, but it cannot retroactively restore
+the commands scrubbed from October journals.
+
+### Security, reliability and storage properties
+
+- A full capture directory must be an absolute, nonsymlinked path owned by the
+  process with permissions \`0700\`; existing insecure directories are refused
+  at server construction. JSONL files are \`0600\` with \`O_NOFOLLOW\` and
+  checked ownership/mode. Writers use file locks and append complete JSON rows.
+- The writer never dumps raw contents to Journald. A failed *pre-dispatch*
+  audit write prevents the affected operation from starting; a failure after
+  the tool executes is logged as a sanitized \`full_capture_error\` without
+  converting that already-executed command into a retryable failure.
+- \`fsync = true\` forces durability after every record at a performance cost;
+  default false trades synchronous flush latency for normal OS buffering.
+- Daily files are retained until the owner explicitly removes or archives
+  them. There is **no automatic retention deletion** in this first version.
+  Plan capacity monitoring and treat audit files as sensitive local data.
+- Tool surface, result schemas, authentication, allowed roots, Command job
+  ownership and existing Journal parsers remain unchanged. Do not make the
+  default public tool descriptions mention full capture or insert payload
+  fields into ordinary logs.
+
+### Verification
+
+The new \`tests/unit/core/test_full_capture_sink.py\` verifies settings,
+private modes, no symlink traversal, binary/Unicode/full-size roundtrips,
+concurrent writer integrity, and failed-output behavior.
+\`tests/integration/test_full_capture.py\` drives real FastMCP middleware with
+full and disabled capture, including long multiline content, request/result
+correlation and journal sanitization. Existing logging and public-surface
+contract tests must still pass on Linux/macOS before deployment.
+
+The user-owned development machine may opt into full capture when this source
+change is installed and independently verified; the implementation worktree
+does **not** enable or deploy this setting automatically.
