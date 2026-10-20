@@ -11,6 +11,7 @@ import json
 import sys
 from typing import Any
 
+from lsp_dialogue import Dialogue
 from lsp_payloads import CAPABILITIES, semantic_result
 
 
@@ -52,11 +53,12 @@ def main() -> int:
         "--disable", action="append", choices=tuple(CAPABILITIES), default=[]
     )
     options = parser.parse_args()
+    dialogue = Dialogue()
     while (request := _read_message()) is not None:
         method = request.get("method")
         if method == "exit":
             return 0
-        if "id" not in request:
+        if dialogue.accept(request):
             continue
         response: dict[str, Any] = {"jsonrpc": "2.0", "id": request["id"]}
         if method == "initialize":
@@ -72,6 +74,11 @@ def main() -> int:
             }
         elif method in CAPABILITIES and method not in options.disable:
             response["result"] = semantic_result(method, options.definition)
+        elif method == "fixture/serverRequest":
+            _send_message(dialogue.server_request(request["params"]))
+            response["result"] = None
+        elif method == "fixture/observed":
+            response["result"] = dialogue.observed()
         elif method == "shutdown":
             response["result"] = None
         else:
