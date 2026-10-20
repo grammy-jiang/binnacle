@@ -25,6 +25,7 @@ import hashlib
 import json
 import logging
 import time
+import traceback
 import uuid
 from pathlib import Path
 from typing import Any
@@ -43,6 +44,7 @@ from binnacle.mcp.callctx import (
     current_turn,
 )
 from binnacle.mcp.identity import ClientIdentity
+from binnacle.observability.full_capture import FullCaptureSink
 from binnacle.observability.log_safety import (
     REDACTED,
     safe_arguments,
@@ -128,9 +130,43 @@ def _session_marker(context: MiddlewareContext[Any]) -> str:
 
 
 class RequestLoggingMiddleware(LoggingMiddleware):
-    def __init__(self, identity: ClientIdentity, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        identity: ClientIdentity,
+        *,
+        capture: FullCaptureSink | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self._identity = identity
+        self._capture = capture
+
+    async def on_message(
+        self, context: MiddlewareContext[Any], call_next: CallNext[Any, Any]
+    ) -> Any:
+        if self._capture is None:
+            return await super().on_message(context, call_next)
+        identity = self._extra_fields(context)
+        identity.update(_header_fields())
+        envelope = {
+            "correlation": identity,
+            "method": context.method,
+            "source": context.source,
+        }
+        self._capture.required("mcp_request", **envelope, payload=context.message)
+        try:
+            result = await super().on_message(context, call_next)
+        except BaseException as exc:
+            self._capture.best_effort(
+                "mcp_error",
+                **envelope,
+                error_class=type(exc).__name__,
+                error=str(exc),
+                traceback="".join(traceback.format_exception(exc)),
+            )
+            raise
+        self._capture.best_effort("mcp_response", **envelope, result=result)
+        return result
 
     def _extra_fields(self, context: MiddlewareContext[Any]) -> dict[str, str]:
         fields = {
@@ -320,9 +356,11 @@ class ToolLoggingMiddleware(Middleware):
         *,
         tokenizer: TokenizerTelemetrySettings | None = None,
         path_root: Path | None = None,
+        capture: FullCaptureSink | None = None,
     ) -> None:
         self._identity = identity
         self._path_root = path_root
+        self._capture = capture
         self._logger = logging.getLogger("binnacle.results")
         tokenizer = (
             get_settings().telemetry.tokenizer if tokenizer is None else tokenizer
@@ -378,6 +416,14 @@ class ToolLoggingMiddleware(Middleware):
             who,
             {"args_chars": str(args_chars), "args": args_text},
         )
+        if self._capture is not None:
+            self._capture.required(
+                "tool_call",
+                correlation=who,
+                raw_client=raw_client,
+                tool_name=getattr(context.message, "name", None),
+                arguments=arguments,
+            )
         token = current_call.set(call_id)
         # The execution policy requires the original client identity, while
         # the journal receives only an explicitly safe label.
@@ -405,6 +451,14 @@ class ToolLoggingMiddleware(Middleware):
             # error= remains the final free-text field for historical parsers.
             error_fields["error"] = REDACTED
             self._log("tool_result", logging.WARNING, who, error_fields)
+            if self._capture is not None:
+                self._capture.best_effort(
+                    "tool_error",
+                    correlation=who,
+                    error_class=type(e).__name__,
+                    error=str(e),
+                    traceback="".join(traceback.format_exception(e)),
+                )
             raise
         finally:
             current_call_started.reset(started_token)
@@ -426,4 +480,6 @@ class ToolLoggingMiddleware(Middleware):
         self._log(
             "tool_result", logging.WARNING if is_error else logging.INFO, who, fields
         )
+        if self._capture is not None:
+            self._capture.best_effort("tool_result", correlation=who, result=result)
         return result
