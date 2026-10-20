@@ -3,6 +3,9 @@
 Run from the checkout: python -m tests.fixtures.lsp.raw_benchmark --output
 /private/tmp/run.json. Output must be outside the checkout in a temporary
 location. Gold is frozen independently of the fake's response implementation.
+Add --sample-resources --child for six opt-in process-tree snapshots. Cold wall
+latency includes observation pauses; identity prevents comparison with unsampled
+runs. Settling is unobserved. Fixed logical URIs are not real workspace lookups.
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ import time
 from pathlib import Path
 
 from tests.fixtures.lsp.process_observer import ProcessObserver
+from tests.fixtures.lsp.resource_sampling import METHOD, Sampler
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
@@ -75,6 +79,8 @@ def identity(manifest: dict, repetitions: int, deadline: float, fault: str) -> d
             Path(__file__),
             HERE / "lsp_peer.py",
             HERE / "process_observer.py",
+            HERE / "resource_sampling.py",
+            HERE / "benchmark_compare.py",
         )
     }
     return {
@@ -167,14 +173,26 @@ def run(
     repetitions: int = 30,
     deadline: float = 1.0,
     fault: str = "none",
+    sample_resources: bool = False,
+    sample_interval: float = 0.02,
 ) -> dict:
     output = output_path(output)
     if not 30 <= repetitions <= 1000 or not 0.01 <= deadline <= 3:
         raise ValueError(
             "bounded run requires 30..1000 requests and 0.01..3 second deadline"
         )
-    if fault not in ("none", "crash-initialize", "hang-initialize", "crash-request"):
+    if fault not in (
+        "none",
+        "child",
+        "escaped-child",
+        "crash-initialize",
+        "hang-initialize",
+        "crash-request",
+    ):
         raise ValueError("only explicit fake fault cases are permitted")
+    if not 0.01 <= sample_interval <= 0.2:
+        raise ValueError("sample interval must be 0.01..0.2 seconds")
+    sampler = None
     artifact = {
         "schema": "binnacle-fake-raw-benchmark/1",
         "evidence": "fake-only",
@@ -187,6 +205,13 @@ def run(
     try:
         manifest = load_manifest(manifest_path)
         artifact["identity"] = identity(manifest, repetitions, deadline, fault)
+        artifact["identity"]["sampling"] = {
+            "enabled": sample_resources,
+            "method": METHOD,
+            "interval_s": sample_interval,
+            "snapshots_per_phase": 2,
+            "cold_timing": "spawn through initialize including opt-in observation pauses",
+        }
         with tempfile.TemporaryDirectory(prefix="binnacle-fake-bench-") as directory:
             workspace = Path(directory)
             for name, content in manifest["workspace"].items():
@@ -199,6 +224,14 @@ def run(
                     "pid": peer.process.pid,
                     "rootUri": workspace.as_uri(),
                 }
+                if sample_resources:
+                    expected = set()
+                    if peer.expects_child:
+                        expected.add(peer.wait_event("child-ready")["pid"])
+                    sampler = Sampler(peer.process.pid, expected, sample_interval)
+                    artifact["resources"] = sampler.result
+                    sampler.capture("cold")
+                    sampler.capture("cold")
                 init, _ = request(
                     peer,
                     "initialize",
@@ -222,11 +255,21 @@ def run(
                     time.perf_counter_ns() - start
                 ) / 1_000_000
                 peer.send({"jsonrpc": "2.0", "method": "initialized", "params": {}})
+                if sampler:
+                    sampler.capture("settling")
+                    sampler.capture("settling")
                 artifact["first_request"] = semantic(peer, manifest, 2, deadline)
+                if sampler:
+                    sampler.capture("warm")
                 for index in range(repetitions):
                     artifact["samples"].append(
                         semantic(peer, manifest, index + 3, deadline)
                     )
+                if sampler:
+                    sampler.capture("warm")
+                    artifact["resources"] = sampler.finish()
+                if peer.expects_child:
+                    peer.close_children()
                 peer.finish()
             artifact["cleanup_verified"] = peer.cleanup_verified
         artifact["warm_ms"] = percentiles(
@@ -234,7 +277,9 @@ def run(
         )
         artifact["correct_samples"] = len(artifact["samples"])
         artifact["gold_verified"] = True
-        artifact["valid"] = True
+        artifact["valid"] = (
+            not sample_resources or artifact["resources"]["status"] == "valid"
+        )
     except (
         OSError,
         ValueError,
@@ -244,6 +289,8 @@ def run(
         subprocess.SubprocessError,
     ) as error:
         # Fixed error category only: never include response bodies, source or logs.
+        if sampler:
+            sampler.result["status"] = "invalid"
         artifact["failure"] = type(error).__name__
         artifact["correct_samples"] = len(artifact["samples"])
     with output.open("x", encoding="utf-8") as stream:
@@ -257,9 +304,19 @@ def main() -> int:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--manifest", type=Path, default=MANIFEST)
     parser.add_argument("--repetitions", type=int, default=30)
+    parser.add_argument("--sample-resources", action="store_true")
+    parser.add_argument("--sample-interval", type=float, default=0.02)
+    parser.add_argument(
+        "--child", action="store_true", help="cooperative synthetic child"
+    )
     args = parser.parse_args()
     artifact = run(
-        args.output, manifest_path=args.manifest, repetitions=args.repetitions
+        args.output,
+        manifest_path=args.manifest,
+        repetitions=args.repetitions,
+        sample_resources=args.sample_resources,
+        sample_interval=args.sample_interval,
+        fault="child" if args.child else "none",
     )
     return 0 if artifact["valid"] else 1
 
