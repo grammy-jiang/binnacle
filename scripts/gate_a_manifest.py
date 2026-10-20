@@ -34,6 +34,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "mcp/__init__.py",
             "mcp/identity.py",
             "mcp/logging_middleware.py",
+            "mcp/logging_setup.py",
             "mcp/tool_admission_drain.py",
             "mcp/maintenance_request_admission.py",
             "mcp/visibility.py",
@@ -220,6 +221,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "observability/system_resource_history.py",
             "observability/token_telemetry.py",
             "observability/log_safety.py",
+            "observability/full_capture.py",
         },
         "observability_linux": {
             "observability/linux/__init__.py",
@@ -275,6 +277,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "cli.py",
             "config.py",
             "config_unknown_keys.py",
+            "config_telemetry.py",
             "errors.py",
             "provenance.py",
             "doctor_contracts.py",
