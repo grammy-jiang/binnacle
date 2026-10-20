@@ -21,6 +21,7 @@ Read only what is needed:
 | [Implementation plan V2](implementation-plan.md) | Gated roadmap, executable work packages, dependencies, acceptance and release decisions |
 | [P0.5 resolution](p0-5-architecture-resolution-2026-10-21.md) | Seven design issues, binding decisions and retained runtime gates |
 | [P0.6 host inventory](p0-6-host-readiness-2026-10-21.md) | Read-only actual service-PATH/OS/provider locator evidence on MacBook and two Raspberry Pi hosts |
+| [P1 native validation](p1-native-validation-2026-10-21.md) | Three-host, two-seed deterministic fake fixture/benchmark tests and baseline contract evidence |
 | [Initial independent review](p0-5-independent-review-2026-10-21.md) | Initial read-only REWORK findings against pre-amendment code |
 | [Independent follow-up GO](p0-5-followup-review-2026-10-21.md) | Independent verification of seven amended contracts, permitting only P1 private fixtures |
 
@@ -47,7 +48,7 @@ Historical evidence is valuable; its `f1493ee` source baseline is not interchang
 
 ## Execution policy
 
-P0.5 independently passed **for private P1 fixtures only** on 2026-10-21, after documented REWORK and review. The earlier P1.1 tests were developed provisionally and are now eligible as fixture evidence, not runtime/product proof. P0.6 host inventory and further P1 tasks are eligible but **not started by this review**. No P2 integration, provider, READ/public registration or deployment approval follows from P0.5.
+P0.5 independently passed **for private P1 fixtures only** on 2026-10-21, after documented REWORK and review. The earlier P1.1 tests were developed provisionally and are now eligible as fixture evidence, not runtime/product proof. P0.6 and P1.1–P1.8 are completed as non-production evidence; P1.9 independent review remains the final P1 gate. No P2 integration, provider, READ/public registration or deployment approval follows from P0.5.
 Use an isolated worktree and a commit per focused implementation item. Preserve users' live services, old design branch, and existing dirty main worktrees. All repository artifacts (including docs and tests) are in English.
 
 ## Reading order
