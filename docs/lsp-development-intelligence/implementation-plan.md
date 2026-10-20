@@ -1,7 +1,7 @@
 # Development Intelligence / LSP — V2 implementation and validation plan
 
-**Date:** 2026-10-20. **State:** DRAFT — design-only work completed; P0 independent review and evidence gates pending. No production source or public tool changes.
-**Current source baseline:** `origin/master` `ce943ced`. **Previous plan:** [2026-09-30 archived V1 plan](implementation-plan-v1-2026-09-30.md).
+**Date:** 2026-10-20; reviewed 2026-10-21. **State:** P0.5 initial independent **REWORK**, followed by independent **GO for P1 private test fixtures only**. No production LSP source or public tool changes.
+**Current review baseline:** `origin/master` `40aafcd` (original V2 baseline `ce943ced`). **Previous plan:** [2026-09-30 archived V1 plan](implementation-plan-v1-2026-09-30.md).
 **Inputs:** [architecture review](current-architecture-review-2026-10-20.md), [functional/technical design V2](functional-technical-design-v2.md), [LSP capability mapbook V2](capability-mapbook-v2.md).
 
 ## 1. Execution principles (mandatory)
@@ -39,9 +39,9 @@ Each item must have one scoped code/evidence change, acceptance proof and a comm
 | P0.2 | Provider capability mapbook; service-vs-shell PATH distinction, upstream claims | P0.1 | All candidate languages, trust, evidence tags and gaps recorded (**draft complete**) |
 | P0.3 | V2 responsibilities, protocol/process/security and failures | P0.1 | Technical draft with trust/access/exception model (**draft complete**) |
 | P0.4 | Re-map V1 tasks and gates to current architecture, preserve V1 history | P0.1–P0.3 | This V2 plan and versioned V1 archive (**draft complete**) |
-| P0.5 | Independent design review: focused FastMCP child ADR, agent capability portfolio, privacy-safe evaluation track, architecture/lifespan ownership, testability, READ and visibility policy | P0.1–P0.4 | Signed GO/REWORK record, open risks owner and targeted changes (**pending**) |
+| P0.5 | Independent design review: focused FastMCP child ADR, agent capability portfolio, privacy-safe evaluation track, architecture/lifespan ownership, testability, READ and visibility policy | P0.1–P0.4 | 2026-10-21 first REWORK, seven decisions amended, independent follow-up **GO (P1 private fixtures only)**; [decision](p0-5-architecture-resolution-2026-10-21.md) / [sign-off](p0-5-followup-review-2026-10-21.md) |
 | P0.6 | Non-intrusive host readiness inventory: deployed service PATH, OS process primitives, versions | P0.5 | Service-context evidence and exact executable fingerprint (**pending; no provider start on production**) |
-| P1.1 | Minimal fake LSP stdio handshake, response framing | P0 GO | Isolated fake fixture smoke implemented (2026-10-20); production P0 gate remains pending |
+| P1.1 | Minimal fake LSP stdio handshake, response framing | P0 GO for follow-on implementation | Isolated fixture originally implemented provisionally 2026-10-20; 2026-10-21 P0.5 GO makes subsequent private P1 tasks eligible, but not automatic |
 | P1.2 | Fake capability/definition/references/symbol/hover payloads | P1.1 | Typed fixture cases including null/multiple/LocationLink |
 | P1.3 | Fake notifications and server requests | P1.1 | Safe configuration response and edit/command refusal tests |
 | P1.4 | Transport adversarial fixtures: split/coalesced/bad/oversized frames, late ID | P1.1 | Bounded parser negative coverage |
@@ -50,13 +50,14 @@ Each item must have one scoped code/evidence change, acceptance proof and a comm
 | P1.7 | Raw LSP benchmark harness + run identity and reproducible fixture manifest | P1.2/P1.4 | Gold assertions required for valid timing; results carry provenance |
 | P1.8 | Provider process-tree sampling, cold/settle/warm and artifact comparator | P1.5/P1.7 | Child RSS/CPU counted; incompatible runs rejected |
 | P1.9 | Independent fixture/harness reliability review | P1.1–P1.8 | Repeated deterministic passes and fault coverage checkpoint |
+| P2.0 | Add strict, default-off feature/provider configuration and root-level near-miss rejection | P0.5 GO | Invalid disabled configs, misspelled TOML/env and unsafe profile fallback refused; legacy settings preserved |
 | P2.1 | Decide narrow in-house JSON-RPC or vetted client dependency using P1 fixtures | P1.9 | ADR with dependency/security/maintenance tradeoffs |
 | P2.2 | Strict framing/JSON-RPC request+notification dispatcher | P2.1 | Negative framing, unexpected response and cancellation tests |
 | P2.3 | Server-to-client requests, capability negotiation, position encoding | P2.2 | Advertised vs unsupported, Unicode/UTF-16 and edit refusal tests |
 | P2.4 | Cross-platform provider process owner and cleanup semantics | P1.5/P2.1 | Linux/Darwin spawn/kill/process-tree test with no leaked child |
 | P2.5 | Authorized workspace resolver, disk snapshots and didOpen/didChange/didClose | P2.3 | Allowed-root, git-worktree, symlink/TOCTOU, stale-file tests |
 | P2.6 | Manager registry: single-flight, concurrent requests, cooldown, bounded residency | P2.2/P2.4/P2.5 | Concurrent/no leak/timeout/eviction tests |
-| P2.7 | Default-off FastMCP lifespan injection and guarded startup module manifest | P2.6 | No import-time spawn, shutdown/reload cleanup, existing 6/8 surfaces unchanged |
+| P2.7 | Default-off FastMCP lifespan injection and guarded startup module manifest | P2.0/P2.6 | No import-time spawn, partial-start/cancellation/repeated-lifespan cleanup, direct-call denial and shutdown; existing 6/8 surfaces unchanged |
 | P2.8 | OS and package/coverage/architecture regression gate | P2.7 | Production imports, module-size, coverage, Linux/Darwin and contract checks |
 | P3.1 | Exact audited provider profile schema, discovery/source restrictions and trust classification | P2.8/P0.6 | Reject untrusted project-local command, unknown config, disabled provider |
 | P3.2 | Pyright LSP profile and independent Pyright CLI analyzer profile | P3.1 | Capability negotiation + file/reference gold tests; CLI JSON completion |
@@ -91,12 +92,12 @@ P7.X expands for TypeScript/JavaScript, clangd, Marksman, Bash, Makefile, YAML/J
 
 ## 4. Stage gates and release rules
 
-### P0: design GO gate (currently not passed)
+### P0: design GO gate (passed for P1 private fixtures only)
 
 - Review V2 against current `application.py` composition and startup module import manifest, not old source paths.
 - Confirm separate process ownership and two trust boundaries: requested path authority **and** provider's own OS-level workspace/code execution reach.
-- Approve provider profile and mapbook evidence semantics, including `advertised != tested != READ safe`.
-- Accept or revise the proposed work package dependency order and provide explicit independent review record.
+- Approve provider profile and mapbook evidence semantics, including `advertised != tested != READ safe`. Host configuration is authority; client-name visibility is not permission. Require enforceable confinement before public READ and honest `cleanup_unverified` on escaped descendants.
+- Accept or revise the proposed work package dependency order and provide explicit independent review record. The initial 2026-10-21 independent verdict was REWORK; seven [resolutions](p0-5-architecture-resolution-2026-10-21.md) received [independent design GO](p0-5-followup-review-2026-10-21.md) for P1 private fixtures. Strict config is P2.0 and must precede P2.7.
 
 ### P1/P2: private foundational GO
 
@@ -114,7 +115,7 @@ P7.X expands for TypeScript/JavaScript, clangd, Marksman, Bash, Makefile, YAML/J
 
 ### P4: agent value GO / STOP
 
-Pre-register correctness and workflow thresholds before A/B run. Publish both success and failure cases. At minimum experimental correctness may **not deteriorate** versus baseline; require repeatable useful reduction in model steps, tool calls, tokens or task latency, without unacceptable provider memory/CPU or wrong-definition rates. Raw sub-millisecond RPC without end-to-end gain is NO-GO.
+Pre-register a versioned, **numerical** correctness non-regression threshold, wrong-definition tolerance, sample/task sizing, workflow improvement threshold, confidence/variance method and RAM/CPU ceilings **before any A/B run**. Publish both success and failure cases. At minimum experimental correctness may **not deteriorate** versus baseline; require repeatable useful reduction in model steps, tool calls, tokens or task latency, without unacceptable provider memory/CPU or wrong-definition rates. Raw sub-millisecond RPC without end-to-end gain is NO-GO.
 
 ### P5/P6/P7: public release decision
 
@@ -164,7 +165,7 @@ Each implementation/validation task records:
 | Decisions | GO/REWORK/STOP with rationale, safety exceptions, independent reviewer |
 | Delivery | Commit, clean worktree, next eligible task(s), deploy status and rollback plan |
 
-The immediate next action after this draft is **P0.5 independent review**, then P0.6 service-context inventory. P1.1 fake server development must not be treated as automatically authorized by having written this document.
+The independent P0.5 first review returned **REWORK** on 2026-10-21; its seven design amendments received independent follow-up **GO for P1 private fixtures only**. The P0.6 service-context inventory and remaining private P1 work are now eligible, not executed here. The earlier P1.1 fake server was provisional, not an implementation waiver. P2 and public gates remain independent.
 
 ## 8. Risks, blockers and mitigation owners
 

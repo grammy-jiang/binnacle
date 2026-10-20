@@ -1,8 +1,8 @@
 # Development Intelligence / LSP — design index
 
-**Status:** V2 design draft, 2026-10-20. No production implementation approved or started.
-**Source baseline:** remote `origin/master` at `ce943ced75dc672f3e503b1e07682b6fa2181a5e` (last upstream commit dated 2026-10-14).
-**Design worktree:** `~/Projects/binnacle-lsp-v2-20261020`; branch `design/lsp-v2-reassessment-20261020`.
+**Status:** P0.5 architecture **GO for P1 private test fixtures only** (2026-10-21 independent follow-up, after initial REWORK). No production LSP implementation, mount, or deployment.
+**Current review baseline:** remote `origin/master` at `40aafcd` (2026-10-21); initial V2 design baseline was `ce943ced` (2026-10-14).
+**Active isolated worktree:** `~/Projects/binnacle-lsp-isolated-20261021`; branch `feat/lsp-isolated-p0-review-20261021`.
 **Previous design:** `design/lsp-development-intelligence-2026-09-27`, last design commit `2b477bd1`.
 **Scope:** one Binnacle server on one machine. Do not introduce a cross-machine LSP controller.
 
@@ -13,12 +13,15 @@ Read only what is needed:
 | Document | Purpose |
 | --- | --- |
 | [Current architecture review](current-architecture-review-2026-10-20.md) | Verified source baseline, current integration points, refactor gaps and open verification |
-| [Focused sub-server ADR (proposed)](adr-0001-focused-subserver.md) | Recommended fourth mounted child and root-owned runtime; pending P0.5 review |
+| [Focused sub-server ADR](adr-0001-focused-subserver.md) | Fourth mounted child and root-owned runtime accepted as private-stage design; public release conditional |
 | [Functional and technical design V2](functional-technical-design-v2.md) | Responsibilities, protocol/lifecycle, security, results, failure handling and integration |
 | [Provider capability mapbook V2](capability-mapbook-v2.md) | Provider/language capabilities, evidence, trust, cost, host inventory and upgrade rules |
 | [Development capability portfolio](development-capability-portfolio.md) | Agent-first candidate roadmap beyond LSP: structure, impact, tests, failures, debugging |
 | [Historical trajectory evaluation plan](historical-trajectory-evaluation-plan.md) | Reuse old tool/tunnel logs and session observer for opportunity mining, task replay and paired agent A/B |
 | [Implementation plan V2](implementation-plan.md) | Gated roadmap, executable work packages, dependencies, acceptance and release decisions |
+| [P0.5 resolution](p0-5-architecture-resolution-2026-10-21.md) | Seven design issues, binding decisions and retained runtime gates |
+| [Initial independent review](p0-5-independent-review-2026-10-21.md) | Initial read-only REWORK findings against pre-amendment code |
+| [Independent follow-up GO](p0-5-followup-review-2026-10-21.md) | Independent verification of seven amended contracts, permitting only P1 private fixtures |
 
 The V2 documents above override any contradictory V1 assumption. The files below are historical context, **not current work instructions**:
 
@@ -43,7 +46,7 @@ Historical evidence is valuable; its `f1493ee` source baseline is not interchang
 
 ## Execution policy
 
-P0 (this revision) is **design and evidence only**. P1 may begin only after review accepts the V2 gates.
+P0.5 independently passed **for private P1 fixtures only** on 2026-10-21, after documented REWORK and review. The earlier P1.1 tests were developed provisionally and are now eligible as fixture evidence, not runtime/product proof. P0.6 host inventory and further P1 tasks are eligible but **not started by this review**. No P2 integration, provider, READ/public registration or deployment approval follows from P0.5.
 Use an isolated worktree and a commit per focused implementation item. Preserve users' live services, old design branch, and existing dirty main worktrees. All repository artifacts (including docs and tests) are in English.
 
 ## Reading order

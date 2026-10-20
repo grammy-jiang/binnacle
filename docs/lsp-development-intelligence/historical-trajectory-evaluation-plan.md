@@ -186,3 +186,7 @@ Sequence: E0/E1/E2 can be developed without any new public tool; E3 can be built
 - Local `~/Projects/binnacle-session-observability` code for read-only DB correlations.
 
 **The evaluation is not ready to claim performance uplift**. The completed work in this document establishes feasible historical instrumentation and a test design, while the prospective agent A/B has not been executed.
+
+## 9. 2026-10-21 full-capture privacy amendment
+
+Upstream `40aafcd` includes separately managed opt-in raw MCP full capture. This **does not** authorize LSP evaluation to read or export full raw request/result/error content. Treat full-capture stores as sensitive host-local material governed by the logging workstream; never commit, forward to a model reviewer or silently join them to the retrospective evaluation corpus. Prefer anonymized non-content tool/outcome counts and explicitly versioned synthetic fixtures. Any future study requiring raw private content needs a separate security/privacy decision, retention policy and informed authorization. Legacy September/October scrub-era uncertainty remains in force.

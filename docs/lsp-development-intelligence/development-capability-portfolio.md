@@ -131,7 +131,7 @@ Test selection must never silently replace mandatory CI or repository quality ga
 
 ## 7. Proposal on phased integration
 
-1. Add this capability portfolio to **P0.5** discussion; do not change already approved V2 LSP runtime/contract foundations.
+1. Add this capability portfolio to **P0.5** discussion; do not prematurely treat proposed V2 LSP runtime/contract foundations as approved.
 2. Finish original V2 private LSP navigation and Python analyzer foundations first.
 3. Run a low-risk local Python `ast` proof of concept and test-oriented impact evidence without any public MCP registration.
 4. Decide independently whether structural query and change impact justify a new standing surface. If two candidates fail, preserve the internal capability mapbook but stop exposing them.

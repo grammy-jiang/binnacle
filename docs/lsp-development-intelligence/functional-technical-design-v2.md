@@ -1,7 +1,7 @@
 # Development Intelligence: functional and technical design V2
 
-**Status:** design draft only; no implementation authorization implied. **Date:** 2026-10-20.
-**Source:** Binnacle `origin/master` `ce943ced`, [architecture review](current-architecture-review-2026-10-20.md) and [provider mapbook](capability-mapbook-v2.md).
+**Status:** P0.5 independent GO for P1 private test fixtures (2026-10-21); no public/runtime/production authorization implied. **Date:** 2026-10-20.
+**Source:** Binnacle initial design `origin/master` `ce943ced`; reviewed against `40aafcd`, [architecture review](current-architecture-review-2026-10-20.md) and [provider mapbook](capability-mapbook-v2.md).
 
 ## 1. Product problem and boundary
 
@@ -40,19 +40,19 @@ Minimal dependency direction: public MCP adapter -> semantic/analyzer service ->
 
 The FastMCP application lifespan owns a **private manager**. Entering lifespan allocates only inert data structures; it does not locate/download/start a provider. The first *explicit private semantic/analyzer request* may invoke the audited configured profile, with one start per (canonical workspace, provider/profile fingerprint, service generation). A ready instance is reused across MCP turns while the process stays alive.
 
-Shutdown stops new requests, bounds active request draining, sends LSP `shutdown` then `exit`, waits briefly, escalates termination to the entire owned process group and closes readers/pipes. A manager-wide closing state is distinct from per-provider readiness. Source reloads/redeploys must leave no orphaned children or outstanding responses.
+Shutdown stops new requests, bounds active request draining, sends LSP `shutdown` then `exit`, waits briefly, escalates termination to the entire owned process group and closes readers/pipes. A manager-wide closing state is distinct from per-provider readiness. Source reloads/redeploys must close owned children and settle outstanding responses **within an auditable OS/process boundary**. A descendant that escapes a process group or supervisor crash must be reported as `cleanup_unverified`, not assumed gone. Such profiles cannot qualify for READ or untrusted-workspace release until independently contained.
 
 Native differences are handled below composition. The job owner and its durable spool are deliberately *not* involved. Process-tree accounting and reliable descendant cleanup require Linux and Darwin test evidence, especially for subprocesses that fork/launch new sessions.
 
 ## 3. Configuration and trust policy
 
-Default is **disabled**, with zero new public tools, zero provider subprocesses and no observable changes in existing tools. Exact TOML keys remain provisional until reviewed against current `config.py`:
+Default is **disabled**, with zero new public tools, zero provider subprocesses and no observable changes in existing tools. The top-level TOML section `[development_intelligence]` and environment prefix `BINNACLE_DEVELOPMENT_INTELLIGENCE__` are reserved. Detailed nested fields remain provisional until schema implementation, subject to the P0.5 strict-key contract:
 
 - enable Development Intelligence globally; turn off audited discovery separately;
 - configure per-provider enable/disable, command source, explicit trusted override and pinned argv/env;
 - define allowed languages and workspace roots, maximum concurrent resident instances, resource ceilings, request deadlines and idle eviction;
 - keep safety profile and READ eligibility separate from protocol feature flags;
-- disallow unexpected config near-misses instead of silently using unsafe defaults.
+- disallow unexpected config near-misses instead of silently using unsafe defaults. Reject unknown nested keys/profiles even when disabled; explicitly guard top-level near-misses because existing `Settings` ignores otherwise unknown sections. Keep legacy settings compatibility outside this feature.
 
 Resolution priority: explicit validated trusted configuration -> audited *service PATH* executable -> unavailable. Never search/execute arbitrary repository `.venv`, `node_modules/.bin`, shell aliases, editor settings, `package.json` scripts or commands from provider output. Do not auto-download executable packages, npm typings or workspace toolchains.
 
@@ -61,7 +61,7 @@ There are two distinct security gates:
 1. **Host execution safety:** can the provider perform untrusted process, network, workspace-write or cache activities under this exact profile?
 2. **Data access authority:** what paths may an agent request, what workspace trees can the provider itself scan, and what returned file URIs can Binnacle reveal?
 
-Applying Binnacle file path checks solely to the incoming `path` does **not** confine a provider's own file-system activity. READ eligibility needs OS-effective isolation or explicitly audited behavior plus fail-closed profile policy. Never assert a sandbox that has not been demonstrated.
+Applying Binnacle file path checks solely to the incoming `path` does **not** confine a provider's own file-system activity. For any public READ claim, require independently demonstrated OS-effective restrictions for filesystem writes, external reads as applicable, child execution and network, plus an exact audited binary/profile. Behavior-only observation without enforceable isolation is insufficient for untrusted-workspace READ: classify such profiles as `explicit_trust_only` or `benchmark_only`. Never assert a sandbox or completed descendant cleanup without evidence.
 
 Profiles are classified `audited_read_eligible`, `explicit_trust_only`, `benchmark_only`, `not_audited`. New profiles start as `not_audited`; only a passed side-effect audit may promote one. Project configuration is untrusted input. Refuse server-to-client `workspace/applyEdit`; do not send client-to-server `workspace/executeCommand` or automatic edits in a READ flow.
 
@@ -165,7 +165,7 @@ Separate five quantities:
 
 A/B uses the same real tasks and model settings, controlled ordering and temporary Binnacle app, with identical permissions and token measurement. Baseline arm = current six-tool search/read workflow; experimental arm = same workflow plus private symbol API only. Record confidence/variance and failure cases. A latency win with worse correctness is a **NO-GO**.
 
-Operational telemetry is sparse and redacted. Record profile ID/hash, workspace hash, phase timing, status, reference counts, side-effect verdict and process accounting. Never log full source or protocol frames by default.
+Operational telemetry is sparse and redacted. Record approved tool labels, profile ID/hash, workspace hash, phase timing, status, reference counts, side-effect verdict and process accounting. Never log full source, protocol frames, absolute paths or provider stderr by default. Root-level `telemetry.full_capture` (already merged into master) is a separate **opt-in sensitive raw-content store** that may capture LSP arguments, results and errors; LSP must not silently enable it or use that raw data for evaluation. Explicit capture-off/on and rejected-request privacy tests are required.
 
 ## 10. Release and compatibility
 
@@ -191,3 +191,11 @@ Do not merge a worktree just because isolated unit tests pass; CI/production acc
 - whether a seventh or eighth tool justifies token/visibility cost.
 
 The V2 [implementation roadmap](implementation-plan.md) assigns evidence tasks to resolve these rather than guessing answers in design.
+
+## 12. P0.5 ownership and privilege clarification (2026-10-21)
+
+- The existing shared MCP bearer token authenticates one host authority. Client-name tool visibility is not an access-control principal. Every authenticated client gets the same host-granted provider/root authority, while display of future public tools is an independent UI/product decision. Tool-call permission, root and audited profile checks run regardless of discovery/visibility state.
+- In the root FastMCP lifespan, after Files access and maintenance readiness, enter the private manager inertly; leave it before stopping maintenance and releasing Files. No child user lifespan may own a second manager. Partial-enter failures and canceled shutdowns still invoke bounded cleanup. The in-memory FastMCP mount probe did run child lifespan between root enter/exit; production ASGI once-per-generation remains a separate test gate.
+- Provider process confinement, failure recovery and clean READ annotation are distinct decisions. Test privileged descendant escapes/crashes on each OS; do not equate `killpg`, initial provider exit or provider-advertised no-write methods with confinement. Report `cleanup_unverified` and disable further unsafe launch if the boundary cannot be proved.
+- Frozen startup import inventory includes inactive feature modules. Imports require only already-pinned runtime dependencies and must not probe/spawn actual language servers.
+- Configuration and telemetry details and release acceptance are specified by the [P0.5 resolution register](p0-5-architecture-resolution-2026-10-21.md). Independent P0.5 GO was recorded on 2026-10-21 for private fixture research only; later runtime, provider and public-release evidence gates remain mandatory.
