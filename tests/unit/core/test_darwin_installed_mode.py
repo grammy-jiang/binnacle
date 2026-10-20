@@ -402,3 +402,20 @@ def test_native_command_transport_normal_result(monkeypatch):
         DarwinInstalledMcpMode._run_command(("/bin/launchctl", "print", TARGET))
         is expected
     )
+
+
+def test_native_installed_mode_does_not_require_sudo_validation(installed):
+    # On some macOS sudoers setups, sudo -n -v fails even when the exact
+    # NOPASSWD install and launchctl commands are authorized.
+    mode, runner, _, _ = installed
+    original_run = runner.__call__
+
+    def privilege_run(argv):
+        if argv == ("/usr/bin/sudo", "-n", "-v"):
+            return subprocess.CompletedProcess(argv, 1, "", "password required")
+        return original_run(argv)
+
+    mode._run = privilege_run
+    assert "switched to dev" in mode.apply(mode.plan("dev"), force=True)
+    assert mode.status().find("dev mode") >= 0
+    assert ("/usr/bin/sudo", "-n", "-v") not in runner.calls

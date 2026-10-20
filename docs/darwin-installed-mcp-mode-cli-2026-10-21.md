@@ -38,7 +38,12 @@ than importing Linux uvloop service logic. Reload watches src/ only.
 The controller locks the private transaction root, pins the pre-change
 plist SHA-256, stores the complete old/candidate plists in private files,
 then uses fixed sudo -n install / launchctl bootout/bootstrap commands
-for the single MCP label. Unknown service identity, missing privilege,
+for the single MCP label.
+The controller does not call sudo -n -v as a preliminary approval check:
+some valid NOPASSWD configurations reject that generic validation request
+even though the specific install and launchctl operations are permitted.
+Each fixed-argument native operation is checked directly; failures remain
+bounded by the existing restoration path. Unknown service identity, missing privilege,
 a changed source plist or incomplete rollback is a refusal, not implicit
 adoption. The Jobs manager and tunnel are never restarted as part of a
 frontend mode change.

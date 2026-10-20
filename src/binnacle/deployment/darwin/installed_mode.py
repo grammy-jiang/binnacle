@@ -235,7 +235,9 @@ class DarwinInstalledMcpMode:
             os.close(fd)
 
     def _install(self, plan: ModePlan, backup: Path, candidate: Path) -> str:
-        self._command("/usr/bin/sudo", "-n", "-v")
+        # sudo -n -v can require authentication even when the exact
+        # NOPASSWD install/launchctl operations are permitted. The actual
+        # fixed-argv operation is the authority and returns its own failure.
         was_running = self._running()
         installed = False
         stopped = False
