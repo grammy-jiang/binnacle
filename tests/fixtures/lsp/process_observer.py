@@ -16,7 +16,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from tests.fixtures.lsp.lsp_peer import FIXTURE, LspPeer
+from tests.fixtures.lsp.lsp_peer import FIXTURE, LspPeer, abort_spawned_peer
 
 
 class ProcessObserver(LspPeer):
@@ -32,7 +32,6 @@ class ProcessObserver(LspPeer):
         os.close(fd)
         self.trace = Path(name)
         read_fd, self.control = os.pipe()
-        self.selector = selectors.DefaultSelector()
         self.buffer = bytearray()
         self.max_buffered = 0
         self.stderr_size = 0
@@ -43,8 +42,11 @@ class ProcessObserver(LspPeer):
         self.reaps_via_rpc = command is None
         self.expects_child = fault in ("child", "escaped-child")
         argv = command or [str(FIXTURE), "--fault", fault]
+        process = None
+        selector = None
         try:
-            self.process = subprocess.Popen(
+            selector = selectors.DefaultSelector()
+            process = subprocess.Popen(
                 [
                     sys.executable,
                     "-u",
@@ -61,15 +63,44 @@ class ProcessObserver(LspPeer):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
+            if process.stdout is None or process.stderr is None:
+                raise ValueError("missing fake process pipes")
+            selector.register(process.stdout, selectors.EVENT_READ)
+            selector.register(process.stderr, selectors.EVENT_READ)
+            os.set_blocking(process.stderr.fileno(), False)
         except BaseException:
-            os.close(self.control)
-            self.selector.close()
+            # Construction is transactional: `with` cannot close a partial peer.
+            # Release the synthetic child's private EOF control before killing
+            # its parent, and let that parent reap the cooperative descendant.
+            if self.control is not None:
+                os.close(self.control)
+                self.control = None
+            if process is not None and self.expects_child and process.poll() is None:
+                from tests.fixtures.lsp.lsp_transport import frame
+
+                try:
+                    if process.stdin is not None:
+                        process.stdin.write(
+                            frame(
+                                {
+                                    "jsonrpc": "2.0",
+                                    "id": 901,
+                                    "method": "fixture/reap",
+                                }
+                            )
+                        )
+                        process.stdin.flush()
+                    self.wait_event("child-reaped", timeout=2)
+                except (BrokenPipeError, OSError, TimeoutError):
+                    # Regardless of a cooperative child's behavior, the owned
+                    # parent must still be killed and reaped.
+                    pass
+            abort_spawned_peer(process, selector)
             raise
         finally:
             os.close(read_fd)
-        for pipe in (self.process.stdout, self.process.stderr):
-            self.selector.register(pipe, selectors.EVENT_READ)
-        os.set_blocking(self.process.stderr.fileno(), False)
+        self.process = process
+        self.selector = selector
 
     def events(self) -> list[dict]:
         # Ignore only the incomplete final line during a concurrent append.
