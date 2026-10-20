@@ -6,9 +6,12 @@ proof of model/agent workflow improvement.
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from typing import Any
+
+from lsp_payloads import CAPABILITIES, semantic_result
 
 
 def _read_message() -> dict[str, Any] | None:
@@ -39,6 +42,16 @@ def _send_message(value: dict[str, Any]) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--definition",
+        choices=("location", "link", "null", "multiple"),
+        default="location",
+    )
+    parser.add_argument(
+        "--disable", action="append", choices=tuple(CAPABILITIES), default=[]
+    )
+    options = parser.parse_args()
     while (request := _read_message()) is not None:
         method = request.get("method")
         if method == "exit":
@@ -49,19 +62,16 @@ def main() -> int:
         if method == "initialize":
             response["result"] = {
                 "capabilities": {
-                    "definitionProvider": True,
+                    **{
+                        capability: method not in options.disable
+                        for method, capability in CAPABILITIES.items()
+                    },
                     "textDocumentSync": 1,
                 },
                 "serverInfo": {"name": "binnacle-fake-lsp", "version": "0"},
             }
-        elif method == "textDocument/definition":
-            response["result"] = {
-                "uri": "file:///fixture.py",
-                "range": {
-                    "start": {"line": 1, "character": 4},
-                    "end": {"line": 1, "character": 10},
-                },
-            }
+        elif method in CAPABILITIES and method not in options.disable:
+            response["result"] = semantic_result(method, options.definition)
         elif method == "shutdown":
             response["result"] = None
         else:
