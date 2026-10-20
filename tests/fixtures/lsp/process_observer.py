@@ -20,7 +20,14 @@ from tests.fixtures.lsp.lsp_peer import FIXTURE, LspPeer
 
 
 class ProcessObserver(LspPeer):
-    def __init__(self, directory: Path, fault: str = "none", *, command=None):
+    def __init__(
+        self,
+        directory: Path,
+        fault: str = "none",
+        *,
+        command=None,
+        cwd: Path | None = None,
+    ):
         fd, name = tempfile.mkstemp(prefix="trace-", suffix=".jsonl", dir=directory)
         os.close(fd)
         self.trace = Path(name)
@@ -47,6 +54,7 @@ class ProcessObserver(LspPeer):
                     "--control-fd",
                     str(read_fd),
                 ],
+                cwd=cwd,
                 pass_fds=(read_fd,),
                 start_new_session=True,
                 stdin=subprocess.PIPE,
@@ -61,6 +69,7 @@ class ProcessObserver(LspPeer):
             os.close(read_fd)
         for pipe in (self.process.stdout, self.process.stderr):
             self.selector.register(pipe, selectors.EVENT_READ)
+        os.set_blocking(self.process.stderr.fileno(), False)
 
     def events(self) -> list[dict]:
         # Ignore only the incomplete final line during a concurrent append.
@@ -89,10 +98,21 @@ class ProcessObserver(LspPeer):
             if key.fileobj is self.process.stdout:
                 stdout_chunk = chunk
                 continue
-            if not chunk:
-                self.selector.unregister(key.fileobj)
-            self.stderr_size += len(chunk)
-            self.stderr_sample.extend(chunk[: max(0, 4096 - len(self.stderr_sample))])
+            # Drain a bounded burst, including bytes queued behind stdout readiness.
+            for index in range(257):
+                if not chunk:
+                    self.selector.unregister(key.fileobj)
+                    break
+                self.stderr_size += len(chunk)
+                self.stderr_sample.extend(
+                    chunk[: max(0, 4096 - len(self.stderr_sample))]
+                )
+                if index == 256:
+                    break
+                try:
+                    chunk = os.read(key.fileobj.fileno(), 1024)
+                except BlockingIOError:
+                    break
         return stdout_chunk
 
     def receive(self, timeout: float = 3) -> dict:

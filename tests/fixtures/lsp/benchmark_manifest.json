@@ -1,0 +1,11 @@
+{
+  "schema": "binnacle-fake-lsp-workload/1",
+  "case": "definition-location",
+  "profile": "deterministic-fake-only",
+  "method": "textDocument/definition",
+  "semantics": "Fixed fake wire location; no indexing or real-provider accuracy claim",
+  "workspace": {"fixture.py": "# Synthetic benchmark fixture\ndef sample():\n    return 1\nsample()\n"},
+  "params": {"textDocument": {"uri": "file:///fixture.py"}, "position": {"line": 3, "character": 1}},
+  "gold": {"uri": "file:///fixture.py", "range": {"start": {"line": 1, "character": 4}, "end": {"line": 1, "character": 10}}},
+  "setup": {"capabilities": {}, "initializationOptions": null, "workspace_policy": "fresh-temp-cwd-rootUri; fixed logical fake URI; no didOpen"}
+}
