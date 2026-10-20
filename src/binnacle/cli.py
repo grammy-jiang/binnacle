@@ -11,7 +11,7 @@ import subprocess
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, TypedDict
 
 import cyclopts
 
@@ -40,6 +40,10 @@ TUNNEL_UNIT = "binnacle-tunnel.service"
 #: Copies of unit files taken before `setup` or `mode` rewrites them.
 BACKUP_DIR = get_settings().jobs.dir.parent / "unit-backups"
 MODES = ("dev", "prod")
+
+
+class _NativeReloadKwargs(TypedDict, total=False):
+    reload_dirs: list[str]
 
 
 def _write_token(path: Path | None = None) -> None:
@@ -85,7 +89,9 @@ def serve(
     # the record is written on a failed start and cleared on Server.started.
     with native_service_output(), serving_entry():
         reload_path = Path.cwd() / "src"
-        watched_src = [str(reload_path)] if reload and reload_path.is_dir() else None
+        native_reload: _NativeReloadKwargs = {}
+        if reload and reload_path.is_dir() and host_os_family() == "darwin":
+            native_reload["reload_dirs"] = [str(reload_path)]
         uvicorn.run(
             "binnacle.server:app",
             host=host,
@@ -93,7 +99,7 @@ def serve(
             reload=reload,
             loop="asyncio" if host_os_family() == "darwin" else "uvloop",
             http="httptools",
-            reload_dirs=watched_src,
+            **native_reload,
         )
 
 
