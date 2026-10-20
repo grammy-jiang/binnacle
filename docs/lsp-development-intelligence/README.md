@@ -16,6 +16,7 @@ Read only what is needed:
 | [Focused sub-server ADR (proposed)](adr-0001-focused-subserver.md) | Recommended fourth mounted child and root-owned runtime; pending P0.5 review |
 | [Functional and technical design V2](functional-technical-design-v2.md) | Responsibilities, protocol/lifecycle, security, results, failure handling and integration |
 | [Provider capability mapbook V2](capability-mapbook-v2.md) | Provider/language capabilities, evidence, trust, cost, host inventory and upgrade rules |
+| [Development capability portfolio](development-capability-portfolio.md) | Agent-first candidate roadmap beyond LSP: structure, impact, tests, failures, debugging |
 | [Implementation plan V2](implementation-plan.md) | Gated roadmap, executable work packages, dependencies, acceptance and release decisions |
 
 The V2 documents above override any contradictory V1 assumption. The files below are historical context, **not current work instructions**:
