@@ -15,6 +15,7 @@ import pwd
 import secrets
 import stat
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -234,14 +235,43 @@ class DarwinInstalledMcpMode:
         finally:
             os.close(fd)
 
+    def _wait_for_absence(self) -> None:
+        """Wait for the exact label to leave launchd after a successful bootout."""
+        for _ in range(20):
+            if not self._running():
+                return
+            time.sleep(0.25)
+        raise InstalledMcpModeError("MCP launchd label still loaded after bootout")
+
+    def _bootstrap(self, plist: Path) -> None:
+        """Retry only when launchd positively confirms the label is absent."""
+        argv = (
+            "/usr/bin/sudo",
+            "-n",
+            "/bin/launchctl",
+            "bootstrap",
+            "system",
+            str(plist),
+        )
+        for attempt in range(4):
+            result = self._run(argv)
+            if result.returncode == 0:
+                return
+            # A failed bootstrap may nevertheless have registered the label.
+            # Do not send a duplicate bootstrap to an ambiguous live daemon.
+            if self._running():
+                raise InstalledMcpModeError(
+                    "MCP bootstrap returned failure but label is loaded"
+                )
+            if attempt < 3:
+                time.sleep(0.5)
+        raise InstalledMcpModeError("MCP bootstrap failed after bounded retries")
+
     def _install(self, plan: ModePlan, backup: Path, candidate: Path) -> str:
-        # sudo -n -v can require authentication even when the exact
-        # NOPASSWD install/launchctl operations are permitted. The actual
-        # fixed-argv operation is the authority and returns its own failure.
+        """Quiesce the installed label and roll back even after partial startup."""
         was_running = self._running()
         installed = False
         stopped = False
-        new_running = False
         try:
             self._install_plist(candidate)
             installed = True
@@ -250,35 +280,29 @@ class DarwinInstalledMcpMode:
                     "/usr/bin/sudo", "-n", "/bin/launchctl", "bootout", TARGET
                 )
                 stopped = True
-            self._command(
-                "/usr/bin/sudo",
-                "-n",
-                "/bin/launchctl",
-                "bootstrap",
-                "system",
-                str(plan.plist),
-            )
-            new_running = True
+                self._wait_for_absence()
+            self._bootstrap(plan.plist)
             if not self._running():
                 raise InstalledMcpModeError("restarted MCP LaunchDaemon not loaded")
             return f"{TARGET}: switched to {plan.mode} mode (previous plist backed up)"
         except InstalledMcpModeError as exc:
             if installed:
                 try:
-                    if new_running:
+                    if stopped and self._running():
+                        # Includes a partially successful bootstrap that returned
+                        # a nonzero exit code but registered the new label.
                         self._command(
                             "/usr/bin/sudo", "-n", "/bin/launchctl", "bootout", TARGET
                         )
+                        self._wait_for_absence()
                     self._install_plist(backup)
                     if stopped:
-                        self._command(
-                            "/usr/bin/sudo",
-                            "-n",
-                            "/bin/launchctl",
-                            "bootstrap",
-                            "system",
-                            str(plan.plist),
-                        )
+                        self._wait_for_absence()
+                        self._bootstrap(plan.plist)
+                        if not self._running():
+                            raise InstalledMcpModeError(
+                                "restored MCP LaunchDaemon not loaded"
+                            )
                 except InstalledMcpModeError:
                     raise InstalledMcpModeError(
                         "MCP mode update AND rollback failed; inspect installed plist "

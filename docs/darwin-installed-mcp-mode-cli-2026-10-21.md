@@ -58,3 +58,12 @@ tests, Linux systemd regression, full CI, installed plist identity,
 non-running important tasks, backup, deliberate restart, live health
 and private Full Capture sentinel. The enabled logging preference is
 independent of running the frontend in development mode.
+
+## Launchd transition and rollback safety
+
+The installed MCP controller waits for positive label absence after
+a successful bootout. Bootstrap errors are retried only when the
+label is absent; a failed bootstrap with a loaded label is ambiguous
+and must instead be rolled back. Restoration must verify that the old
+plist and original launchd label have been reinstated. An independent
+deployment controller handles failures of the CLI transaction itself.
