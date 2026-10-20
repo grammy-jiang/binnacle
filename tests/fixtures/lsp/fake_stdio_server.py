@@ -14,6 +14,8 @@ from typing import Any
 from lsp_dialogue import Dialogue
 from lsp_payloads import CAPABILITIES, semantic_result
 from lsp_transport import MODES, emit, frame
+from process_faults import MODES as FAULT_MODES
+from process_faults import Faults
 
 
 def _read_message() -> dict[str, Any] | None:
@@ -53,10 +55,16 @@ def main() -> int:
         "--disable", action="append", choices=tuple(CAPABILITIES), default=[]
     )
     parser.add_argument("--transport", choices=MODES, default="split")
+    parser.add_argument("--fault", choices=FAULT_MODES, default="none")
+    parser.add_argument("--trace")
+    parser.add_argument("--control-fd", type=int)
     options = parser.parse_args()
+    faults = Faults(options.fault, options.trace, options.control_fd)
     delayed: dict[str, Any] | None = None
     dialogue = Dialogue()
     while (request := _read_message()) is not None:
+        if faults.accept(request):
+            continue
         method = request.get("method")
         if method == "exit":
             return 0

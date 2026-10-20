@@ -45,7 +45,7 @@ Each item must have one scoped code/evidence change, acceptance proof and a comm
 | P1.2 | Fake capability/definition/references/symbol/hover payloads | P1.1 | Typed fixture cases including null/multiple/LocationLink |
 | P1.3 | Fake notifications and server requests | P1.1 | Safe configuration response and edit/command refusal tests |
 | P1.4 | Transport adversarial fixtures: split/coalesced/bad/oversized frames, late ID | P1.1 | Bounded parser negative coverage |
-| P1.5 | Process failure fixture: hang, crash, orphan descendants, cancel, non-exit | P1.1 | Deterministic cleanup/timeout witnesses on Linux and Darwin |
+| P1.5 | Process failure fixture: hang, crash, orphan descendants, cancel, non-exit | P1.1 | **Fixture implementation complete (2026-10-21):** 14 synthetic process integration cases; combined P1.1–P1.5 suite 63 passed on Darwin/Python 3.13. Private JSONL, bounded stderr/timeouts, TERM/KILL and ordinary/escaped descendant cleanup witnesses; observation failure stays cleanup-unverified. POSIX design, Linux execution and independent review pending; no production lifecycle acceptance. |
 | P1.6 | Fake analyzer: JSON diagnostics, cache/workspace sentinel writes, child spawn | P0 GO | Harness detects intentional side effects and false-clean results |
 | P1.7 | Raw LSP benchmark harness + run identity and reproducible fixture manifest | P1.2/P1.4 | Gold assertions required for valid timing; results carry provenance |
 | P1.8 | Provider process-tree sampling, cold/settle/warm and artifact comparator | P1.5/P1.7 | Child RSS/CPU counted; incompatible runs rejected |
