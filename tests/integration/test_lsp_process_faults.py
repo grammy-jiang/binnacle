@@ -60,6 +60,11 @@ def test_stderr_flood_is_drained_and_retention_bounded(tmp_path):
     with ProcessObserver(tmp_path, "stderr-flood") as peer:
         assert peer.request("initialize")["id"] == 1
         peer.wait_event("stderr-written")
+        # The writer's flush is not evidence the independent pipe reader has
+        # consumed every byte. Drain with a deadline on both Darwin and Linux.
+        deadline = time.monotonic() + 3
+        while peer.stderr_size < 256 * 1024 and time.monotonic() < deadline:
+            peer.read_chunk(min(0.05, deadline - time.monotonic()))
         assert peer.stderr_size == 256 * 1024
         assert len(peer.stderr_sample) == 4096
     assert peer.cleanup_verified
