@@ -28,12 +28,11 @@ class ProcessObserver(LspPeer):
         command=None,
         cwd: Path | None = None,
     ):
-        fd, name = tempfile.mkstemp(prefix="trace-", suffix=".jsonl", dir=directory)
-        os.close(fd)
-        self.trace = Path(name)
-        read_fd, self.control = os.pipe()
-        self.selector = selectors.DefaultSelector()
+        self.process = None
+        self.selector = None
+        self.control = None
         self.buffer = bytearray()
+        self.pending_length = None
         self.max_buffered = 0
         self.stderr_size = 0
         self.stderr_sample = bytearray()
@@ -42,8 +41,13 @@ class ProcessObserver(LspPeer):
         self.escaped = False
         self.reaps_via_rpc = command is None
         self.expects_child = fault in ("child", "escaped-child")
-        argv = command or [str(FIXTURE), "--fault", fault]
+        read_fd = None
         try:
+            fd, name = tempfile.mkstemp(prefix="trace-", suffix=".jsonl", dir=directory)
+            os.close(fd)
+            self.trace = Path(name)
+            read_fd, self.control = os.pipe()
+            argv = command or [str(FIXTURE), "--fault", fault]
             self.process = subprocess.Popen(
                 [
                     sys.executable,
@@ -61,15 +65,16 @@ class ProcessObserver(LspPeer):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
+            self.selector = selectors.DefaultSelector()
+            for pipe in (self.process.stdout, self.process.stderr):
+                self.selector.register(pipe, selectors.EVENT_READ)
+            os.set_blocking(self.process.stderr.fileno(), False)
         except BaseException:
-            os.close(self.control)
-            self.selector.close()
+            self.release_resources()
             raise
         finally:
-            os.close(read_fd)
-        for pipe in (self.process.stdout, self.process.stderr):
-            self.selector.register(pipe, selectors.EVENT_READ)
-        os.set_blocking(self.process.stderr.fileno(), False)
+            if read_fd is not None:
+                os.close(read_fd)
 
     def events(self) -> list[dict]:
         # Ignore only the incomplete final line during a concurrent append.
@@ -114,28 +119,6 @@ class ProcessObserver(LspPeer):
                 except BlockingIOError:
                     break
         return stdout_chunk
-
-    def receive(self, timeout: float = 3) -> dict:
-        deadline = time.monotonic() + timeout
-        while True:
-            if b"\r\n\r\n" in self.buffer:
-                header, _, body = self.buffer.partition(b"\r\n\r\n")
-                length = int(header.split(b":", 1)[1])
-                if length > 8192:
-                    raise ValueError("fixture body too large")
-                if len(body) >= length:
-                    self.buffer = body[length:]
-                    return json.loads(body[:length])
-            if time.monotonic() >= deadline:
-                raise TimeoutError("fixture response deadline")
-            chunk = self.read_chunk(deadline - time.monotonic())
-            if chunk == b"":
-                raise EOFError("fixture stdout EOF")
-            if chunk:
-                self.buffer.extend(chunk)
-                self.max_buffered = max(self.max_buffered, len(self.buffer))
-                if len(self.buffer) > 9216:
-                    raise ValueError("fixture buffer limit")
 
     def close_children(self) -> None:
         if self.control is not None:
