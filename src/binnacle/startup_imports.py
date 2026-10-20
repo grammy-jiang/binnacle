@@ -98,6 +98,8 @@ _MANAGER_COMMON = (
     # Pin their complete startup closure rather than treating them as late
     # imports or allowing unreviewed extra modules.
     "binnacle.config_maintenance",
+    # Telemetry models are imported by the common Settings module on both hosts.
+    "binnacle.config_telemetry",
     "binnacle.platform",
     "binnacle.platform.contracts.maintenance_contracts",
     "binnacle.platform.contracts",

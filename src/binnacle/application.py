@@ -10,7 +10,6 @@ import platform
 from collections.abc import Callable, Mapping
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from functools import partial
 from threading import Event, RLock
 from time import time
 
@@ -39,15 +38,11 @@ from binnacle.features.files.files_server import create_files_server
 from binnacle.features.files.paths import FileToolAccess
 from binnacle.features.search.search_server import create_search_server
 from binnacle.mcp.identity import ClientIdentity
-from binnacle.mcp.logging_middleware import (
-    RequestLoggingMiddleware,
-    ToolLoggingMiddleware,
-)
+from binnacle.mcp.logging_setup import attach_logging
 from binnacle.mcp.maintenance_request_admission import FullRequestAdmissionMiddleware
 from binnacle.mcp.tool_admission_drain import ToolAdmissionDrain
 from binnacle.mcp.tool_order import PublicToolOrder
 from binnacle.mcp.visibility import ClientToolVisibility, ClientToolVisibilityTransform
-from binnacle.observability.log_safety import safe_request_payload
 from binnacle.platform.contracts.capability_contracts import NativeCapabilityError
 from binnacle.platform.contracts.darwin_contracts import (
     ForegroundExecution as NativeForegroundExecution,
@@ -231,23 +226,7 @@ def create_application(
         ),
     )
     identity = ClientIdentity()
-    root.add_middleware(
-        RequestLoggingMiddleware(
-            identity,
-            include_payloads=True,
-            max_payload_length=500,
-            payload_serializer=partial(
-                safe_request_payload, root=settings.roots.default_root
-            ),
-        )
-    )
-    root.add_middleware(
-        ToolLoggingMiddleware(
-            identity,
-            tokenizer=settings.telemetry.tokenizer,
-            path_root=settings.roots.default_root,
-        )
-    )
+    attach_logging(root, identity, settings)
     root.add_middleware(ClientToolVisibility(settings.client_tools, identity))
     # Explicitly injected per-generation gate; installed default is None.
     if admission_gate is not None:
