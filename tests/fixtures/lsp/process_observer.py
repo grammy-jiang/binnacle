@@ -70,6 +70,36 @@ class ProcessObserver(LspPeer):
                 self.selector.register(pipe, selectors.EVENT_READ)
             os.set_blocking(self.process.stderr.fileno(), False)
         except BaseException:
+            # If our synthetic provider already spawned a cooperative child,
+            # release its control pipe and allow the owning parent to reap it
+            # before tearing down the parent. Killing the parent immediately
+            # can leave a zombie and produce false cleanup evidence.
+            if self.process is not None and self.expects_child:
+                try:
+                    if self.control is not None:
+                        os.close(self.control)
+                        self.control = None
+                    self.wait_event("child-ready", timeout=2)
+                    self.wait_event("child-exit", timeout=2)
+                    if self.reaps_via_rpc and self.process.poll() is None:
+                        from tests.fixtures.lsp.lsp_transport import frame
+
+                        assert self.process.stdin is not None
+                        self.process.stdin.write(
+                            frame(
+                                {
+                                    "jsonrpc": "2.0",
+                                    "id": 901,
+                                    "method": "fixture/reap",
+                                }
+                            )
+                        )
+                        self.process.stdin.flush()
+                    self.wait_event("child-reaped", timeout=2)
+                except (OSError, TimeoutError, BrokenPipeError):
+                    # A failed cooperative handshake cannot certify cleanup.
+                    # The final resource rollback still reaps our owned parent.
+                    pass
             self.release_resources()
             raise
         finally:
