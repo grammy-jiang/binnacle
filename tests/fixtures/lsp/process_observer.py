@@ -33,6 +33,7 @@ class ProcessObserver(LspPeer):
         self.escalated = False
         self.cleanup_verified = False
         self.escaped = False
+        self.reaps_via_rpc = command is None
         self.expects_child = fault in ("child", "escaped-child")
         argv = command or [str(FIXTURE), "--fault", fault]
         try:
@@ -82,15 +83,17 @@ class ProcessObserver(LspPeer):
     def read_chunk(self, timeout: float) -> bytes | None:
         """Drain stderr without retaining unbounded data; None means no stdout yet."""
         ready = self.selector.select(max(0, timeout))
+        stdout_chunk = None
         for key, _ in ready:
             chunk = os.read(key.fileobj.fileno(), 1024)
             if key.fileobj is self.process.stdout:
-                return chunk
+                stdout_chunk = chunk
+                continue
             if not chunk:
                 self.selector.unregister(key.fileobj)
             self.stderr_size += len(chunk)
             self.stderr_sample.extend(chunk[: max(0, 4096 - len(self.stderr_sample))])
-        return None
+        return stdout_chunk
 
     def receive(self, timeout: float = 3) -> dict:
         deadline = time.monotonic() + timeout
@@ -124,9 +127,9 @@ class ProcessObserver(LspPeer):
         self.escaped = any(e["pgid"] != self.process.pid for e in children)
         if children:
             self.wait_event("child-exit")
-            if self.process.poll() is None:
+            if self.process.poll() is None and self.reaps_via_rpc:
                 self.request("fixture/reap", 900)
-                self.wait_event("child-reaped")
+            self.wait_event("child-reaped")
             # Exit intent is NOT proof of disappearance. Signal 0 only observes.
             deadline = time.monotonic() + 3
             while time.monotonic() < deadline:
