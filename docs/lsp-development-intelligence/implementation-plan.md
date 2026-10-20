@@ -41,7 +41,7 @@ Each item must have one scoped code/evidence change, acceptance proof and a comm
 | P0.4 | Re-map V1 tasks and gates to current architecture, preserve V1 history | P0.1–P0.3 | This V2 plan and versioned V1 archive (**draft complete**) |
 | P0.5 | Independent design review: focused FastMCP child ADR, agent capability portfolio, privacy-safe evaluation track, architecture/lifespan ownership, testability, READ and visibility policy | P0.1–P0.4 | Signed GO/REWORK record, open risks owner and targeted changes (**pending**) |
 | P0.6 | Non-intrusive host readiness inventory: deployed service PATH, OS process primitives, versions | P0.5 | Service-context evidence and exact executable fingerprint (**pending; no provider start on production**) |
-| P1.1 | Minimal fake LSP stdio handshake, response framing | P0 GO | Deterministic initialize/shutdown/exit tests |
+| P1.1 | Minimal fake LSP stdio handshake, response framing | P0 GO | Isolated fake fixture smoke implemented (2026-10-20); production P0 gate remains pending |
 | P1.2 | Fake capability/definition/references/symbol/hover payloads | P1.1 | Typed fixture cases including null/multiple/LocationLink |
 | P1.3 | Fake notifications and server requests | P1.1 | Safe configuration response and edit/command refusal tests |
 | P1.4 | Transport adversarial fixtures: split/coalesced/bad/oversized frames, late ID | P1.1 | Bounded parser negative coverage |
