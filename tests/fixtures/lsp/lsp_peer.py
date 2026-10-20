@@ -23,6 +23,7 @@ class LspPeer:
             stderr=subprocess.PIPE,
         )
         self.buffer = bytearray()
+        self.max_buffered = 0
         self.selector = selectors.DefaultSelector()
         assert self.process.stdout is not None
         self.selector.register(self.process.stdout, selectors.EVENT_READ)
@@ -84,6 +85,7 @@ class LspPeer:
             if not chunk:
                 raise EOFError("truncated frame or closed stdout")
             self.buffer.extend(chunk)
+            self.max_buffered = max(self.max_buffered, len(self.buffer))
 
     def request(self, method: str, request_id: int = 1, **params: Any) -> dict:
         self.send(
@@ -91,8 +93,16 @@ class LspPeer:
         )
         response = self.receive()
         assert "method" not in response, "server request requires dispatch"
-        assert response["id"] == request_id
+        self.validate_response(response, request_id)
         return response
+
+    @staticmethod
+    def validate_response(response: dict[str, Any], expected_id: int) -> None:
+        if "method" in response:
+            raise ValueError("server request is not a response")
+        response_id = response.get("id")
+        if type(response_id) is not int or response_id != expected_id:
+            raise ValueError("unexpected response ID")
 
     def finish(self) -> None:
         assert self.request("shutdown", 999) == {

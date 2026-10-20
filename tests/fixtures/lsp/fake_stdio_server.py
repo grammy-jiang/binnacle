@@ -13,6 +13,7 @@ from typing import Any
 
 from lsp_dialogue import Dialogue
 from lsp_payloads import CAPABILITIES, semantic_result
+from lsp_transport import MODES, emit, frame
 
 
 def _read_message() -> dict[str, Any] | None:
@@ -37,8 +38,7 @@ def _read_message() -> dict[str, Any] | None:
 
 
 def _send_message(value: dict[str, Any]) -> None:
-    raw = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
-    sys.stdout.buffer.write(f"Content-Length: {len(raw)}\r\n\r\n".encode() + raw)
+    sys.stdout.buffer.write(frame(value))
     sys.stdout.buffer.flush()
 
 
@@ -52,7 +52,9 @@ def main() -> int:
     parser.add_argument(
         "--disable", action="append", choices=tuple(CAPABILITIES), default=[]
     )
+    parser.add_argument("--transport", choices=MODES, default="split")
     options = parser.parse_args()
+    delayed: dict[str, Any] | None = None
     dialogue = Dialogue()
     while (request := _read_message()) is not None:
         method = request.get("method")
@@ -74,6 +76,18 @@ def main() -> int:
             }
         elif method in CAPABILITIES and method not in options.disable:
             response["result"] = semantic_result(method, options.definition)
+        elif method == "fixture/transport":
+            response["result"] = "wire → 文"
+            if options.transport == "late-id":
+                delayed = response
+            elif emit(sys.stdout.buffer, options.transport, response):
+                return 0
+            continue
+        elif method == "fixture/release":
+            if delayed is not None:
+                _send_message(delayed)
+                delayed = None
+            response["result"] = None
         elif method == "fixture/serverRequest":
             _send_message(dialogue.server_request(request["params"]))
             response["result"] = None
@@ -90,5 +104,5 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (EOFError, TypeError, ValueError, json.JSONDecodeError):
+    except (EOFError, TypeError, ValueError, BrokenPipeError):
         raise SystemExit(2) from None
