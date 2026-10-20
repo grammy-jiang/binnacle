@@ -1,8 +1,6 @@
-"""Single host-selection boundary for native OS mechanisms.
+"""Single host-selection boundary; inject narrow native OS adapters.
 
-Darwin adapters remain limited mechanisms, with public runtime review-gated.
-Domain services consume small platform contracts; they do not select the host or import its implementation.
-This module is normal Python composition, not a FastMCP Provider or registry.
+Darwin runtime effects remain review-gated and unavailable by default.
 """
 
 import platform
@@ -180,6 +178,15 @@ def create_service_controller(
     return SystemdUserServices()
 
 
+def create_native_installed_cli():
+    """Compose installed-Darwin daemon management; never select systemd on Mac."""
+    if host_os_family() != "darwin":
+        return None
+    from binnacle.deployment.darwin.installed_cli import MacInstalledCLI
+
+    return MacInstalledCLI()
+
+
 def create_linux_provisioner(*, unit_dir=None, backup_dir=None, run=None):
     """Linux-only setup compatibility, not a generic cross-OS provisioner."""
     if host_os_family() != "linux":
@@ -331,11 +338,7 @@ def native_file_capability(*, owner: JobOwnerKind, release_scope=None, execution
 
 
 def create_native_provisioner(*, root: Path, lease: ServiceLease):
-    """Map A6 inert plans; native lifecycle acceptance remains a separate gate.
-
-    A6 omits raw launchd output paths. The service entrypoint writes records
-    through A5 with the generation embedded here, never to an unredacted file.
-    """
+    """Map A6 inert plans; no raw service logs or lifecycle authorization."""
     if host_os_family() != "darwin":
         raise UnsupportedHostOS("Native provisioning requires Darwin")
     import os

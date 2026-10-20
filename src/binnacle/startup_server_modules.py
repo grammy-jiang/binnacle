@@ -179,6 +179,8 @@ _SERVER_EXTRA_LINUX = (
 )
 _SERVER_EXTRA_DARWIN = (
     "binnacle.deployment.darwin",
+    "binnacle.deployment.darwin.installed_cli",
+    "binnacle.deployment.darwin.installed_mode",
     "binnacle.deployment.darwin.plist",
     "binnacle.deployment.darwin.provisioner",
     "binnacle.deployment.darwin.setup",

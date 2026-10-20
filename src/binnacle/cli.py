@@ -1,13 +1,9 @@
 """binnacle command line -- serve, setup, mode, doctor, stats, token.
 
-The server itself lives in binnacle.server; this module only wires it to
-subcommands and provisions the deployment pieces that are ours to manage:
-the token and Binnacle's systemd user units. `binnacle-mcp.service` is the
-restartable MCP control plane; `binnacle-jobs.service` is the stable command
-owner. Development runs the MCP checkout with auto-reload while production
-runs installed `binnacle serve`; the job owner never auto-reloads. The ChatGPT
-tunnel is the `binnacle-tunnel` companion's business; core keeps only its
-unit name, for `token rotate`.
+The CLI selects native Linux systemd user services or a verified installed
+macOS launchd service. Development uses checkout-based MCP autoreload, while
+the stable Jobs manager remains separate and never auto-reloads. The ChatGPT
+tunnel remains an independent companion.
 """
 
 import secrets
@@ -27,6 +23,7 @@ from binnacle.deployment.server_unit import SERVER_UNIT, render_server_unit
 from binnacle.diagnostics import doctor_jobs
 from binnacle.platform.deployment_platform import (
     create_linux_provisioner,
+    create_native_installed_cli,
     create_service_controller,
     create_service_inspector,
 )
@@ -80,14 +77,15 @@ def serve(
     """Run the MCP server in the foreground (what the systemd unit runs)."""
     import uvicorn
 
-    # Darwin uses the stdlib loop: reserve SIGCHLD for the A2 sole reaper.
-    # Linux retains its pinned uvloop/httptools production stack.
+    # Darwin uses stdlib asyncio (SIGCHLD is reserved for A2); Linux uses uvloop.
     from binnacle.platform.composition import host_os_family, native_service_output
     from binnacle.startup_imports import serving_entry
 
     # This process is the serving entry while uvicorn imports binnacle.server:
     # the record is written on a failed start and cleared on Server.started.
     with native_service_output(), serving_entry():
+        reload_path = Path.cwd() / "src"
+        watched_src = [str(reload_path)] if reload and reload_path.is_dir() else None
         uvicorn.run(
             "binnacle.server:app",
             host=host,
@@ -95,6 +93,7 @@ def serve(
             reload=reload,
             loop="asyncio" if host_os_family() == "darwin" else "uvloop",
             http="httptools",
+            reload_dirs=watched_src,
         )
 
 
@@ -173,6 +172,7 @@ def setup(
     port: int = get_settings().serve.port,
     dry_run: bool = False,
     adopt: bool = False,
+    force: bool = False,
 ) -> None:
     """Provision the server side: token, MCP unit, and stable jobs unit.
 
@@ -191,6 +191,10 @@ def setup(
         one), after reviewing the diff `--dry-run` shows. It is backed up
         first.
     """
+    native = create_native_installed_cli()
+    if native is not None:
+        native.setup(dev=dev, port=port, dry_run=dry_run, adopt=adopt, force=force)
+        return
     actions: list[str] = []
 
     def act(description: str, fn: Callable[[], object]) -> None:
@@ -257,6 +261,10 @@ def mode(
     rollback setting explicitly selects the embedded owner, running jobs
     remain blockers because they share the MCP cgroup. `--force` overrides.
     """
+    native = create_native_installed_cli()
+    if native is not None:
+        native.mode(target=target, repo=repo, force=force)
+        return
     provisioner = _provisioner()
     marker = _current_marker(provisioner)
     if target == "status":

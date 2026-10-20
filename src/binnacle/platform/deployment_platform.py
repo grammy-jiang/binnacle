@@ -2,6 +2,7 @@
 
 from binnacle.platform.composition import (
     create_linux_provisioner,
+    create_native_installed_cli,
     create_runtime_paths,
     create_service_controller,
     create_service_inspector,
@@ -10,6 +11,7 @@ from binnacle.platform.composition import (
 
 __all__ = (
     "create_linux_provisioner",
+    "create_native_installed_cli",
     "create_runtime_paths",
     "create_service_controller",
     "create_service_inspector",

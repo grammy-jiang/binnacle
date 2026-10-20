@@ -107,6 +107,7 @@ def test_binnacle_serve_marks_the_entry_while_uvicorn_runs(monkeypatch, system):
     cli.serve(reload=True)
     assert [marked for marked, _ in seen] == [True, True]
     assert [k["reload"] for _, k in seen] == [False, True]
+    assert seen[1][1].get("reload_dirs") == [str(Path.cwd() / "src")]
     assert not serving_entry_marked()
 
 
