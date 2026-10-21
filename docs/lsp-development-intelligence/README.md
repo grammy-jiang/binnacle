@@ -18,6 +18,7 @@ Read only what is needed:
 | [Provider capability mapbook V2](capability-mapbook-v2.md) | Provider/language capabilities, evidence, trust, cost, host inventory and upgrade rules |
 | [Development capability portfolio](development-capability-portfolio.md) | Agent-first candidate roadmap beyond LSP: structure, impact, tests, failures, debugging |
 | [Historical trajectory evaluation plan](historical-trajectory-evaluation-plan.md) | Reuse old tool/tunnel logs and session observer for opportunity mining, task replay and paired agent A/B |
+| [2026-10-21 full-capture readiness](full-capture-readiness-2026-10-21.md) | Rebasing and on-host audit of unredacted full MCP payload, retained job output and task-replay limitations |
 | [Implementation plan V2](implementation-plan.md) | Gated roadmap, executable work packages, dependencies, acceptance and release decisions |
 | [P0.5 resolution](p0-5-architecture-resolution-2026-10-21.md) | Seven design issues, binding decisions and retained runtime gates |
 | [P0.6 host inventory](p0-6-host-readiness-2026-10-21.md) | Read-only actual service-PATH/OS/provider locator evidence on MacBook and two Raspberry Pi hosts |
