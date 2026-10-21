@@ -23,6 +23,7 @@ Read only what is needed:
 | [E0/E1 independent review trail](e0-e1-independent-review-2026-10-21.md) | Initial REWORK findings, corrected defects and final bounded GO evidence |
 | [E2 sample cohort and evidence gaps](e2-historical-sampling-2026-10-21.md) | 49 host-local sampled request groups, 11 controls and reasons real task labels/R2 snapshots remain unverified |
 | [E2 technical review](e2-independent-review-2026-10-21.md) | Security and reproducibility review trail, technical GO vs pending independent task/gold acceptance |
+| [E2.1 local trace relinking](e2-1-local-trace-recovery-2026-10-21.md) | Three-host 49/49 opaque case restoration, 697 tool events, independent limited GO and residual task/source uncertainty |
 | [Implementation plan V2](implementation-plan.md) | Gated roadmap, executable work packages, dependencies, acceptance and release decisions |
 | [P0.5 resolution](p0-5-architecture-resolution-2026-10-21.md) | Seven design issues, binding decisions and retained runtime gates |
 | [P0.6 host inventory](p0-6-host-readiness-2026-10-21.md) | Read-only actual service-PATH/OS/provider locator evidence on MacBook and two Raspberry Pi hosts |
