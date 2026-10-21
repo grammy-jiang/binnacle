@@ -29,6 +29,7 @@ Read only what is needed:
 | [P2.0 default-off implementation](p2-0-default-off-configuration-2026-10-21.md) | Strict opt-in config, startup inventory and disabled/enabled in-memory tool-surface parity |
 | [P2.1 minimal LSP client decision](p2-1-client-dependency-decision-2026-10-21.md) | Standard-library asyncio RPC with injected transport; no dependency or process owner |
 | [P2 multilspy upstream adoption assessment](p2-multilspy-upstream-gap-assessment-2026-10-21.md) | Microsoft v0.1.1 source-audited; preferred reuse with compatibility gaps and bounded POC before replacing in-house protocol |
+| [Zuban multilspy adapter proof](p2-multilspy-zuban-adapter-proof-2026-10-21.md) | Real macOS Zuban 0.10.0 and no-fork external subclass POC; optional LocationLink bug and production gaps |
 | [P2.2/P2.3 protocol acceptance](p2-2-p2-3-protocol-acceptance-2026-10-21.md) | Strict wire framing, parallel requests, server reverse RPC, capability and UTF-16 tests |
 | [Implementation plan V2](implementation-plan.md) | Gated roadmap, executable work packages, dependencies, acceptance and release decisions |
 | [P0.5 resolution](p0-5-architecture-resolution-2026-10-21.md) | Seven design issues, binding decisions and retained runtime gates |
