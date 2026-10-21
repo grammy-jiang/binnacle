@@ -9,8 +9,10 @@ private in-memory FastMCP application. Nothing is registered in production.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import subprocess
+from importlib.metadata import distribution
 from pathlib import Path
 
 import pytest
@@ -23,7 +25,7 @@ from binnacle.features.development_intelligence.lsp_workspace_policy import (
     normalize_locations,
 )
 
-EXPECTED_UPSTREAM_SHA = "b5325f19c7b77317bd4ab7c1ff3c6bb8fa5b8f1b"
+EXPECTED_UPSTREAM_SHA = "9203732e4e5f65cc1374b109110f7b6354d3d43b"
 OPT_IN = "BINNACLE_PATCHED_MULTILSPY_QA"
 SOURCE_ENV = "BINNACLE_MULTILSPY_SOURCE_DIR"
 BINARY_ENV = "PYRIGHT_LSP_TEST_BIN"
@@ -35,29 +37,44 @@ def patched_upstream():
         pytest.skip(f"Run with {OPT_IN}=1 for mandatory pinned upstream acceptance")
     source_value = os.environ.get(SOURCE_ENV)
     binary_value = os.environ.get(BINARY_ENV)
-    assert source_value, f"{SOURCE_ENV} is required for a real acceptance run"
     assert binary_value, f"{BINARY_ENV} is required for a real acceptance run"
-
-    source = Path(source_value).resolve(strict=True)
     binary = Path(binary_value)
     assert binary.is_absolute() and binary.is_file(), "real Pyright binary required"
-    revision = subprocess.run(
-        ["git", "-C", str(source), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        timeout=5,
-        check=True,
-    ).stdout.strip()
-    assert revision == EXPECTED_UPSTREAM_SHA, "Wrong multilspy source revision"
     import inspect
 
     from multilspy.language_servers.pyright_language_server.pyright_server import (
         PyrightServer,
     )
 
-    assert Path(inspect.getfile(PyrightServer)).resolve().is_relative_to(source), (
-        "Detected installed/PyPI multilspy instead of source under test"
-    )
+    actual_file = Path(inspect.getfile(PyrightServer)).resolve()
+    if source_value:
+        # Contributor worktree acceptance: validate Git checkout and import.
+        source = Path(source_value).resolve(strict=True)
+        revision = subprocess.run(
+            ["git", "-C", str(source), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        ).stdout.strip()
+        assert revision == EXPECTED_UPSTREAM_SHA, "Wrong multilspy source revision"
+        assert actual_file.is_relative_to(source), (
+            "Detected installed/PyPI multilspy instead of source under test"
+        )
+    else:
+        # Production-style opt-in: an installed wheel must carry the exact
+        # VCS commit in direct_url.json; version 0.1.1 alone proves nothing.
+        package = distribution("multilspy")
+        manifest = package.read_text("direct_url.json")
+        assert manifest, "Refusing multilspy without immutable Git provenance"
+        origin = json.loads(manifest)
+        vcs = origin.get("vcs_info", {})
+        assert origin.get("url") == "https://github.com/grammy-jiang/multilspy.git"
+        assert vcs.get("commit_id") == EXPECTED_UPSTREAM_SHA
+        assert vcs.get("requested_revision") == EXPECTED_UPSTREAM_SHA
+        assert actual_file.is_relative_to(
+            Path(package.locate_file("multilspy")).resolve()
+        )
     return binary, PyrightServer
 
 

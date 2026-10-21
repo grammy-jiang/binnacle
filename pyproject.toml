@@ -59,6 +59,14 @@ binnacle-watchdog = "binnacle.companions.watchdog.watchdog_cli:main"
 binnacle-service-watchdog = "binnacle.companions.service_watchdog:main"
 binnacle-tunnel = "binnacle.companions.tunnel.tunnel_cli:main"
 
+[project.optional-dependencies]
+# Exact PEP 508 VCS URL in build metadata, not uv-only source resolution.
+# Disabled by default. Pyright 1.1.413 executable is separately host-provided.
+development-intelligence-pyright = [
+    "multilspy @ git+https://github.com/grammy-jiang/multilspy.git@9203732e4e5f65cc1374b109110f7b6354d3d43b",
+    "psutil>=7,<8",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
@@ -71,6 +79,7 @@ test = [
     "hypothesis>=6.167.1",
     "pathspec>=1.1,<2", # Darwin platform tests import it on every host; runtime keeps the darwin marker
     "pytest>=9.1.1",
+    "pytest-asyncio>=1,<2",
     "pytest-cov>=7.1.0",
     "pytest-randomly>=4.1.0",
     "pytest-timeout>=2.4.0",
