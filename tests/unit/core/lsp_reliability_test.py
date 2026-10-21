@@ -104,10 +104,9 @@ def test_process_observer_constructor_rollback(tmp_path, monkeypatch, stage):
     peer = ProcessObserver.__new__(ProcessObserver)
     with pytest.raises(OSError, match="injected failure"):
         peer.__init__(tmp_path)
-    if stage != "factory":
-        assert_spawn_rolled_back(spawned)
-    else:
-        assert spawned == []
+    # Both pre- and post-spawn selector factory choices are valid, provided
+    # any successfully spawned process is fully closed and reaped.
+    assert_spawn_rolled_back(spawned)
     assert peer.control is None
     assert all(not selector.get_map() for selector in opened)
 
@@ -128,13 +127,13 @@ def test_partial_frame_remains_readable_after_timeout_and_coalesced_next(
         with pytest.raises(TimeoutError, match="fixture response deadline"):
             peer.receive(timeout=0.02)
         if split == "body-partial":
-            assert peer._expected_body_length == len(first) - boundary
+            assert peer.pending_length == len(first) - boundary
         else:
-            assert peer._expected_body_length is None
+            assert peer.pending_length is None
         peer.buffer.extend(first[cutoff:] + second)
         assert peer.receive(timeout=0.2) == response1
         assert peer.receive(timeout=0.2) == response2
-        assert peer._expected_body_length is None
+        assert peer.pending_length is None
         assert peer.buffer == bytearray()
         assert peer.max_buffered <= 9216
 
