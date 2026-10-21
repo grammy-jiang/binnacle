@@ -58,3 +58,9 @@ GitHub 在此时受保护 master 为 61a0657，其第一父提交 469e31f 集成
 PR #60 第一轮 Python 3.14 中另一会话的 Issue #30 flock EAGAIN 测试失败，但在不跳过测试、不修改日志维护源码的情况下，同 SHA 正式重跑成功。原 master 65ece951 曾有独立 Issue #30 recovery RPC socket 拒绝的 CI 波动。这些测试风险交还 Issue #30 owner，不能把 FDW-6 合并当作日志维护稳定性或生产授权证据。
 
 本会话 Files/Search 代码收尾完成；外部 E1-WORK、A4-TCC 和 RELEASE-CONVERGE 仍为 NOT_VERIFIED/EXTERNAL。旧生产服务与实际配置不因 GitHub 更新自动升级，且 Issue #30 C1–C4 独立验收仍未闭环。
+
+## 2026-10-21 Chat Mode 实际验收补充
+
+用户已明确只要求 ChatGPT Chat Mode；截至 2026-10-21 的新决定把 E1-WORK 从当前交付中排除，**不是**声称过去的 Work Mode 已通过。新的 Chat Mode 真实 MCP 工具调用已完成配置范围内的六工具验收，参阅 docs/r6w3-chat-mode-acceptance-2026-10-21.md。
+
+Mac 原生 TCC-like/文件模式权限回归 40 passed；Chat Mode 真实 read_file 对自己创建的权限 000 临时文件返回 Permission denied，测试文件已安全清除；此非 macOS TCC 框架的原生拒绝回执。A4-TCC 继续 NOT_VERIFIED。GitHub master b63e47cf 与三机已运行的 MCP ab60a33e 存在版本差，Mac Jobs Manager 仍在 278af9c 且持有一个 running Job，RELEASE-CONVERGE 继续 EXTERNAL。所有运行中的服务、其他 Job、生产日志、授权目录及 macOS TCC 设置均未被本次验收改变。

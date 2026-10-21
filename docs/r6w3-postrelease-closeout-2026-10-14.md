@@ -46,9 +46,10 @@
 
 | ID | 状态 | 条件 |
 | --- | --- | --- |
-| E1-WORK | EXTERNAL | Work 实际 UI 中对同一 MCP 的真实授权工具调用、回执；无外部客户端驱动时记录 NOT_VERIFIED。 |
+| E1-WORK | OUT_OF_SCOPE | 2026-10-21 用户明确收窄为 Chat Mode；Work Mode 不再是本会话交付或发布门禁。原计划的历史 E1-WORK 记录不代表验收已通过。 |
+| E1-CHAT | CLOSED | 2026-10-21 真实 ChatGPT Chat Mode 调用三台 MCP 的已配置六工具表面；Mac stop_job 不可用是既有能力限制。详见 r6w3-chat-mode-acceptance-2026-10-21.md。 |
 | A4-TCC | EXTERNAL | 经用户批准的 macOS 真实 TCC-denied 路径/权限样例；不运行 tccutil、不扩大 TCC grant。 |
-| RELEASE-CONVERGE | EXTERNAL | GitHub 截至 2026-10-14 23:35 的受保护分支 cefc072b vs 三台设备先前安装版本 278af9c；只在其它会话完成开发与 Jobs Manager/MCP/RPC 归零、独立部署门禁合格时逐台安全更新。 |
+| RELEASE-CONVERGE | EXTERNAL | 2026-10-21 GitHub master b63e47cf，三台运行 MCP 均为 ab60a33e，但 Mac Jobs Manager 仍为 278af9c 且有 1 running / 0 UNKNOWN；禁止强制停任务升级。详细状态见 2026-10-21 Chat Mode 验收报告。 |
 | DEV-TOOLS | CLOSED | 各 OS uv/hooks、rg 版本实际 Doctor 状态复核，区分非致命 warning、真实阻断；不动生产环境。 |
 | ISSUE30 | BOUNDARY | macOS 日志归档、privileged controller、crash guardian 与生产 prune 由另一聊天会话独占；本表不领取任何源码写权限。 |
 
@@ -88,3 +89,12 @@
 - 签名提交 6475a9b，PR [#60](https://github.com/grammy-jiang/binnacle/pull/60) 已受保护合并至 cefc072b；Issue [#57](https://github.com/grammy-jiang/binnacle/issues/57) CLOSED。Mac 与独立 Pi 各 521 passed / 2 expected skipped；Mac Python 3.14.8 额外 160 passed；两台 pre-commit、双目标 MyPy、架构与安全检查通过。PR 精确头两组 CI 最终 17/17 成功。
 - 历史 CI 波动保留：PR #60 第一轮 Python 3.14 失败于非 FDW-6 的 Issue #30 log_transaction_controller/observer 锁竞争（flock EAGAIN），同一 SHA 重新运行通过。PR #58 合并后 master 曾在另一 Issue #30 recovery RPC socket fixture 出现 ConnectionRefusedError；Issue #30 的生产验收与测试稳定性不因本项合并而假报完成。
 - 本收尾范围无未分类的代码 OPEN、REVIEW 或 BLOCKED_TOOL；真正剩余三个 EXTERNAL：E1-WORK、A4-TCC、RELEASE-CONVERGE。Issue #30 仍是另一会话专属 BOUNDARY，自动日志 prune 保持 OFF。Mac/Pi/sextant 已安装服务没有因为 PR #60 合并而部署或重启。
+
+## 2026-10-21 Chat Mode 专项范围修订与新证据
+
+- 用户明确本项目只交付 ChatGPT Chat Mode；原计划 E1-WORK 改列 OUT_OF_SCOPE，不需要 Work UI、Work Agent 或 Work 连接授权。本轮不擅自重写原始 24-lane 设计的历史记录。
+- E1-CHAT CLOSED：实际从 ChatGPT Chat Mode 调用 MacBook Pro、主 Raspberry Pi 和 sextant 的 read_file、list_files、search_text、run_command、job_status 均获预期结果；两台 Linux 主机通过独占测试 Job 验证 stop_job 的 SIGTERM/退出；Mac 的 stop_job 为已声明不可用，不假报成功。
+- 有意配置的 openai-mcp 六工具白名单不包含 edit_file/write_file；这两项在 MCP Server 注册完整表面中仍存在。不要将它们重新开放以冒充 Chat Mode 八工具验收。
+- A4-TCC 仍为 EXTERNAL：Mac 的 Files/TCC 回归 40 passed，且真实 Chat Mode read_file 对私有临时权限 000 文件正确拒绝并已清理；上述均不能替代真实 macOS TCC-denied 回执。
+- RELEASE-CONVERGE 仍为 EXTERNAL：三台 MCP 的运行代码 ab60a33e，GitHub master b63e47cf；Mac 既有 Jobs Manager 278af9c 有 1 running / 0 UNKNOWN。三台 MCP 正处于开发热重载模式。未经可信空闲证明和受控回滚门禁，不停服务、不修改生产。
+- 逐项详细证据与明确边界见 docs/r6w3-chat-mode-acceptance-2026-10-21.md；Issue #30 持续由独立会话管理。
