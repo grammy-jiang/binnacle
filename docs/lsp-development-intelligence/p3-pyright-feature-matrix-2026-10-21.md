@@ -124,3 +124,28 @@ with canonical paths and valid request locations. Some features require
 the low-level multilspy API and high-level completion still needs an
 upstream fix. Keep Pyright as selected provider; continue P2.4 process
 ownership and P2.5 workspace/URI gates before public MCP exposure.
+
+
+## Upstream follow-up verification (2026-10-21, later revision)
+
+This section supplements the original v0.1.1 testing above; it does NOT
+rewrite the earlier baseline or claim that Microsoft has merged the changes.
+
+The contribution in Microsoft multilspy PR #168 was revised at
+f6f7e6a3c2021b56fc99c4ac7d4530e8d9a94c44 after comparing existing
+provider and test patterns. The new upstream adapter now uses the
+initialize_params.json convention, preserves positional configuration
+compatibility, and has fixture/AsyncMock and actual subprocess resource
+tests. The proposed generic completion fix solves the originally observed
+label-only/incomplete Pyright completion problem in that contribution
+branch. This fix is NOT present in the currently published multilspy v0.1.1.
+
+Mac Python 3.10/3.13/3.14 and Pi Linux ARM64 Python 3.13 all ran
+the same reviewed focused suite at **66/66 passed per environment**.
+The PR is open, review required, with CLA status passed as checked after
+the latest push. GitHub workflow changes were not authorized by the
+contributor token, so real-provider CI testing remains opt-in through an
+explicit Pyright binary variable.
+
+Full evidence and the boundary against production release are in
+[p3 upstream pattern review](p3-multilspy-upstream-pattern-review-2026-10-21.md).
