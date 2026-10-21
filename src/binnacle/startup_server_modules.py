@@ -77,6 +77,7 @@ _SERVER_COMMON = (
     "binnacle.features.development_intelligence.lsp_policy",
     "binnacle.features.development_intelligence.lsp_session",
     "binnacle.features.development_intelligence.lsp_wire",
+    "binnacle.features.development_intelligence.multilspy_pyright",
     "binnacle.features.files",
     "binnacle.features.files.error_text",
     "binnacle.features.files.fd_chain",
