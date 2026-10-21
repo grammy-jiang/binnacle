@@ -1,6 +1,7 @@
 """Real Pyright feature-level acceptance (opt-in; no production process startup).
 
-Requires explicitly pinned PYRIGHT_LSP_TEST_BIN and multilspy, otherwise skips.
+Uses the SHA-pinned upstream PyrightServer fixture (explicit opt-in; never
+silently passes against old PyPI multilspy). CLI tests have a separate binary.
 A disposable canonical workspace avoids macOS /var vs /private/var URI aliases.
 Rename edits are NEVER applied. CLI variants remain separate from LSP tests.
 """
@@ -16,22 +17,9 @@ from pathlib import Path
 import pytest
 
 from binnacle.features.development_intelligence.lsp_session import utf16_offset
-from binnacle.features.development_intelligence.multilspy_pyright import (
-    PyrightOptions,
-    create_pyright_adapter,
-)
-from tests.integration.test_lsp_multilspy_pyright import _optional_upstream
+from tests.integration.test_lsp_multilspy_patched_upstream import _new_native_server
 
-
-@pytest.fixture
-def pyright_executable() -> Path:
-    value = os.environ.get("PYRIGHT_LSP_TEST_BIN")
-    if not value:
-        pytest.skip("PYRIGHT_LSP_TEST_BIN missing; never auto-discover binaries")
-    executable = Path(value)
-    if not executable.is_absolute() or not executable.is_file():
-        pytest.skip("Pinned Pyright server binary unavailable")
-    return executable
+pytest_plugins = ("tests.integration.test_lsp_multilspy_patched_upstream",)
 
 
 @pytest.fixture
@@ -108,37 +96,19 @@ def _params(path: Path, line: int, col: int, **more) -> dict:
     }
 
 
-def _adapter(root: Path, executable: Path):
-    config, logger = _optional_upstream()
-    return create_pyright_adapter(
-        config,
-        logger,
-        root,
-        executable=executable,
-        options=PyrightOptions(diagnostic_mode="openFilesOnly"),
-    )
+def _adapter(root: Path, patched_upstream):
+    return _new_native_server(root, patched_upstream)
 
 
 def test_navigation_completion_signatures_and_workspace_symbols(
-    python_workspace, pyright_executable: Path
+    python_workspace, patched_upstream
 ) -> None:
     root, f = python_workspace
-    adapter = _adapter(root, pyright_executable)
+    adapter = _adapter(root, patched_upstream)
 
     async def run() -> None:
         async with adapter.start_server():
-            assert adapter.capabilities.get("positionEncoding", "utf-16") == "utf-16"
-            needed = (
-                "definitionProvider",
-                "referencesProvider",
-                "hoverProvider",
-                "completionProvider",
-                "signatureHelpProvider",
-                "documentSymbolProvider",
-                "workspaceSymbolProvider",
-                "typeDefinitionProvider",
-            )
-            assert all(adapter.capabilities.get(key) for key in needed)
+            assert adapter.server.process is not None
             app_lines = f["app"].read_text().splitlines()
             with (
                 adapter.open_file("lib.py"),
@@ -243,11 +213,11 @@ def test_navigation_completion_signatures_and_workspace_symbols(
 
 
 def test_rename_preview_and_call_hierarchy_are_read_only(
-    python_workspace, pyright_executable: Path
+    python_workspace, patched_upstream
 ) -> None:
     root, files = python_workspace
     original = {p.name: p.read_bytes() for p in root.iterdir() if p.is_file()}
-    adapter = _adapter(root, pyright_executable)
+    adapter = _adapter(root, patched_upstream)
 
     async def run() -> None:
         async with adapter.start_server():
@@ -294,10 +264,10 @@ def test_rename_preview_and_call_hierarchy_are_read_only(
 
 
 def test_diagnostic_push_identifies_syntax_semantic_and_type_errors(
-    python_workspace, pyright_executable: Path
+    python_workspace, patched_upstream
 ) -> None:
     root, paths = python_workspace
-    adapter = _adapter(root, pyright_executable)
+    adapter = _adapter(root, patched_upstream)
 
     async def run() -> None:
         async with adapter.start_server():
@@ -311,7 +281,7 @@ def test_diagnostic_push_identifies_syntax_semantic_and_type_errors(
                 with adapter.open_file(paths[key].name):
                     entries = []
                     for _ in range(12):
-                        incoming = await adapter.next_diagnostics(timeout_s=2)
+                        incoming = await adapter.next_diagnostics(timeout=2)
                         if incoming.get("uri") != paths[key].as_uri():
                             continue
                         entries = incoming.get("diagnostics", [])

@@ -18,7 +18,7 @@ from anyio import fail_after
 
 from binnacle.config_development_intelligence import DevelopmentIntelligenceSettings
 from binnacle.features.development_intelligence.lsp_session import utf16_offset
-from binnacle.features.development_intelligence.multilspy_pyright import (
+from binnacle.features.development_intelligence.lsp_workspace_policy import (
     _authorized_file,
     normalize_locations,
 )

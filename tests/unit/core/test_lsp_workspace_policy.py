@@ -1,49 +1,14 @@
-"""Pyright multilspy adapter: fail-closed pure policy without optional package."""
+"""Provider-independent Binnacle workspace/URI policy tests."""
 
 import pytest
 
-from binnacle.features.development_intelligence.multilspy_pyright import (
-    PyrightOptions,
+from binnacle.features.development_intelligence.lsp_workspace_policy import (
     _authorized_file,
-    create_pyright_adapter,
     normalize_locations,
 )
 
 POSITION = {"line": 0, "character": 4}
 SPAN = {"start": POSITION, "end": {"line": 0, "character": 9}}
-
-
-@pytest.mark.parametrize(
-    ("mode", "diagnostics"),
-    [
-        ("off", "openFilesOnly"),
-        ("basic", "openFilesOnly"),
-        ("standard", "workspace"),
-        ("strict", "workspace"),
-    ],
-)
-def test_allowed_pyright_options(mode, diagnostics):
-    value = PyrightOptions(type_checking_mode=mode, diagnostic_mode=diagnostics)
-    assert value.type_checking_mode == mode
-    assert value.diagnostic_mode == diagnostics
-
-
-@pytest.mark.parametrize("bad", ["any", "mypy", "", None])
-def test_unknown_type_check_mode_rejected(bad):
-    with pytest.raises(ValueError, match="invalid_pyright_type_checking_mode"):
-        PyrightOptions(type_checking_mode=bad)
-
-
-@pytest.mark.parametrize("bad", ["open-files-only", "all", "none", None])
-def test_unknown_diagnostic_mode_rejected(bad):
-    with pytest.raises(ValueError, match="invalid_pyright_diagnostic_mode"):
-        PyrightOptions(diagnostic_mode=bad)
-
-
-@pytest.mark.parametrize("bad", [-1, 0, 121, float("nan")])
-def test_initialize_timeout_bounded(bad):
-    with pytest.raises(ValueError, match="invalid_pyright_initialize_deadline"):
-        PyrightOptions(initialize_timeout_s=bad)
 
 
 def test_valid_local_document_location_and_location_link(tmp_path):
@@ -180,29 +145,6 @@ def test_symlink_escape_is_not_read(tmp_path):
         _authorized_file(root, "linked.py")
 
 
-class FakeProfile:
-    trace_lsp_communication = False
-
-
-def test_missing_or_relative_binary_fails_before_importing_multilspy(tmp_path):
-    root = tmp_path / "workspace"
-    root.mkdir()
-    for candidate in ("pyright-langserver", "/unknown/pyright-langserver"):
-        with pytest.raises(ValueError, match="pyright_executable"):
-            create_pyright_adapter(FakeProfile(), None, root, executable=candidate)
-
-
-def test_full_raw_wire_logging_is_prohibited(tmp_path):
-    root = tmp_path / "workspace"
-    root.mkdir()
-    binary = tmp_path / "binary"
-    binary.write_text("no execution needed")
-    profile = FakeProfile()
-    profile.trace_lsp_communication = True
-    with pytest.raises(ValueError, match="raw_wire_logging"):
-        create_pyright_adapter(profile, None, root, executable=binary)
-
-
 @pytest.mark.parametrize(
     "bad",
     [
@@ -217,3 +159,22 @@ def test_malformed_location_ranges_are_rejected(tmp_path, bad):
     file.write_text("def greet(): return 1\n")
     with pytest.raises(ValueError, match="invalid_pyright_location_range"):
         normalize_locations(tmp_path, [{"uri": file.as_uri(), "range": bad}])
+
+
+def test_binnacle_does_not_maintain_a_second_pyright_adapter():
+    """Keep multilspy as the only provider adapter implementation."""
+    import ast
+    from pathlib import Path
+
+    from binnacle.features import development_intelligence
+
+    modules = Path(development_intelligence.__file__).parent
+    assert not (modules / "multilspy_pyright.py").exists()
+    for path in modules.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                assert node.name not in {"PyrightAdapter", "PyrightServer"}, (
+                    "Pyright adapter implementation belongs in pinned multilspy",
+                    path,
+                )
