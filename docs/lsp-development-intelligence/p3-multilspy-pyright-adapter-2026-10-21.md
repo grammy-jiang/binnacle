@@ -86,9 +86,14 @@ a pinned PYRIGHT_LSP_TEST_BIN and the optional multilspy package.
 ## Remaining (not claimed)
 
 - No automatic public MCP registration or host production install.
-- No complete Linux ARM64 live adapter exercise on Raspberry Pi/Sextant;
-  both hosts currently have Pyright on PATH, which is not a verified
-  service-context installation or adapter compatibility result.
+- **Linux ARM64 Raspberry Pi native real adapter regression: 46/46
+  passed** in a disposable /tmp installation, including 3 real Pyright
+  integration tests and 4 extended capability tests. This confirms
+  Linux/macOS functional compatibility on tested inputs, not a live
+  Binnacle service-context or process-containment guarantee.
+- Sextant has the installed Pyright binary and prior independent CLI
+  configuration-mode tests, but this exact multilspy adapter suite was
+  not executed on Sextant.
 - No complete type/diagnostic correctness, latency, RAM and resource audit.
 - No robust P2.4 forced-stop/timeout/cancellation process containment,
   concurrent workspace instance manager or P2.5 repository authorization.

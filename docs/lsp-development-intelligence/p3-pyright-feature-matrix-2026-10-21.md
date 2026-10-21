@@ -13,8 +13,10 @@ not a provider security/containment or performance audit.
 - Binnacle PyrightAdapter in
   src/binnacle/features/development_intelligence/multilspy_pyright.py.
 - macOS arm64: actual multilspy/stdio real-provider integration.
-- Linux aarch64: Raspberry Pi and Sextant checked the four type-checking
-  modes through installed Pyright 1.1.413 CLI, not the multilspy adapter.
+- Linux aarch64: Raspberry Pi now also ran the exact Binnacle Pyright
+  adapter and full native feature test suite (46 passed, 0 failures)
+  using pinned multilspy v0.1.1 with Pyright 1.1.413. Sextant's
+  previous native checks covered CLI modes, not this multilspy adapter.
 - Tests only use temporary synthesized Python projects. Production Binnacle
   host services, real user repositories, external file edits, and MCP tool
   inventory are not touched.
@@ -98,9 +100,24 @@ tests and does not download or install any Provider.
 - Mac CPython 3.10 and 3.14: with pinned optional multilspy v0.1.1
   installed only in disposable temporary virtualenvs, 7/7 actual
   existing+new integration tests pass in each version.
-- Linux aarch64 on Raspberry Pi and Sextant: four CLI type
-  configuration modes passed on each device; multilspy integration
-  on those hosts was **not** executed by this task.
+- **Linux aarch64 Raspberry Pi native multilspy + Pyright: 46/46 passed**
+  (39 optional Pyright adapter unit, 3 real-provider integration, 4
+  extended capability/type-mode tests). The source/test archive was
+  transferred only to /tmp and verified by SHA-256
+  a129dd7a3a2777f22b13dca0cd3dc01b5283da1ae06460afdeef715af29c3c46.
+  Provider processes and test projects remained isolated from live Binnacle.
+- Linux aarch64 Sextant: four CLI type configuration modes were previously
+  verified; this exact optional multilspy adapter regression has NOT been
+  repeated on Sextant.
+- Microsoft multilspy upstream community PR
+  https://github.com/microsoft/multilspy/pull/168 was opened from the
+  separate forked upstream branch feat/pyright-language-server-20261021.
+  The upstream contribution keeps Jedi as default Python backend; it adds
+  explicit Pyright selection, fixes optional LocationLink parsing and null
+  references. Its own tests: Mac Python 3.10/3.14 each 8/8, Pi Linux
+  Python 3.13 8/8 (real Pyright 1.1.413).
+- The upstream PR is open, with Microsoft CLA acceptance pending a
+  personal legal decision by the contributing account holder.
 
 Decision: Pyright's listed core LSP language features work correctly
 with canonical paths and valid request locations. Some features require
