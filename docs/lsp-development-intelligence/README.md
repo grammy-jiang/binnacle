@@ -32,6 +32,7 @@ Read only what is needed:
 | [Zuban multilspy adapter proof](p2-multilspy-zuban-adapter-proof-2026-10-21.md) | Real macOS Zuban 0.10.0 and no-fork external subclass POC; optional LocationLink bug and production gaps |
 | [Pyright multilspy adapter implementation](p3-multilspy-pyright-adapter-2026-10-21.md) | External optional Python adapter, actual Pyright 1.1.413 stdio and type-diagnostic proof, release gates open |
 | [Microsoft multilspy upstream pattern review](p3-multilspy-upstream-pattern-review-2026-10-21.md) | PR #168 revised against native adapters and test conventions; Mac/Linux 66-test gate, upstream release still pending |
+| [Pyright upstream final cross-platform QA](p3-pyright-final-upstream-qa-2026-10-22.md) | Upstream PR #168 final SHA 7ff6e92, Pyright 1.1.413 and 77/77 checks across six Mac/Linux Python combinations; release gates remain open |
 | [Pyright complete feature matrix](p3-pyright-feature-matrix-2026-10-21.md) | Real LSP navigation, completion, signatures, rename, symbols and diagnostic tests; four typing modes on three hosts; known upstream high-level completion limitation |
 | [P2.2/P2.3 protocol acceptance](p2-2-p2-3-protocol-acceptance-2026-10-21.md) | Strict wire framing, parallel requests, server reverse RPC, capability and UTF-16 tests |
 | [Implementation plan V2](implementation-plan.md) | Gated roadmap, executable work packages, dependencies, acceptance and release decisions |
