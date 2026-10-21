@@ -6,7 +6,7 @@
 
 **Source and privacy:** The opt-in local full-capture JSONL and read-only session-observability SQLite database. Original commands, source text, file paths, raw results, request hashes and other private identifiers were inspected only inside their originating machine. No raw records were exported to the model, copied into this repository or replayed as commands.
 
-**Implementation:** scripts/lsp_e01_trace.py, scripts/lsp_e01_patterns.py; tests/scripts/test_lsp_e01_trace.py and test_lsp_e01_robustness.py. Separate from the Binnacle production logger, tools and P2 runtime.
+**Implementation:** scripts/lsp_e01_trace.py, scripts/lsp_e01_patterns.py and scripts/lsp_e01_observer.py; tests/scripts/test_lsp_e01_trace.py, test_lsp_e01_robustness.py and test_lsp_e01_window_bounds.py. Separate from the Binnacle production logger, tools and P2 runtime.
 
 ## 1. Frozen corpus and linkage quality
 
@@ -71,9 +71,10 @@ The 10 change/navigation windows come from **just two groups**, not ten independ
 - Raw files are streamed in place and output is aggregate-only. No arbitrary captured shell command is executed, and no source paths, command arguments, request IDs or per-value hashes are exported.
 - The SQLite join uses read-only mode and query-only settings. Unresolved alternative hashes, duplicate or malformed events, mismatched typed request identifiers, incomplete timestamps and impossible outcome chronology are excluded from confident windows.
 - Full input matching compares the original MCP tool name and exact canonical argument digest locally; sanitized name collisions cannot be treated as exact identity.
-- Timestamp parsing handles explicit UTC and timezone offsets, with a fixed exclusive UTC cutoff to prevent E0/E1's own later activity inflating the pilot. Appended records after the cutoff affect only explicit excluded/scanned-row bookkeeping.
+- Timestamp parsing handles explicit UTC and timezone offsets, with a fixed exclusive UTC cutoff to prevent E0/E1's own later activity inflating the pilot. Appended records after the cutoff affect only explicit excluded/scanned-row bookkeeping. The observer SQLite mapping is read at analysis time, not from an immutable noon snapshot; later ambiguous hash joins could change attributable group counts.
 - Synthetic tests covered malformed JSON, redactions/truncation markers, fake identities, different event orders, negative chronology, time-window ties, lexical false positives, and no raw-data disclosure.
-- Independently reviewed E0/E1 code: repeated REWORK findings were corrected and the final read-only reviewer returned GO for retrospective anonymous opportunity metadata only. The [independent review trail](e0-e1-independent-review-2026-10-21.md) records all closures.\n- Final synthetic suite: 45/45 passed on each host; MacBook also passed Python 3.10 and 3.14. Pi final transfer bundle SHA-256: 139a843553e5eda4d3e586b0819b9ca9617cc5672a7193f6c5258d9d55d6bf35.
+- Independently reviewed E0/E1 code: repeated REWORK findings were corrected and the final read-only reviewer returned GO for retrospective anonymous opportunity metadata only. The [independent review trail](e0-e1-independent-review-2026-10-21.md) records all closures.
+- Final synthetic suite: 45/45 passed on each host; MacBook also passed Python 3.10 and 3.14. Pi final transfer bundle SHA-256: 139a843553e5eda4d3e586b0819b9ca9617cc5672a7193f6c5258d9d55d6bf35.
 - This pilot does not include historical user prompts, total model tokens, full repository snapshots, causal counterfactuals, a completed real-provider audit, or an AI Agent success rate.
 
 **Outcome:** Continue evidence validation under E2. Keep P2 implementation unstarted and the existing 6/8 MCP tool surfaces unchanged.
