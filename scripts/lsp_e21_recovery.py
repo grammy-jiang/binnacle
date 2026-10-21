@@ -245,6 +245,7 @@ def recover(
     batch: str,
     *,
     write_local_review: bool = False,
+    require_existing_checkpoint: bool = False,
 ) -> dict:
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,48}", batch):
         raise ValueError("invalid E2 batch label")
@@ -379,16 +380,20 @@ def recover(
         "task_field_presence": taskfields,
         "cases": records,
     }
-    if write_local_review:
-        # Only local case metadata and opaque keys; never raw arguments.
+    if write_local_review or require_existing_checkpoint:
         data = (
             json.dumps(flags, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
             + "\n"
         ).encode()
-        with _owned_directory(private_dir) as fd:
-            _atomic_publish(
-                fd, f"{batch}-e21-v2-review.json", data, allow_existing=True
-            )
+        filename = f"{batch}-e21-v2-review.json"
+        if require_existing_checkpoint:
+            with existing_owner_private(private_dir) as fd:
+                saved = _read_owned_file(fd, filename, max_bytes=len(data))
+            if not hmac.compare_digest(saved, data):
+                raise ValueError("existing E2.1 checkpoint differs")
+        if write_local_review:
+            with _owned_directory(private_dir) as fd:
+                _atomic_publish(fd, filename, data, allow_existing=True)
 
     return {
         "schema": REVIEW_SCHEMA,

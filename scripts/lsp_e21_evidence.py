@@ -112,7 +112,10 @@ def _content_commitments(
                         )
                         destination = request_commitments
                 elif event in ("tool_result", "tool_error"):
-                    call_key = (corr.get("server_gen"), corr.get("call"))
+                    gen, call = corr.get("server_gen"), corr.get("call")
+                    if not isinstance(gen, str) or not isinstance(call, str):
+                        continue
+                    call_key = (gen, call)
                     if call_key in call_keys:
                         target = call_key
                         fields = {
@@ -178,7 +181,10 @@ def _git_evidence(
                 corr = item.get("correlation") or {}
                 if not isinstance(corr, dict):
                     continue
-                key = (corr.get("server_gen"), corr.get("call"))
+                gen, call = corr.get("server_gen"), corr.get("call")
+                if not isinstance(gen, str) or not isinstance(call, str):
+                    continue
+                key = (gen, call)
                 if key not in targets:
                     continue
                 group, state = targets[key]
