@@ -16,6 +16,7 @@ _SERVER_COMMON = (
     "binnacle.application",
     "binnacle.auto_background_shell",
     "binnacle.config",
+    "binnacle.config_development_intelligence",
     "binnacle.config_maintenance",
     "binnacle.config_telemetry",
     "binnacle.config_unknown_keys",

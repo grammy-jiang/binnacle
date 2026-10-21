@@ -39,6 +39,10 @@ from pydantic_settings import (
 )
 
 from binnacle.auto_background_shell import shell_policy_code
+from binnacle.config_development_intelligence import (
+    DevelopmentIntelligenceSettings,
+    reject_feature_near_misses,
+)
 from binnacle.config_maintenance import MCPMaintenanceSettings
 from binnacle.config_telemetry import (  # noqa: F401 - preserve public config imports
     TelemetrySettings,
@@ -394,6 +398,9 @@ class Settings(BaseSettings):
     mcp_maintenance: MCPMaintenanceSettings = Field(
         default_factory=MCPMaintenanceSettings
     )
+    development_intelligence: DevelopmentIntelligenceSettings = Field(
+        default_factory=DevelopmentIntelligenceSettings
+    )
     rg_bin: str = Field("rg", description="ripgrep binary for list/search.")
     client_tools: dict[str, tuple[str, ...]] = Field(
         default={
@@ -438,6 +445,7 @@ class Settings(BaseSettings):
             )
             if misplaced:
                 raise roots_key_error(misplaced, "top-level roots-like")
+            reject_feature_near_misses(data, cls.model_fields, os.environ)
             if removed:
                 data = {k: v for k, v in data.items() if k not in removed}
         model = handler(data)

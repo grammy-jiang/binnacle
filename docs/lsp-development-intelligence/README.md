@@ -26,6 +26,7 @@ Read only what is needed:
 | [E2.1 local trace relinking](e2-1-local-trace-recovery-2026-10-21.md) | Three-host 49/49 opaque case restoration, 697 tool events, independent limited GO and residual task/source uncertainty |
 | [E2.2 independent task-source precheck](e2-2-independent-task-source-2026-10-21.md) | Mac full and two-Pi narrow source leads; 2 task-ID overlaps, 0 verified original user tasks |
 | [E2.2 technical review](e2-2-independent-review-2026-10-21.md) | Fail-closed session coverage, same-repository provenance, read-only checkpoint and limited technical GO |
+| [P2.0 default-off implementation](p2-0-default-off-configuration-2026-10-21.md) | Strict opt-in config, startup inventory and disabled/enabled in-memory tool-surface parity |
 | [Implementation plan V2](implementation-plan.md) | Gated roadmap, executable work packages, dependencies, acceptance and release decisions |
 | [P0.5 resolution](p0-5-architecture-resolution-2026-10-21.md) | Seven design issues, binding decisions and retained runtime gates |
 | [P0.6 host inventory](p0-6-host-readiness-2026-10-21.md) | Read-only actual service-PATH/OS/provider locator evidence on MacBook and two Raspberry Pi hosts |
