@@ -219,11 +219,43 @@ def create_pyright_adapter(
                                 "applyEdit": False,
                                 "configuration": True,
                                 "workspaceFolders": False,
+                                "symbol": {"dynamicRegistration": False},
+                                # Rename returns an edit proposal; Binnacle
+                                # never applies it without a separate action.
+                                "workspaceEdit": {"documentChanges": True},
                             },
                             "textDocument": {
                                 "definition": {"linkSupport": True},
+                                "declaration": {"linkSupport": True},
+                                "typeDefinition": {"linkSupport": True},
                                 "references": {},
                                 "hover": {"contentFormat": ["markdown", "plaintext"]},
+                                "completion": {
+                                    "dynamicRegistration": False,
+                                    "completionItem": {
+                                        "snippetSupport": False,
+                                        "documentationFormat": ["plaintext"],
+                                    },
+                                },
+                                "signatureHelp": {
+                                    "dynamicRegistration": False,
+                                    "signatureInformation": {
+                                        "documentationFormat": ["plaintext"],
+                                        "parameterInformation": {
+                                            "labelOffsetSupport": True
+                                        },
+                                    },
+                                },
+                                "rename": {
+                                    "dynamicRegistration": False,
+                                    "prepareSupport": True,
+                                },
+                                "documentHighlight": {
+                                    "dynamicRegistration": False,
+                                },
+                                "codeAction": {
+                                    "dynamicRegistration": False,
+                                },
                                 "documentSymbol": {
                                     "hierarchicalDocumentSymbolSupport": True
                                 },

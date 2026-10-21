@@ -66,51 +66,48 @@ def test_real_multilspy_pyright_navigation_diagnostics_and_cleanup(
     assert adapter.server.process is None
 
     async def exercise() -> None:
-        async with asyncio.timeout(30):
-            async with adapter.start_server():
-                assert (
-                    adapter.capabilities.get("positionEncoding", "utf-16") == "utf-16"
-                )
-                definition = await asyncio.wait_for(
-                    adapter.request_definition("example.py", 3, 11), 6
-                )
-                assert len(definition) == 1
-                assert definition[0]["relativePath"] == "example.py"
-                assert definition[0]["range"]["start"]["line"] == 0
-                references = await asyncio.wait_for(
-                    adapter.request_references("example.py", 0, 4), 6
-                )
-                assert len(references) >= 1
-                assert all(r["relativePath"] == "example.py" for r in references)
-                hover = await asyncio.wait_for(
-                    adapter.request_hover("example.py", 3, 11), 6
-                )
-                assert hover is not None
-                symbols = await asyncio.wait_for(
-                    adapter.request_document_symbols("example.py"), 6
-                )
-                assert isinstance(symbols, tuple)
+        async with adapter.start_server():
+            assert adapter.capabilities.get("positionEncoding", "utf-16") == "utf-16"
+            definition = await asyncio.wait_for(
+                adapter.request_definition("example.py", 3, 11), 6
+            )
+            assert len(definition) == 1
+            assert definition[0]["relativePath"] == "example.py"
+            assert definition[0]["range"]["start"]["line"] == 0
+            references = await asyncio.wait_for(
+                adapter.request_references("example.py", 0, 4), 6
+            )
+            assert len(references) >= 1
+            assert all(r["relativePath"] == "example.py" for r in references)
+            hover = await asyncio.wait_for(
+                adapter.request_hover("example.py", 3, 11), 6
+            )
+            assert hover is not None
+            symbols = await asyncio.wait_for(
+                adapter.request_document_symbols("example.py"), 6
+            )
+            assert isinstance(symbols, tuple)
 
-                # Ignore stale empty didClose diagnostics from earlier queries,
-                # then leave this source open until a current diagnostic arrives.
-                while not adapter.diagnostics.empty():
-                    adapter.diagnostics.get_nowait()
-                with adapter.open_file("example.py"):
-                    observed: set[str] = set()
-                    for _ in range(12):
-                        notification = await adapter.next_diagnostics(timeout_s=2)
-                        if notification.get("uri") != file.as_uri():
-                            continue
-                        for entry in notification.get("diagnostics", []):
-                            if isinstance(entry, dict):
-                                code = entry.get("code")
-                                if isinstance(code, str):
-                                    observed.add(code)
-                        if "reportReturnType" in observed:
-                            break
-                    assert "reportReturnType" in observed
+            # Ignore stale empty didClose diagnostics from earlier queries,
+            # then leave this source open until a current diagnostic arrives.
+            while not adapter.diagnostics.empty():
+                adapter.diagnostics.get_nowait()
+            with adapter.open_file("example.py"):
+                observed: set[str] = set()
+                for _ in range(12):
+                    notification = await adapter.next_diagnostics(timeout_s=2)
+                    if notification.get("uri") != file.as_uri():
+                        continue
+                    for entry in notification.get("diagnostics", []):
+                        if isinstance(entry, dict):
+                            code = entry.get("code")
+                            if isinstance(code, str):
+                                observed.add(code)
+                    if "reportReturnType" in observed:
+                        break
+                assert "reportReturnType" in observed
 
-    asyncio.run(exercise())
+    asyncio.run(asyncio.wait_for(exercise(), timeout=30))
     assert adapter.server.process is None
     assert file.read_text(encoding="utf-8") == original
 
