@@ -218,6 +218,7 @@ dependencies = [
 
 [package.optional-dependencies]
 development-intelligence-pyright = [
+    { name = "cryptography" },
     { name = "multilspy" },
     { name = "psutil" },
 ]
@@ -281,6 +282,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4,<5" },
+    { name = "cryptography", marker = "extra == 'development-intelligence-pyright'", specifier = ">=50,<51" },
     { name = "cyclopts", specifier = ">=4.23.3" },
     { name = "fastmcp", specifier = "==4.1.0" },
     { name = "mcp", specifier = "==2.3.0" },
