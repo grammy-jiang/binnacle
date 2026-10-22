@@ -9,8 +9,10 @@ accepts OS confinement/resources, or leaves selection REWORK / READ NO-GO.
 from __future__ import annotations
 
 import argparse
+import hmac
 import json
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -74,6 +76,7 @@ def link_stage_evidence(
     ledger: ReplayLedger,
     registry_id: str,
     min_registry_serial: int,
+    expected_registry_sha256: str,
     run_id: str,
     producer: str,
     binnacle_commit: str,
@@ -106,6 +109,12 @@ def link_stage_evidence(
         expected_registry_id=registry_id,
         min_serial=min_registry_serial,
     )
+    if (
+        not isinstance(expected_registry_sha256, str)
+        or re.fullmatch(r"[0-9a-f]{64}", expected_registry_sha256) is None
+        or not hmac.compare_digest(registry.sha256, expected_registry_sha256)
+    ):
+        raise LinkRefused("operator_registry_sha256_mismatch")
     registry_dir = str(Path(chosen).parent) if chosen else ""
     ev_policy = PathPolicy(
         owner_uids=evidence_policy_.owner_uids,
@@ -177,7 +186,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--registry", type=Path, default=None)
     parser.add_argument("--registry-id", required=True)
-    parser.add_argument("--min-registry-serial", type=int, default=1)
+    parser.add_argument("--min-registry-serial", type=int, required=True)
+    parser.add_argument("--registry-sha256", required=True)
     parser.add_argument("--ledger", type=Path, required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--producer", required=True)
@@ -206,6 +216,7 @@ def main(argv: list[str] | None = None) -> int:
             ledger=FileReplayLedger(args.ledger, ledger_policy),
             registry_id=args.registry_id,
             min_registry_serial=args.min_registry_serial,
+            expected_registry_sha256=args.registry_sha256,
             run_id=args.run_id,
             producer=args.producer,
             binnacle_commit=args.binnacle_commit,
@@ -222,6 +233,22 @@ def main(argv: list[str] | None = None) -> int:
                     "public_release": "NO-GO",
                     "attestations_verified": False,
                     "reason": str(exc),
+                },
+                sort_keys=True,
+            )
+        )
+        return 2
+    except Exception:  # noqa: BLE001
+        # Never disclose untrusted evidence or local paths in a traceback.
+        print(
+            json.dumps(
+                {
+                    "schema": "binnacle.p36.trust-link/1",
+                    "selection": "NO-GO",
+                    "read": "NO-GO",
+                    "public_release": "NO-GO",
+                    "attestations_verified": False,
+                    "reason": "internal_error",
                 },
                 sort_keys=True,
             )

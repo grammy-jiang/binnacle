@@ -6,6 +6,7 @@ separate temporary directories. No network, shell or production registry is used
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from datetime import timedelta
@@ -51,6 +52,9 @@ def run(world: World, stages=None, ledger=None, **override):
         "ledger": ledger if ledger is not None else MemoryReplayLedger(),
         "registry_id": REGISTRY_ID,
         "min_registry_serial": 1,
+        "expected_registry_sha256": hashlib.sha256(
+            world.registry_path.read_bytes()
+        ).hexdigest(),
         "run_id": RUN_ID,
         "producer": PRODUCER,
         "binnacle_commit": COMMIT,
@@ -258,6 +262,10 @@ def test_default_cli_policy_refuses_process_owned_registry(world, capsys):
         str(world.registry_path),
         "--registry-id",
         REGISTRY_ID,
+        "--min-registry-serial",
+        "3",
+        "--registry-sha256",
+        hashlib.sha256(world.registry_path.read_bytes()).hexdigest(),
         "--ledger",
         str(world.ledger_path),
         "--run-id",
@@ -334,6 +342,7 @@ def test_registry_inside_repository_checkout_refused(world, monkeypatch):
 def test_replay_refused_across_ledger_instances(world):
     ledger_path = world.ledger_path
     ledger_path.parent.mkdir(mode=0o700)
+    ledger_path.touch(mode=0o600)  # operator-provisioned once
     first = run(world, ledger=FileReplayLedger(ledger_path, POLICY))
     assert first["replay_protection"] == "persistent_ledger"
     with pytest.raises(ReviewRefused, match="review_replay_detected"):

@@ -186,9 +186,10 @@ def test_rotation_and_revocation_resolution(tmp_path):
     now = datetime(2026, 10, 23, 7, 0, tzinfo=UTC)
     before = datetime(2026, 10, 23, 5, 0, tzinfo=UTC)
     after = datetime(2026, 10, 23, 6, 30, tzinfo=UTC)
-    assert registry.resolve(old_entry["key_id"], "P3.3", before, now)
-    with pytest.raises(RegistryRefused, match="signer_key_retired"):
-        registry.resolve(old_entry["key_id"], "P3.3", after, now)
+    for issued in (before, after):
+        # A stolen retired key may backdate issued_at_utc; no fresh linking.
+        with pytest.raises(RegistryRefused, match="signer_key_retired"):
+            registry.resolve(old_entry["key_id"], "P3.3", issued, now)
     assert registry.resolve(new_entry["key_id"], "P3.5", after, now)
     for issued in (before, after):  # Revocation is retroactive and absolute.
         with pytest.raises(RegistryRefused, match="signer_key_revoked"):
@@ -225,6 +226,7 @@ def test_file_ledger_persists_across_instances_and_is_all_or_nothing(tmp_path):
     state = tmp_path / "state"
     state.mkdir(mode=0o700)
     path = state / "replay.ledger"
+    path.touch(mode=0o600)  # pre-provisioned by the operator, never by verifier
     first = FileReplayLedger(path, POLICY)
     keys = [replay_key("r", "run", stage) for stage in ("P3.3", "P3.4")]
     first.record(keys)

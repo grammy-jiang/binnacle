@@ -138,7 +138,13 @@ def verify_signed_review(
     try:
         unpacked = json.loads(receipt_json, object_pairs_hook=_no_duplicates)
         item = SignedReviewReceipt.model_validate(unpacked)
-    except (UnicodeError, ValueError, TypeError, ValidationError) as exc:
+    except (
+        UnicodeError,
+        ValueError,
+        TypeError,
+        ValidationError,
+        RecursionError,
+    ) as exc:
         raise ReviewRefused("invalid_review_schema") from exc
     if (
         item.stage != expected_stage
@@ -286,7 +292,7 @@ def verify_registry_review(
         raise ReviewRefused("review_age_policy_invalid")
     try:
         item = RegistryReviewReceipt.model_validate(_loads_strict(receipt_json))
-    except (ValueError, TypeError, ValidationError) as exc:
+    except (ValueError, TypeError, ValidationError, RecursionError) as exc:
         raise ReviewRefused("invalid_review_schema") from exc
     _refuse_mismatch(
         item,
@@ -305,9 +311,12 @@ def verify_registry_review(
     if instant.tzinfo is None:
         raise ReviewRefused("invalid_review_clock")
     instant = instant.astimezone(timezone.utc)
-    issued = datetime.strptime(item.issued_at_utc, "%Y-%m-%dT%H:%M:%SZ").replace(
-        tzinfo=timezone.utc
-    )
+    try:
+        issued = datetime.strptime(item.issued_at_utc, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=timezone.utc
+        )
+    except ValueError as exc:
+        raise ReviewRefused("invalid_review_timestamp") from exc
     if not -timedelta(minutes=5) <= instant - issued <= timedelta(seconds=max_age_s):
         raise ReviewRefused("review_expired_or_future")
     try:

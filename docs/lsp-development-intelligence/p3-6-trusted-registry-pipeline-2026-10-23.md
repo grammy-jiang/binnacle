@@ -31,8 +31,9 @@ outcome `verified_approval`.
   registry. A receipt supplies a `key_id`; unknown fields, embedded keys and
   roles are refused by the strict schema. `key_id` must equal the SHA-256 of
   the registry's raw public key.
-- Lifecycle: `active`, `retired` (accepted only for receipts issued before
-  `state_changed_at_utc`), `revoked` (refused retroactively). Rotation requires
+- Lifecycle: `active`, `retired` and `revoked`. Fresh linkage refuses **all
+  retired keys**, including backdated receipts (a stolen retired key can forge
+  the issue timestamp). Revoked keys are also refused retroactively. Rotation requires
   the successor's `supersedes` to name a non-active predecessor. A deleted key
   is `signer_key_unknown`. Validity windows, `registry_id` and a caller-pinned
   minimum `serial` (rollback) are enforced.
@@ -83,3 +84,28 @@ process or temp-file modules.
 6. Linking checks signed claims against the bytes. It does not re-run P3.3
    isolation or P3.5 measurement, and it does not feed `lsp_p36_policy`.
 7. No MCP tool, production registration, deployment or READ enablement.
+
+## Independent-review follow-up, 2026-10-23
+
+The independent read-only P3.6 source review identified high-priority
+configuration-pin and error-handling flaws. Follow-up candidate code now
+requires an **explicit** registry serial floor and an **exact SHA-256** pin.
+The pin is supplied by an operator and is not itself a separate trust anchor;
+the signed claims still grant no authority. The CLI now returns a sanitized
+NO-GO `internal_error` code for unexpected failures. Calendar-invalid and
+deeply nested receipt inputs fail closed without printing source paths or
+contents. A replay ledger must already exist; the verifier never creates a
+fresh one. Multi-part writes are written to completion, and both the ledger
+and its parent directory are fsynced. Torn rows are rejected.
+
+The ledger and registry must be provisioned by an independently trusted
+operator. A same-user application can still replace its own ledger state;
+there is **no** authenticated external ledger anchor in this prototype.
+A caller-selectable ledger path remains a replay-weakness even when the file
+is pre-provisioned. This is independently documented as a release blocker,
+and real approval/READ remain NO-GO.
+
+For current linking a retired key is rejected even for a historically dated
+receipt; this prevents a stolen retired key from backdating fresh signatures.
+Replay SHA identifiers keep their original format for compatibility but reject
+embedded NUL separators rather than silently changing existing ledger keys.

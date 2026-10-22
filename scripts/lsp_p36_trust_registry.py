@@ -159,10 +159,9 @@ class TrustRegistry:
             and now <= parse_utc(key.not_after_utc)
         ):
             raise RegistryRefused("signer_key_outside_validity")
-        if key.state == "retired" and (
-            key.state_changed_at_utc is None
-            or issued >= parse_utc(key.state_changed_at_utc)
-        ):
+        # A retired key can forge a backdated receipt timestamp.
+        # Reject all retired keys from *new* link acceptance.
+        if key.state == "retired":
             raise RegistryRefused("signer_key_retired")
         if stage not in key.stages:
             raise RegistryRefused("signer_role_unauthorized")
@@ -200,6 +199,13 @@ def load_trust_registry(
 
 
 def replay_key(registry_id: str, run_id: str, stage: str) -> str:
+    # Keep the existing ledger SHA format; reject embedded separators rather
+    # than changing replay IDs and re-admitting previously consumed receipts.
+    if any(
+        not isinstance(value, str) or not value or "\x00" in value
+        for value in (registry_id, run_id, stage)
+    ):
+        raise RegistryRefused("replay_identity_invalid")
     material = f"P3.6-REPLAY-V1\x00{registry_id}\x00{run_id}\x00{stage}"
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
@@ -252,8 +258,7 @@ class FileReplayLedger:
                 raise RegistryRefused("ledger_directory_not_private")
             fd = os.open(
                 self._name,
-                os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW | os.O_CLOEXEC,
-                0o600,
+                os.O_RDWR | os.O_APPEND | os.O_NOFOLLOW | os.O_CLOEXEC,
                 dir_fd=dir_fd,
             )
         except OSError as exc:
@@ -275,6 +280,9 @@ class FileReplayLedger:
         ):
             raise RegistryRefused("ledger_file_unsafe")
         raw = os.pread(fd, MAX_LEDGER_BYTES, 0)
+        # Torn append never means a partially recorded approval is reusable.
+        if raw and not raw.endswith(b"\n"):
+            raise RegistryRefused("ledger_file_corrupt")
         lines = raw.decode("ascii", errors="replace").split("\n")
         entries = {line for line in lines if line}
         if any(len(line) != 64 or line.strip("0123456789abcdef") for line in entries):
@@ -296,8 +304,18 @@ class FileReplayLedger:
             fcntl.flock(fd, fcntl.LOCK_EX)
             if self._entries(fd).intersection(keys) or len(set(keys)) != len(keys):
                 raise RegistryRefused("review_replay_detected")
-            os.write(fd, "".join(f"{key}\n" for key in keys).encode("ascii"))
-            os.fsync(fd)
+            data = "".join(f"{key}\n" for key in keys).encode("ascii")
+            try:
+                offset = 0
+                while offset < len(data):
+                    written = os.write(fd, data[offset:])
+                    if written <= 0:
+                        raise RegistryRefused("ledger_short_write")
+                    offset += written
+                os.fsync(fd)
+                os.fsync(dir_fd)
+            except OSError as exc:
+                raise RegistryRefused("ledger_write_failed") from exc
         finally:
             os.close(fd)
             os.close(dir_fd)
