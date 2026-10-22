@@ -324,17 +324,6 @@ def test_atomic_publish_interruption_leaves_no_final_or_partial(tmp_path, monkey
     assert (root / "test-batch.json").read_bytes() == b"complete-value"
 
 
-def test_partial_or_insecure_key_requires_explicit_recovery(tmp_path):
-    from scripts import lsp_e02_private as private
-
-    root = tmp_path / "private"
-    root.mkdir(mode=0o700)
-    (root / "e02-local-key.bin").write_bytes(b"partial")
-    with pytest.raises(ValueError, match="manual recovery"):
-        private.write_document(root, "sample", {"cases": []})
-    assert not (root / "sample.json").exists()
-
-
 def test_concurrent_private_key_creation_is_consistent(tmp_path):
     from concurrent.futures import ThreadPoolExecutor
 

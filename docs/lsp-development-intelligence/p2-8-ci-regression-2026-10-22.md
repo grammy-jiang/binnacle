@@ -158,6 +158,34 @@ previously blocked has **not** been executed or credited: synthetic I/O fault
 injection is valuable branch coverage but not an OS sandbox proof. This safety
 gate stays OPEN in P3.
 
+## Hosted CI follow-up: independent E02 key integrity vs mode testing
+
+The first pushed P2.8 commit, `0e19e7883213d1f38397586df393b741e42062ed`,
+triggered [hosted run 39726688554](https://github.com/grammy-jiang/binnacle/actions/runs/39726688554).
+Code Quality and Packaging **PASSED**, but Python 3.10/3.11/3.12/3.14 and
+Coverage Policy each encountered the **same one test failure**:
+`tests/scripts/test_lsp_e02_samples.py::test_partial_or_insecure_key_requires_explicit_recovery`.
+The GitHub runner's normal `umask 0022` created the synthetic *partial* key
+with mode `0644`; the production `lsp_e02_private._read_owned_file()`
+correctly refused it with `PermissionError` before the independently expected
+invalid-length (`ValueError`, manual recovery) assertion. No upstream Pyright,
+JSON-RPC or Binnacle LSP semantic feature failed in that run.
+
+The corrective test change explicitly sets the partial synthetic key to
+`0600` before checking **invalid length -> manual recovery**, and separately
+creates a **complete 32-byte key with explicit insecure `0644` mode** to
+verify **PermissionError -> no document written**. Both conditions are now
+covered independently across host default umasks; the production security
+checks, persisted keys and subprocess identities are completely unchanged.
+The two key-mode controls live in a dedicated bounded
+`tests/scripts/test_lsp_e02_key_modes.py` module so the existing E02 suite
+stays below the strict 500-line module limit. The combined E02 two-file suite
+reported **31 passed per Mac Python 3.10–3.14** under `umask 0022`; both
+independent controls also passed on Pi/Sextant with `umask 0022` and `0077`.
+ A new hosted CI run is still a
+mandatory condition for claiming P2.8 final hosted acceptance; do not count
+the first failed run as success.
+
 ## Remaining gates (do not close early)
 
 - **Local Coverage Policy and full Python 3.13 tox acceptance are PASS.**
