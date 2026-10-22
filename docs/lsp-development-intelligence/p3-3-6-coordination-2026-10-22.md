@@ -186,3 +186,28 @@ All public MCP exposure, READ admission and deployment remain **NO-GO**.
 
 **Still open:** new-hosted-CI confirmation, P3.3 OS isolation, and P3.6
 independent source authentication. No READ enablement, deployment or merge.
+
+## Hosted coverage Guardian-observer race follow-up — 2026-10-23
+
+- GitHub Actions [39810160573](https://github.com/grammy-jiang/binnacle/actions/runs/39810160573)
+  on test-fixture commit `8768a95` passed all four Python compatibility
+  jobs (3.10, 3.11, 3.12 and 3.14), Code Quality and Packaging. Its
+  Coverage job failed during the **non-unit test lane**, not the configured
+  coverage threshold, because a successful synthetic Issue #30 log-transaction
+  test tried reading the journal while its separately scheduled test Guardian
+  still held the kernel lease.
+- The test now first awaits the Guardian's own completed `not-needed`
+  outcome, then obtains an unowned journal observation using the shared
+  **fixture-only**, bounded retry for that exact temporary lease-owner
+  refusal. Other refusals remain immediate and all production observer
+  semantics, lock behavior and backend code remain unchanged.
+- The same helper is applied to the other existing post-Guardian tests
+  without globally changing `snapshot()` or skipping test cases.
+- Complete 26-test controller module independently passed **twice each**
+  under Python 3.10, 3.12 and 3.13 (**156 total passes**). The same
+  module also passed **three four-worker xdist runs** on a separately
+  hash-verified Sextant worktree (**78 additional passes**). All modified-file
+  pre-commit hooks and Ruff checks passed.
+- Hosted CI must be re-run on the next exact commit. This work remains
+  **test-only**: READ, production authorization, deployment and public tools
+  stay **NO-GO**.

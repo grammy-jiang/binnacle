@@ -72,7 +72,7 @@ def snapshot(root: Path):
     return inspect_unowned_transaction(root / ("txn-" + NONCE))
 
 
-def snapshot_after_failed_controller(root: Path, *, timeout_s: float = 2):
+def snapshot_when_fixture_lease_released(root: Path, *, timeout_s: float = 2):
     """Wait for a cooperative synthetic guardian to release its short lease.
 
     The real observer remains strictly nonblocking. Retry only its exact
@@ -112,13 +112,17 @@ def test_complete_transaction_uses_real_components_and_durable_journal(
     assert bz2.decompress((root / "private-logs" / (RAW + ".bz2")).read_bytes()) == (
         b"e2e-fixture-generation raw\n"
     )
-    report = snapshot(root)
+    # An independently running synthetic guardian can briefly hold the
+    # journal lock even after the successful controller has returned.
+    # Observe its completed, non-authorizing outcome before claiming an
+    # unowned snapshot. This never changes the production nonblocking reader.
+    assert _guardian_outcome(root) == "not-needed"
+    report = snapshot_when_fixture_lease_released(root)
     assert report.phase == "complete"
     assert report.revision == 11
     assert len(report.receipts) == 11
     assert not report.production_authorized
     assert not report.producer_may_be_stopped
-    assert _guardian_outcome(root) == "not-needed"
     assert actor.events.index("watchdog") < actor.events.index("mcp")
     assert actor.events.index("mcp") < actor.events.index("jobs")
     assert actor.events.index("jobs") < actor.events.index("guardian")
@@ -166,8 +170,9 @@ def test_unknown_bootout_leaves_independent_guardian_armed_without_duplicate(
     with pytest.raises(RuntimeError, match="fixture rejected step stop"):
         run(scenario)
     assert_no_archive_mutation(root)
-    assert snapshot(root).phase == "guardian_armed"
-    assert snapshot(root).producer_may_be_stopped
+    observed = snapshot_when_fixture_lease_released(root)
+    assert observed.phase == "guardian_armed"
+    assert observed.producer_may_be_stopped
     assert actor.writer.original is not None
     assert actor.writer.original.poll() is None
     assert actor.writer.active is None
@@ -183,7 +188,7 @@ def test_unknown_stop_after_child_exits_does_not_adopt_old_journal(
     with pytest.raises(RuntimeError, match="fixture rejected step stopped"):
         run(scenario)
     assert_no_archive_mutation(root)
-    assert snapshot_after_failed_controller(root).phase == "guardian_armed"
+    assert snapshot_when_fixture_lease_released(root).phase == "guardian_armed"
     assert "restore" not in actor.events
     assert _guardian_outcome(root) == "restarted"
     assert (root / "private-logs/mcp.stderr.log").is_file()
@@ -197,7 +202,7 @@ def test_failure_after_confirmed_stop_restores_writer_before_releasing_barriers(
     with pytest.raises(RuntimeError, match="fixture rejected step fd"):
         run(scenario)
     assert_no_archive_mutation(root)
-    assert snapshot_after_failed_controller(root).phase == "producer_stopped"
+    assert snapshot_when_fixture_lease_released(root).phase == "producer_stopped"
     assert actor.restored
     assert actor.writer.active is not None
     assert actor.writer.active.poll() is None
@@ -217,7 +222,7 @@ def test_restore_refusal_after_valid_prune_leaves_recovery_guardian(
     assert bz2.decompress((root / "private-logs" / (RAW + ".bz2")).read_bytes()) == (
         b"e2e-fixture-generation raw\n"
     )
-    assert snapshot_after_failed_controller(root).phase == "raw_pruned"
+    assert snapshot_when_fixture_lease_released(root).phase == "raw_pruned"
     assert actor.writer.active is None
     assert actor.events.count("restore") == 1  # no unsafe bootstrap retry
     assert _guardian_outcome(root) == "restarted"
@@ -319,7 +324,7 @@ def test_lost_durable_restored_phase_ack_cannot_double_bootstrap(
     assert actor.writer.active is not None
     assert actor.writer.active.poll() is None
     assert actor.gate.snapshot().pause_nonce is None
-    assert snapshot_after_failed_controller(root).phase == "raw_pruned"
+    assert snapshot_when_fixture_lease_released(root).phase == "raw_pruned"
     assert not (root / "private-logs" / RAW).exists()
     assert not (root / "watchdog/request.json").exists()
 
@@ -335,7 +340,7 @@ def test_mcp_reopen_failure_holds_guardian_and_other_admission_barriers(
     assert actor.writer.active.poll() is None
     assert actor.events.count("restore") == 1
     assert actor.events.count("mcp_resumed") == 1
-    observed = snapshot_after_failed_controller(root)
+    observed = snapshot_when_fixture_lease_released(root)
     assert observed.phase == "raw_pruned"
     assert observed.needs_external_recovery
     assert not (root / "guardian-disarm").exists()
@@ -360,7 +365,7 @@ def test_wrong_mcp_resumption_receipt_cannot_grant_complete(
     # This fixture's guardian can briefly hold the journal after the
     # controller refuses; wait for an actual unowned observation, not a
     # controller lock bypass or a second inconsistent snapshot.
-    observed = snapshot_after_failed_controller(root)
+    observed = snapshot_when_fixture_lease_released(root)
     assert observed.phase == "raw_pruned"
     assert observed.production_authorized is False
     assert not (root / "guardian-disarm").exists()
