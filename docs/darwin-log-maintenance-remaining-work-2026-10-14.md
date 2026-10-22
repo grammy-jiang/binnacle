@@ -63,6 +63,14 @@ This is only the transaction sequence: the trusted installed native
 actuator and independent privileged recovery guardian do not yet exist.
 No C2 authorization item is accepted complete on that basis.
 
+A 2026-10-22 preparatory **non-executable** native actuator plan validator
+(platform/darwin/log_maintenance_native_plan.py) builds only fixed
+/bin/launchctl argv for approved labels and exact independently supplied
+plist fingerprint, log-root and source inode *claims*. Its 37 isolated
+adversarial tests cannot establish any root-side authorization. No subprocess,
+helper, IPC, production permission, prune or launchd action is implemented;
+the five C2 acceptance items therefore remain unchecked.
+
 - [ ] A controller not hosted by the service being stopped, with exact
   allowlisted service label, root:wheel 0644 pinned launchd plist and
   exact stderr/stdout source. No arbitrary path/command or broad sudo.
