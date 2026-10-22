@@ -200,6 +200,7 @@ name = "binnacle-mcp"
 version = "1.0.1"
 source = { editable = "." }
 dependencies = [
+    { name = "anyio" },
     { name = "cyclopts", version = "4.25.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "cyclopts", version = "5.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "fastmcp" },
@@ -276,6 +277,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anyio", specifier = ">=4,<5" },
     { name = "cyclopts", specifier = ">=4.23.3" },
     { name = "fastmcp", specifier = "==4.1.0" },
     { name = "mcp", specifier = "==2.3.0" },

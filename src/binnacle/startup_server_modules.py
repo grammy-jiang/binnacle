@@ -81,6 +81,8 @@ _SERVER_COMMON = (
     "binnacle.features.development_intelligence.lsp_manager_shutdown",
     "binnacle.features.development_intelligence.lsp_manager_types",
     "binnacle.features.development_intelligence.lsp_policy",
+    "binnacle.features.development_intelligence.lsp_preview_mount",
+    "binnacle.features.development_intelligence.lsp_preview_server",
     "binnacle.features.development_intelligence.lsp_process_owner",
     "binnacle.features.development_intelligence.lsp_process_tree",
     "binnacle.features.development_intelligence.lsp_provider_manager",

@@ -33,6 +33,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "anyio>=4,<5",
     "cyclopts>=4.23.3", # the CLI framework fastmcp's own CLI uses
     "fastmcp==4.1.0", # reviewed FastMCP 4.1 baseline
     "mcp==2.3.0", # latest MCP protocol SDK; exact released/tested pairing

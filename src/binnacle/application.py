@@ -175,8 +175,15 @@ def create_application(
     commands_factory: Callable[..., FastMCP] = create_commands_server,
     admission_gate: ToolAdmissionDrain | None = None,
     maintenance_runtime: MaintenanceSidecar | None = None,
+    _private_lsp_preview_gate: bool = False,
+    _private_lsp_preview_factory: Callable[..., FastMCP] | None = None,
 ) -> FastMCP:
-    """Build a pure native FastMCP tree from supplied application dependencies."""
+    """Build a pure native FastMCP tree from supplied application dependencies.
+
+    The internal P2.7 gate is intentionally absent from Settings, the server
+    factory and all deploy entrypoints. It is injected only by private review
+    tests. Config-only opt-in does not release P5 semantic tools publicly.
+    """
     if isinstance(backend, RestrictedCommandBackend):
         from binnacle.platform.composition import validate_native_command_states
 
@@ -261,6 +268,20 @@ def create_application(
             listing_command_preview_chars=settings.jobs.listing_command_preview_chars,
         )
     )
+
+    if _private_lsp_preview_gate:
+        # Only an internal QA dependency may opt into P2.7 preview wiring.
+        # Binnacle production creates the root with this gate always false.
+        from binnacle.features.development_intelligence.lsp_preview_mount import (
+            mount_private_preview,
+        )
+
+        mount_private_preview(
+            root,
+            feature_settings=settings.development_intelligence,
+            roots=settings.roots,
+            child_factory=_private_lsp_preview_factory,
+        )
 
     @root.custom_route("/healthz", methods=["GET"], include_in_schema=False)
     async def healthz(request: Request) -> JSONResponse:
