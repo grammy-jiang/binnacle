@@ -285,7 +285,7 @@ requires-dist = [
     { name = "fastmcp", specifier = "==4.1.0" },
     { name = "mcp", specifier = "==2.3.0" },
     { name = "mcp-types", specifier = "==2.3.0" },
-    { name = "multilspy", marker = "extra == 'development-intelligence-pyright'", git = "https://github.com/grammy-jiang/multilspy.git?rev=9203732e4e5f65cc1374b109110f7b6354d3d43b" },
+    { name = "multilspy", marker = "extra == 'development-intelligence-pyright'", git = "https://github.com/grammy-jiang/multilspy.git?rev=08ba0dbe60b6e0a3eff4796cb77ff5c0837bc892" },
     { name = "orjson", specifier = ">=3.11.3" },
     { name = "pathspec", marker = "sys_platform == 'darwin'", specifier = ">=1.1,<2" },
     { name = "psutil", marker = "extra == 'development-intelligence-pyright'", specifier = ">=7,<8" },
@@ -2085,7 +2085,7 @@ wheels = [
 [[package]]
 name = "multilspy"
 version = "0.1.1"
-source = { git = "https://github.com/grammy-jiang/multilspy.git?rev=9203732e4e5f65cc1374b109110f7b6354d3d43b#9203732e4e5f65cc1374b109110f7b6354d3d43b" }
+source = { git = "https://github.com/grammy-jiang/multilspy.git?rev=08ba0dbe60b6e0a3eff4796cb77ff5c0837bc892#08ba0dbe60b6e0a3eff4796cb77ff5c0837bc892" }
 dependencies = [
     { name = "jedi-language-server" },
     { name = "psutil" },

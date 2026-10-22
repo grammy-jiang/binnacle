@@ -5,6 +5,12 @@
 **Source baseline:** Binnacle `origin/master` at `ce943ced`, previous V1 research last updated 2026-09-30.
 **Purpose:** a maintained, evidence-driven catalogue of what each LSP server can actually do, and what Binnacle can safely expose to an AI agent. This is a research artifact, **not** an enabled provider manifest.
 
+**P3.6 synthesis, 2026-10-22:** [offline decision matrix and evidence ledger](p3-6-policy-synthesis-2026-10-22.md).
+Provider/resource acceptance remains **REWORK** pending final P3.3–P3.5 evidence
+and independent review. No provider has an evidence-backed P3.6 GO. READ and
+public release remain **NO-GO**. Historical tables below are not promoted to
+current measurements or security certification.
+
 ## 1. Strict evidence semantics
 
 Use four independent axes, never one vague `supported` boolean.
@@ -275,3 +281,33 @@ Every proposed expansion starts as an evidence row; only documented per-provider
 - [gopls official features](https://go.dev/gopls/features/).
 - [Ruff native LSP migration](https://github.com/astral-sh/ruff-lsp).
 - Binnacle prior [V1 provider study](providers-and-safety.md) and [V1 safety testing plan](testing-safety-contracts.md). Historical probes are not fresh 2026-10-20 results.
+
+## 11. P3.4 native breadth evidence — 2026-10-22
+
+**Opt-in native QA, not shipped. P3.3 READ NO-GO.** This update supersedes
+historical/unprobed cells only for the exact Sextant Linux aarch64 versions and
+fixed synthetic settings below. All launched rows are `benchmark_only`.
+Service PATH, OS confinement and real-workspace correctness remain untested.
+See the [provider evidence and caveats](p3-4-provider-breadth-2026-10-22.md) and
+[sanitized machine report](p3-4-breadth-native-2026-10-22.json).
+
+| Provider | Version | Newly observed | Advertised but unverified (selected) | Unsupported / not advertised / caveats |
+| --- | --- | --- | --- | --- |
+| TypeScript LS / TypeScript | 6.0.0 | Initialize/shutdown; document symbol; cross-file definition | References, hover, workspace symbols, type definition, implementation | Declaration, call hierarchy, pull diagnostics not advertised; no project plugins or type downloads |
+| TypeScript LS / JavaScript | 6.0.0 | Separate JS initialize/shutdown, symbol and cross-file definition | Same as TS | Same omissions; no broader JS project claim |
+| clangd / C | 19.1.7 | Initialize/shutdown; C11 symbol and same-file definition | References, hover, declaration, type definition, implementation, hierarchy | Pull diagnostics not advertised; background index/config disabled |
+| clangd / C++ | 19.1.7 | Separate C++17 initialize/shutdown, symbol and same-file definition | Same as C | No build or whole-project index proof |
+| rust-analyzer | 0.3.3065-standalone | Initialize/shutdown; detached-file symbol | Navigation, hierarchy, pull diagnostics | Cargo, build scripts, proc macros, project readiness untested; benchmark-only |
+| Marksman | 2026-02-08 | Initialize/shutdown; heading symbol | Link definition, references, hover, workspace symbols | No type/declaration/hierarchy/pull-diagnostic advertisement; cross-file link correctness unprobed |
+| Bash LS | 5.6.0 | Initialize/shutdown; function symbol after document readiness notification | Definition, references, hover, workspace symbols | No declaration/type/hierarchy/pull-diagnostic advertisement; helpers disabled, sourced navigation unprobed |
+| make-language-server | Not installed | No launch | None | Separate `make-ls` alias present but unreviewed and unlaunched; no support claim |
+| YAML LS | 1.24.0 | Initialize/shutdown; key symbol | Definition, hover, completion, editing suggestions | No references/workspace-symbol/hierarchy/pull-diagnostic advertisement; remote stores disabled |
+| VS Code JSON LS | extracted package 4.10.0 | Initialize/shutdown; key symbol | Hover, pull diagnostics, code actions | No definition/references/workspace-symbol/completion/formatting advertisement for this client profile |
+
+Existing multilspy constructors were exercised for TS, JS, C through the `cpp`
+selector, C++ and Rust at pinned revision `9203732`. Full upstream adapter
+sessions were not exercised. Direct bounded handshakes supply the capability
+evidence; the runner adds no production adapter. Other listed languages have
+no upstream factory selector at that revision. Not-advertised does not mean
+universally absent, especially where dynamic registration or client capability
+negotiation changes the response. No editing or command capability was invoked.

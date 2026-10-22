@@ -16,6 +16,7 @@ from binnacle.platform.darwin.log_maintenance_observer import (
 from tests.issue30_full_transaction_fixture import (
     FixtureProducer,
     RehearsalRefused,
+    _guardian_outcome,
     run_complete_fixture_transaction,
     setup_fixture,
 )
@@ -55,6 +56,11 @@ def _run(scenario, **change):
 
 
 def _journal(root: Path):
+    # The synthetic guardian briefly locks the journal after a failed
+    # controller releases it. Wait for its bounded completion witness before
+    # testing unowned inspection; a concurrent observer is correctly refused.
+    if (root / "guardian-disarm").exists():
+        _guardian_outcome(root)
     return inspect_unowned_transaction(root / ("txn-" + NONCE))
 
 

@@ -1,0 +1,347 @@
+{
+  "schema": "binnacle.p35/1",
+  "environment": {
+    "utc": "2026-10-22T12:44:49.557524+00:00",
+    "os": "Linux",
+    "os_release": "6.18.50+rpt-rpi-2712",
+    "architecture": "aarch64",
+    "python": "3.13.16",
+    "cpu_count": 4,
+    "load_average": [
+      7.5537109375,
+      7.5830078125,
+      5.83740234375
+    ],
+    "binnacle_revision": "66697d280cc29991c4500e46eb2641ef91f84541",
+    "tracked_or_untracked_changes": true,
+    "harness_sha256": "d7e8cb17be9a2127c4a5ba43ebb43afe0e658fac0f04aa116199df1ef7f0cb1f",
+    "uv_lock_sha256": "a8682646e4909feb8b861bb616cb8a6cb5362eb1fc45ad60f26b7ee36eae69ca"
+  },
+  "authoritative_timings": false,
+  "quiet_host_attested": false,
+  "release_decision": "NOT_EVALUATED_READ_NO_GO",
+  "provider": {
+    "provider": "pyright",
+    "version": "1.1.413",
+    "source": "explicit_preinstalled_npm",
+    "artifact_sha256": {
+      "langserver.index.js": "f200762078eb9880faf421a5b30f9ef3055b1d85c6f10780d75db4da8d8499f1",
+      "package.json": "37cc437f98ce6b9339b1a3772e42487767d010ddf9920664dbf6b27b969debee",
+      "dist/pyright.js": "7668785b6020ddf018151da3dd4bdd10ca6b9782f0a31bb4130727200e57027b",
+      "dist/pyright-internal.js": "a8263ff39421126b91bbfe2135ae20b3f7723aec12f3fa37a3237cb0f429f115",
+      "dist/vendor.js": "aa87a73522f084f20bdc6fda2a75c91866ecef737630cb82c3b20621d78d9dea"
+    },
+    "multilspy_commit": "9203732e4e5f65cc1374b109110f7b6354d3d43b",
+    "initialize_template_sha256": "94995235ec831318396067447a1e9b9ce4cec01fe3c0970ee8800a0a405e9a45",
+    "node_version": "v24.19.0",
+    "node_executable_sha256": "3e53e5ff5eaa922f1b4308312d50da9091db62d40b87716ad36c60b347e7f984",
+    "command": [
+      "<trusted-pyright-langserver>",
+      "--stdio"
+    ],
+    "trust": "explicit_trust_only",
+    "read_release": "NO_GO"
+  },
+  "status": "completed",
+  "options": {
+    "repeats": 1,
+    "warmup": 1,
+    "concurrency": 1,
+    "instances": 1,
+    "deadline_s": 15,
+    "total_s": 40.0,
+    "sample_interval_s": 0.1,
+    "p95_budget_ms": 100,
+    "rss_budget_mib": 512
+  },
+  "corpus": {
+    "kind": "synthetic_small",
+    "revision": "p35-python-v1",
+    "revision_semantics": "versioned_generator",
+    "sha256": "b43242d4f3cd2c052b7ebb0997e7abedc283086954268e3a6f4f600d11d344da",
+    "file_count": 3,
+    "bytes": 145,
+    "gold_sha256": "e138c78cf2bb5999102b06cb1aab9bf355a5431ba4ca507bc3825931b71c1f4c"
+  },
+  "sample_grade": "smoke",
+  "operations": [
+    {
+      "case": 0,
+      "operation": "manager_definition",
+      "supported_instances": 1,
+      "settling": {
+        "correct": 1,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0
+      },
+      "warm": {
+        "correct": 1,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0,
+        "samples": 1,
+        "response_ms": {
+          "p50": 6.95847999304533,
+          "p95": 6.95847999304533,
+          "p99": 6.95847999304533
+        },
+        "correct_response_ms": {
+          "p50": 6.95847999304533,
+          "p95": 6.95847999304533,
+          "p99": 6.95847999304533
+        },
+        "result_count": {
+          "p50": 1,
+          "p95": 1,
+          "p99": 1
+        },
+        "result_bytes": {
+          "p50": 176,
+          "p95": 176,
+          "p99": 176
+        },
+        "error_rate": 0.0,
+        "timeout_rate": 0.0,
+        "correctness_rate": 1.0
+      },
+      "budget_label": "within_provisional_budget"
+    },
+    {
+      "case": 1,
+      "operation": "definition",
+      "supported_instances": 1,
+      "settling": {
+        "correct": 1,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0
+      },
+      "warm": {
+        "correct": 1,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0,
+        "samples": 1,
+        "response_ms": {
+          "p50": 1.875008107163012,
+          "p95": 1.875008107163012,
+          "p99": 1.875008107163012
+        },
+        "correct_response_ms": {
+          "p50": 1.875008107163012,
+          "p95": 1.875008107163012,
+          "p99": 1.875008107163012
+        },
+        "result_count": {
+          "p50": 1,
+          "p95": 1,
+          "p99": 1
+        },
+        "result_bytes": {
+          "p50": 150,
+          "p95": 150,
+          "p99": 150
+        },
+        "error_rate": 0.0,
+        "timeout_rate": 0.0,
+        "correctness_rate": 1.0
+      },
+      "budget_label": "within_provisional_budget"
+    },
+    {
+      "case": 2,
+      "operation": "references",
+      "supported_instances": 1,
+      "settling": {
+        "correct": 1,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0
+      },
+      "warm": {
+        "correct": 1,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0,
+        "samples": 1,
+        "response_ms": {
+          "p50": 5.384691990911961,
+          "p95": 5.384691990911961,
+          "p99": 5.384691990911961
+        },
+        "correct_response_ms": {
+          "p50": 5.384691990911961,
+          "p95": 5.384691990911961,
+          "p99": 5.384691990911961
+        },
+        "result_count": {
+          "p50": 3,
+          "p95": 3,
+          "p99": 3
+        },
+        "result_bytes": {
+          "p50": 453,
+          "p95": 453,
+          "p99": 453
+        },
+        "error_rate": 0.0,
+        "timeout_rate": 0.0,
+        "correctness_rate": 1.0
+      },
+      "budget_label": "within_provisional_budget"
+    },
+    {
+      "case": 3,
+      "operation": "hover",
+      "supported_instances": 1,
+      "settling": {
+        "correct": 1,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0
+      },
+      "warm": {
+        "correct": 1,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0,
+        "samples": 1,
+        "response_ms": {
+          "p50": 2.24509893450886,
+          "p95": 2.24509893450886,
+          "p99": 2.24509893450886
+        },
+        "correct_response_ms": {
+          "p50": 2.24509893450886,
+          "p95": 2.24509893450886,
+          "p99": 2.24509893450886
+        },
+        "result_count": {
+          "p50": 1,
+          "p95": 1,
+          "p99": 1
+        },
+        "result_bytes": {
+          "p50": 187,
+          "p95": 187,
+          "p99": 187
+        },
+        "error_rate": 0.0,
+        "timeout_rate": 0.0,
+        "correctness_rate": 1.0
+      },
+      "budget_label": "within_provisional_budget"
+    },
+    {
+      "case": 4,
+      "operation": "document_symbols",
+      "supported_instances": 1,
+      "settling": {
+        "correct": 1,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0
+      },
+      "warm": {
+        "correct": 1,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0,
+        "samples": 1,
+        "response_ms": {
+          "p50": 1.9281379645690322,
+          "p95": 1.9281379645690322,
+          "p99": 1.9281379645690322
+        },
+        "correct_response_ms": {
+          "p50": 1.9281379645690322,
+          "p95": 1.9281379645690322,
+          "p99": 1.9281379645690322
+        },
+        "result_count": {
+          "p50": 1,
+          "p95": 1,
+          "p99": 1
+        },
+        "result_bytes": {
+          "p50": 454,
+          "p95": 454,
+          "p99": 454
+        },
+        "error_rate": 0.0,
+        "timeout_rate": 0.0,
+        "correctness_rate": 1.0
+      },
+      "budget_label": "within_provisional_budget"
+    },
+    {
+      "case": 5,
+      "operation": "workspace_symbols",
+      "supported_instances": 1,
+      "settling": {
+        "correct": 1,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0
+      },
+      "warm": {
+        "correct": 1,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0,
+        "samples": 1,
+        "response_ms": {
+          "p50": 1.420899061486125,
+          "p95": 1.420899061486125,
+          "p99": 1.420899061486125
+        },
+        "correct_response_ms": {
+          "p50": 1.420899061486125,
+          "p95": 1.420899061486125,
+          "p99": 1.420899061486125
+        },
+        "result_count": {
+          "p50": 1,
+          "p95": 1,
+          "p99": 1
+        },
+        "result_bytes": {
+          "p50": 193,
+          "p95": 193,
+          "p99": 193
+        },
+        "error_rate": 0.0,
+        "timeout_rate": 0.0,
+        "correctness_rate": 1.0
+      },
+      "budget_label": "within_provisional_budget"
+    }
+  ],
+  "startup_to_first_result_ms": 2981.825005961582,
+  "cleanup_verified": true,
+  "teardown_ms": 703.2533040037379,
+  "resources": {
+    "status": "observed",
+    "samples": 34,
+    "sampling_errors": 0,
+    "tree_rss_peak_bytes": 168083456,
+    "resident_tree_rss_peak_bytes": 168083456,
+    "observed_cpu_seconds": 2.5,
+    "process_count_peak": 2,
+    "resident_instances_peak": 1,
+    "semantics": "sampled RSS sum; shared pages may double count; CPU since observed process birth; missed short-lived/escaped children possible; no confinement proof"
+  },
+  "resource_budget_label": "within_provisional_budget",
+  "initialize_response_ms": {
+    "p50": 530.0400339765474,
+    "p95": 530.0400339765474,
+    "p99": 530.0400339765474
+  },
+  "initialize_samples": 1,
+  "resident_reuse_verified": true,
+  "elapsed_ms": 3763.100043986924,
+  "harness_cpu_seconds": 0.380012958,
+  "valid": true,
+  "snapshot_unchanged": true
+}

@@ -65,7 +65,7 @@ binnacle-tunnel = "binnacle.companions.tunnel.tunnel_cli:main"
 # Exact PEP 508 VCS URL in build metadata, not uv-only source resolution.
 # Disabled by default. Pyright 1.1.413 executable is separately host-provided.
 development-intelligence-pyright = [
-    "multilspy @ git+https://github.com/grammy-jiang/multilspy.git@9203732e4e5f65cc1374b109110f7b6354d3d43b",
+    "multilspy @ git+https://github.com/grammy-jiang/multilspy.git@08ba0dbe60b6e0a3eff4796cb77ff5c0837bc892",
     "psutil>=7,<8",
 ]
 

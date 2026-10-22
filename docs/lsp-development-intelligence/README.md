@@ -35,6 +35,7 @@ Read only what is needed:
 | [Pyright upstream final cross-platform QA](p3-pyright-final-upstream-qa-2026-10-22.md) | Upstream PR #168 final SHA 7ff6e92, Pyright 1.1.413 and 77/77 checks across six Mac/Linux Python combinations; release gates remain open |
 | [Pyright complete feature matrix](p3-pyright-feature-matrix-2026-10-21.md) | Real LSP navigation, completion, signatures, rename, symbols and diagnostic tests; four typing modes on three hosts; known upstream high-level completion limitation |
 | [P2.2/P2.3 protocol acceptance](p2-2-p2-3-protocol-acceptance-2026-10-21.md) | Strict wire framing, parallel requests, server reverse RPC, capability and UTF-16 tests |
+| [P3.5 opt-in benchmark harness](p3-5-benchmark-harness-2026-10-22.md) | Synthetic Python gold checks, response percentiles, observed resources, explicit-trust snapshot option, and bounded native smoke; quiet-host timing gate remains open |
 | [Implementation plan V2](implementation-plan.md) | Gated roadmap, executable work packages, dependencies, acceptance and release decisions |
 | [P0.5 resolution](p0-5-architecture-resolution-2026-10-21.md) | Seven design issues, binding decisions and retained runtime gates |
 | [P0.6 host inventory](p0-6-host-readiness-2026-10-21.md) | Read-only actual service-PATH/OS/provider locator evidence on MacBook and two Raspberry Pi hosts |

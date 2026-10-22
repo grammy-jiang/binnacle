@@ -65,6 +65,9 @@ LINUX_ONLY_MODULES = frozenset(
     ]
 )
 _ROWS = """
+scripts/test_lsp_p34_breadth.py | E0: one per-test POSIX synthetic subprocess protocol check; static fixture and privacy tests run everywhere
+scripts/test_lsp_p34_wire.py | E0: ten per-test POSIX group and stdio protocol checks; no whole-module skip, explicit Windows non-support
+integration/test_lsp_p33_os_boundaries.py | T0: P3.3 per-test Linux Bubblewrap mount/network namespace denial control; native launch hygiene tests remain portable; no Darwin confinement claim
 system/test_uplink_network.py | baseline: Linux SO_BINDTODEVICE / iproute2 only
 live/test_deployment_smoke.py | baseline: opt-in live host (BINNACLE_LIVE=1)
 scripts/test_macos_collection_native.py | T0: Darwin host probe (sw_vers); the rest of the module runs everywhere
@@ -152,6 +155,9 @@ ALLOWED_PLATFORM_SKIPS = {
 
 # Per row: the platform-conditioned skip sites a file may hold (reviewable edit).
 PLATFORM_SITE_COUNTS = {
+    "tests/scripts/test_lsp_p34_breadth.py": 1,
+    "tests/scripts/test_lsp_p34_wire.py": 10,
+    "tests/integration/test_lsp_p33_os_boundaries.py": 1,
     "tests/integration/test_lsp_analyzer_audit.py": 10,
     "tests/integration/test_lsp_owner_native_descendants.py": 1,
     "tests/integration/test_lsp_process_faults.py": 7,

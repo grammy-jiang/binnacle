@@ -25,7 +25,7 @@ from binnacle.features.development_intelligence.lsp_workspace_policy import (
     normalize_locations,
 )
 
-EXPECTED_UPSTREAM_SHA = "9203732e4e5f65cc1374b109110f7b6354d3d43b"
+EXPECTED_UPSTREAM_SHA = "08ba0dbe60b6e0a3eff4796cb77ff5c0837bc892"
 OPT_IN = "BINNACLE_PATCHED_MULTILSPY_QA"
 SOURCE_ENV = "BINNACLE_MULTILSPY_SOURCE_DIR"
 BINARY_ENV = "PYRIGHT_LSP_TEST_BIN"

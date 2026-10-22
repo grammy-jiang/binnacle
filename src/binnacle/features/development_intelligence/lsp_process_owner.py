@@ -9,6 +9,7 @@ workspace authorization). This private component is not production-mounted.
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -20,6 +21,11 @@ from binnacle.features.development_intelligence.lsp_process_tree import (
     NativeProviderTree,
     ProcessCleanup,
 )
+
+# P3.3 credential-hygiene allowlist for native multilspy Pyright subprocesses.
+# This does NOT isolate filesystem, network or children. HOME may be inferred
+# from passwd. PATH is supplied separately from the admitted Node installation.
+_PYRIGHT_PARENT_ENV_KEYS = ("LANG", "LC_ALL", "LC_CTYPE", "TZ")
 
 
 class ProviderLifecycleError(RuntimeError):
@@ -112,6 +118,8 @@ class PrivatePyrightProcessOwner:
             raise ValueError("invalid_provider_cleanup_deadline")
         self._root = root
         self._binary = resolved_binary
+        self._selected_binary = binary
+        self._operator_roots = tuple(approved)
         self._cleanup_timeout_s = float(cleanup_timeout_s)
         self._active = False
         self._entered = False
@@ -139,6 +147,7 @@ class PrivatePyrightProcessOwner:
 
     def _make_upstream_server(self) -> Any:
         """Import only the optional pinned fork, and only upon actual launch."""
+        node = self._admit_node_launch()
         from multilspy import LanguageServer  # type: ignore[import-untyped]
         from multilspy.multilspy_config import (  # type: ignore[import-untyped]
             Language,
@@ -148,16 +157,84 @@ class PrivatePyrightProcessOwner:
             MultilspyLogger,
         )
 
-        return LanguageServer.create(
+        server = LanguageServer.create(
             MultilspyConfig(
                 code_language=Language.PYTHON,
                 python_server="pyright",
                 server_binary=str(self._binary),
                 trace_lsp_communication=False,
+                inherited_environment_keys=_PYRIGHT_PARENT_ENV_KEYS,
             ),
             MultilspyLogger(),
             str(self._root),
         )
+        launch = server.server.process_launch_info
+        if launch.cmd != [str(self._binary), "--stdio"] or launch.env:
+            raise ProviderLifecycleError("pyright_launch_contract_changed")
+        # Reuse upstream PR #168 for all protocol/lifecycle behavior. Only the
+        # embedding host decides executable authority. Bypass env's shebang
+        # lookup and never mutate the parent environment (concurrent owners).
+        launch.cmd = [str(node), str(self._binary), "--stdio"]
+        launch.env = {"PATH": str(node.parent)}
+        return server
+
+    def _admit_launch_file(self, selected: Path) -> Path:
+        """Reject writable-root traversal, including intermediate symlinks.
+
+        This is a selection check, not an atomic open/exec or hardlink/mount
+        identity proof. Operator-owned installations must remain trusted.
+        """
+        pending = list(selected.parts[1:])
+        current = Path(selected.anchor).resolve(strict=True)
+        links = 0
+        while pending:
+            part = pending.pop(0)
+            current = current.parent if part == ".." else current / part
+            if any(current.is_relative_to(root) for root in self._operator_roots):
+                raise ProviderLifecycleError("pyright_launch_inside_operator_root")
+            if current.is_symlink():
+                links += 1
+                if links > 40:
+                    raise ProviderLifecycleError("pyright_launch_symlink_cycle")
+                target = current.readlink()
+                if not target.is_absolute():
+                    target = current.parent / target
+                pending = list(target.parts[1:]) + pending
+                current = Path(target.anchor).resolve(strict=True)
+        if not current.is_file() or not os.access(current, os.X_OK):
+            raise ProviderLifecycleError("pyright_launch_file_unavailable")
+        return current
+
+    def _admit_node_launch(self) -> Path:
+        """Only the native npm launcher and its selected sibling Node qualify.
+
+        No PATH search or fallback. A trusted launcher alias and sibling node
+        alias may point to separately installed, trusted package/runtime trees.
+        Recheck each launch; arbitrary wrappers/interpreter chains fail closed.
+        """
+        try:
+            binary = self._admit_launch_file(self._selected_binary)
+            if binary != self._binary:
+                raise ProviderLifecycleError("pyright_launcher_retargeted")
+            with binary.open("rb") as stream:
+                if stream.readline(128) != b"#!/usr/bin/env node\n":
+                    raise ProviderLifecycleError("pyright_launcher_not_audited")
+            node = self._admit_launch_file(self._selected_binary.parent / "node")
+            with node.open("rb") as stream:
+                magic = stream.read(4)
+            # Native ELF / Mach-O (including universal) only, never another
+            # env script. This rejects chains; it does not certify Node bytes.
+            if magic not in (
+                b"\x7fELF",
+                b"\xcf\xfa\xed\xfe",
+                b"\xfe\xed\xfa\xcf",
+                b"\xca\xfe\xba\xbe",
+                b"\xca\xfe\xba\xbf",
+            ):
+                raise ProviderLifecycleError("pyright_node_not_native")
+            return node
+        except (OSError, ValueError) as exc:
+            raise ProviderLifecycleError("pyright_launch_admission_failed") from exc
 
     def observe_owned_processes(self) -> None:
         """Sample only our verified process group and descendants.

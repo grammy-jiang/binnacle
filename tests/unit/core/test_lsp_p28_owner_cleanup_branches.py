@@ -294,6 +294,9 @@ def test_upstream_factory_is_native_library_not_local_pyright_adapter(
         PrivatePyrightProcessOwner as ActualClass,
     )
 
+    # This factory-only check has no native installation. Launch admission is
+    # exercised separately with real files and real Pyright.
+    monkeypatch.setattr(owner, "_admit_node_launch", lambda: owner._binary)
     server = ActualClass._make_upstream_server(owner)
     assert type(server).__name__ == "PyrightServer"
     assert server.repository_root_path == str(owner._root)
