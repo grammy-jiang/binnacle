@@ -183,7 +183,7 @@ def test_unknown_stop_after_child_exits_does_not_adopt_old_journal(
     with pytest.raises(RuntimeError, match="fixture rejected step stopped"):
         run(scenario)
     assert_no_archive_mutation(root)
-    assert snapshot(root).phase == "guardian_armed"
+    assert snapshot_after_failed_controller(root).phase == "guardian_armed"
     assert "restore" not in actor.events
     assert _guardian_outcome(root) == "restarted"
     assert (root / "private-logs/mcp.stderr.log").is_file()
@@ -197,7 +197,7 @@ def test_failure_after_confirmed_stop_restores_writer_before_releasing_barriers(
     with pytest.raises(RuntimeError, match="fixture rejected step fd"):
         run(scenario)
     assert_no_archive_mutation(root)
-    assert snapshot(root).phase == "producer_stopped"
+    assert snapshot_after_failed_controller(root).phase == "producer_stopped"
     assert actor.restored
     assert actor.writer.active is not None
     assert actor.writer.active.poll() is None
@@ -217,7 +217,7 @@ def test_restore_refusal_after_valid_prune_leaves_recovery_guardian(
     assert bz2.decompress((root / "private-logs" / (RAW + ".bz2")).read_bytes()) == (
         b"e2e-fixture-generation raw\n"
     )
-    assert snapshot(root).phase == "raw_pruned"
+    assert snapshot_after_failed_controller(root).phase == "raw_pruned"
     assert actor.writer.active is None
     assert actor.events.count("restore") == 1  # no unsafe bootstrap retry
     assert _guardian_outcome(root) == "restarted"

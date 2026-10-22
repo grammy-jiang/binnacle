@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 
 def send(value):
@@ -19,6 +20,11 @@ def main():
     if mode == "hang-child":
         subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        # Explicit fixture-only readiness witness, *after* child creation and
+        # SIGTERM disposition. An overloaded CI runner must not expire the
+        # adversarial deadline before the process tree exists.
+        if len(sys.argv) > 2:
+            Path(sys.argv[2]).write_text("ready\n", encoding="ascii")
         time.sleep(60)
         return
     if mode == "stderr":

@@ -19,6 +19,18 @@ def peer(tmp_path, *args, timeout=2):
     return Peer([sys.executable, "-u", str(FIXTURE), *args], tmp_path, {}, timeout)
 
 
+def _terminated_or_zombie(child, psutil):
+    """A child disappearing between two psutil calls is successful cleanup.
+
+    Still-running, non-zombie children remain a hard failure; do not hide
+    permission, observation, or process-identity errors.
+    """
+    try:
+        return not child.is_running() or child.status() == psutil.STATUS_ZOMBIE
+    except psutil.NoSuchProcess:
+        return True
+
+
 @pytest.mark.parametrize("mode", ["normal", "stderr", "reverse"])
 @pytest.mark.skipif(os.name != "posix", reason="P3.4 POSIX stdio/process group test")
 def test_handshake_shutdown_and_reverse_denial(tmp_path, mode):
@@ -74,22 +86,56 @@ def test_bad_frames_are_bounded(tmp_path, wire, code):
 @pytest.mark.skipif(os.name != "posix", reason="P3.4 POSIX stdio/process group test")
 def test_timeout_cleans_term_ignoring_parent_and_child(tmp_path):
     psutil = pytest.importorskip("psutil")
-    instance = peer(tmp_path, "hang-child", timeout=0.3)
-    started = time.monotonic()
+    ready = tmp_path / "synthetic-child-ready"
+    instance = peer(tmp_path, "hang-child", str(ready), timeout=5)
     children = []
+    started = time.monotonic()
     try:
-        with pytest.raises(ProbeError, match="deadline"):
-            instance.request("initialize", {}, {})
+        startup_deadline = time.monotonic() + 5
+        while not ready.is_file():
+            assert instance.process.poll() is None, "fixture exited before ready"
+            assert time.monotonic() < startup_deadline, "fixture startup timed out"
+            time.sleep(0.01)
+        # The adversarial deadline begins only after the child exists and the
+        # parent has installed SIGTERM_IGN. Otherwise this test races Python
+        # startup on busy CI hosts instead of testing group cleanup.
         children = psutil.Process(instance.process.pid).children()
         assert len(children) == 1
+        instance.deadline = time.monotonic() + 0.3
+        started = time.monotonic()
+        with pytest.raises(ProbeError, match="deadline"):
+            instance.request("initialize", {}, {})
     finally:
         instance.close()
     assert time.monotonic() - started < 4
     assert instance.process.returncode == -signal.SIGKILL
-    assert all(
-        not child.is_running() or child.status() == psutil.STATUS_ZOMBIE
-        for child in children
-    )
+    assert all(_terminated_or_zombie(child, psutil) for child in children)
+
+
+def test_reaped_child_disappearance_between_psutil_checks_is_clean():
+    psutil = pytest.importorskip("psutil")
+
+    class GoneAfterCheck:
+        def is_running(self):
+            return True
+
+        def status(self):
+            raise psutil.NoSuchProcess(pid=92321)
+
+    assert _terminated_or_zombie(GoneAfterCheck(), psutil)
+
+
+def test_running_child_must_not_count_as_clean():
+    psutil = pytest.importorskip("psutil")
+
+    class StillRunning:
+        def is_running(self):
+            return True
+
+        def status(self):
+            return psutil.STATUS_RUNNING
+
+    assert not _terminated_or_zombie(StillRunning(), psutil)
 
 
 @pytest.mark.skipif(os.name != "posix", reason="P3.4 POSIX stdio/process group test")
