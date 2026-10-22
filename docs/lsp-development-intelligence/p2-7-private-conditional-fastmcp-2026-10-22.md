@@ -76,11 +76,13 @@ same Git-pinned multilspy SHA above.
 | MacBook Pro macOS ARM64 | 3.10, 3.14 | P2.7 focused HTTP/lifespan/real Pyright | **30 passed each** |
 
 The full Mac selection included P2.4 process owner, P2.5 workspace/document,
-P2.6 34 fake and nine real manager tests, and P2.7 30 selected tests. Both Linux hosts were rerun against the exact reviewed final P2.7 source
-and test files (SHA-256 matched with the MacBook); all three native hosts
-passed the same **163** selected cases. `pytest --collect-only` confirms
-**30 P2.7 tests** on Mac, with Python 3.10/3.14 each passing those 30. Normal existing MCP application-composition regression was also
-run on macOS: **15 passed, one platform-expected skip**.
+P2.6 34 fake and nine real manager tests, and P2.7 30 selected tests. Both
+Linux hosts were rerun against the exact final reviewed P2.7 source and tests
+(SHA-256 matched against the MacBook). All three native hosts passed the same
+**163** selected cases. `pytest --collect-only` confirms 30 P2.7 cases on
+both macOS and Linux; Mac Python 3.10/3.14 each passed those 30. The separate
+normal MCP application-composition regression on Mac reported **15 passed,
+one platform-expected skip**.
 
 Run P2.7 specifically, with explicit opt-in to fail on a missing binary:
 
@@ -99,7 +101,10 @@ Additional checks: Ruff configured rules and formatting, focused mypy, Bandit,
 `uv lock --check`, complete guarded startup manifest, strict under-500-line
 module gate, wheel contents and pinned PEP 508 optional dependency, separate
 no-extra installation (no multilspy imported), and unchanged six/eight tool
-surfaces. Tests used real FastMCP v4.1 and the root `create_application`.
+surfaces. We explicitly declare `anyio>=4,<5` in `pyproject.toml` because
+P2.7 directly invokes `anyio.CancelScope`; FastMCP already required and
+installed this package transitively. Tests used actual FastMCP v4.1 and the
+root `create_application`.
 
 ## Independent review outcomes
 
