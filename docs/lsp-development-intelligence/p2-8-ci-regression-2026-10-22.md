@@ -186,15 +186,35 @@ independent controls also passed on Pi/Sextant with `umask 0022` and `0077`.
 mandatory condition for claiming P2.8 final hosted acceptance; do not count
 the first failed run as success.
 
+## Final GitHub-hosted CI acceptance
+
+The follow-up commit `d17424836bd9c8de99cee901a967fb60276ab100`
+separated the two E02 negative controls for incomplete key contents and
+permissive private key filesystem mode under GitHub Runner's ordinary
+`umask 0022`. The product key validation policy was **not** relaxed.
+
+[GitHub Actions run 39727890450](https://github.com/grammy-jiang/binnacle/actions/runs/39727890450)
+completed with **seven of seven jobs SUCCESS** on that exact commit:
+
+- Packaging / Python 3.13 — SUCCESS.
+- Code Quality — SUCCESS.
+- Coverage Policy / Python 3.13 — SUCCESS.
+- Tests / Python 3.10, 3.11, 3.12 and 3.14 — all SUCCESS.
+
+This upgrades P2.8 from local-only acceptance to **hosted CI GO**. No
+production deployment, `master` merge, P3 untrusted READ classification,
+public `inspect_symbol`, or multilspy upstream merge follows implicitly.
+The pre-existing approved temporary-floor coverage debts remain independently
+tracked, rather than erased by a reduced policy.
+
 ## Remaining gates (do not close early)
 
 - **Local Coverage Policy and full Python 3.13 tox acceptance are PASS.**
   The next mandatory check is the hosted GitHub Actions run on the final
   committed source; local success must not be reported as hosted success.
-- Finalize one coherent P2.8 commit/branch and verify hosted
-  GitHub Actions Python 3.10, 3.11, 3.12, 3.14, Code Quality, Coverage Policy,
-  Packaging and the manual Git-history secret gate. A local pass is not
-  evidence that hosted CI passed.
+- **Completed:** two P2.8 commits and seven successful hosted CI jobs as
+  listed above. Do not merge or deploy just because the checks are green:
+  P3/P4/P5 retain independent security/product release approvals.
 - Preserve P2.5 dedicated adversarial TOCTOU review and P3 OS/Pyright write
   side-effect/security classification as independent **NO-GO** public release
   conditions. The P2.7 private QA tool is not an approved MCP product API.

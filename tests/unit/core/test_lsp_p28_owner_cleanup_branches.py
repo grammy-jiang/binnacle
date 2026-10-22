@@ -110,7 +110,10 @@ def fake_owner_factory(tmp_path, monkeypatch):
 
     def factory(*, cleanup_timeout_s=2):
         owner = PrivatePyrightProcessOwner(
-            profile, project, cleanup_timeout_s=cleanup_timeout_s
+            profile,
+            project,
+            cleanup_timeout_s=cleanup_timeout_s,
+            operator_allowed_roots=(project,),
         )
         upstream = FakeUpstream()
         monkeypatch.setattr(owner, "_make_upstream_server", lambda: upstream)
@@ -235,15 +238,22 @@ def test_owner_rejects_unavailable_executable_and_non_directory_root(tmp_path):
         )
 
     with pytest.raises(ProviderLifecycleError, match="executable_unavailable"):
-        PrivatePyrightProcessOwner(settings("/nonexistent/pyright"), root)
+        PrivatePyrightProcessOwner(
+            settings("/nonexistent/pyright"), root, operator_allowed_roots=(root,)
+        )
     document = tmp_path / "not-a-directory.py"
     document.write_text("value = 4\n")
     with pytest.raises(ProviderLifecycleError, match="workspace_not_directory"):
-        PrivatePyrightProcessOwner(settings(sys.executable), document)
+        PrivatePyrightProcessOwner(
+            settings(sys.executable), document, operator_allowed_roots=(document,)
+        )
     for invalid in (True, "3", 0, -1, 121):
         with pytest.raises(ValueError, match="cleanup_deadline"):
             PrivatePyrightProcessOwner(
-                settings(sys.executable), root, cleanup_timeout_s=invalid
+                settings(sys.executable),
+                root,
+                cleanup_timeout_s=invalid,
+                operator_allowed_roots=(root,),
             )
 
 

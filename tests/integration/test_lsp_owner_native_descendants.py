@@ -99,7 +99,7 @@ async def test_owner_backstop_observes_and_reaps_actual_provider_descendant(
             )
         },
     )
-    owner = PrivatePyrightProcessOwner(profile, root)
+    owner = PrivatePyrightProcessOwner(profile, root, operator_allowed_roots=(root,))
 
     def real_upstream_factory():
         server = LanguageServer.create(

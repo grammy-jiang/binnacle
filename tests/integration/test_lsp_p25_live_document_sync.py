@@ -58,7 +58,9 @@ async def test_actual_multilspy_did_open_change_close_and_fresh_definition(
 ):
     allowed, root, settings = live_workspace
     workspace = AuthorizedWorkspace((allowed,), root / "app.py")
-    owner = PrivatePyrightProcessOwner(settings, workspace.workspace_root)
+    owner = PrivatePyrightProcessOwner(
+        settings, workspace.workspace_root, operator_allowed_roots=(allowed,)
+    )
     before = (root / "lib.py").read_bytes()
     recorded = []
     with fail_after(35):
@@ -122,7 +124,9 @@ async def test_actual_provider_no_external_scope_and_bounded_disk_staleness(
 ):
     allowed, root, settings = live_workspace
     workspace = AuthorizedWorkspace((allowed,), root / "app.py")
-    owner = PrivatePyrightProcessOwner(settings, workspace.workspace_root)
+    owner = PrivatePyrightProcessOwner(
+        settings, workspace.workspace_root, operator_allowed_roots=(allowed,)
+    )
     with fail_after(30):
         async with (
             owner.session() as server,

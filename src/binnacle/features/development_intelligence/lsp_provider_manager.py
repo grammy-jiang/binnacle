@@ -30,6 +30,7 @@ from .lsp_manager_types import (
     ShutdownObservation,
 )
 from .lsp_process_owner import PrivatePyrightProcessOwner
+from .lsp_profile_assessment import assess_provider_profile
 from .lsp_workspace_access import AuthorizedWorkspace
 
 
@@ -269,7 +270,9 @@ class PrivateProviderManager:
                     eviction = oldest.worker
                 else:
                     owner = self._owner_factory(
-                        self._settings, workspace.workspace_root
+                        self._settings,
+                        workspace.workspace_root,
+                        operator_allowed_roots=self._allowed_roots,
                     )
                     entry = ManagedProvider(key=key, workspace=workspace, owner=owner)
                     entry.users = 1
@@ -355,10 +358,7 @@ class PrivateProviderManager:
         profile = self._settings.profiles.get("pyright")
         if profile is None or not profile.enabled:
             raise ProviderManagerError("pyright_provider_disabled")
-        if (
-            profile.mode != "explicit_trust_only"
-            or profile.source != "trusted_absolute"
-        ):
+        if not assess_provider_profile(self._settings).private_launch_eligible:
             raise ProviderManagerError("pyright_provider_not_authorized")
         task = asyncio.current_task()
         if task is None:

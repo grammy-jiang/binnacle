@@ -21,6 +21,7 @@ from fastmcp.exceptions import ToolError
 from binnacle.config import RootsSettings
 from binnacle.config_development_intelligence import DevelopmentIntelligenceSettings
 
+from .lsp_profile_assessment import assess_provider_profile
 from .lsp_provider_manager import PrivateProviderManager
 
 _CLEANUP_CEILING_SECONDS = 90.0
@@ -60,16 +61,10 @@ def validate_private_profile(settings: DevelopmentIntelligenceSettings) -> bool:
     """
     if not settings.enabled or not settings.discovery_enabled:
         return False
-    profile = settings.profiles.get("pyright")
-    if profile is None or not profile.enabled:
+    assessment = assess_provider_profile(settings)
+    if assessment.reason in ("profile_absent", "profile_disabled"):
         return False
-    if (
-        profile.mode != "explicit_trust_only"
-        or profile.source != "trusted_absolute"
-        or not profile.executable
-        or profile.argv
-        or profile.env
-    ):
+    if not assessment.private_launch_eligible:
         raise ValueError("private_pyright_preview_requires_trusted_profile")
     # The native P2.4 owner checks the executable on first launch. Merely
     # discovering an enabled tool must not eagerly spawn or read a workspace.

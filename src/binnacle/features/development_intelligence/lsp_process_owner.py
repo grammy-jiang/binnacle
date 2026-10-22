@@ -55,6 +55,7 @@ class PrivatePyrightProcessOwner:
         settings: DevelopmentIntelligenceSettings,
         workspace_root: Path,
         *,
+        operator_allowed_roots: tuple[Path, ...],
         cleanup_timeout_s: float = 25.0,
     ) -> None:
         if not settings.enabled:
@@ -68,6 +69,8 @@ class PrivatePyrightProcessOwner:
             raise ProviderLifecycleError("pyright_requires_trusted_absolute_executable")
         if profile.argv or profile.env:
             raise ProviderLifecycleError("unaudited_pyright_process_options")
+        if profile.languages and "python" not in profile.languages:
+            raise ProviderLifecycleError("pyright_profile_language_not_supported")
         binary = Path(profile.executable)
         if not binary.is_absolute() or not binary.is_file():
             raise ProviderLifecycleError("pyright_executable_unavailable")
@@ -80,6 +83,27 @@ class PrivatePyrightProcessOwner:
         resolved_binary = binary.resolve(strict=True)
         if binary.is_relative_to(root) or resolved_binary.is_relative_to(root):
             raise ProviderLifecycleError("pyright_executable_inside_workspace")
+        # The requested file belongs to one workspace, but Binnacle grants
+        # the agent read/write authority to *all* operator-approved roots.
+        # An executable from any such root is mutable by an authenticated MCP
+        # user even when it is outside the current Python project.
+        if not isinstance(operator_allowed_roots, tuple) or not operator_allowed_roots:
+            raise ProviderLifecycleError("operator_roots_required")
+        approved = []
+        for configured_root in operator_allowed_roots:
+            try:
+                granted = Path(configured_root).expanduser().resolve(strict=True)
+            except (OSError, ValueError) as exc:
+                raise ProviderLifecycleError("operator_root_unavailable") from exc
+            if not granted.is_dir():
+                raise ProviderLifecycleError("operator_root_not_directory")
+            approved.append(granted)
+            if binary.is_relative_to(granted) or resolved_binary.is_relative_to(
+                granted
+            ):
+                raise ProviderLifecycleError("pyright_executable_inside_operator_root")
+        if not any(root.is_relative_to(grant) for grant in approved):
+            raise ProviderLifecycleError("workspace_outside_operator_roots")
         if (
             isinstance(cleanup_timeout_s, bool)
             or not isinstance(cleanup_timeout_s, (float, int))
@@ -227,7 +251,8 @@ class PrivatePyrightProcessOwner:
                         not task.done() for task in handler.tasks.values()
                     ),
                     cleanup_unverified=bool(
-                        cleanup_error
+                        self._poisoned
+                        or cleanup_error
                         or result is None
                         or result.status != "observed_clean"
                         or (process is not None and process.returncode is None)
@@ -281,6 +306,13 @@ class PrivatePyrightProcessOwner:
             return
         server = self._server
         if server is not None and server.server.process is not None:
-            await asyncio.wait_for(
-                server.server.stop(), timeout=self._cleanup_timeout_s
-            )
+            try:
+                await asyncio.wait_for(
+                    server.server.stop(), timeout=self._cleanup_timeout_s
+                )
+            except asyncio.CancelledError:
+                self._poisoned = True
+                raise
+            except Exception as exc:
+                self._poisoned = True
+                raise ProviderLifecycleError("provider_cleanup_unverified") from exc

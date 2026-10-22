@@ -89,7 +89,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "features/commands/job_resource_history.py",
             "features/commands/job_store.py",
         },
-        # Reviewed P2.0–P2.7 Development Intelligence; one source owner per
+        # Reviewed P2.0–P3.1 Development Intelligence; one source owner per
         # module, NOT a wildcard that silently admits new adapters into CI.
         "development_intelligence": {
             "features/development_intelligence/__init__.py",
@@ -103,6 +103,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "features/development_intelligence/lsp_policy.py",
             "features/development_intelligence/lsp_preview_mount.py",
             "features/development_intelligence/lsp_preview_server.py",
+            "features/development_intelligence/lsp_profile_assessment.py",
             "features/development_intelligence/lsp_process_owner.py",
             "features/development_intelligence/lsp_process_tree.py",
             "features/development_intelligence/lsp_provider_manager.py",

@@ -85,6 +85,7 @@ _SERVER_COMMON = (
     "binnacle.features.development_intelligence.lsp_preview_server",
     "binnacle.features.development_intelligence.lsp_process_owner",
     "binnacle.features.development_intelligence.lsp_process_tree",
+    "binnacle.features.development_intelligence.lsp_profile_assessment",
     "binnacle.features.development_intelligence.lsp_provider_manager",
     "binnacle.features.development_intelligence.lsp_session",
     "binnacle.features.development_intelligence.lsp_wire",

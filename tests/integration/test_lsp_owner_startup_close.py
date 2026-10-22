@@ -45,7 +45,9 @@ async def test_aclose_during_pre_spawn_initialize_cancels_inflight_start(tmp_pat
             )
         },
     )
-    owner = PrivatePyrightProcessOwner(settings, root, cleanup_timeout_s=4)
+    owner = PrivatePyrightProcessOwner(
+        settings, root, cleanup_timeout_s=4, operator_allowed_roots=(root,)
+    )
     server = LanguageServer.create(
         MultilspyConfig(
             code_language=Language.PYTHON,
@@ -114,7 +116,9 @@ async def test_aclose_during_blocked_initialize_after_spawn_reaps_process(tmp_pa
             )
         },
     )
-    owner = PrivatePyrightProcessOwner(profile, root, cleanup_timeout_s=10)
+    owner = PrivatePyrightProcessOwner(
+        profile, root, cleanup_timeout_s=10, operator_allowed_roots=(root,)
+    )
     server = LanguageServer.create(
         MultilspyConfig(
             code_language=Language.PYTHON,

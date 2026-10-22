@@ -171,7 +171,9 @@ def fx(tmp_path):
         return PrivateProviderManager(
             configured,
             roots,
-            _owner_factory=lambda _settings, root: SimulatedProvider(WITNESS, root),
+            _owner_factory=lambda _settings, root, *, operator_allowed_roots: (
+                SimulatedProvider(WITNESS, root)
+            ),
             _document_factory=SimulatedDocuments,
             **overrides,
         )

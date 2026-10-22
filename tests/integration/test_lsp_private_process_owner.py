@@ -77,11 +77,13 @@ def test_owner_requires_strict_explicit_trust_and_approved_profile(tmp_path):
     root = tmp_path / "workspace"
     root.mkdir()
     with pytest.raises(ProviderLifecycleError, match="disabled"):
-        PrivatePyrightProcessOwner(DevelopmentIntelligenceSettings(), root)
+        PrivatePyrightProcessOwner(
+            DevelopmentIntelligenceSettings(), root, operator_allowed_roots=(root,)
+        )
 
     invalid = DevelopmentIntelligenceSettings(enabled=True)
     with pytest.raises(ProviderLifecycleError, match="disabled"):
-        PrivatePyrightProcessOwner(invalid, root)
+        PrivatePyrightProcessOwner(invalid, root, operator_allowed_roots=(root,))
 
     candidate = tmp_path / "fake-binary"
     candidate.write_text("not executed", encoding="utf-8")
@@ -97,7 +99,7 @@ def test_owner_requires_strict_explicit_trust_and_approved_profile(tmp_path):
         },
     )
     with pytest.raises(ProviderLifecycleError, match="explicit_trust"):
-        PrivatePyrightProcessOwner(untrusted, root)
+        PrivatePyrightProcessOwner(untrusted, root, operator_allowed_roots=(root,))
 
     unsupported = DevelopmentIntelligenceSettings(
         enabled=True,
@@ -112,14 +114,16 @@ def test_owner_requires_strict_explicit_trust_and_approved_profile(tmp_path):
         },
     )
     with pytest.raises(ProviderLifecycleError, match="unaudited"):
-        PrivatePyrightProcessOwner(unsupported, root)
+        PrivatePyrightProcessOwner(unsupported, root, operator_allowed_roots=(root,))
 
 
 @pytest.mark.asyncio
 async def test_real_parent_lifecycle_and_sequential_reuse(
     valid_owner_profile, workspace
 ):
-    owner = PrivatePyrightProcessOwner(valid_owner_profile, workspace)
+    owner = PrivatePyrightProcessOwner(
+        valid_owner_profile, workspace, operator_allowed_roots=(workspace,)
+    )
     assert not owner.active and owner.last_exit is None
     original = (workspace / "sample.py").read_bytes()
     observed = []
@@ -156,7 +160,9 @@ async def test_real_parent_lifecycle_and_sequential_reuse(
 async def test_real_cancelled_body_terminates_upstream_provider(
     valid_owner_profile, workspace
 ):
-    owner = PrivatePyrightProcessOwner(valid_owner_profile, workspace)
+    owner = PrivatePyrightProcessOwner(
+        valid_owner_profile, workspace, operator_allowed_roots=(workspace,)
+    )
     entered = asyncio.Event()
     never = asyncio.Event()
 
@@ -181,7 +187,9 @@ async def test_real_cancelled_body_terminates_upstream_provider(
 async def test_real_body_exception_keeps_error_and_closes_process(
     valid_owner_profile, workspace
 ):
-    owner = PrivatePyrightProcessOwner(valid_owner_profile, workspace)
+    owner = PrivatePyrightProcessOwner(
+        valid_owner_profile, workspace, operator_allowed_roots=(workspace,)
+    )
     with pytest.raises(RuntimeError, match="expected fixture exception"):
         async with owner.session() as server:
             assert server.server.process is not None
@@ -195,7 +203,9 @@ async def test_real_body_exception_keeps_error_and_closes_process(
 async def test_owner_denies_concurrent_context_until_registry_is_built(
     valid_owner_profile, workspace
 ):
-    owner = PrivatePyrightProcessOwner(valid_owner_profile, workspace)
+    owner = PrivatePyrightProcessOwner(
+        valid_owner_profile, workspace, operator_allowed_roots=(workspace,)
+    )
     async with owner.session():
         with pytest.raises(ProviderLifecycleError, match="busy"):
             async with owner.session():
@@ -206,7 +216,9 @@ async def test_owner_denies_concurrent_context_until_registry_is_built(
 
 @pytest.mark.asyncio
 async def test_owner_aclose_blocks_future_start(valid_owner_profile, workspace):
-    owner = PrivatePyrightProcessOwner(valid_owner_profile, workspace)
+    owner = PrivatePyrightProcessOwner(
+        valid_owner_profile, workspace, operator_allowed_roots=(workspace,)
+    )
     await owner.aclose()
     assert owner.closed
     with pytest.raises(ProviderLifecycleError, match="closed"):
@@ -219,7 +231,9 @@ async def test_owner_aclose_blocks_future_start(valid_owner_profile, workspace):
 async def test_aclose_while_session_active_reaps_process(
     valid_owner_profile, workspace
 ):
-    owner = PrivatePyrightProcessOwner(valid_owner_profile, workspace)
+    owner = PrivatePyrightProcessOwner(
+        valid_owner_profile, workspace, operator_allowed_roots=(workspace,)
+    )
     entered = asyncio.Event()
     block = asyncio.Event()
     observed = {}
@@ -249,7 +263,9 @@ async def test_aclose_while_session_active_reaps_process(
 
 @pytest.mark.asyncio
 async def test_crashed_provider_does_not_remain_active(valid_owner_profile, workspace):
-    owner = PrivatePyrightProcessOwner(valid_owner_profile, workspace)
+    owner = PrivatePyrightProcessOwner(
+        valid_owner_profile, workspace, operator_allowed_roots=(workspace,)
+    )
     from multilspy.lsp_protocol_handler.server import (  # type: ignore[import-untyped]
         Error,
     )
@@ -272,7 +288,10 @@ def test_process_cleanup_deadline_validation(valid_owner_profile, workspace):
     for invalid in (-1, 0, 121, float("nan"), float("inf")):
         with pytest.raises(ValueError, match="cleanup_deadline"):
             PrivatePyrightProcessOwner(
-                valid_owner_profile, workspace, cleanup_timeout_s=invalid
+                valid_owner_profile,
+                workspace,
+                cleanup_timeout_s=invalid,
+                operator_allowed_roots=(workspace,),
             )
 
 
@@ -293,7 +312,7 @@ def test_rejects_pyright_executable_inside_untrusted_workspace(tmp_path):
         },
     )
     with pytest.raises(ProviderLifecycleError, match="inside_workspace"):
-        PrivatePyrightProcessOwner(profile, root)
+        PrivatePyrightProcessOwner(profile, root, operator_allowed_roots=(root,))
 
     # Even a trusted-looking external absolute symlink must not execute a
     # target rooted in the requested project.
@@ -311,7 +330,7 @@ def test_rejects_pyright_executable_inside_untrusted_workspace(tmp_path):
         },
     )
     with pytest.raises(ProviderLifecycleError, match="inside_workspace"):
-        PrivatePyrightProcessOwner(via_symlink, root)
+        PrivatePyrightProcessOwner(via_symlink, root, operator_allowed_roots=(root,))
 
 
 @pytest.mark.asyncio
@@ -346,7 +365,9 @@ async def test_nonresponsive_initialization_fails_closed_without_leaking_parent(
             )
         },
     )
-    owner = PrivatePyrightProcessOwner(profile, root, cleanup_timeout_s=15)
+    owner = PrivatePyrightProcessOwner(
+        profile, root, cleanup_timeout_s=15, operator_allowed_roots=(root,)
+    )
     server = LanguageServer.create(
         MultilspyConfig(
             code_language=Language.PYTHON,

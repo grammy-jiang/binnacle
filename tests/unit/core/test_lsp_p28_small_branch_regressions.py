@@ -57,8 +57,9 @@ async def test_one_shot_workspace_facade_lifecycle_and_failure_cleanup(
     events = []
 
     class Owner:
-        def __init__(self, _settings, root):
+        def __init__(self, _settings, root, *, operator_allowed_roots):
             self.root = root
+            assert root.is_relative_to(operator_allowed_roots[0])
 
         @asynccontextmanager
         async def session(self):
@@ -108,8 +109,8 @@ async def test_one_shot_facade_closes_owner_on_error(authorized_source, monkeypa
     observed = []
 
     class BrokenOwner:
-        def __init__(self, *_args):
-            pass
+        def __init__(self, *_args, operator_allowed_roots):
+            assert operator_allowed_roots == roots.canonical_allowed
 
         @asynccontextmanager
         async def session(self):

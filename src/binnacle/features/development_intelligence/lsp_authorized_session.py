@@ -31,13 +31,16 @@ class PrivateAuthorizedPyrightWorkspace:
         # RootsSettings.canonical_allowed is a first-use pinned snapshot of
         # operator-granted roots. Never derive authority from Pyright results,
         # repository configuration, LSP capabilities or a client-supplied root.
+        operator_roots = tuple(roots_settings.canonical_allowed)
         self.workspace = AuthorizedWorkspace(
-            tuple(roots_settings.canonical_allowed),
+            operator_roots,
             requested_file,
             allow_parent_fallback=allow_parent_fallback,
         )
         self.owner = PrivatePyrightProcessOwner(
-            feature_settings, self.workspace.workspace_root
+            feature_settings,
+            self.workspace.workspace_root,
+            operator_allowed_roots=operator_roots,
         )
         self._used = False
 
