@@ -1,0 +1,4 @@
+# One scoped false positive: SHA-256 digest of lsp_workspace_access.py in the
+# reviewed P3.5 real-subset manifest. Independently verified against file bytes.
+# Do not disable scanning or generalize this exemption.
+1325e30736a4ac0677261c02791035f934690223:docs/lsp-development-intelligence/p3-5-reviewed-real-subset-manifest-2026-10-23.json:generic-api-key:21

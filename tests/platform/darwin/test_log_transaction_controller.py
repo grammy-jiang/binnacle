@@ -319,7 +319,7 @@ def test_lost_durable_restored_phase_ack_cannot_double_bootstrap(
     assert actor.writer.active is not None
     assert actor.writer.active.poll() is None
     assert actor.gate.snapshot().pause_nonce is None
-    assert snapshot(root).phase == "raw_pruned"
+    assert snapshot_after_failed_controller(root).phase == "raw_pruned"
     assert not (root / "private-logs" / RAW).exists()
     assert not (root / "watchdog/request.json").exists()
 
@@ -335,8 +335,9 @@ def test_mcp_reopen_failure_holds_guardian_and_other_admission_barriers(
     assert actor.writer.active.poll() is None
     assert actor.events.count("restore") == 1
     assert actor.events.count("mcp_resumed") == 1
-    assert snapshot(root).phase == "raw_pruned"
-    assert snapshot(root).needs_external_recovery
+    observed = snapshot_after_failed_controller(root)
+    assert observed.phase == "raw_pruned"
+    assert observed.needs_external_recovery
     assert not (root / "guardian-disarm").exists()
     assert (root / "manager-pause/request.json").exists()
     assert (root / "watchdog/request.json").exists()

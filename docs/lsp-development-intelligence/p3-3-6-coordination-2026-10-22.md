@@ -162,3 +162,27 @@ All public MCP exposure, READ admission and deployment remain **NO-GO**.
 - On source-review remediation code: Linux P3.4/P3.5/P3.6 focused tests, macOS native Pyright/decision suite and Sextant targeted tests passed. The native Python 3.10 managed fast suite passed; review-policy and new-file pre-commit checks were rerun separately.
 - Sextant trusted Binnacle source-subset verification selects exactly 18 reviewed Python source files and five semantic gold methods, with inputs transferred by hash into disposable workspaces. [Post-review real-subset performance report](p3-5-reviewed-real-subset-2026-10-23.md) includes single- and dual-resident native resource results; these remain **not** a whole-repository or production resource admission certificate.
 - This checkpoint does not authorize public MCP tools, release, upstream multilspy merge, or production deployment; an updated hosted CI check and final independent attestation pipeline remain outstanding.
+
+## Follow-up GitHub CI security and Python 3.12 diagnosis — 2026-10-23
+
+- GitHub run [39798989503](https://github.com/grammy-jiang/binnacle/actions/runs/39798989503)
+  passed Python 3.10/3.11/3.14, Packaging and Coverage, but failed both
+  Code Quality and Python 3.12.
+- Code Quality's manual whole-history Gitleaks scan reported one
+  `generic-api-key` match in the new P3.5 reviewed-source manifest. The
+  purported key is in fact the exact lower-case 64-byte SHA-256 digest
+  of `src/binnacle/features/development_intelligence/lsp_workspace_access.py`;
+  independently recomputing the file SHA-256 matched the stored value.
+  The sole `.gitleaksignore` entry is scoped to the *exact historical commit,
+  path, line and detection rule*, not a global secret-scan disablement.
+  Full local reachable history scan still finds **zero unignored hits**.
+- Python 3.12 failed the same independent synthetic guardian journal lease
+  timing race seen previously on Python 3.10, in another Issue #30 negative
+  test. Its fixture now uses the existing bounded, narrow retry only for
+  the exact expected temporary lease-conflict error; production observer
+  `inspect_unowned_transaction()` remains strictly nonblocking.
+- A fresh P3.4 opt-in full native recheck on this code returned **nine pass,
+  one absent** with current script SHA-256 matching the raw report.
+
+**Still open:** new-hosted-CI confirmation, P3.3 OS isolation, and P3.6
+independent source authentication. No READ enablement, deployment or merge.

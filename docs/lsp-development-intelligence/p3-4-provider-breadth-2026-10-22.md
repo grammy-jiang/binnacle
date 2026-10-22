@@ -222,3 +222,15 @@ the integrated working source; this supersedes the original Sextant report
 for source identity while retaining the latter as historical evidence.
 This is synthetic, trust-only QA. It does not imply OS confinement, full
 multilspy adapter execution, or P3.6 resource acceptance.
+
+## Postreview native fixture status, 2026-10-23
+
+The actual P3.3–P3.6 follow-up candidate runs P3.4 with stricter side-effect
+gating: an installed provider passes only if its fixture is unchanged, the
+workspace contains no unexpected file, a reviewed semantic gold succeeded,
+and the session/cleanup completed safely. Re-running all ten synthetic
+provider profiles resulted in **9 pass, 1 not installed, 0 failures**.
+All four probe script SHA-256 values in the
+[postreview raw report](p3-4-breadth-native-postreview-2026-10-23.json)
+match their actual source bytes. This remains opt-in synthetic/private
+provider evidence, **not** an OS sandbox certificate or READ authorization.

@@ -1,0 +1,1464 @@
+{
+  "baseline": "66697d2",
+  "evidence": "opt-in native QA; synthetic; not shipped; P3.3 READ NO-GO",
+  "limits": {
+    "escaped_descendants": "unverified",
+    "full_dependency_identity": "not_audited",
+    "network_confinement": false,
+    "service_path": "not_checked"
+  },
+  "platform": {
+    "machine": "aarch64",
+    "python": "3.13.16",
+    "system": "Linux"
+  },
+  "providers": [
+    {
+      "adapter": {
+        "adapter_source_sha256": "4c87cd13d414107967a12b8266ba798afea4b4019080d108837f290e621f1a88",
+        "class": "TypeScriptLanguageServer",
+        "distribution_version": "0.1.1",
+        "initialize_template_sha256": "4e03e4ee915f1f20ed8084c4b4cb82ba93665e7db9563d8e1314761d7f1f0ad5",
+        "revision": "08ba0dbe60b6e0a3eff4796cb77ff5c0837bc892",
+        "status": "constructor_pass_session_unprobed"
+      },
+      "advertised": [
+        "definitionProvider",
+        "referencesProvider",
+        "hoverProvider",
+        "documentSymbolProvider",
+        "workspaceSymbolProvider",
+        "typeDefinitionProvider",
+        "implementationProvider",
+        "completionProvider",
+        "signatureHelpProvider",
+        "renameProvider",
+        "codeActionProvider",
+        "documentFormattingProvider",
+        "semanticTokensProvider",
+        "inlayHintProvider"
+      ],
+      "argv": [
+        "typescript-language-server",
+        "--stdio"
+      ],
+      "capability_snapshot": {
+        "codeActionProvider": true,
+        "completionProvider": {
+          "resolveProvider": true,
+          "triggerCharacters": [
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>"
+          ]
+        },
+        "definitionProvider": true,
+        "documentFormattingProvider": true,
+        "documentSymbolProvider": true,
+        "executeCommandProvider": {
+          "commands": [
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>"
+          ]
+        },
+        "foldingRangeProvider": true,
+        "hoverProvider": true,
+        "implementationProvider": true,
+        "inlayHintProvider": true,
+        "redacted_extension_count": 4,
+        "referencesProvider": true,
+        "renameProvider": true,
+        "selectionRangeProvider": true,
+        "semanticTokensProvider": {
+          "full": true,
+          "legend": {
+            "tokenModifiers": [
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>"
+            ],
+            "tokenTypes": [
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>"
+            ]
+          },
+          "range": true,
+          "redacted_extension_count": 1
+        },
+        "signatureHelpProvider": {
+          "redacted_extension_count": 1,
+          "triggerCharacters": [
+            "<string>",
+            "<string>",
+            "<string>"
+          ]
+        },
+        "textDocumentSync": 2,
+        "typeDefinitionProvider": true,
+        "workspace": {
+          "redacted_extension_count": 1
+        },
+        "workspaceSymbolProvider": true
+      },
+      "classification": "benchmark_only",
+      "cleanup": "group_signaled_leader_reaped",
+      "definition": "fixture_pass",
+      "document_symbol": "fixture_pass",
+      "exit": "pass",
+      "extra_workspace_entries": 0,
+      "fixture_files_unchanged": true,
+      "fixture_sha256": "880ddbbe0ee2bc48956c1430ddb29351ab776819d6244d849e0f4ac7352b1755",
+      "identity": {
+        "executable_sha256": "146b113929fd41f12fbe7342ba493adce2bf82a07cdc791d0b9678a17572bc46",
+        "package_manifest_sha256": "aa2ab5a5d765774cbdfdd53cb188d6a6a5749d6f65629bf7c411a3cef6902e79",
+        "version": "6.0.0",
+        "version_source": "package.json"
+      },
+      "initialize": "pass",
+      "initialize_inputs": {
+        "capabilities": {
+          "general": {
+            "positionEncodings": [
+              "utf-16"
+            ]
+          },
+          "textDocument": {
+            "documentSymbol": {
+              "hierarchicalDocumentSymbolSupport": true
+            }
+          },
+          "workspace": {
+            "configuration": true,
+            "workspaceFolders": true
+          }
+        },
+        "options": {
+          "disableAutomaticTypingAcquisition": true,
+          "plugins": [],
+          "tsserver": {
+            "path": "<installed-typescript>/lib/tsserver.js",
+            "useSyntaxServer": "never"
+          }
+        },
+        "settings": {}
+      },
+      "node_identity": {
+        "sha256": "3e53e5ff5eaa922f1b4308312d50da9091db62d40b87716ad36c60b347e7f984",
+        "version": "24.19.0"
+      },
+      "not_advertised": [
+        "declarationProvider",
+        "callHierarchyProvider",
+        "diagnosticProvider"
+      ],
+      "position_encoding": "utf-16",
+      "provider": "typescript",
+      "read_eligible": false,
+      "reverse_requests_denied": 0,
+      "shutdown": "pass",
+      "status": "pass",
+      "typescript_identity": {
+        "executable_sha256": "e3ccfeec65ec5c470b8ffc5611878a31182650c7e8a062c38a719f83b523edcb",
+        "package_manifest_sha256": "9332e97c30d3e53ed54910b89207ed657fb444066484df6e5b6965bf130865e9",
+        "payload_sha256": "1992fc3518a4aa5443638a25794281995ec3ce84820692713296262997d5443b",
+        "version": "6.0.3",
+        "version_source": "package.json"
+      }
+    },
+    {
+      "adapter": {
+        "adapter_source_sha256": "4c87cd13d414107967a12b8266ba798afea4b4019080d108837f290e621f1a88",
+        "class": "TypeScriptLanguageServer",
+        "distribution_version": "0.1.1",
+        "initialize_template_sha256": "4e03e4ee915f1f20ed8084c4b4cb82ba93665e7db9563d8e1314761d7f1f0ad5",
+        "revision": "08ba0dbe60b6e0a3eff4796cb77ff5c0837bc892",
+        "status": "constructor_pass_session_unprobed"
+      },
+      "advertised": [
+        "definitionProvider",
+        "referencesProvider",
+        "hoverProvider",
+        "documentSymbolProvider",
+        "workspaceSymbolProvider",
+        "typeDefinitionProvider",
+        "implementationProvider",
+        "completionProvider",
+        "signatureHelpProvider",
+        "renameProvider",
+        "codeActionProvider",
+        "documentFormattingProvider",
+        "semanticTokensProvider",
+        "inlayHintProvider"
+      ],
+      "argv": [
+        "typescript-language-server",
+        "--stdio"
+      ],
+      "capability_snapshot": {
+        "codeActionProvider": true,
+        "completionProvider": {
+          "resolveProvider": true,
+          "triggerCharacters": [
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>"
+          ]
+        },
+        "definitionProvider": true,
+        "documentFormattingProvider": true,
+        "documentSymbolProvider": true,
+        "executeCommandProvider": {
+          "commands": [
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>"
+          ]
+        },
+        "foldingRangeProvider": true,
+        "hoverProvider": true,
+        "implementationProvider": true,
+        "inlayHintProvider": true,
+        "redacted_extension_count": 4,
+        "referencesProvider": true,
+        "renameProvider": true,
+        "selectionRangeProvider": true,
+        "semanticTokensProvider": {
+          "full": true,
+          "legend": {
+            "tokenModifiers": [
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>"
+            ],
+            "tokenTypes": [
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>"
+            ]
+          },
+          "range": true,
+          "redacted_extension_count": 1
+        },
+        "signatureHelpProvider": {
+          "redacted_extension_count": 1,
+          "triggerCharacters": [
+            "<string>",
+            "<string>",
+            "<string>"
+          ]
+        },
+        "textDocumentSync": 2,
+        "typeDefinitionProvider": true,
+        "workspace": {
+          "redacted_extension_count": 1
+        },
+        "workspaceSymbolProvider": true
+      },
+      "classification": "benchmark_only",
+      "cleanup": "group_signaled_leader_reaped",
+      "definition": "fixture_pass",
+      "document_symbol": "fixture_pass",
+      "exit": "pass",
+      "extra_workspace_entries": 0,
+      "fixture_files_unchanged": true,
+      "fixture_sha256": "4ad99b4df05c9f8f53748a4e7eab96f3cfc9ce439aa512e9981ece689114020d",
+      "identity": {
+        "executable_sha256": "146b113929fd41f12fbe7342ba493adce2bf82a07cdc791d0b9678a17572bc46",
+        "package_manifest_sha256": "aa2ab5a5d765774cbdfdd53cb188d6a6a5749d6f65629bf7c411a3cef6902e79",
+        "version": "6.0.0",
+        "version_source": "package.json"
+      },
+      "initialize": "pass",
+      "initialize_inputs": {
+        "capabilities": {
+          "general": {
+            "positionEncodings": [
+              "utf-16"
+            ]
+          },
+          "textDocument": {
+            "documentSymbol": {
+              "hierarchicalDocumentSymbolSupport": true
+            }
+          },
+          "workspace": {
+            "configuration": true,
+            "workspaceFolders": true
+          }
+        },
+        "options": {
+          "disableAutomaticTypingAcquisition": true,
+          "plugins": [],
+          "tsserver": {
+            "path": "<installed-typescript>/lib/tsserver.js",
+            "useSyntaxServer": "never"
+          }
+        },
+        "settings": {}
+      },
+      "node_identity": {
+        "sha256": "3e53e5ff5eaa922f1b4308312d50da9091db62d40b87716ad36c60b347e7f984",
+        "version": "24.19.0"
+      },
+      "not_advertised": [
+        "declarationProvider",
+        "callHierarchyProvider",
+        "diagnosticProvider"
+      ],
+      "position_encoding": "utf-16",
+      "provider": "javascript",
+      "read_eligible": false,
+      "reverse_requests_denied": 0,
+      "shutdown": "pass",
+      "status": "pass",
+      "typescript_identity": {
+        "executable_sha256": "e3ccfeec65ec5c470b8ffc5611878a31182650c7e8a062c38a719f83b523edcb",
+        "package_manifest_sha256": "9332e97c30d3e53ed54910b89207ed657fb444066484df6e5b6965bf130865e9",
+        "payload_sha256": "1992fc3518a4aa5443638a25794281995ec3ce84820692713296262997d5443b",
+        "version": "6.0.3",
+        "version_source": "package.json"
+      }
+    },
+    {
+      "adapter": {
+        "adapter_source_sha256": "d45abfeb9f51ee13c12b2b6b27521eadd5a39ed04df0eff5d8cda9ba733c72ce",
+        "class": "ClangdLanguageServer",
+        "distribution_version": "0.1.1",
+        "initialize_template_sha256": "3cb4ffbfc835da291953bcea2e3b69fbf1b3e094c193dca5d12a3b49524818e1",
+        "revision": "08ba0dbe60b6e0a3eff4796cb77ff5c0837bc892",
+        "status": "constructor_pass_session_unprobed"
+      },
+      "advertised": [
+        "definitionProvider",
+        "declarationProvider",
+        "referencesProvider",
+        "hoverProvider",
+        "documentSymbolProvider",
+        "workspaceSymbolProvider",
+        "typeDefinitionProvider",
+        "implementationProvider",
+        "callHierarchyProvider",
+        "completionProvider",
+        "signatureHelpProvider",
+        "renameProvider",
+        "codeActionProvider",
+        "documentFormattingProvider",
+        "semanticTokensProvider",
+        "inlayHintProvider"
+      ],
+      "argv": [
+        "clangd",
+        "--background-index=false",
+        "--clang-tidy=false",
+        "--enable-config=false",
+        "--pch-storage=memory",
+        "-j=1"
+      ],
+      "capability_snapshot": {
+        "callHierarchyProvider": true,
+        "codeActionProvider": true,
+        "completionProvider": {
+          "resolveProvider": false,
+          "triggerCharacters": [
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>"
+          ]
+        },
+        "declarationProvider": true,
+        "definitionProvider": true,
+        "documentFormattingProvider": true,
+        "documentLinkProvider": {
+          "resolveProvider": false
+        },
+        "documentSymbolProvider": true,
+        "executeCommandProvider": {
+          "commands": [
+            "<string>",
+            "<string>",
+            "<string>"
+          ]
+        },
+        "foldingRangeProvider": true,
+        "hoverProvider": true,
+        "implementationProvider": true,
+        "inlayHintProvider": true,
+        "redacted_extension_count": 10,
+        "referencesProvider": true,
+        "renameProvider": true,
+        "selectionRangeProvider": true,
+        "semanticTokensProvider": {
+          "full": {
+            "delta": true
+          },
+          "legend": {
+            "tokenModifiers": [
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>"
+            ],
+            "tokenTypes": [
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>"
+            ]
+          },
+          "range": false
+        },
+        "signatureHelpProvider": {
+          "triggerCharacters": [
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>"
+          ]
+        },
+        "textDocumentSync": {
+          "change": 2,
+          "openClose": true,
+          "save": true
+        },
+        "typeDefinitionProvider": true,
+        "workspaceSymbolProvider": true
+      },
+      "classification": "benchmark_only",
+      "cleanup": "group_signaled_leader_reaped",
+      "definition": "fixture_pass",
+      "document_symbol": "fixture_pass",
+      "exit": "pass",
+      "extra_workspace_entries": 0,
+      "fixture_files_unchanged": true,
+      "fixture_sha256": "391e2d40e6f8072eb2657050f36c5726d005379d85a58705ddf92defd78b45a4",
+      "identity": {
+        "executable_sha256": "7e233931e6ee410613daeddb2db2f0aa683ba896b83353432cf20f7d20a4e8fe",
+        "version": "19.1.7",
+        "version_source": "bounded_version_command"
+      },
+      "initialize": "pass",
+      "initialize_inputs": {
+        "capabilities": {
+          "general": {
+            "positionEncodings": [
+              "utf-16"
+            ]
+          },
+          "textDocument": {
+            "documentSymbol": {
+              "hierarchicalDocumentSymbolSupport": true
+            }
+          },
+          "workspace": {
+            "configuration": true,
+            "workspaceFolders": true
+          }
+        },
+        "options": {},
+        "settings": {}
+      },
+      "not_advertised": [
+        "diagnosticProvider"
+      ],
+      "position_encoding": "utf-16",
+      "provider": "c",
+      "read_eligible": false,
+      "reverse_requests_denied": 0,
+      "shutdown": "pass",
+      "status": "pass"
+    },
+    {
+      "adapter": {
+        "adapter_source_sha256": "d45abfeb9f51ee13c12b2b6b27521eadd5a39ed04df0eff5d8cda9ba733c72ce",
+        "class": "ClangdLanguageServer",
+        "distribution_version": "0.1.1",
+        "initialize_template_sha256": "3cb4ffbfc835da291953bcea2e3b69fbf1b3e094c193dca5d12a3b49524818e1",
+        "revision": "08ba0dbe60b6e0a3eff4796cb77ff5c0837bc892",
+        "status": "constructor_pass_session_unprobed"
+      },
+      "advertised": [
+        "definitionProvider",
+        "declarationProvider",
+        "referencesProvider",
+        "hoverProvider",
+        "documentSymbolProvider",
+        "workspaceSymbolProvider",
+        "typeDefinitionProvider",
+        "implementationProvider",
+        "callHierarchyProvider",
+        "completionProvider",
+        "signatureHelpProvider",
+        "renameProvider",
+        "codeActionProvider",
+        "documentFormattingProvider",
+        "semanticTokensProvider",
+        "inlayHintProvider"
+      ],
+      "argv": [
+        "clangd",
+        "--background-index=false",
+        "--clang-tidy=false",
+        "--enable-config=false",
+        "--pch-storage=memory",
+        "-j=1"
+      ],
+      "capability_snapshot": {
+        "callHierarchyProvider": true,
+        "codeActionProvider": true,
+        "completionProvider": {
+          "resolveProvider": false,
+          "triggerCharacters": [
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>"
+          ]
+        },
+        "declarationProvider": true,
+        "definitionProvider": true,
+        "documentFormattingProvider": true,
+        "documentLinkProvider": {
+          "resolveProvider": false
+        },
+        "documentSymbolProvider": true,
+        "executeCommandProvider": {
+          "commands": [
+            "<string>",
+            "<string>",
+            "<string>"
+          ]
+        },
+        "foldingRangeProvider": true,
+        "hoverProvider": true,
+        "implementationProvider": true,
+        "inlayHintProvider": true,
+        "redacted_extension_count": 10,
+        "referencesProvider": true,
+        "renameProvider": true,
+        "selectionRangeProvider": true,
+        "semanticTokensProvider": {
+          "full": {
+            "delta": true
+          },
+          "legend": {
+            "tokenModifiers": [
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>"
+            ],
+            "tokenTypes": [
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>"
+            ]
+          },
+          "range": false
+        },
+        "signatureHelpProvider": {
+          "triggerCharacters": [
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>"
+          ]
+        },
+        "textDocumentSync": {
+          "change": 2,
+          "openClose": true,
+          "save": true
+        },
+        "typeDefinitionProvider": true,
+        "workspaceSymbolProvider": true
+      },
+      "classification": "benchmark_only",
+      "cleanup": "group_signaled_leader_reaped",
+      "definition": "fixture_pass",
+      "document_symbol": "fixture_pass",
+      "exit": "pass",
+      "extra_workspace_entries": 0,
+      "fixture_files_unchanged": true,
+      "fixture_sha256": "4bed524e3e5b5f1899177ef7510ce51089ae96f138d81956c185585e8aa9b67e",
+      "identity": {
+        "executable_sha256": "7e233931e6ee410613daeddb2db2f0aa683ba896b83353432cf20f7d20a4e8fe",
+        "version": "19.1.7",
+        "version_source": "bounded_version_command"
+      },
+      "initialize": "pass",
+      "initialize_inputs": {
+        "capabilities": {
+          "general": {
+            "positionEncodings": [
+              "utf-16"
+            ]
+          },
+          "textDocument": {
+            "documentSymbol": {
+              "hierarchicalDocumentSymbolSupport": true
+            }
+          },
+          "workspace": {
+            "configuration": true,
+            "workspaceFolders": true
+          }
+        },
+        "options": {},
+        "settings": {}
+      },
+      "not_advertised": [
+        "diagnosticProvider"
+      ],
+      "position_encoding": "utf-16",
+      "provider": "cpp",
+      "read_eligible": false,
+      "reverse_requests_denied": 0,
+      "shutdown": "pass",
+      "status": "pass"
+    },
+    {
+      "adapter": {
+        "adapter_source_sha256": "19aca7bbb15f8603a09bbbdd81e2e1b360b2703b66e3680892630d2d4d98cd24",
+        "class": "RustAnalyzer",
+        "distribution_version": "0.1.1",
+        "initialize_template_sha256": "6246df865687534c6a9ad43ad0daa3cfc89daa3b2ddb98786ad353bcf6ceda2b",
+        "revision": "08ba0dbe60b6e0a3eff4796cb77ff5c0837bc892",
+        "status": "constructor_pass_session_unprobed"
+      },
+      "advertised": [
+        "definitionProvider",
+        "declarationProvider",
+        "referencesProvider",
+        "hoverProvider",
+        "documentSymbolProvider",
+        "workspaceSymbolProvider",
+        "typeDefinitionProvider",
+        "implementationProvider",
+        "callHierarchyProvider",
+        "diagnosticProvider",
+        "completionProvider",
+        "signatureHelpProvider",
+        "renameProvider",
+        "codeActionProvider",
+        "documentFormattingProvider",
+        "semanticTokensProvider",
+        "inlayHintProvider"
+      ],
+      "argv": [
+        "rust-analyzer"
+      ],
+      "capability_snapshot": {
+        "callHierarchyProvider": true,
+        "codeActionProvider": true,
+        "completionProvider": {
+          "completionItem": {
+            "labelDetailsSupport": false
+          },
+          "resolveProvider": false,
+          "triggerCharacters": [
+            "<string>",
+            "<string>",
+            "<string>",
+            "<string>"
+          ]
+        },
+        "declarationProvider": true,
+        "definitionProvider": true,
+        "diagnosticProvider": {
+          "interFileDependencies": true,
+          "redacted_extension_count": 1,
+          "workspaceDiagnostics": false
+        },
+        "documentFormattingProvider": true,
+        "documentSymbolProvider": true,
+        "experimental": {
+          "redacted_extension_count": 12
+        },
+        "foldingRangeProvider": true,
+        "hoverProvider": true,
+        "implementationProvider": true,
+        "inlayHintProvider": {
+          "resolveProvider": false
+        },
+        "positionEncoding": "<string>",
+        "redacted_extension_count": 4,
+        "referencesProvider": true,
+        "renameProvider": {
+          "prepareProvider": true
+        },
+        "selectionRangeProvider": true,
+        "semanticTokensProvider": {
+          "full": {
+            "delta": true
+          },
+          "legend": {
+            "tokenModifiers": [
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>"
+            ],
+            "tokenTypes": [
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>",
+              "<string>"
+            ]
+          },
+          "range": true
+        },
+        "signatureHelpProvider": {
+          "triggerCharacters": [
+            "<string>",
+            "<string>",
+            "<string>"
+          ]
+        },
+        "textDocumentSync": {
+          "change": 2,
+          "openClose": true,
+          "save": {}
+        },
+        "typeDefinitionProvider": true,
+        "workspace": {
+          "redacted_extension_count": 1,
+          "workspaceFolders": {
+            "changeNotifications": true,
+            "supported": true
+          }
+        },
+        "workspaceSymbolProvider": true
+      },
+      "classification": "benchmark_only",
+      "cleanup": "group_signaled_leader_reaped",
+      "definition": "unprobed",
+      "document_symbol": "fixture_pass",
+      "exit": "pass",
+      "extra_workspace_entries": 0,
+      "fixture_files_unchanged": true,
+      "fixture_sha256": "ea9d2d3e47a7029b7f3fdc36b193fe2838a08622cac60d963d70f84f69474700",
+      "identity": {
+        "executable_sha256": "9af7a48919c41e899ca30bcec333341caeb351ecc1a93ff43a5851cf38ae50f0",
+        "version": "0.3.3016-standalone",
+        "version_source": "initialize.serverInfo"
+      },
+      "initialize": "pass",
+      "initialize_inputs": {
+        "capabilities": {
+          "general": {
+            "positionEncodings": [
+              "utf-16"
+            ]
+          },
+          "textDocument": {
+            "documentSymbol": {
+              "hierarchicalDocumentSymbolSupport": true
+            }
+          },
+          "workspace": {
+            "configuration": true,
+            "workspaceFolders": true
+          }
+        },
+        "options": {
+          "cargo": {
+            "buildScripts": {
+              "enable": false
+            },
+            "sysroot": null
+          },
+          "check": {
+            "enable": false
+          },
+          "checkOnSave": false,
+          "detachedFiles": [
+            "<fixture>/main.rs"
+          ],
+          "linkedProjects": [],
+          "procMacro": {
+            "enable": false
+          }
+        },
+        "settings": {}
+      },
+      "not_advertised": [],
+      "position_encoding": "utf-16",
+      "provider": "rust",
+      "read_eligible": false,
+      "reverse_requests_denied": 0,
+      "shutdown": "pass",
+      "status": "pass"
+    },
+    {
+      "adapter": {
+        "status": "no_upstream_adapter"
+      },
+      "advertised": [
+        "definitionProvider",
+        "referencesProvider",
+        "hoverProvider",
+        "documentSymbolProvider",
+        "workspaceSymbolProvider",
+        "completionProvider",
+        "renameProvider",
+        "codeActionProvider",
+        "semanticTokensProvider"
+      ],
+      "argv": [
+        "marksman",
+        "server"
+      ],
+      "capability_snapshot": {
+        "codeActionProvider": {
+          "resolveProvider": false
+        },
+        "completionProvider": {
+          "triggerCharacters": [
+            "<string>",
+            "<string>",
+            "<string>"
+          ]
+        },
+        "definitionProvider": true,
+        "documentSymbolProvider": true,
+        "executeCommandProvider": {
+          "commands": []
+        },
+        "hoverProvider": true,
+        "redacted_extension_count": 1,
+        "referencesProvider": true,
+        "renameProvider": true,
+        "semanticTokensProvider": {
+          "full": {
+            "delta": false
+          },
+          "legend": {
+            "tokenModifiers": [],
+            "tokenTypes": [
+              "<string>",
+              "<string>",
+              "<string>"
+            ]
+          },
+          "range": true
+        },
+        "textDocumentSync": {
+          "change": 1,
+          "openClose": true
+        },
+        "workspace": {
+          "redacted_extension_count": 1,
+          "workspaceFolders": {
+            "changeNotifications": true,
+            "supported": true
+          }
+        },
+        "workspaceSymbolProvider": true
+      },
+      "classification": "benchmark_only",
+      "cleanup": "group_signaled_leader_reaped",
+      "definition": "unprobed",
+      "document_symbol": "fixture_pass",
+      "exit": "pass",
+      "extra_workspace_entries": 0,
+      "fixture_files_unchanged": true,
+      "fixture_sha256": "82016563df9ef3582072927745dce35b8c59d8035e68738968ae787b3ca654d6",
+      "identity": {
+        "executable_sha256": "db8e124527f7f8048e3e6c91821b9c52ef173d92c01e47d221bf1337afd962fb",
+        "version": "2026-02-08",
+        "version_source": "bounded_version_command"
+      },
+      "initialize": "pass",
+      "initialize_inputs": {
+        "capabilities": {
+          "general": {
+            "positionEncodings": [
+              "utf-16"
+            ]
+          },
+          "textDocument": {
+            "documentSymbol": {
+              "hierarchicalDocumentSymbolSupport": true
+            }
+          },
+          "workspace": {
+            "configuration": true,
+            "workspaceFolders": true
+          }
+        },
+        "options": {},
+        "settings": {}
+      },
+      "not_advertised": [
+        "declarationProvider",
+        "typeDefinitionProvider",
+        "implementationProvider",
+        "callHierarchyProvider",
+        "diagnosticProvider",
+        "signatureHelpProvider",
+        "documentFormattingProvider",
+        "inlayHintProvider"
+      ],
+      "position_encoding": "utf-16",
+      "provider": "markdown",
+      "read_eligible": false,
+      "reverse_requests_denied": 0,
+      "shutdown": "pass",
+      "status": "pass"
+    },
+    {
+      "adapter": {
+        "status": "no_upstream_adapter"
+      },
+      "advertised": [
+        "definitionProvider",
+        "referencesProvider",
+        "hoverProvider",
+        "documentSymbolProvider",
+        "workspaceSymbolProvider",
+        "completionProvider",
+        "renameProvider",
+        "codeActionProvider",
+        "documentFormattingProvider"
+      ],
+      "argv": [
+        "bash-language-server",
+        "start"
+      ],
+      "capability_snapshot": {
+        "codeActionProvider": {
+          "codeActionKinds": [
+            "<string>"
+          ],
+          "resolveProvider": false,
+          "workDoneProgress": false
+        },
+        "completionProvider": {
+          "resolveProvider": true,
+          "triggerCharacters": [
+            "<string>",
+            "<string>"
+          ]
+        },
+        "definitionProvider": true,
+        "documentFormattingProvider": true,
+        "documentSymbolProvider": true,
+        "hoverProvider": true,
+        "redacted_extension_count": 1,
+        "referencesProvider": true,
+        "renameProvider": {
+          "prepareProvider": true
+        },
+        "textDocumentSync": 1,
+        "workspaceSymbolProvider": true
+      },
+      "classification": "benchmark_only",
+      "cleanup": "group_signaled_leader_reaped",
+      "definition": "unprobed",
+      "document_symbol": "fixture_pass",
+      "exit": "pass",
+      "extra_workspace_entries": 0,
+      "fixture_files_unchanged": true,
+      "fixture_sha256": "c98a9131d599c8264c45d57ddfa2f3a03c1211994777c9ab0c20be1f93aaa582",
+      "identity": {
+        "executable_sha256": "9b40161b305793636fa6c3649c292b28a077a5200483b51ea57cc7e8f25211ad",
+        "package_manifest_sha256": "ba540bbddd73097ba8ae89c1ddef0d031a2212064c8532f10b2437fd469415f5",
+        "version": "5.6.0",
+        "version_source": "package.json"
+      },
+      "initialize": "pass",
+      "initialize_inputs": {
+        "capabilities": {
+          "general": {
+            "positionEncodings": [
+              "utf-16"
+            ]
+          },
+          "textDocument": {
+            "documentSymbol": {
+              "hierarchicalDocumentSymbolSupport": true
+            }
+          },
+          "workspace": {
+            "configuration": true,
+            "workspaceFolders": true
+          }
+        },
+        "options": {},
+        "settings": {
+          "bashIde": {
+            "backgroundAnalysisMaxFiles": 0,
+            "explainshellEndpoint": "",
+            "shellcheckPath": "",
+            "shfmt": {
+              "path": ""
+            }
+          }
+        }
+      },
+      "node_identity": {
+        "sha256": "3e53e5ff5eaa922f1b4308312d50da9091db62d40b87716ad36c60b347e7f984",
+        "version": "24.19.0"
+      },
+      "not_advertised": [
+        "declarationProvider",
+        "typeDefinitionProvider",
+        "implementationProvider",
+        "callHierarchyProvider",
+        "diagnosticProvider",
+        "signatureHelpProvider",
+        "semanticTokensProvider",
+        "inlayHintProvider"
+      ],
+      "position_encoding": "utf-16",
+      "provider": "bash",
+      "read_eligible": false,
+      "readiness": "document_diagnostics_received_not_completeness_proof",
+      "reverse_requests_denied": 0,
+      "shutdown": "pass",
+      "status": "pass"
+    },
+    {
+      "alternate_make_ls": "present_unreviewed_not_launched",
+      "classification": "benchmark_only",
+      "initialize": "unprobed",
+      "provider": "make",
+      "read_eligible": false,
+      "requested_executable": "make-language-server",
+      "shutdown": "unprobed",
+      "status": "not_installed"
+    },
+    {
+      "adapter": {
+        "status": "no_upstream_adapter"
+      },
+      "advertised": [
+        "definitionProvider",
+        "hoverProvider",
+        "documentSymbolProvider",
+        "completionProvider",
+        "renameProvider",
+        "codeActionProvider",
+        "documentFormattingProvider"
+      ],
+      "argv": [
+        "yaml-language-server",
+        "--stdio"
+      ],
+      "capability_snapshot": {
+        "codeActionProvider": true,
+        "completionProvider": {
+          "resolveProvider": false
+        },
+        "definitionProvider": true,
+        "documentFormattingProvider": true,
+        "documentLinkProvider": {},
+        "documentSymbolProvider": true,
+        "executeCommandProvider": {
+          "commands": [
+            "<string>"
+          ]
+        },
+        "foldingRangeProvider": true,
+        "hoverProvider": true,
+        "redacted_extension_count": 3,
+        "renameProvider": {
+          "prepareProvider": true
+        },
+        "selectionRangeProvider": true,
+        "textDocumentSync": 2,
+        "workspace": {
+          "workspaceFolders": {
+            "changeNotifications": true,
+            "supported": true
+          }
+        }
+      },
+      "classification": "benchmark_only",
+      "cleanup": "group_signaled_leader_reaped",
+      "definition": "unprobed",
+      "document_symbol": "fixture_pass",
+      "exit": "pass",
+      "extra_workspace_entries": 0,
+      "fixture_files_unchanged": true,
+      "fixture_sha256": "a956b22605a079f5404b7eaf1ebe7fb108ced7c3135885cef1ded7f3275c2763",
+      "identity": {
+        "executable_sha256": "93e9cff3dee44232379f0bccb98dd96d042a4472fe648ac9d4f85633e32c7e8d",
+        "package_manifest_sha256": "849b8cdbc0622d53a8c8be5ae82cc0220b91fe1b05c84f113de0b1523ea110e1",
+        "version": "1.24.0",
+        "version_source": "initialize.serverInfo"
+      },
+      "initialize": "pass",
+      "initialize_inputs": {
+        "capabilities": {
+          "general": {
+            "positionEncodings": [
+              "utf-16"
+            ]
+          },
+          "textDocument": {
+            "documentSymbol": {
+              "hierarchicalDocumentSymbolSupport": true
+            }
+          },
+          "workspace": {
+            "configuration": true,
+            "workspaceFolders": true
+          }
+        },
+        "options": {},
+        "settings": {
+          "http": {
+            "proxy": "",
+            "proxyStrictSSL": true
+          },
+          "yaml": {
+            "format": {
+              "enable": false
+            },
+            "kubernetesCRDStore": {
+              "enable": false
+            },
+            "schemaStore": {
+              "enable": false
+            },
+            "schemas": {},
+            "validate": true
+          }
+        }
+      },
+      "node_identity": {
+        "sha256": "3e53e5ff5eaa922f1b4308312d50da9091db62d40b87716ad36c60b347e7f984",
+        "version": "24.19.0"
+      },
+      "not_advertised": [
+        "declarationProvider",
+        "referencesProvider",
+        "workspaceSymbolProvider",
+        "typeDefinitionProvider",
+        "implementationProvider",
+        "callHierarchyProvider",
+        "diagnosticProvider",
+        "signatureHelpProvider",
+        "semanticTokensProvider",
+        "inlayHintProvider"
+      ],
+      "position_encoding": "utf-16",
+      "provider": "yaml",
+      "read_eligible": false,
+      "reverse_requests_denied": 0,
+      "shutdown": "pass",
+      "status": "pass"
+    },
+    {
+      "adapter": {
+        "status": "no_upstream_adapter"
+      },
+      "advertised": [
+        "hoverProvider",
+        "documentSymbolProvider",
+        "diagnosticProvider",
+        "codeActionProvider"
+      ],
+      "argv": [
+        "vscode-json-language-server",
+        "--stdio"
+      ],
+      "capability_snapshot": {
+        "codeActionProvider": true,
+        "colorProvider": {},
+        "diagnosticProvider": {
+          "interFileDependencies": false,
+          "redacted_extension_count": 1,
+          "workspaceDiagnostics": false
+        },
+        "documentFormattingProvider": false,
+        "documentLinkProvider": {},
+        "documentSymbolProvider": true,
+        "foldingRangeProvider": true,
+        "hoverProvider": true,
+        "redacted_extension_count": 1,
+        "selectionRangeProvider": true,
+        "textDocumentSync": 2
+      },
+      "classification": "benchmark_only",
+      "cleanup": "group_signaled_leader_reaped",
+      "definition": "unprobed",
+      "document_symbol": "fixture_pass",
+      "exit": "pass",
+      "extra_workspace_entries": 0,
+      "fixture_files_unchanged": true,
+      "fixture_sha256": "c5ba229707da6673accdce261127ceca3bcda9f7813127d67602035ca824c3df",
+      "identity": {
+        "executable_sha256": "8a9dc4ab378de995aadd8ab25e13450eb8a27b6e0e8dc47fecb41a7b57488c26",
+        "package_manifest_sha256": "800386607018178fdbdd5fbc141bc713572f50cb995ad6ccc9ef9c6332e5a47f",
+        "version": "4.10.0",
+        "version_source": "package.json"
+      },
+      "initialize": "pass",
+      "initialize_inputs": {
+        "capabilities": {
+          "general": {
+            "positionEncodings": [
+              "utf-16"
+            ]
+          },
+          "textDocument": {
+            "documentSymbol": {
+              "hierarchicalDocumentSymbolSupport": true
+            }
+          },
+          "workspace": {
+            "configuration": true,
+            "workspaceFolders": true
+          }
+        },
+        "options": {},
+        "settings": {
+          "json": {
+            "format": {
+              "enable": false
+            },
+            "schemaDownload": {
+              "enable": false
+            },
+            "schemas": []
+          }
+        }
+      },
+      "node_identity": {
+        "sha256": "3e53e5ff5eaa922f1b4308312d50da9091db62d40b87716ad36c60b347e7f984",
+        "version": "24.19.0"
+      },
+      "not_advertised": [
+        "definitionProvider",
+        "declarationProvider",
+        "referencesProvider",
+        "workspaceSymbolProvider",
+        "typeDefinitionProvider",
+        "implementationProvider",
+        "callHierarchyProvider",
+        "completionProvider",
+        "signatureHelpProvider",
+        "renameProvider",
+        "documentFormattingProvider",
+        "semanticTokensProvider",
+        "inlayHintProvider"
+      ],
+      "position_encoding": "utf-16",
+      "provider": "json",
+      "read_eligible": false,
+      "reverse_requests_denied": 0,
+      "shutdown": "pass",
+      "status": "pass"
+    }
+  ],
+  "recorded_at_utc": "2026-10-22T15:03:27.130307+00:00",
+  "run_id": "725be8e5af164369a14708c4fad09aa2",
+  "schema": 1,
+  "script_sha256": {
+    "lsp_p34_breadth.py": "845b4bd1a003ebcce85e18f8aaa7e85d0e040484aa059d7c4ee1bc1167decaf4",
+    "lsp_p34_evidence.py": "35682b32a4335c07195d80583db9c3d5902b18a4f208cce03bcbb6cff0bb56ab",
+    "lsp_p34_fixtures.py": "e0cadf326671b6c1f4127ce02084cdcb8da4e77984bde1452c11b15d83e03f03",
+    "lsp_p34_wire.py": "dd3779fcf02da57c923457e8f025173f188e6499131178a9167970154ea1b415"
+  },
+  "timeout_seconds_per_session": 30.0
+}
