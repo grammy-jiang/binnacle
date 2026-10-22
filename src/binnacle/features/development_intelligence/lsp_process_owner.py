@@ -106,6 +106,13 @@ class PrivatePyrightProcessOwner:
     def closed(self) -> bool:
         return self._closed
 
+    @property
+    def process_running(self) -> bool:
+        """Liveness of the exact provider already owned by this instance."""
+        server = self._server
+        process = server.server.process if server is not None else None
+        return self._active and process is not None and process.returncode is None
+
     def _make_upstream_server(self) -> Any:
         """Import only the optional pinned fork, and only upon actual launch."""
         from multilspy import LanguageServer

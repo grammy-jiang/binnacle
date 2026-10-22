@@ -183,6 +183,11 @@ class AuthorizedWorkspace:
             os.close(root_handle)
         self.snapshot(self.source_file)  # reject missing/nonregular/unsafe targets now
 
+    @property
+    def root_identity(self) -> tuple[int, int]:
+        """Operator-authorized canonical root device/inode identity."""
+        return self._root_identity
+
     def _workspace_fd(self) -> int:
         handle = _open_directory(self._authority_root, self._workspace_parts)
         try:
