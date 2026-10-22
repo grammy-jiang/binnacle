@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import bz2
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,7 @@ from binnacle.platform.darwin.log_maintenance_observer import (
     inspect_unowned_transaction,
 )
 from binnacle.platform.darwin.log_maintenance_transaction import (
+    MaintenanceJournalRefused,
     MaintenanceTransactionJournal,
 )
 from tests.issue30_controller_real_components import (
@@ -68,6 +70,25 @@ def run(scenario, **updates):
 
 def snapshot(root: Path):
     return inspect_unowned_transaction(root / ("txn-" + NONCE))
+
+
+def snapshot_after_failed_controller(root: Path, *, timeout_s: float = 2):
+    """Wait for a cooperative synthetic guardian to release its short lease.
+
+    The real observer remains strictly nonblocking. Retry only its exact
+    existing-owner refusal for a bounded period; a permanently held lease
+    still fails, and no journal lock is broken or forcefully released.
+    """
+    deadline = time.monotonic() + timeout_s
+    while True:
+        try:
+            return snapshot(root)
+        except MaintenanceJournalRefused as exc:
+            if str(exc) != "existing controller still owns the journal lease":
+                raise
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.01)
 
 
 def assert_no_archive_mutation(root: Path) -> None:
@@ -335,8 +356,12 @@ def test_wrong_mcp_resumption_receipt_cannot_grant_complete(
     with pytest.raises(ControllerRefused, match="unowned"):
         run(scenario)
     assert actor.events.count("restore") == 1
-    assert snapshot(root).phase == "raw_pruned"
-    assert snapshot(root).production_authorized is False
+    # This fixture's guardian can briefly hold the journal after the
+    # controller refuses; wait for an actual unowned observation, not a
+    # controller lock bypass or a second inconsistent snapshot.
+    observed = snapshot_after_failed_controller(root)
+    assert observed.phase == "raw_pruned"
+    assert observed.production_authorized is False
     assert not (root / "guardian-disarm").exists()
 
 

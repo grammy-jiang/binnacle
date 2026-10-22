@@ -1,0 +1,311 @@
+{
+  "schema": "binnacle.p35/1",
+  "environment": {
+    "utc": "2026-10-22T14:38:58.708867+00:00",
+    "os": "Linux",
+    "os_release": "6.18.50+rpt-rpi-2712",
+    "architecture": "aarch64",
+    "python": "3.13.16",
+    "cpu_count": 4,
+    "load_average": [
+      0.0859375,
+      0.07177734375,
+      0.15380859375
+    ],
+    "binnacle_revision": "66697d280cc29991c4500e46eb2641ef91f84541",
+    "tracked_or_untracked_changes": true,
+    "harness_sha256": "ba8e03218e927736410d7e4d5da683dc5562c8b3b91fb519d260ee32f6497ede",
+    "uv_lock_sha256": "7c6d10455df2c98a262f21ee0ae7452c79f8139faf369a68184f1c70670bcc7b"
+  },
+  "authoritative_timings": false,
+  "quiet_host_attested": true,
+  "release_decision": "NOT_EVALUATED_READ_NO_GO",
+  "provider": {
+    "provider": "pyright",
+    "version": "1.1.413",
+    "source": "explicit_preinstalled_npm",
+    "artifact_sha256": {
+      "langserver.index.js": "f200762078eb9880faf421a5b30f9ef3055b1d85c6f10780d75db4da8d8499f1",
+      "package.json": "37cc437f98ce6b9339b1a3772e42487767d010ddf9920664dbf6b27b969debee",
+      "dist/pyright.js": "7668785b6020ddf018151da3dd4bdd10ca6b9782f0a31bb4130727200e57027b",
+      "dist/pyright-internal.js": "a8263ff39421126b91bbfe2135ae20b3f7723aec12f3fa37a3237cb0f429f115",
+      "dist/vendor.js": "aa87a73522f084f20bdc6fda2a75c91866ecef737630cb82c3b20621d78d9dea"
+    },
+    "multilspy_commit": "08ba0dbe60b6e0a3eff4796cb77ff5c0837bc892",
+    "initialize_template_sha256": "94995235ec831318396067447a1e9b9ce4cec01fe3c0970ee8800a0a405e9a45",
+    "node_version": "v24.19.0",
+    "node_executable_sha256": "3e53e5ff5eaa922f1b4308312d50da9091db62d40b87716ad36c60b347e7f984",
+    "command": [
+      "<trusted-pyright-langserver>",
+      "--stdio"
+    ],
+    "trust": "explicit_trust_only",
+    "read_release": "NO_GO"
+  },
+  "status": "completed",
+  "options": {
+    "repeats": 30,
+    "warmup": 3,
+    "concurrency": 1,
+    "instances": 1,
+    "deadline_s": 15.0,
+    "total_s": 150.0,
+    "sample_interval_s": 0.1,
+    "p95_budget_ms": 100,
+    "rss_budget_mib": 512
+  },
+  "corpus": {
+    "kind": "trusted_real_snapshot",
+    "revision": "ae545d13adc35bdb09f5772e259da7cc6120daf0",
+    "revision_semantics": "operator_declared_git_commit_content_verified_by_manifest",
+    "sha256": "2a537e5cf250f737a964372f8245ab5f20074ae1d3fdeee1ee4ad3fc719878b0",
+    "file_count": 19,
+    "bytes": 128076,
+    "gold_sha256": "94f3a35422f80707eddea130cb69ec7ce8431b777796d81676639db85df40f9a"
+  },
+  "sample_grade": "exploratory",
+  "operations": [
+    {
+      "case": 0,
+      "operation": "manager_definition",
+      "supported_instances": 1,
+      "settling": {
+        "correct": 3,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0
+      },
+      "warm": {
+        "correct": 30,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0,
+        "samples": 30,
+        "response_ms": {
+          "p50": 72.33822997659445,
+          "p95": 76.71704608947039,
+          "p99": 85.13232390396297
+        },
+        "correct_response_ms": {
+          "p50": 72.33822997659445,
+          "p95": 76.71704608947039,
+          "p99": 85.13232390396297
+        },
+        "result_count": {
+          "p50": 1,
+          "p95": 1,
+          "p99": 1
+        },
+        "result_bytes": {
+          "p50": 301,
+          "p95": 301,
+          "p99": 301
+        },
+        "error_rate": 0.0,
+        "timeout_rate": 0.0,
+        "correctness_rate": 1.0
+      },
+      "budget_label": "within_provisional_budget"
+    },
+    {
+      "case": 1,
+      "operation": "definition",
+      "supported_instances": 1,
+      "settling": {
+        "correct": 3,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0
+      },
+      "warm": {
+        "correct": 30,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0,
+        "samples": 30,
+        "response_ms": {
+          "p50": 0.4089630674570799,
+          "p95": 0.5687590455636382,
+          "p99": 0.7184999994933605
+        },
+        "correct_response_ms": {
+          "p50": 0.4089630674570799,
+          "p95": 0.5687590455636382,
+          "p99": 0.7184999994933605
+        },
+        "result_count": {
+          "p50": 1,
+          "p95": 1,
+          "p99": 1
+        },
+        "result_bytes": {
+          "p50": 214,
+          "p95": 214,
+          "p99": 214
+        },
+        "error_rate": 0.0,
+        "timeout_rate": 0.0,
+        "correctness_rate": 1.0
+      },
+      "budget_label": "within_provisional_budget"
+    },
+    {
+      "case": 2,
+      "operation": "hover",
+      "supported_instances": 1,
+      "settling": {
+        "correct": 3,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0
+      },
+      "warm": {
+        "correct": 30,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0,
+        "samples": 30,
+        "response_ms": {
+          "p50": 0.8480750257149339,
+          "p95": 1.388092990964651,
+          "p99": 5.6646669982001185
+        },
+        "correct_response_ms": {
+          "p50": 0.8480750257149339,
+          "p95": 1.388092990964651,
+          "p99": 5.6646669982001185
+        },
+        "result_count": {
+          "p50": 1,
+          "p95": 1,
+          "p99": 1
+        },
+        "result_bytes": {
+          "p50": 266,
+          "p95": 266,
+          "p99": 266
+        },
+        "error_rate": 0.0,
+        "timeout_rate": 0.0,
+        "correctness_rate": 1.0
+      },
+      "budget_label": "within_provisional_budget"
+    },
+    {
+      "case": 3,
+      "operation": "document_symbols",
+      "supported_instances": 1,
+      "settling": {
+        "correct": 3,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0
+      },
+      "warm": {
+        "correct": 30,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0,
+        "samples": 30,
+        "response_ms": {
+          "p50": 1.19924102909863,
+          "p95": 1.7631290247663856,
+          "p99": 4.664630047045648
+        },
+        "correct_response_ms": {
+          "p50": 1.19924102909863,
+          "p95": 1.7631290247663856,
+          "p99": 4.664630047045648
+        },
+        "result_count": {
+          "p50": 4,
+          "p95": 4,
+          "p99": 4
+        },
+        "result_bytes": {
+          "p50": 18760,
+          "p95": 18760,
+          "p99": 18760
+        },
+        "error_rate": 0.0,
+        "timeout_rate": 0.0,
+        "correctness_rate": 1.0
+      },
+      "budget_label": "within_provisional_budget"
+    },
+    {
+      "case": 4,
+      "operation": "workspace_symbols",
+      "supported_instances": 1,
+      "settling": {
+        "correct": 3,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0
+      },
+      "warm": {
+        "correct": 30,
+        "incorrect": 0,
+        "error": 0,
+        "timeout": 0,
+        "samples": 30,
+        "response_ms": {
+          "p50": 8.322631008923054,
+          "p95": 30.5853181052953,
+          "p99": 35.39007809013128
+        },
+        "correct_response_ms": {
+          "p50": 8.322631008923054,
+          "p95": 30.5853181052953,
+          "p99": 35.39007809013128
+        },
+        "result_count": {
+          "p50": 1,
+          "p95": 1,
+          "p99": 1
+        },
+        "result_bytes": {
+          "p50": 273,
+          "p95": 273,
+          "p99": 273
+        },
+        "error_rate": 0.0,
+        "timeout_rate": 0.0,
+        "correctness_rate": 1.0
+      },
+      "budget_label": "within_provisional_budget"
+    }
+  ],
+  "startup_to_first_result_ms": 1687.2849280480295,
+  "cleanup_verified": true,
+  "teardown_ms": 686.5087969927117,
+  "resources": {
+    "status": "observed",
+    "samples": 47,
+    "sampling_errors": 0,
+    "tree_rss_peak_bytes": 270123008,
+    "resident_tree_rss_peak_bytes": 270123008,
+    "observed_cpu_seconds": 3.45,
+    "process_count_peak": 1,
+    "resident_instances_peak": 1,
+    "semantics": "sampled RSS sum; shared pages may double count; CPU since observed process birth; missed short-lived/escaped children possible; no confinement proof"
+  },
+  "resource_budget_label": "within_provisional_budget",
+  "provider_readiness": [
+    {
+      "operation": "workspace_symbols",
+      "attempts": 1
+    }
+  ],
+  "initialize_response_ms": {
+    "p50": 215.2823390206322,
+    "p95": 215.2823390206322,
+    "p99": 215.2823390206322
+  },
+  "initialize_samples": 1,
+  "resident_reuse_verified": true,
+  "elapsed_ms": 5408.555021043867,
+  "harness_cpu_seconds": 3.1761392809999998,
+  "valid": true,
+  "snapshot_unchanged": true
+}

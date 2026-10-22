@@ -37,6 +37,7 @@ def test_scoped_positive_control_is_deterministic_and_never_read(monkeypatch):
     decision = evaluate(request, bundle)
     assert decision == evaluate(request, bundle)
     assert decision.selection == decision.resource == "GO"
+    assert decision.attestations_verified is False
     assert decision.read == decision.public_release == "NO-GO"
     assert decision.observed.warm_samples == 30
     assert decision.observed.warm_p50_ms == 15

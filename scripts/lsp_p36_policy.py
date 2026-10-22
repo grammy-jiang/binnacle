@@ -24,6 +24,7 @@ from scripts.lsp_p36_evidence import (
 
 Verdict = Literal["GO", "REWORK", "NO-GO"]
 MIN_SAMPLES = 30  # Exploratory floor from testing-performance.md, not stability proof.
+MIN_SOAK_SECONDS = 60  # A second of "soak" is not a lifecycle check.
 
 
 class AuditEntry(Record):
@@ -55,6 +56,9 @@ class Decision(Record):
     resource: Verdict
     read: Literal["NO-GO"] = "NO-GO"
     public_release: Literal["NO-GO"] = "NO-GO"
+    # No cryptographic or trusted external reviewer attestation is verified by
+    # this offline script; a synthetic positive fixture cannot grant authority.
+    attestations_verified: Literal[False] = False
     reasons: tuple[str, ...]
     audit: tuple[AuditEntry, ...]
     observed: Observed | None = None
@@ -102,11 +106,14 @@ def _measurement_reasons(
         "gold_failure": all(sample.gold_passed for sample in data.warm),
         "resident_warm_unproven": data.resident_settled and data.same_process,
         "rss_sample_too_small": len(data.tree_rss_mib) >= MIN_SAMPLES,
+        "rss_zero_or_negative": all(v > 0 for v in data.tree_rss_mib),
+        "latency_zero_or_negative": all(v.latency_ms > 0 for v in data.warm),
         "cpu_sample_too_small": len(data.idle_tree_cpu_pct) >= MIN_SAMPLES,
         "process_tree_incomplete": data.complete_process_tree,
         "cold_settle_missing": data.cold_start_ms is not None
         and data.settle_ms is not None,
-        "soak_unproven": data.soak_passed and (data.soak_duration_s or 0) > 0,
+        "soak_unproven": data.soak_passed
+        and (data.soak_duration_s or 0) >= MIN_SOAK_SECONDS,
         "cleanup_unverified": data.cleanup_verified,
         "resource_envelope_mismatch": data.tested_envelope
         == request.requested_envelope,
@@ -150,6 +157,10 @@ def evaluate(request: PolicyRequest, bundle: EvidenceBundle) -> Decision:
     envelope = request.requested_envelope
     if envelope.max_resident_servers > request.settings.max_resident_servers:
         blockers.append("configured_resident_limit_exceeded")
+    if envelope.idle_timeout_s != request.settings.idle_timeout_s:
+        blockers.append("configured_idle_timeout_mismatch")
+    if envelope.request_timeout_s != request.settings.request_timeout_s:
+        blockers.append("configured_request_timeout_mismatch")
     audit = tuple(
         _audit(stage, data, request)
         for stage, data in (

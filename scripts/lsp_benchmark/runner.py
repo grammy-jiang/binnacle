@@ -232,15 +232,17 @@ async def experiment(
         result["status"] == "completed"
         and result["cleanup_verified"]
         and result["resident_reuse_verified"]
+        and result["resources"].get("status") == "observed"
+        and result["resources"].get("sampling_errors", 0) == 0
+        and isinstance(rss, (int, float))
+        and rss > 0
         and bool(rows)
-        and any(row["supported_instances"] for row in rows.values())
+        and all(
+            row["supported_instances"] == options.instances for row in rows.values()
+        )
         and all(
             row["budget_label"]
-            in (
-                "within_provisional_budget",
-                "exceeds_provisional_budget",
-                "unsupported",
-            )
+            in ("within_provisional_budget", "exceeds_provisional_budget")
             for row in rows.values()
         )
     )

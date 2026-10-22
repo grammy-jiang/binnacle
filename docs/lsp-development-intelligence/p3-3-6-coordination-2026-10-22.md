@@ -110,3 +110,55 @@ On each Linux host, `job_status(job_id)` can recover process lifecycle. The Code
   independent security review, representative workload soak and P4 agent-value
   experiments remain **NO-GO / REWORK**. No product install or public MCP
   tool registration was attempted as part of these QA gates.
+
+## Independent security review follow-ups — 2026-10-23
+
+A single read-only local Claude Code Sonnet/High review assessed integrated commit
+`ae545d13adc35bdb09f5772e259da7cc6120daf0`. Its integration decision was
+**REWORK**; READ/security admission remains **NO-GO** and later P4 release
+remains unapproved. The following corrections were made in a separate candidate:
+
+- P3.5 executable provenance: hash and version the absolute Node selected next
+  to the explicitly admitted Pyright alias, rather than `shutil.which("node")`
+  on inherited PATH. A deterministic regression checks that runtime identity.
+- P3.4 native probe: `pass` now additionally requires exact fixture integrity,
+  zero extra workspace entries and positive document-symbol gold. An adversarial
+  post-session filesystem-mutation test must return `failed`.
+- P3.5 measurement `valid` now requires positive observed RSS, zero sampling
+  errors and complete operation support for all instances. It is **not** an
+  enforced RSS quota, and representative agent performance remains unproved.
+- P3.6 reports always include `attestations_verified=false` because offline
+  JSON inputs and plain-text reviewer names are unauthenticated. Even a synthetic
+  policy-predicate `GO` exits the CLI nonzero (3), not authorization success.
+  Idle/request envelope equality, positive RSS/latency and bounded minimum-soak
+  requirements also reject misleading evidence; tests remain synthetic only.
+- Initial GitHub Actions run `39793203424` failed only its Python 3.10 job,
+  from a legacy Issue #30 guardian journal nonblocking-lock race after a forged
+  receipt. Other six jobs passed. The **test-only** observer now retries only
+  the exact transient busy-lease exception for a bounded interval; production
+  `inspect_unowned_transaction()` remains nonblocking and fail-closed.
+- On Raspberry Pi, the failing test passed **20 consecutive Python 3.10 runs**;
+  the subsequently repeated managed 3.10 full suite passed **8,274 parallel-safe
+  tests and 98 ordinary-process tests**, with 353 skips and one optional skip
+  respectively. Mac real-Pyright/strategy targeted checks passed **270 tests**.
+  Existing full static hooks and 246 focused strategy tests passed.
+- New review-candidate 18-source Binnacle snapshot reports were checked against
+  their actual source file SHA-256 and current P3.5 harness SHA-256; single-
+  and dual-resident runs retained exact gold correctness, zero sampling errors
+  and clean shutdown. These are **trusted source-subset** observations, not
+  full-project production performance or externally signed attestations.
+
+**Unresolved:** P3.3 lacks OS-level untrusted-workspace confinement, atomic
+file/runtime identity and full package trust proof; P3.6 lacks authenticated
+review-source importers and accepted production resource envelopes; P3.4's
+in-process upstream adapter-construction side effects lack enforced sandboxing.
+All public MCP exposure, READ admission and deployment remain **NO-GO**.
+
+## Independent source review and final controlled QA follow-up (2026-10-23)
+
+- Local read-only Claude Code Sonnet/high independent review examined immutable commit `ae545d1`, identifying three high-priority risks/proof gaps and several medium-grade evidence weaknesses. Report: [independent review and follow-up dispositions](p3-3-6-independent-review-2026-10-23.md). The reviewer had no code modification or Git publication permissions; reported cost was approximately US$0.87.
+- Direct MCP owner fixed P3.5 Node provenance mismatch with actual launched sibling Node, P3.4 pass-on-fixture-side-effect false-green, P3.5 cold/partial resource validity, P3.6 envelope and unverified pseudo-attestation CLI success. The remaining executable tree TOCTOU/OS confinement issue and source-bound authenticated P3.6 attestation are explicitly unresolved (READ NO-GO, P4 REWORK).
+- GitHub CI for original `ae545d1` passed Code Quality, Packaging, Coverage and Python 3.11/3.12/3.14; Python 3.10 had an unrelated independent Guardian lease race during a synthetic Issue #30 observer test. A narrowly bounded **test-only** retry of the existing non-blocking observer was added; local Python 3.10 reproduced the original race, then passed 20/20 focused repetitions after remediation. Production lock behavior is unchanged.
+- On source-review remediation code: Linux P3.4/P3.5/P3.6 focused tests, macOS native Pyright/decision suite and Sextant targeted tests passed. The native Python 3.10 managed fast suite passed; review-policy and new-file pre-commit checks were rerun separately.
+- Sextant trusted Binnacle source-subset verification selects exactly 18 reviewed Python source files and five semantic gold methods, with inputs transferred by hash into disposable workspaces. [Post-review real-subset performance report](p3-5-reviewed-real-subset-2026-10-23.md) includes single- and dual-resident native resource results; these remain **not** a whole-repository or production resource admission certificate.
+- This checkpoint does not authorize public MCP tools, release, upstream multilspy merge, or production deployment; an updated hosted CI check and final independent attestation pipeline remain outstanding.

@@ -6,7 +6,6 @@ import asyncio
 import hashlib
 import json
 import re
-import shutil
 import subprocess
 import time
 from importlib.metadata import distribution
@@ -57,11 +56,15 @@ def provenance(binary: Path) -> dict:
         if not path.is_file():
             raise ValueError("pyright_package_incomplete")
         hashes[name] = hashlib.sha256(path.read_bytes()).hexdigest()
-    node = shutil.which("node")
-    if node is None:
+    # The private owner executes the explicitly selected launcher's sibling
+    # node, NEVER whichever executable happens to be first on inherited PATH.
+    # Hash and version the same resolved runtime selected for launch.
+    node_alias = binary.parent / "node"
+    if not node_alias.is_file():
         raise ValueError("node_runtime_unavailable")
+    node = node_alias.resolve(strict=True)
     node_version = subprocess.run(
-        [node, "--version"], capture_output=True, text=True, check=True, timeout=5
+        [str(node), "--version"], capture_output=True, text=True, check=True, timeout=5
     ).stdout.strip()
     if not re.fullmatch(r"v\d+\.\d+\.\d+", node_version):
         raise ValueError("node_version_unrecognized")
@@ -80,7 +83,7 @@ def provenance(binary: Path) -> dict:
         "multilspy_commit": UPSTREAM_SHA,
         "initialize_template_sha256": hashlib.sha256(template.read_bytes()).hexdigest(),
         "node_version": node_version,
-        "node_executable_sha256": hashlib.sha256(Path(node).read_bytes()).hexdigest(),
+        "node_executable_sha256": hashlib.sha256(node.read_bytes()).hexdigest(),
         "command": ["<trusted-pyright-langserver>", "--stdio"],
         "trust": "explicit_trust_only",
         "read_release": "NO_GO",
@@ -205,7 +208,9 @@ class NativeBackend:
                 self.positions[index, case] = (
                     len(line[: case.character].encode("utf-16-le")) // 2
                 )
-            await self.query(index, cases[0])
+            cold_result = await self.query(index, cases[0])
+            if not correct(cases[0], cold_result, self.roots[index]):
+                raise ValueError("cold_definition_gold_failed")
             # Some providers advertise workspace symbols before indexing has
             # completed. Confirm exact synthetic gold before timed warm calls.
             for case in cases:

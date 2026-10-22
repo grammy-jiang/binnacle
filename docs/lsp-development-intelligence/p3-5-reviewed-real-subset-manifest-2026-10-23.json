@@ -1,0 +1,106 @@
+{
+  "schema": 1,
+  "revision": "ae545d13adc35bdb09f5772e259da7cc6120daf0",
+  "files": {
+    "src/binnacle/features/development_intelligence/lsp_authorized_session.py": "e62698db3f5d6b0720e5828f61d960f59e0b3b8224851d76936fa41f60640af2",
+    "src/binnacle/features/development_intelligence/lsp_client.py": "7cfa213e4eb3b106f17eb261b73c6cb3fe95b065652518ec2f36b1908d7cc3a1",
+    "src/binnacle/features/development_intelligence/lsp_document_sync.py": "c46fc1553384b7399d7b10991d5567552ea07dbac8755a8145db00f9b32c8cd0",
+    "src/binnacle/features/development_intelligence/lsp_manager_cooldown.py": "416fca90ee64105c580fee7264246125c607104232fbdd885c86492b3ad9037e",
+    "src/binnacle/features/development_intelligence/lsp_manager_eviction.py": "1c267e60c5edd8563495f22ddcd5920bdf68302b3f60ca3ecdf58ed44c04cbc5",
+    "src/binnacle/features/development_intelligence/lsp_manager_shutdown.py": "f99bb8b04331dc2276e528743d5b3c313130e17d75cc6dbe48ab67b3bead41fd",
+    "src/binnacle/features/development_intelligence/lsp_manager_types.py": "65bf961ffa23ac1308eae4c81bc5ad6df1a1af65096c272fb5bae2ae4350d860",
+    "src/binnacle/features/development_intelligence/lsp_policy.py": "4828711de92a42ab94d6613b3921f6d5d39b28a941f22255ce98d8b52b59fb12",
+    "src/binnacle/features/development_intelligence/lsp_preview_mount.py": "58c84b14462a787b55c0ba280756455509163417f16963aa305192e1480d5252",
+    "src/binnacle/features/development_intelligence/lsp_preview_server.py": "c8a952ac1836a59b128fc0bb67f234cc15d86d8d9ecfe994f45d149451e768ac",
+    "src/binnacle/features/development_intelligence/lsp_process_owner.py": "8315f5cac2e4769cb521e7500bd533085d25d5c5b013afc39e9c8a41032e70e4",
+    "src/binnacle/features/development_intelligence/lsp_process_tree.py": "0ba92abb774b734cb854bb3b6a4ac53187d308386838629aa1d035c3863b9a0d",
+    "src/binnacle/features/development_intelligence/lsp_profile_assessment.py": "0d32e6e9cdafbb4ac9db142e5a092f1f7dc2a36ef1349408621be988ea637e78",
+    "src/binnacle/features/development_intelligence/lsp_provider_manager.py": "e3f5e013feb69d51576a963f59d79155cb6721079dbf3876ee0ec3748e359a33",
+    "src/binnacle/features/development_intelligence/lsp_session.py": "02959a3a2221b221d1e87a71e16bcbd6e4fe5fd2ec6a8055d340e0f8feb14d19",
+    "src/binnacle/features/development_intelligence/lsp_wire.py": "81a93cb86cba3e77135af1ac2e25aec9a354be6cefd0445e313fffb5c3327581",
+    "src/binnacle/features/development_intelligence/lsp_workspace_access.py": "ac732e2f6fda36543e325e476635c0595d7101797d45a08e756b6b467e281231",
+    "src/binnacle/features/development_intelligence/lsp_workspace_policy.py": "86d6087e21ce32af88e1fd480df5ce430060d59c55770fe4e879d066bc12d503"
+  },
+  "cases": [
+    {
+      "operation": "manager_definition",
+      "file": "src/binnacle/features/development_intelligence/lsp_process_owner.py",
+      "line": 67,
+      "character": 20,
+      "symbol": "ProviderLifecycleError",
+      "locations": [
+        [
+          "src/binnacle/features/development_intelligence/lsp_process_owner.py",
+          30,
+          6,
+          30,
+          28
+        ]
+      ]
+    },
+    {
+      "operation": "definition",
+      "file": "src/binnacle/features/development_intelligence/lsp_process_owner.py",
+      "line": 67,
+      "character": 20,
+      "symbol": "ProviderLifecycleError",
+      "locations": [
+        [
+          "src/binnacle/features/development_intelligence/lsp_process_owner.py",
+          30,
+          6,
+          30,
+          28
+        ]
+      ]
+    },
+    {
+      "operation": "hover",
+      "file": "src/binnacle/features/development_intelligence/lsp_process_owner.py",
+      "line": 67,
+      "character": 20,
+      "symbol": "ProviderLifecycleError",
+      "names": [
+        "ProviderLifecycleError"
+      ]
+    },
+    {
+      "operation": "document_symbols",
+      "file": "src/binnacle/features/development_intelligence/lsp_process_owner.py",
+      "line": 67,
+      "character": 20,
+      "symbol": "ProviderLifecycleError",
+      "locations": [
+        [
+          "src/binnacle/features/development_intelligence/lsp_process_owner.py",
+          30,
+          6,
+          30,
+          28
+        ]
+      ],
+      "names": [
+        "ProviderLifecycleError"
+      ]
+    },
+    {
+      "operation": "workspace_symbols",
+      "file": "src/binnacle/features/development_intelligence/lsp_process_owner.py",
+      "line": 67,
+      "character": 20,
+      "symbol": "ProviderLifecycleError",
+      "locations": [
+        [
+          "src/binnacle/features/development_intelligence/lsp_process_owner.py",
+          30,
+          6,
+          30,
+          28
+        ]
+      ],
+      "names": [
+        "ProviderLifecycleError"
+      ]
+    }
+  ]
+}

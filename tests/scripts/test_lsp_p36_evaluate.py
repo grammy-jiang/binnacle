@@ -12,7 +12,7 @@ from tests.fixtures.lsp.decision_evidence import inputs
 
 
 @pytest.mark.parametrize(
-    "mode,code", [("accepted", 0), ("absent", 1), ("invalid", 2), ("unreadable", 2)]
+    "mode,code", [("accepted", 3), ("absent", 1), ("invalid", 2), ("unreadable", 2)]
 )
 def test_json_report_exit_status_and_private_data_redaction(
     tmp_path, capsys, mode, code
@@ -32,7 +32,10 @@ def test_json_report_exit_status_and_private_data_redaction(
     output = capsys.readouterr().out
     report = json.loads(output)
     assert "private-token-never-echo" not in output
-    assert report["selection"] == {0: "GO", 1: "REWORK", 2: "NO-GO"}[code]
+    assert report["selection"] == {3: "GO", 1: "REWORK", 2: "NO-GO"}[code]
+    if mode == "accepted":
+        assert report["attestations_verified"] is False
+        assert report["read"] == report["public_release"] == "NO-GO"
 
 
 def test_module_entrypoint_with_committed_pending_bundle(tmp_path, monkeypatch, capsys):

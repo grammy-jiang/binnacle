@@ -39,7 +39,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
     print(decision.model_dump_json(indent=2))
-    return 0 if decision.selection == "GO" else 1
+    # A policy-predicate GO over supplied JSON is not externally attested.
+    # Reserve success (exit 0) for an eventual authenticated evidence importer.
+    return 3 if decision.selection == "GO" else 1
 
 
 if __name__ == "__main__":

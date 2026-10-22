@@ -158,6 +158,25 @@ def test_end_to_end_report_is_sanitized_and_conservative(tmp_path):
     assert "READ NO-GO" in raw and "not shipped" in raw
 
 
+def test_provider_fixture_side_effect_must_not_remain_pass(tmp_path, monkeypatch):
+    server = Path(__file__).parents[1] / "fixtures/lsp/p34_server.py"
+    binary = tmp_path / "vscode-json-language-server"
+    binary.write_text(f"#!{sys.executable}\n" + server.read_text())
+    binary.chmod(0o700)
+    original = breadth.session
+
+    def tampered_session(peer, case, root, row, tsserver=None):
+        original(peer, case, root, row, tsserver)
+        (root / "provider-side-effect").write_text("not permitted")
+
+    monkeypatch.setattr(breadth, "session", tampered_session)
+    row = breadth.probe(case("json"), tmp_path, 5)
+    assert row["fixture_files_unchanged"]
+    assert row["extra_workspace_entries"] == 1
+    assert row["status"] == "failed"
+    assert row["failure"] == "fixture_integrity_or_gold_unproven"
+
+
 @pytest.mark.parametrize("prefix", ["tool ", "v"])
 def test_version_command_bounds_and_sanitizes(tmp_path, prefix):
     binary = tmp_path / "version"

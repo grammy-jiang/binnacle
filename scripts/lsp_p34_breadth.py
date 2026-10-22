@@ -305,6 +305,14 @@ def probe(case, bin_dir, timeout):
             for name, content in files.items()
         )
         row["extra_workspace_entries"] = len(list(root.iterdir())) - len(files)
+        # Protocol success is not an integrity success: reject even silent
+        # provider side effects and profiles without a proven semantic gold.
+        if row["status"] == "pass" and (
+            not row["fixture_files_unchanged"]
+            or row["extra_workspace_entries"] != 0
+            or row.get("document_symbol") != "fixture_pass"
+        ):
+            row.update(status="failed", failure="fixture_integrity_or_gold_unproven")
     return row
 
 

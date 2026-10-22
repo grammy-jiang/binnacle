@@ -382,16 +382,23 @@ def test_provenance_checks_package_version_and_upstream_pin(tmp_path, monkeypatc
             locate_file=lambda _: package / "package.json",
         ),
     )
-    monkeypatch.setattr(
-        native.shutil, "which", lambda _: str(package / "langserver.index.js")
-    )
-    monkeypatch.setattr(
-        native.subprocess,
-        "run",
-        lambda *args, **kwargs: SimpleNamespace(stdout="v22.0.0"),
-    )
+    (package / "node").write_bytes(b"reviewed-node-runtime")
+    calls = []
+
+    def observed_node_version(argv, **kwargs):
+        calls.append(argv)
+        assert argv == [str((package / "node").resolve()), "--version"]
+        return SimpleNamespace(stdout="v22.0.0")
+
+    monkeypatch.setattr(native.subprocess, "run", observed_node_version)
     result = native.provenance(package / "langserver.index.js")
+    assert calls
     assert result["version"] == "1.1.413"
+    assert result["node_version"] == "v22.0.0"
+    assert (
+        result["node_executable_sha256"]
+        == hashlib.sha256(b"reviewed-node-runtime").hexdigest()
+    )
     assert str(package) not in json.dumps(result)
     manifest["vcs_info"]["commit_id"] = "bad"
     with pytest.raises(ValueError, match="provenance_mismatch"):
