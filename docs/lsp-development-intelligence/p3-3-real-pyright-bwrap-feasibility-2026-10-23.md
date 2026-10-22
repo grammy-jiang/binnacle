@@ -71,9 +71,10 @@ connection before the sandbox probe was attempted.
    network namespace escapes, executable privilege escalation, inherited
    descriptors, unauthorized writes, CPU/memory exhaustion or orphaned child
    after parent cancellation/SIGKILL.
-4. **Cross-platform parity:** macOS `sandbox-exec` is installed on the
-   MacBook Pro but its complete Pyright policy and lifecycle have **not** been
-   verified. Do not generalize Linux results to Darwin.
+4. **Cross-platform parity:** a separate macOS synthetic Pyright session
+   succeeded under limited Seatbelt write/network restrictions, but read
+   confinement is **not** established. Do not generalize Linux results to
+   Darwin or infer that the two launch profiles have equivalent authority.
 5. **Independent review:** collect source-bound, signed reviewer evidence
    and link it to the exact upstream `multilspy` VCS pin, built artifact,
    selected Node/JS tree and Binnacle commit. Then use the P3.6 fail-closed
@@ -83,3 +84,35 @@ connection before the sandbox probe was attempted.
 This work only removes the earlier feasibility uncertainty that Pyright
 could not initialize inside a rootless Bubblewrap filesystem/network
 namespace. It does **not** close the P3.3 OS-confinement release gate.
+
+## Separate macOS Seatbelt exploratory comparison (2026-10-23)
+
+MacBook Pro (Darwin arm64, macOS kernel 27.0.0), Node v24.21.0 and installed
+Pyright 1.1.413 completed a bidirectional synthetic LSP `initialize`,
+`textDocument/documentSymbol`, `shutdown` and `exit` with process
+exit code **0** under this **limited** Seatbelt profile:
+
+`(version 1)(deny default)(allow process*)(allow mach-lookup)`
+`(allow sysctl-read)(allow file-read*)(allow file-write* (subpath CACHE))`
+
+The selected CACHE was disposable and operator-created. Direct synthetic
+workspace mutation was denied with `EPERM`; a connection to a host loopback
+listener (separately confirmed reachable by the host) was denied with
+`EPERM`; the synthetic source hash was unchanged. The test invoked only the
+selected Node and Pyright commands; descendant processes were not audited.
+These observations are not
+a full sandbox escape or process-tree audit.
+
+**Critical missing constraint:** the observed working profile currently uses
+`(allow file-read*)`, which lets the provider read unrelated host files.
+Consequently it is **not suitable for READ security admission**. A stricter
+read allowlist covering selected system paths but excluding arbitrary host
+home files caused Node to abort before executing JavaScript. The necessary
+Apple system read/mach rules and trusted package boundaries still require
+separate debugging, source review and negative controls. In particular,
+`allow mach-lookup` is broad and needs to be narrowed to independently
+reviewed system services.
+
+The read/write/network profile and subprocess/escape behavior have not been
+integrated into `PrivatePyrightProcessOwner`. These two feasibility tests
+(Linux Bubblewrap and macOS Seatbelt) **do not change READ/public NO-GO**.
