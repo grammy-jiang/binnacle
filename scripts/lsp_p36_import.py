@@ -12,11 +12,11 @@ import hashlib
 import json
 import os
 import re
-import stat
 from pathlib import Path
 from typing import Any
 
 from scripts.lsp_p36_evidence import EvidenceBundle
+from scripts.lsp_p36_secure_io import PathPolicy, PathRefused, read_file
 
 P34_SCRIPTS = (
     "lsp_p34_breadth.py",
@@ -53,22 +53,18 @@ def _unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def _load(path: Path, sha256: str) -> dict[str, Any]:
-    """Open only explicit regular files, size bounded, without following leaf links."""
+    """Read one vetted regular file: no symlinks, hardlinks or foreign owners."""
     if not path.is_absolute() or not HEX64.fullmatch(sha256):
         raise EvidenceRefused("invalid_input_reference")
-    fd = -1
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK)
-        st = os.fstat(fd)
-        if not stat.S_ISREG(st.st_mode) or not 0 < st.st_size <= MAX_BYTES:
-            raise EvidenceRefused("invalid_evidence_file")
-        raw = os.read(fd, MAX_BYTES + 1)
-    except OSError as exc:
-        raise EvidenceRefused("unreadable_evidence_file") from exc
-    finally:
-        if fd >= 0:
-            os.close(fd)
-    if len(raw) != st.st_size or hashlib.sha256(raw).hexdigest() != sha256:
+        raw = read_file(
+            path,
+            PathPolicy(owner_uids=frozenset({os.geteuid(), 0}), check_ancestors=False),
+            MAX_BYTES,
+        ).data
+    except PathRefused as exc:
+        raise EvidenceRefused(f"unreadable_evidence_file:{exc}") from exc
+    if hashlib.sha256(raw).hexdigest() != sha256:
         raise EvidenceRefused("evidence_sha256_mismatch")
     try:
         value = json.loads(
@@ -276,7 +272,11 @@ def inspect(
             "p36_cross_stage_evidence_identity_unbound",
             "p36_reviewer_authentication_missing",
         ],
-        "trust_note": "Operator-supplied SHA pins and producer JSON are not independent attestations.",
+        "trust_note": (
+            "Operator-supplied SHA pins and producer JSON are not independent "
+            "attestations. Reviewer authentication and stage linking are a "
+            "separate step: scripts/lsp_p36_link.py with an operator registry."
+        ),
     }
 
 

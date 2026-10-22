@@ -46,6 +46,10 @@ There is no user-provided signer key or production reviewer registry connected.
 The existing P3.6 raw-artifact consistency preflight continues to produce
 `REWORK` with all three stage evidence fields null.
 
+> **Update:** the operator-registry, replay and linking work described in item 1
+> below is prototyped in `p3-6-trusted-registry-pipeline-2026-10-23.md`. The v1
+> API here remains a self-contained proof of signature and grants no authority.
+
 ## Next required acceptance work
 
 1. Implement a separate, authenticated, **operator-managed** reviewer public
