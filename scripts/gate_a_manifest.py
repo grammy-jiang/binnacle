@@ -89,6 +89,28 @@ def manifest_groups() -> dict[str, set[str]]:
             "features/commands/job_resource_history.py",
             "features/commands/job_store.py",
         },
+        # Reviewed P2.0–P2.7 Development Intelligence; one source owner per
+        # module, NOT a wildcard that silently admits new adapters into CI.
+        "development_intelligence": {
+            "features/development_intelligence/__init__.py",
+            "features/development_intelligence/lsp_authorized_session.py",
+            "features/development_intelligence/lsp_client.py",
+            "features/development_intelligence/lsp_document_sync.py",
+            "features/development_intelligence/lsp_manager_cooldown.py",
+            "features/development_intelligence/lsp_manager_eviction.py",
+            "features/development_intelligence/lsp_manager_shutdown.py",
+            "features/development_intelligence/lsp_manager_types.py",
+            "features/development_intelligence/lsp_policy.py",
+            "features/development_intelligence/lsp_preview_mount.py",
+            "features/development_intelligence/lsp_preview_server.py",
+            "features/development_intelligence/lsp_process_owner.py",
+            "features/development_intelligence/lsp_process_tree.py",
+            "features/development_intelligence/lsp_provider_manager.py",
+            "features/development_intelligence/lsp_session.py",
+            "features/development_intelligence/lsp_wire.py",
+            "features/development_intelligence/lsp_workspace_access.py",
+            "features/development_intelligence/lsp_workspace_policy.py",
+        },
         # Inert, default-off Job Awareness: portable core plus SQLite ledger.
         # Mirrors the job-awareness-core-isolation import-linter contract.
         "job_awareness_core": {
@@ -280,6 +302,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "config.py",
             "config_unknown_keys.py",
             "config_telemetry.py",
+            "config_development_intelligence.py",
             "errors.py",
             "provenance.py",
             "doctor_contracts.py",

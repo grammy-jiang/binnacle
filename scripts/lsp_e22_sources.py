@@ -11,9 +11,9 @@ import datetime as dt
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-if __package__:
+if TYPE_CHECKING or __package__:
     from .lsp_e01_trace import _digest, _time
 else:
     from lsp_e01_trace import _digest, _time
@@ -85,7 +85,7 @@ def _repo(path: Path, home: Path) -> Path | None:
 
 def _case_input(args: Any, tool: str, home: Path) -> tuple[set[Path], set[str]]:
     if not isinstance(args, dict):
-        return None, set()
+        return set(), set()
     refs: set[str] = set()
     for key in ("command", "pattern"):
         value = args.get(key)
@@ -111,7 +111,7 @@ def inputs_by_call(
 ) -> tuple[dict, dict[str, int]]:
     """Safely recover only workspace anchors and potential literal task IDs."""
     anchored: dict = {}
-    stats = collections.Counter()
+    stats: collections.Counter[str] = collections.Counter()
     for file in sorted(capture_dir.glob("*.jsonl")):
         if file.is_symlink() or not file.is_file():
             stats["unreadable_capture_file"] += 1
@@ -169,7 +169,7 @@ def available_documents(repo: Path, as_of: float) -> tuple[int, set[str], dict]:
     if not repo.is_dir():
         return 0, set(), {"repository_unavailable": 1}
     window_start = as_of - DAYS_PREEXISTING * 86400
-    counts = collections.Counter()
+    counts: collections.Counter[str] = collections.Counter()
     refs: set[str] = set()
     docs = 0
     for d, folders, names in os.walk(repo, followlinks=False):

@@ -85,10 +85,10 @@ def _label(tool: str, arguments: Any) -> tuple[frozenset[str], str]:
                 frozenset({"text_search"}) if tool == "search_text" else frozenset()
             ), "incomplete"
         if tool == "search_text":
-            names = {"text_search"}
+            selected_names = {"text_search"}
             if PATTERNS["code_structure_query"].search(text):
-                names.add("code_structure_query")
-            return frozenset(names), "present"
+                selected_names.add("code_structure_query")
+            return frozenset(selected_names), "present"
         names = frozenset(k for k, rx in PATTERNS.items() if rx.search(text))
         if "code_structure_query" in names and "text_search" not in names:
             names = names - {"code_structure_query"}

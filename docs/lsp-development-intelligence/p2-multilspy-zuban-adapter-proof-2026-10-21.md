@@ -8,10 +8,10 @@ provider sandbox certification or an invitation to restart historical E2/E3.
 
 - Microsoft multilspy v0.1.1, tag commit
   62acb3cf2d7a0746992ca08767d8a4fded402ebb, MIT.
-  https://github.com/microsoft/multilspy
+  <https://github.com/microsoft/multilspy>
 - Zuban 0.10.0, via PyPI, Rust-implemented Python LSP; isolated macOS arm64
-  virtualenv; source https://github.com/zubanls/zuban and
-  https://docs.zubanls.com/en/latest/installation.html .
+  virtualenv; source <https://github.com/zubanls/zuban> and
+  <https://docs.zubanls.com/en/latest/installation.html> .
 - Official process command: zuban server. Zuban LSP initializationOptions:
   typeCheckingMode=default/off/mypy/auto; diagnosticMode=open-files-only/workspace;
   disableLanguageServices and optionally pythonExecutable.

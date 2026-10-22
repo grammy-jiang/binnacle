@@ -9,9 +9,9 @@ from __future__ import annotations
 import collections
 import hashlib
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-if __package__:
+if TYPE_CHECKING or __package__:
     from .lsp_e01_patterns import _windows
 else:
     from lsp_e01_patterns import _windows
@@ -64,7 +64,7 @@ def reliable(call: Any, corpus: Any) -> bool:
 def episodes(corpus: Any) -> tuple[list[Episode], dict[str, int]]:
     observed: dict[tuple[str, str], list[Any]] = collections.defaultdict(list)
     verified: dict[tuple[str, str], list[Any]] = collections.defaultdict(list)
-    missingness = collections.Counter()
+    missingness: collections.Counter[str] = collections.Counter()
     for call in corpus.calls.values():
         if call.group is None:
             missingness["unattributed_calls"] += 1

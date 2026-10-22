@@ -20,8 +20,6 @@ from binnacle.features.development_intelligence.lsp_process_tree import (
     ProcessIdentity,
 )
 
-pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX session process tree")
-
 
 @pytest.fixture
 def spawn_script(tmp_path: Path) -> Path:
@@ -70,6 +68,7 @@ def runnable(pid: int) -> bool:
         return False
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX session process tree")
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["group", "escaped"])
 async def test_observed_descendant_cleanup_with_os_process_identity(
@@ -109,6 +108,7 @@ async def test_observed_descendant_cleanup_with_os_process_identity(
         assert not runnable(child["pid"]), "test fixture process leaked"
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX session process tree")
 @pytest.mark.asyncio
 async def test_reaps_group_descendant_after_original_provider_exits(
     spawn_script: Path, tmp_path: Path
@@ -133,6 +133,7 @@ async def test_reaps_group_descendant_after_original_provider_exits(
         assert not runnable(child["pid"])
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX session process tree")
 @pytest.mark.asyncio
 async def test_absent_observation_returns_unverified_without_signalling():
     owner = NativeProviderTree()
@@ -146,6 +147,7 @@ async def test_absent_observation_returns_unverified_without_signalling():
         await owner.cleanup()
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX session process tree")
 def test_rejects_unowned_pid_or_process_group_and_invalid_deadlines():
     owner = NativeProviderTree()
     for pid in (0, -1, True, "12"):
@@ -160,6 +162,7 @@ def test_rejects_unowned_pid_or_process_group_and_invalid_deadlines():
             NativeProviderTree(grace_seconds=bad)
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX session process tree")
 def test_pid_identity_reuse_cannot_receive_signals(monkeypatch):
     import psutil
 
@@ -178,6 +181,7 @@ def test_pid_identity_reuse_cannot_receive_signals(monkeypatch):
     assert calls == []
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX session process tree")
 @pytest.mark.asyncio
 async def test_descendant_escaping_after_first_observation_is_never_clean(
     spawn_script: Path, tmp_path: Path

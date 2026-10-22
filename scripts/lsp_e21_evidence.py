@@ -13,9 +13,9 @@ import hmac
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-if __package__:
+if TYPE_CHECKING or __package__:
     from .lsp_e01_trace import _request_key, _time
 else:
     from lsp_e01_trace import _request_key, _time
@@ -29,7 +29,7 @@ def _task_fields(
     root: Path, request_keys: set, cutoff: dt.datetime
 ) -> tuple[dict, dict]:
     """Inspect only presence of task metadata; never copy its value."""
-    counts = collections.Counter()
+    counts: collections.Counter[str] = collections.Counter()
     timestamps: dict = {}
     for file in sorted(root.glob("*.jsonl")):
         if file.is_symlink() or not file.is_file():
@@ -102,7 +102,8 @@ def _content_commitments(
                 corr = item.get("correlation")
                 if not isinstance(corr, dict):
                     continue
-                target, fields = None, None
+                target: Any | None = None
+                fields: dict[str, Any] | None = None
                 if event == "mcp_request" and item.get("method") == "tools/call":
                     request_key = _request_key(corr)
                     if request_key in request_keys:
@@ -232,7 +233,7 @@ def _git_evidence(
 
 
 def _case_fingerprint(
-    secret: bytes, calls: list[Any], requests: dict, outcomes: dict
+    secret: bytes, calls: list[Any], request_records: dict, outcomes: dict
 ) -> str:
     """Keyed commitment to all restored call inputs, result/error and request.
 
@@ -248,7 +249,7 @@ def _case_fingerprint(
             call.end_when,
             call.result_truncated,
             call.result_exit,
-            requests.get(call.request_key),
+            request_records.get(call.request_key),
             outcomes.get(call.key),
         ]
         for call in sorted(calls, key=lambda c: c.key)

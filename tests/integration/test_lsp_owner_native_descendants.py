@@ -23,8 +23,6 @@ from binnacle.features.development_intelligence.lsp_process_owner import (
     ProviderLifecycleError,
 )
 
-pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX process tests")
-
 
 @pytest.fixture
 def standalone_lsp_with_child(tmp_path: Path) -> Path:
@@ -67,15 +65,24 @@ def standalone_lsp_with_child(tmp_path: Path) -> Path:
     return peer
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process tests")
 @pytest.mark.asyncio
 @pytest.mark.parametrize("escaped", [False, True])
 async def test_owner_backstop_observes_and_reaps_actual_provider_descendant(
-    standalone_lsp_with_child: Path, tmp_path: Path, escaped: bool
+    standalone_lsp_with_child: Path,
+    tmp_path: Path,
+    escaped: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     import psutil
-    from multilspy import LanguageServer
-    from multilspy.multilspy_config import Language, MultilspyConfig
-    from multilspy.multilspy_logger import MultilspyLogger
+    from multilspy import LanguageServer  # type: ignore[import-untyped]
+    from multilspy.multilspy_config import (  # type: ignore[import-untyped]
+        Language,
+        MultilspyConfig,
+    )
+    from multilspy.multilspy_logger import (  # type: ignore[import-untyped]
+        MultilspyLogger,
+    )
 
     root = tmp_path / "trusted-workspace"
     root.mkdir()
@@ -116,7 +123,7 @@ async def test_owner_backstop_observes_and_reaps_actual_provider_descendant(
         ]
         return server
 
-    owner._make_upstream_server = real_upstream_factory
+    monkeypatch.setattr(owner, "_make_upstream_server", real_upstream_factory)
     created_child = None
     try:
 

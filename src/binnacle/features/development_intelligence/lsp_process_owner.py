@@ -115,9 +115,14 @@ class PrivatePyrightProcessOwner:
 
     def _make_upstream_server(self) -> Any:
         """Import only the optional pinned fork, and only upon actual launch."""
-        from multilspy import LanguageServer
-        from multilspy.multilspy_config import Language, MultilspyConfig
-        from multilspy.multilspy_logger import MultilspyLogger
+        from multilspy import LanguageServer  # type: ignore[import-untyped]
+        from multilspy.multilspy_config import (  # type: ignore[import-untyped]
+            Language,
+            MultilspyConfig,
+        )
+        from multilspy.multilspy_logger import (  # type: ignore[import-untyped]
+            MultilspyLogger,
+        )
 
         return LanguageServer.create(
             MultilspyConfig(

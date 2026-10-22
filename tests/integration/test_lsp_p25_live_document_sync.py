@@ -124,40 +124,42 @@ async def test_actual_provider_no_external_scope_and_bounded_disk_staleness(
     workspace = AuthorizedWorkspace((allowed,), root / "app.py")
     owner = PrivatePyrightProcessOwner(settings, workspace.workspace_root)
     with fail_after(30):
-        async with owner.session() as server:
-            async with AuthorizedDocumentSession(server, workspace) as docs:
-                with pytest.raises(WorkspaceAccessError):
-                    await docs.definition(
-                        "../elsewhere.py", line=1, column=1, expected_symbol="x"
-                    )
-                with pytest.raises(WorkspaceAccessError):
-                    await docs.definition(
-                        "app.py", line=2, column=10, expected_symbol="different"
-                    )
-                first = await docs.definition(
-                    "app.py", line=2, column=10, expected_symbol="greet"
+        async with (
+            owner.session() as server,
+            AuthorizedDocumentSession(server, workspace) as docs,
+        ):
+            with pytest.raises(WorkspaceAccessError):
+                await docs.definition(
+                    "../elsewhere.py", line=1, column=1, expected_symbol="x"
                 )
-                assert first[0]["relativePath"] == "lib.py"
-                original_method = server.server.send.definition
-
-                async def modified_during_query(params):
-                    (root / "app.py").write_text(
-                        "from lib import greet\nanswer = greet('changed')\n"
-                    )
-                    return await original_method(params)
-
-                server.server.send.definition = modified_during_query
-                try:
-                    with pytest.raises(WorkspaceStaleError):
-                        await docs.definition(
-                            "app.py", line=2, column=10, expected_symbol="greet"
-                        )
-                finally:
-                    server.server.send.definition = original_method
-                refreshed = await docs.definition(
-                    "app.py", line=2, column=10, expected_symbol="greet"
+            with pytest.raises(WorkspaceAccessError):
+                await docs.definition(
+                    "app.py", line=2, column=10, expected_symbol="different"
                 )
-                assert refreshed[0]["relativePath"] == "lib.py"
+            first = await docs.definition(
+                "app.py", line=2, column=10, expected_symbol="greet"
+            )
+            assert first[0]["relativePath"] == "lib.py"
+            original_method = server.server.send.definition
+
+            async def modified_during_query(params):
+                (root / "app.py").write_text(
+                    "from lib import greet\nanswer = greet('changed')\n"
+                )
+                return await original_method(params)
+
+            server.server.send.definition = modified_during_query
+            try:
+                with pytest.raises(WorkspaceStaleError):
+                    await docs.definition(
+                        "app.py", line=2, column=10, expected_symbol="greet"
+                    )
+            finally:
+                server.server.send.definition = original_method
+            refreshed = await docs.definition(
+                "app.py", line=2, column=10, expected_symbol="greet"
+            )
+            assert refreshed[0]["relativePath"] == "lib.py"
     assert owner.last_exit and not owner.last_exit.cleanup_unverified
 
 

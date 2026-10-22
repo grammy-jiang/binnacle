@@ -39,7 +39,9 @@ jobs:
           cache-dependency-glob: uv.lock
 
       - name: Sync development dependencies
-        run: uv sync --locked --group dev
+        # P2.4+ mypy checks optional upstream multilspy imports. Installing
+        # this locked extra in the CI QUALITY job is not the default MCP wheel.
+        run: uv sync --locked --group dev --extra development-intelligence-pyright
 
       - name: Run code-quality gates
         run: |

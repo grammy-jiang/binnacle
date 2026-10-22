@@ -6,7 +6,7 @@ rollout, process containment certification, or public MCP tool release.
 
 ## Provenance
 
-- PR: https://github.com/microsoft/multilspy/pull/168
+- PR: <https://github.com/microsoft/multilspy/pull/168>
 - Final contributor SHA: 7ff6e926e7fab6083ffe7233d62f9ed8d1595c09
 - Parent feature implementation and coverage: 765957b; final style and
   static-analysis correction: 7ff6e92.

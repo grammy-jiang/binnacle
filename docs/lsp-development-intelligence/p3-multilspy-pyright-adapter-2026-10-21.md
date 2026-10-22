@@ -9,7 +9,7 @@ adapter, **not a production enabled MCP tool or completed P3 audit**.
 Multilspy v0.1.1 (Microsoft, commit
 62acb3cf2d7a0746992ca08767d8a4fded402ebb) supports custom
 LanguageServer subclasses. A previous community PR #39
-(https://github.com/microsoft/multilspy/pull/39) proposed Python
+(<https://github.com/microsoft/multilspy/pull/39>) proposed Python
 Pyright support in 2024, but its retrieved PR head
 43d6a6190ecb17cd5059fad5a4f9d14bc49c8f2b calls
 basedpyright-langserver, not pyright-langserver, passes a string
@@ -60,6 +60,7 @@ disabled. System service configuration, PATH, Binnacle uv.lock,
 development dependency set and production MCP processes were untouched.
 
 Checks performed on a disposable sample Python project:
+
 - standard LSP initialize, Pyright capability negotiation and clean exit;
 - definition query: one correct local result;
 - references query: one correct local result;

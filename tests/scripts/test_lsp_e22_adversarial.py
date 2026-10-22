@@ -6,7 +6,12 @@ import json
 from datetime import datetime, timezone
 
 from scripts import lsp_e22_sessions as sessions
-from tests.scripts.test_lsp_e22_sessions import _call, _codex, _file
+from tests.scripts.test_lsp_e22_sessions import (
+    _call,
+    _codex,
+    _file,
+    scan_independent_sessions,
+)
 
 CUTOFF = datetime(2026, 10, 21, 2, tzinfo=timezone.utc)
 
@@ -16,7 +21,7 @@ def test_other_mcp_server_cannot_create_compatible_call(tmp_path):
     rows = _codex(args)
     rows[-1]["payload"]["name"] = "mcp__unrelated_service__run_command"
     _file(tmp_path, "codex", rows)
-    matches, info = sessions.scan_independent_sessions(
+    matches, info = scan_independent_sessions(
         tmp_path,
         [_call(args)],
         CUTOFF,
@@ -28,7 +33,7 @@ def test_other_mcp_server_cannot_create_compatible_call(tmp_path):
 def test_time_tolerance_does_not_create_identity_proof(tmp_path):
     args = {"command": "git status"}
     _file(tmp_path, "codex", _codex(args, time="2026-10-21T01:00:12Z"))
-    matches, info = sessions.scan_independent_sessions(
+    matches, info = scan_independent_sessions(
         tmp_path,
         [_call(args)],
         CUTOFF,
@@ -43,7 +48,7 @@ def test_incomplete_session_read_downgrades_unique_candidate(tmp_path, monkeypat
     rows.append(rows[-1])  # duplicate call would invalidate uniqueness
     _file(tmp_path, "codex", rows)
     monkeypatch.setattr(sessions, "MAX_LINES", 2)
-    matches, info = sessions.scan_independent_sessions(
+    matches, info = scan_independent_sessions(
         tmp_path,
         [_call(args)],
         CUTOFF,
@@ -61,7 +66,7 @@ def test_symlink_session_not_read_or_counted_as_direct_evidence(tmp_path):
     folder = tmp_path / ".codex" / "sessions" / "a"
     folder.mkdir(parents=True)
     (folder / "synthetic.jsonl").symlink_to(external)
-    matches, info = sessions.scan_independent_sessions(
+    matches, info = scan_independent_sessions(
         tmp_path,
         [_call(args)],
         CUTOFF,
@@ -75,7 +80,7 @@ def test_malformed_session_row_invalidates_candidate_uniqueness(tmp_path):
     file = _file(tmp_path, "codex", _codex(args))
     with file.open("a") as out:
         out.write('{"timestamp":\n')
-    links, counts = sessions.scan_independent_sessions(tmp_path, [_call(args)], CUTOFF)
+    links, counts = scan_independent_sessions(tmp_path, [_call(args)], CUTOFF)
     assert not links
     assert counts["session_source_incomplete"] >= 1
     assert counts["compatible_agent_tool_signatures"] == 0
@@ -90,9 +95,7 @@ def test_symlink_ancestor_is_not_an_agent_source(tmp_path):
         "".join(json.dumps(e) + "\n" for e in _codex(args))
     )
     (tmp_path / ".codex").symlink_to(real, target_is_directory=True)
-    matches, counts = sessions.scan_independent_sessions(
-        tmp_path, [_call(args)], CUTOFF
-    )
+    matches, counts = scan_independent_sessions(tmp_path, [_call(args)], CUTOFF)
     assert not matches
     assert counts["session_source_incomplete"] >= 1
 
@@ -118,9 +121,7 @@ def test_session_read_failure_does_not_certify_unique_signature(tmp_path, monkey
         return real_open(path, *other, **options)
 
     monkeypatch.setattr(sessions.os, "open", denied)
-    matched, counts = sessions.scan_independent_sessions(
-        tmp_path, [_call(args)], CUTOFF
-    )
+    matched, counts = scan_independent_sessions(tmp_path, [_call(args)], CUTOFF)
     assert not matched
     assert counts["session_source_incomplete"] > 0
     assert counts["compatible_agent_tool_signatures"] == 0
@@ -146,9 +147,7 @@ def test_unreadable_subdirectory_downgrades_otherwise_unique_match(
         return original_scandir(path)
 
     monkeypatch.setattr(os, "scandir", blocked)
-    matches, counts = sessions.scan_independent_sessions(
-        tmp_path, [_call(args)], CUTOFF
-    )
+    matches, counts = scan_independent_sessions(tmp_path, [_call(args)], CUTOFF)
     assert not matches
     assert counts["session_source_incomplete"] >= 1
     assert counts["compatible_agent_tool_signatures"] == 0
@@ -165,9 +164,7 @@ def test_old_file_mtime_exclusion_downgrades_unique_match(tmp_path):
     historical.write_text(fresh.read_text())
     earlier = datetime(2026, 10, 19, tzinfo=timezone.utc).timestamp()
     os.utime(historical, (earlier, earlier))
-    matches, counts = sessions.scan_independent_sessions(
-        tmp_path, [_call(args)], CUTOFF
-    )
+    matches, counts = scan_independent_sessions(tmp_path, [_call(args)], CUTOFF)
     assert not matches
     assert counts["mtime_early_session_files_skipped"] == 1
     assert counts["session_source_incomplete"] >= 1
@@ -182,9 +179,7 @@ def test_unknown_tool_message_timestamp_invalidates_uniqueness(tmp_path):
     duplicate["timestamp"] = "invalid"
     rows.append(duplicate)
     _file(tmp_path, "codex", rows)
-    matches, counts = sessions.scan_independent_sessions(
-        tmp_path, [_call(args)], CUTOFF
-    )
+    matches, counts = scan_independent_sessions(tmp_path, [_call(args)], CUTOFF)
     assert not matches
     assert counts["session_source_incomplete"] >= 1
     assert counts["candidate_links_downgraded_by_partial_scan"] == 1

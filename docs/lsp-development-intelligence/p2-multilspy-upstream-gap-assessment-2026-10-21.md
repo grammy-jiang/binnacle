@@ -4,7 +4,7 @@ Date: 2026-10-21. Status: research complete; preferred dependency migration
 candidate, with concrete compatibility gates. **Not a runtime migration or
 P2.4 release approval.**
 
-Upstream source: https://github.com/microsoft/multilspy
+Upstream source: <https://github.com/microsoft/multilspy>
 Audited tag: v0.1.1, commit 62acb3cf2d7a0746992ca08767d8a4fded402ebb
 MIT; upstream metadata classifies its maturity as Pre-Alpha.
 Source inspected in a detached, disposable /tmp checkout, not Binnacle.

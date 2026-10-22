@@ -124,7 +124,10 @@ def test_feature_env_typos_fail_closed(cfg: Path, monkeypatch, name: str) -> Non
     [
         ("[development_intelligence]\nenabld = true\n", "enabld"),
         ("[development_intelligence]\nenabled = false\nbogus = 1\n", "bogus"),
-        ("[development_intelligence.profiles.pyright]\nenabeld = true\n", "enabeld"),
+        (
+            "[development_intelligence.profiles.pyright]\nunrecognized_option = true\n",
+            "unrecognized_option",
+        ),
         (
             "[development_intelligence.profiles.fake_pyright]\nenabled = true\n",
             "fake_pyright",
@@ -239,6 +242,7 @@ def test_nested_models_are_isolated_from_each_settings_instance(cfg: Path) -> No
 def test_opt_in_flag_does_not_register_mcp_tools_before_p2_7(cfg: Path) -> None:
     """P2.0 is config only; both client surfaces retain exact schema and order."""
     from binnacle.application import create_application
+    from tests.command_support import MemoryCommands
     from tests.contracts.surface_support import served, surface
 
     def snapshot(enabled: bool, client: str | None) -> tuple:
@@ -246,7 +250,7 @@ def test_opt_in_flag_does_not_register_mcp_tools_before_p2_7(cfg: Path) -> None:
         root = create_application(
             settings=setting,
             token="synthetic-opt-in-test",
-            backend=object(),
+            backend=MemoryCommands("unused"),
         )
         tools, instructions = served(client, mcp_server=root)
         return tuple(surface(tool) for tool in tools), instructions

@@ -10,8 +10,6 @@ from tests.fixtures.lsp.analyzer_audit import OUTPUT_LIMIT, audit
 from tests.fixtures.lsp.process_observer import ProcessObserver
 from tests.fixtures.lsp.side_effects import differences, manifest
 
-pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX fixture observer")
-
 
 @pytest.fixture
 def sandbox(tmp_path):
@@ -24,6 +22,7 @@ def sandbox(tmp_path):
     return tmp_path
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX fixture observer")
 @pytest.mark.parametrize(
     "scenario", ["clean", "findings", "nonzero-findings", "stderr"]
 )
@@ -52,6 +51,7 @@ def test_complete_cli_results(sandbox, scenario):
     assert result.stderr_retained == (26 if scenario == "stderr" else 0)
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX fixture observer")
 @pytest.mark.parametrize(
     ("scenario", "status"),
     [
@@ -84,6 +84,7 @@ def test_failed_cli_never_becomes_clean(sandbox, scenario, status):
         assert result.elapsed >= 0.5
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX fixture observer")
 @pytest.mark.parametrize(
     ("scenario", "root", "path"),
     [
@@ -114,6 +115,7 @@ def test_side_effects_reported_even_when_output_fails(sandbox, scenario, root, p
     assert result.status == expected.get(scenario, "complete")
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX fixture observer")
 def test_analyzer_child_is_observed_and_reaped(sandbox):
     result = audit(sandbox, "child")
     events = [json.loads(line) for line in result.trace.read_text().splitlines()]
@@ -125,6 +127,7 @@ def test_analyzer_child_is_observed_and_reaped(sandbox):
     assert result.child_pids == (child["pid"],)
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX fixture observer")
 def test_manifest_includes_ignored_hidden_symlinks_modes_sizes_and_hashes(sandbox):
     root = sandbox / "workspace"
     hidden = root / ".ignored-cache"
@@ -171,6 +174,7 @@ def test_manifest_includes_ignored_hidden_symlinks_modes_sizes_and_hashes(sandbo
     assert changed["added"][0] is None
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX fixture observer")
 def test_external_target_is_audited_as_separate_explicit_root(sandbox):
     root = sandbox / "workspace"
     cache = sandbox / "external-cache"
@@ -181,6 +185,7 @@ def test_external_target_is_audited_as_separate_explicit_root(sandbox):
     assert "sentinel" in differences(before_cache, manifest(cache))
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX fixture observer")
 def test_snapshot_failure_cannot_be_reported_clean(sandbox, monkeypatch):
     def denied(*args, **kwargs):
         raise PermissionError("synthetic unreadable file")
@@ -190,6 +195,7 @@ def test_snapshot_failure_cannot_be_reported_clean(sandbox, monkeypatch):
         audit(sandbox, "clean")
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX fixture observer")
 def test_post_run_snapshot_error_propagates_after_cleanup(sandbox, monkeypatch):
     from tests.fixtures.lsp import analyzer_audit
 
@@ -215,6 +221,7 @@ def test_post_run_snapshot_error_propagates_after_cleanup(sandbox, monkeypatch):
     assert not ProcessObserver.pid_exists(parent)
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX fixture observer")
 def test_fake_analyzer_refuses_redirected_sentinel(sandbox):
     outside = sandbox / "external-cache" / "untouched"
     outside.write_text("original")
@@ -225,6 +232,7 @@ def test_fake_analyzer_refuses_redirected_sentinel(sandbox):
     assert not any(result.changes.values())
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX fixture observer")
 def test_analyzer_child_cleanup_on_interrupted_audit(sandbox):
     from tests.fixtures.lsp.analyzer_audit import ANALYZER
 

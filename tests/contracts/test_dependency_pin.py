@@ -24,6 +24,8 @@ tomllib = pytest.importorskip(
 PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
 
 RUNTIME_DEPENDENCIES = {
+    "anyio>=4,<5": "explicit FastMCP AnyIO CancelScope shielding for LSP shutdown",
+    "typing-extensions>=4.16,<5": "Python 3.10 Self in native resident LSP provider manager",
     "cyclopts>=4.23.3": "the CLI framework of binnacle, binnacle-tunnel and binnacle-watchdog",
     "fastmcp==4.1.0": "the MCP server framework; reviewed stable FastMCP 4.1 baseline",
     "mcp==2.3.0": "exact validated latest MCP protocol SDK for the public API",

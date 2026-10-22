@@ -42,7 +42,7 @@ def patched_upstream():
     assert binary.is_absolute() and binary.is_file(), "real Pyright binary required"
     import inspect
 
-    from multilspy.language_servers.pyright_language_server.pyright_server import (
+    from multilspy.language_servers.pyright_language_server.pyright_server import (  # type: ignore[import-untyped]
         PyrightServer,
     )
 
@@ -113,9 +113,14 @@ def _original_bytes(root: Path) -> dict[str, bytes]:
 
 def _new_native_server(root: Path, patched_upstream):
     binary, cls = patched_upstream
-    from multilspy import LanguageServer
-    from multilspy.multilspy_config import Language, MultilspyConfig
-    from multilspy.multilspy_logger import MultilspyLogger
+    from multilspy import LanguageServer  # type: ignore[import-untyped]
+    from multilspy.multilspy_config import (  # type: ignore[import-untyped]
+        Language,
+        MultilspyConfig,
+    )
+    from multilspy.multilspy_logger import (  # type: ignore[import-untyped]
+        MultilspyLogger,
+    )
 
     server = LanguageServer.create(
         MultilspyConfig(
@@ -149,8 +154,13 @@ def test_patched_factory_is_original_upstream_and_jedi_default(
 ):
     _new_native_server(disposable_workspace, patched_upstream)
     from multilspy import LanguageServer
-    from multilspy.language_servers.jedi_language_server.jedi_server import JediServer
-    from multilspy.multilspy_config import Language, MultilspyConfig
+    from multilspy.language_servers.jedi_language_server.jedi_server import (  # type: ignore[import-untyped]
+        JediServer,
+    )
+    from multilspy.multilspy_config import (
+        Language,
+        MultilspyConfig,
+    )
     from multilspy.multilspy_logger import MultilspyLogger
 
     jedi = LanguageServer.create(

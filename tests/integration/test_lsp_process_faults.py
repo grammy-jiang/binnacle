@@ -9,9 +9,8 @@ import pytest
 
 from tests.fixtures.lsp.process_observer import ProcessObserver
 
-pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX pipe/session fixture")
 
-
+@pytest.mark.skipif(os.name != "posix", reason="POSIX pipe/session fixture")
 @pytest.mark.parametrize("fault", ["hang-initialize", "delay-initialize"])
 def test_initialize_timeout_and_late_response(tmp_path, fault):
     with ProcessObserver(tmp_path, fault) as peer:
@@ -31,6 +30,7 @@ def test_initialize_timeout_and_late_response(tmp_path, fault):
     assert not peer.pid_exists(peer.process.pid)
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX pipe/session fixture")
 @pytest.mark.parametrize("phase", ["initialize", "request"])
 @pytest.mark.parametrize("failure", ["crash", "eof"])
 def test_crash_and_live_stdout_eof(tmp_path, phase, failure):
@@ -56,6 +56,7 @@ def test_crash_and_live_stdout_eof(tmp_path, phase, failure):
     assert not peer.pid_exists(peer.process.pid)
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX pipe/session fixture")
 def test_stderr_flood_is_drained_and_retention_bounded(tmp_path):
     with ProcessObserver(tmp_path, "stderr-flood") as peer:
         assert peer.request("initialize")["id"] == 1
@@ -70,6 +71,7 @@ def test_stderr_flood_is_drained_and_retention_bounded(tmp_path):
     assert peer.cleanup_verified
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX pipe/session fixture")
 def test_shutdown_timeout_term_resistance_and_kill_witness(tmp_path):
     with ProcessObserver(tmp_path, "non-exit") as peer:
         peer.wait_event("ready")  # Signal handler installed before TERM.
@@ -82,6 +84,7 @@ def test_shutdown_timeout_term_resistance_and_kill_witness(tmp_path):
     assert peer.process.returncode == -signal.SIGKILL
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX pipe/session fixture")
 @pytest.mark.parametrize("fault", ["child", "escaped-child"])
 @pytest.mark.parametrize("fail_assertion", [False, True])
 def test_descendant_cleanup_even_on_test_failure(tmp_path, fault, fail_assertion):
@@ -101,6 +104,7 @@ def test_descendant_cleanup_even_on_test_failure(tmp_path, fault, fail_assertion
     assert not peer.pid_exists(peer.process.pid)
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX pipe/session fixture")
 def test_exit_trace_alone_never_proves_cleanup(tmp_path, monkeypatch):
     peer = ProcessObserver(tmp_path, "escaped-child")
     child = peer.wait_event("child-ready")
@@ -113,6 +117,7 @@ def test_exit_trace_alone_never_proves_cleanup(tmp_path, monkeypatch):
     assert not real_exists(peer.process.pid)
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX pipe/session fixture")
 def test_cancel_notification_witness_and_immediate_failure_cleanup(tmp_path):
     with ProcessObserver(tmp_path, "hang-initialize") as peer:
         peer.send({"id": 1, "method": "initialize"})

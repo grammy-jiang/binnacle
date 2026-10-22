@@ -250,7 +250,9 @@ async def test_aclose_while_session_active_reaps_process(
 @pytest.mark.asyncio
 async def test_crashed_provider_does_not_remain_active(valid_owner_profile, workspace):
     owner = PrivatePyrightProcessOwner(valid_owner_profile, workspace)
-    from multilspy.lsp_protocol_handler.server import Error
+    from multilspy.lsp_protocol_handler.server import (  # type: ignore[import-untyped]
+        Error,
+    )
 
     # Crash can race either with the reader (LSP Error) or with stdin drain
     # (ConnectionResetError). Both must release process and request state.
@@ -317,9 +319,14 @@ async def test_nonresponsive_initialization_fails_closed_without_leaking_parent(
     tmp_path,
 ):
     """A spawn before failed initialize must be reaped and poison the owner."""
-    from multilspy import LanguageServer
-    from multilspy.multilspy_config import Language, MultilspyConfig
-    from multilspy.multilspy_logger import MultilspyLogger
+    from multilspy import LanguageServer  # type: ignore[import-untyped]
+    from multilspy.multilspy_config import (  # type: ignore[import-untyped]
+        Language,
+        MultilspyConfig,
+    )
+    from multilspy.multilspy_logger import (  # type: ignore[import-untyped]
+        MultilspyLogger,
+    )
 
     root = tmp_path / "workspace"
     root.mkdir()

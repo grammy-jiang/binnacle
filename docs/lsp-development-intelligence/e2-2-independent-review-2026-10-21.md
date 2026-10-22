@@ -8,7 +8,7 @@
 | First follow-up | Malformed session JSON and missing timestamp events could disappear and manufacture a unique match; task prefix after `.` still matched; parent session directories could be symlinked | Count malformed/undated records, reject ancestor symlinks and add negative fixtures |
 | Second follow-up | Recursive `Path.rglob` could silently suppress unreadable child directories and leave a false unique match | Switch to `os.walk(..., onerror=...)`; any missing directory degrades all uniqueness claims |
 | Third follow-up | An old file's filesystem mtime was silently taken as proof that it had no in-range event | Report older skipped files as **incomplete coverage** and forbid unique-match certification |
-| Final source follow-up | Unknown timestamp tool messages could disappear while preserving uniqueness | Count unparseable potential tool/user events as incomplete; final scoped review **limited technical GO** |
+| Final source follow-up | Unknown timestamp tool messages could disappear while preserving uniqueness | Count unparsable potential tool/user events as incomplete; final scoped review **limited technical GO** |
 | E2.2 local inspection | Default E2.2 called the E2.1 packet writer during checksum validation | Added `require_existing_checkpoint=True` **read-and-compare** path; a synthetic test denies all writers and verifies no file's size/mtime changes; versioned output |
 | Final follow-up | Checkpoint read-only behavior and prior provenance fixes examined | Independent scoped reviewer **limited GO**; source lead results still explicitly unverified |
 

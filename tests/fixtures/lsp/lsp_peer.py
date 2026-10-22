@@ -20,10 +20,11 @@ def reject_constant(value: str) -> None:
 
 class LspPeer:
     def __init__(self, *args: str):
-        self.process = None
-        self.selector = None
+        self.control: int | None = None
+        self.process: subprocess.Popen[bytes] | None = None
+        self.selector: selectors.BaseSelector | None = None
         self.buffer = bytearray()
-        self.pending_length = None
+        self.pending_length: int | None = None
         self.max_buffered = 0
         try:
             self.process = subprocess.Popen(
@@ -82,9 +83,11 @@ class LspPeer:
 
     def send(self, message: dict[str, Any]) -> None:
         body = json.dumps(message, ensure_ascii=False).encode()
-        assert self.process.stdin is not None
-        self.process.stdin.write(f"Content-Length: {len(body)}\r\n\r\n".encode() + body)
-        self.process.stdin.flush()
+        process = self.process
+        if process is None or process.stdin is None:
+            raise RuntimeError("fixture peer is not started")
+        process.stdin.write(f"Content-Length: {len(body)}\r\n\r\n".encode() + body)
+        process.stdin.flush()
 
     def receive(self, timeout: float = 3) -> dict[str, Any]:
         deadline = time.monotonic() + timeout
@@ -110,17 +113,19 @@ class LspPeer:
                     raise ValueError("missing or duplicate Content-Length")
                 if not lengths[0].isdigit():
                     raise ValueError("invalid Content-Length")
-                length = int(lengths[0])
-                if length > 8192:
+                frame_length = int(lengths[0])
+                if frame_length > 8192:
                     raise ValueError("body too large")
-                self.pending_length = length
-                self.buffer = body
+                self.pending_length = frame_length
+                self.buffer = bytearray(body)
             length = self.pending_length
             if length is not None and len(self.buffer) >= length:
-                body = bytes(self.buffer[:length])
+                payload_bytes = bytes(self.buffer[:length])
                 del self.buffer[:length]
                 self.pending_length = None
-                value = json.loads(body.decode("utf-8"), parse_constant=reject_constant)
+                value = json.loads(
+                    payload_bytes.decode("utf-8"), parse_constant=reject_constant
+                )
                 if not isinstance(value, dict):
                     raise ValueError("expected object")
                 return value
@@ -137,10 +142,13 @@ class LspPeer:
                 self.max_buffered = max(self.max_buffered, len(self.buffer))
 
     def read_chunk(self, timeout: float) -> bytes | None:
-        if not self.selector.select(timeout):
+        selector = self.selector
+        process = self.process
+        if selector is None or process is None or process.stdout is None:
+            raise RuntimeError("fixture peer is not started")
+        if not selector.select(timeout):
             return None
-        assert self.process.stdout is not None
-        return os.read(self.process.stdout.fileno(), 1024)
+        return os.read(process.stdout.fileno(), 1024)
 
     def request(self, method: str, request_id: int = 1, **params: Any) -> dict:
         self.send(
@@ -166,6 +174,9 @@ class LspPeer:
             "result": None,
         }
         self.send({"jsonrpc": "2.0", "method": "exit"})
-        assert self.process.wait(timeout=3) == 0
-        assert self.process.stderr is not None
-        assert self.process.stderr.read() == b""
+        process = self.process
+        if process is None:
+            raise RuntimeError("fixture peer has no process")
+        assert process.wait(timeout=3) == 0
+        assert process.stderr is not None
+        assert process.stderr.read() == b""

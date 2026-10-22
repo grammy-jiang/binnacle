@@ -23,9 +23,14 @@ from binnacle.features.development_intelligence.lsp_process_owner import (
 @pytest.mark.asyncio
 async def test_aclose_during_pre_spawn_initialize_cancels_inflight_start(tmp_path):
     """No provider may spawn after its Binnacle owner has finished closing."""
-    from multilspy import LanguageServer
-    from multilspy.multilspy_config import Language, MultilspyConfig
-    from multilspy.multilspy_logger import MultilspyLogger
+    from multilspy import LanguageServer  # type: ignore[import-untyped]
+    from multilspy.multilspy_config import (  # type: ignore[import-untyped]
+        Language,
+        MultilspyConfig,
+    )
+    from multilspy.multilspy_logger import (  # type: ignore[import-untyped]
+        MultilspyLogger,
+    )
 
     root = tmp_path / "private-workspace"
     root.mkdir()
@@ -88,7 +93,10 @@ async def test_aclose_during_pre_spawn_initialize_cancels_inflight_start(tmp_pat
 async def test_aclose_during_blocked_initialize_after_spawn_reaps_process(tmp_path):
     """Closing owner while real stdio peer hangs after spawn cannot leak it."""
     from multilspy import LanguageServer
-    from multilspy.multilspy_config import Language, MultilspyConfig
+    from multilspy.multilspy_config import (
+        Language,
+        MultilspyConfig,
+    )
     from multilspy.multilspy_logger import MultilspyLogger
 
     root = tmp_path / "private-project"

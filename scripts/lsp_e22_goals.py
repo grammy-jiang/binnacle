@@ -13,8 +13,9 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, NoReturn
 
-if __package__:
+if TYPE_CHECKING or __package__:
     from .lsp_e01_trace import Corpus, _events, _observer, _resolve_terminals
     from .lsp_e02_private import _atomic_publish, _owned_directory, _read_owned_file
     from .lsp_e02_selection import episodes
@@ -70,12 +71,14 @@ def inspect_goals(
     # original packet is missing, do not silently establish a new E2.1 baseline.
     previous = private_dir / f"{batch}-e21-v2-review.json"
     with existing_owner_private(private_dir) as directory:
-        evidence = _read_owned_file(directory, previous.name, max_bytes=2 * 1024 * 1024)
+        checkpoint_bytes = _read_owned_file(
+            directory, previous.name, max_bytes=2 * 1024 * 1024
+        )
         key = _read_owned_file(directory, KEY_NAME, max_bytes=32)
         raw = _read_owned_file(directory, f"{batch}.json", max_bytes=1024 * 1024)
     if len(key) != 32:
         raise ValueError("invalid local case key")
-    if not isinstance(json.loads(evidence), dict):
+    if not isinstance(json.loads(checkpoint_bytes), dict):
         raise TypeError("invalid E2.1 checkpoint packet")
     manifest = json.loads(raw)
     cutoff, cases = _validate_manifest(manifest, batch)
@@ -107,8 +110,8 @@ def inspect_goals(
     agent_links, agent_counts = scan_independent_sessions(
         home, list(selected_calls.values()), cutoff
     )
-    totals = collections.Counter()
-    reason_counts = collections.Counter()
+    totals: collections.Counter[str] = collections.Counter()
+    reason_counts: collections.Counter[str] = collections.Counter()
     records = []
     cache: dict = {}
     for case, episode in selected_pairs:
@@ -227,7 +230,7 @@ def inspect_goals(
 
 
 class SafeParser(argparse.ArgumentParser):
-    def error(self, message: str) -> None:
+    def error(self, message: str) -> NoReturn:
         self.exit(2, "E22_ARGUMENT_ERROR\n")
 
 

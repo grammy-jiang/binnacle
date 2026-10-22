@@ -17,9 +17,9 @@ import socket
 import stat
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-if __package__:
+if TYPE_CHECKING or __package__:
     from .lsp_e01_trace import _digest, _time
 else:
     from lsp_e01_trace import _digest, _time
@@ -104,7 +104,7 @@ def _name_matches(full: Any, tool: str, server: str) -> bool:
 
 def _session_events(source: str, item: dict) -> tuple[bool, list[tuple[str, Any]]]:
     """Return user-role presence and native tool-use input structures only."""
-    commands = []
+    commands: list[tuple[str, Any]] = []
     if source == "codex":
         if item.get("type") != "response_item":
             return False, commands
@@ -116,7 +116,9 @@ def _session_events(source: str, item: dict) -> tuple[bool, list[tuple[str, Any]
             return True, commands
         if kind in ("function_call", "custom_tool_call"):
             arguments = payload.get("arguments", payload.get("input"))
-            commands.append((payload.get("name"), arguments))
+            name = payload.get("name")
+            if isinstance(name, str):
+                commands.append((name, arguments))
     elif source == "claude":
         typ = item.get("type")
         if typ == "user":
@@ -127,7 +129,9 @@ def _session_events(source: str, item: dict) -> tuple[bool, list[tuple[str, Any]
             if isinstance(blocks, list):
                 for block in blocks:
                     if isinstance(block, dict) and block.get("type") == "tool_use":
-                        commands.append((block.get("name"), block.get("input")))
+                        name = block.get("name")
+                        if isinstance(name, str):
+                            commands.append((name, block.get("input")))
     elif source == "pi" and item.get("type") == "message":
         message = item.get("message")
         if isinstance(message, dict):
@@ -137,7 +141,9 @@ def _session_events(source: str, item: dict) -> tuple[bool, list[tuple[str, Any]
             if isinstance(blocks, list):
                 for block in blocks:
                     if isinstance(block, dict) and block.get("type") == "toolCall":
-                        commands.append((block.get("name"), block.get("arguments")))
+                        name = block.get("name")
+                        if isinstance(name, str):
+                            commands.append((name, block.get("arguments")))
     return False, commands
 
 
@@ -171,7 +177,7 @@ def scan_independent_sessions(
             "ambiguous_external_match": False,
         }
     )
-    counters = collections.Counter()
+    counters: collections.Counter[str] = collections.Counter()
     for origin, relative in SESSION_PATHS:
         folder = home / relative
         if _has_symlink_component(folder):

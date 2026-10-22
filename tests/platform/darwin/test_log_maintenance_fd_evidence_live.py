@@ -51,6 +51,22 @@ def _lsof(raw: evidence.FDIdentity, canary: evidence.WritableCanary):
         timeout=8,
         check=False,
     )
+    if result.stderr:
+        # Some container namespaces expose a partial filesystem census. The
+        # product correctly refuses it, even if lsof exits 0 and provides the
+        # test-owned FD. Prove that fail-closed invariant first. Positive
+        # lsof controls cannot run under this incomplete observation context.
+        with pytest.raises(
+            evidence.FDCensusRefused, match="lsof execution or stderr untrusted"
+        ):
+            evidence.classify_lsof_census(
+                stdout=result.stdout,
+                stderr=result.stderr,
+                returncode=result.returncode,
+                source=raw,
+                canary=canary,
+            )
+        pytest.skip("lsof reported incomplete filesystem census; refusal verified")
     return evidence.classify_lsof_census(
         stdout=result.stdout,
         stderr=result.stderr,

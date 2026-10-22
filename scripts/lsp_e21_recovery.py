@@ -21,9 +21,9 @@ import stat
 import sys
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
-if __package__:
+if TYPE_CHECKING or __package__:
     from .lsp_e01_patterns import LABELS
     from .lsp_e01_trace import (
         Corpus,
@@ -267,7 +267,7 @@ def recover(
         if ref in resolved:
             raise ValueError("ambiguous local E2 ref collision")
         resolved[ref] = episode
-    counters = collections.Counter()
+    counters: collections.Counter[str] = collections.Counter()
     records = []
     observed = collections.defaultdict(list)
     for call in corpus.calls.values():
@@ -440,7 +440,7 @@ def recover(
 
 
 class SafeParser(argparse.ArgumentParser):
-    def error(self, message: str) -> None:
+    def error(self, message: str) -> NoReturn:
         self.exit(2, "E21_ARGUMENT_ERROR\n")
 
 

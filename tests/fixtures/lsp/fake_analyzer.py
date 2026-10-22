@@ -13,8 +13,12 @@ import signal
 import sys
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from process_faults import Faults, record
+if TYPE_CHECKING:
+    from tests.fixtures.lsp.process_faults import Faults, record
+else:
+    from process_faults import Faults, record
 
 MODES = (
     "clean",

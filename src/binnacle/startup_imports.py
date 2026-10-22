@@ -93,6 +93,9 @@ _MANAGER_COMMON = (
     # Both manager entries need a verified configured state root for
     # failures in later imports; it must be loaded under the same guard.
     "binnacle.config",
+    # Settings references inert Development Intelligence schema on both OSes;
+    # pin this transitive import (never a Pyright adapter or LSP subprocess).
+    "binnacle.config_development_intelligence",
     # The ordinary configuration and neutral platform-composition module
     # now transitively import these inert maintenance schema definitions.
     # Pin their complete startup closure rather than treating them as late
@@ -166,6 +169,9 @@ MANAGER_MODULES = {
                 "binnacle.platform.darwin.job_manager_procinfo",
                 "binnacle.platform.darwin.job_manager_queue",
                 "binnacle.platform.darwin.job_manager_lifecycle",
+                # The Darwin manager startup imports this maintenance fence;
+                # pin it as a required module instead of allowing late imports.
+                "binnacle.platform.darwin.job_manager_maintenance_fence",
                 "binnacle.platform.darwin.job_manager_telemetry",
                 "binnacle.platform.darwin.job_manager_records",
                 "binnacle.platform.darwin.job_manager_service",

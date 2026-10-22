@@ -21,6 +21,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 from tests.fixtures.lsp.process_observer import ProcessObserver
 from tests.fixtures.lsp.resource_sampling import METHOD, Sampler
@@ -192,8 +193,8 @@ def run(
         raise ValueError("only explicit fake fault cases are permitted")
     if not 0.01 <= sample_interval <= 0.2:
         raise ValueError("sample interval must be 0.01..0.2 seconds")
-    sampler = None
-    artifact = {
+    sampler: Sampler | None = None
+    artifact: dict[str, Any] = {
         "schema": "binnacle-fake-raw-benchmark/1",
         "evidence": "fake-only",
         "valid": False,
@@ -218,17 +219,20 @@ def run(
                 (workspace / name).write_text(content, encoding="utf-8")
             start = time.perf_counter_ns()
             with ProcessObserver(workspace, fault, cwd=workspace) as peer:
+                process = peer.process
+                if process is None:
+                    raise RuntimeError("synthetic benchmark process not started")
                 artifact["execution"] = {
-                    "argv": peer.process.args,
+                    "argv": process.args,
                     "cwd": directory,
-                    "pid": peer.process.pid,
+                    "pid": process.pid,
                     "rootUri": workspace.as_uri(),
                 }
                 if sample_resources:
                     expected = set()
                     if peer.expects_child:
                         expected.add(peer.wait_event("child-ready")["pid"])
-                    sampler = Sampler(peer.process.pid, expected, sample_interval)
+                    sampler = Sampler(process.pid, expected, sample_interval)
                     artifact["resources"] = sampler.result
                     sampler.capture("cold")
                     sampler.capture("cold")

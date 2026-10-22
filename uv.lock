@@ -212,6 +212,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "starlette" },
     { name = "tiktoken" },
+    { name = "typing-extensions" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -243,6 +244,7 @@ dev = [
     { name = "ruff" },
     { name = "tox" },
     { name = "tox-uv" },
+    { name = "types-psutil" },
     { name = "types-pyyaml" },
     { name = "uv" },
     { name = "validate-pyproject", extra = ["all", "store"] },
@@ -255,6 +257,7 @@ lint = [
     { name = "lizard" },
     { name = "mypy" },
     { name = "ruff" },
+    { name = "types-psutil" },
     { name = "types-pyyaml" },
     { name = "validate-pyproject", extra = ["all", "store"] },
     { name = "zizmor" },
@@ -290,6 +293,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "starlette", specifier = ">=1.6.0" },
     { name = "tiktoken", specifier = ">=0.14.0" },
+    { name = "typing-extensions", specifier = ">=4.16,<5" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.4" },
 ]
 provides-extras = ["development-intelligence-pyright"]
@@ -316,6 +320,7 @@ dev = [
     { name = "ruff", specifier = ">=0.16.5,<0.17" },
     { name = "tox", specifier = ">=4.61.1" },
     { name = "tox-uv", specifier = ">=1.36.0" },
+    { name = "types-psutil", specifier = ">=7.2" },
     { name = "types-pyyaml", specifier = ">=6.0.12" },
     { name = "uv", specifier = "==0.12.24" },
     { name = "validate-pyproject", extras = ["all", "store"], specifier = ">=0.26" },
@@ -328,6 +333,7 @@ lint = [
     { name = "lizard", specifier = ">=1.24.0" },
     { name = "mypy", specifier = ">=2.3.1" },
     { name = "ruff", specifier = ">=0.16.5,<0.17" },
+    { name = "types-psutil", specifier = ">=7.2" },
     { name = "types-pyyaml", specifier = ">=6.0.12" },
     { name = "validate-pyproject", extras = ["all", "store"], specifier = ">=0.26" },
     { name = "zizmor", specifier = "==1.30.1" },
@@ -3722,6 +3728,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/53/a3/1585216310e344e8102c22482f6060c7a6ea0322b63e026372e6dcefcfd6/truststore-0.10.4.tar.gz", hash = "sha256:9d91bd436463ad5e4ee4aba766628dd6cd7010cf3e2461756b3303710eebc301", size = 26169, upload-time = "2025-08-12T18:49:02.73Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/19/97/56608b2249fe206a67cd573bc93cd9896e1efb9e98bce9c163bcdc704b88/truststore-0.10.4-py3-none-any.whl", hash = "sha256:adaeaecf1cbb5f4de3b1959b42d41f6fab57b2b1666adb59e89cb0b53361d981", size = 18660, upload-time = "2025-08-12T18:49:01.46Z" },
+]
+
+[[package]]
+name = "types-psutil"
+version = "7.2.2.20260906"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/97/0a/f48b9b0ab5ba8599fd117309e345152bf82c756c72be2ff0f635780c2792/types_psutil-7.2.2.20260906.tar.gz", hash = "sha256:93abf22cf9a62b915f724e433bde702995ac274865425fd4a76d1d9b5828da1a", size = 27396, upload-time = "2026-09-06T06:35:24.499Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/8d/81a86107486e1c23f5ca21bea1e9e5b18a50754242e7a0b82f41f9ae8384/types_psutil-7.2.2.20260906-py3-none-any.whl", hash = "sha256:db00baf7f96c3f63421c4d3d68d373923094a0dfddf13e922c5c5fbc42488159", size = 33383, upload-time = "2026-09-06T06:35:23.575Z" },
 ]
 
 [[package]]

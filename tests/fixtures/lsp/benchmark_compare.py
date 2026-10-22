@@ -21,7 +21,12 @@ def require(condition: bool, reason: str) -> None:
 
 
 def number(value: object) -> bool:
-    return type(value) in (int, float) and math.isfinite(value) and value >= 0
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value >= 0
+    )
 
 
 def hash_string(value: object) -> bool:

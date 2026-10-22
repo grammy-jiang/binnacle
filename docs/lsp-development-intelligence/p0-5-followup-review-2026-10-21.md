@@ -7,7 +7,7 @@ Reviewer: local Codex CLI, read-only sandbox, medium reasoning effort. Evaluated
 References below use `R` = [resolution register](p0-5-architecture-resolution-2026-10-21.md), `P` = [implementation plan](implementation-plan.md).
 
 | Finding | Result | Resolution / remaining gate |
-|---|---|---|
+| --- | --- | --- |
 | 1. Authorization | PASS | Host grants govern all authenticated callers; visibility cannot confer permission; direct-call denial required. `R:12` |
 | 2. Confinement/cleanup | PASS | Enforceable isolation gates READ; escaped descendants produce unverified cleanup and prevent unsafe restart/promotion. Native OS proof remains mandatory. `R:13` |
 | 3. Lifecycle ownership | PASS | Root ownership, startup/reverse cleanup ordering, cancellation and per-ASGI-generation semantics specified. Actual ASGI verification gates P2 integration. `R:14` |

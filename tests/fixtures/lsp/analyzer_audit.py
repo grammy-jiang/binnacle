@@ -61,6 +61,9 @@ def audit(sandbox: Path, scenario: str, *, timeout: float = 2) -> Audit:
     status = "invalid"
     diagnostics: list = []
     started = time.monotonic()
+    process = peer.process
+    if process is None:
+        raise RuntimeError("synthetic audit process not started")
     try:
         with peer:
             deadline = started + timeout
@@ -75,10 +78,8 @@ def audit(sandbox: Path, scenario: str, *, timeout: float = 2) -> Audit:
                     peer.close_children()
                 chunk = peer.read_chunk(min(0.01, deadline - time.monotonic()))
                 if chunk == b"":
-                    peer.process.wait(timeout=max(0.001, deadline - time.monotonic()))
-                    status, diagnostics = classify(
-                        bytes(output), peer.process.returncode
-                    )
+                    process.wait(timeout=max(0.001, deadline - time.monotonic()))
+                    status, diagnostics = classify(bytes(output), process.returncode)
                     break
                 if chunk:
                     if len(output) + len(chunk) > OUTPUT_LIMIT:
@@ -93,7 +94,7 @@ def audit(sandbox: Path, scenario: str, *, timeout: float = 2) -> Audit:
         }
     return Audit(
         status,
-        peer.process.returncode,
+        process.returncode,
         diagnostics,
         changes,
         peer.cleanup_verified,

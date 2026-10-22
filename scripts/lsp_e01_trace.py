@@ -16,10 +16,10 @@ import sqlite3
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 # Standalone python scripts/lsp_e01_trace.py and package import both work.
-if __package__:
+if TYPE_CHECKING or __package__:
     from .lsp_e01_observer import _observer
     from .lsp_e01_patterns import EXACT_TURN, LABELS, _label, _windows
 else:
@@ -118,7 +118,9 @@ class Corpus:
         tuple[str, str], list[tuple[str, bool, int | None, float | None]]
     ] = field(default_factory=lambda: collections.defaultdict(list))
     duplicate_calls: set[tuple[str, str]] = field(default_factory=set)
-    duplicate_requests: set[tuple[str, str]] = field(default_factory=set)
+    duplicate_requests: set[tuple[str, tuple[str, str | int]]] = field(
+        default_factory=set
+    )
     duplicate_terminals: set[tuple[str, str]] = field(default_factory=set)
     counts: collections.Counter = field(default_factory=collections.Counter)
     events: collections.Counter = field(default_factory=collections.Counter)
@@ -186,7 +188,12 @@ def _events(
                             corr = data.get("correlation")
                             if isinstance(corr, dict):
                                 gen, call = corr.get("server_gen"), corr.get("call")
-                                if all(isinstance(x, str) and x for x in (gen, call)):
+                                if (
+                                    isinstance(gen, str)
+                                    and gen
+                                    and isinstance(call, str)
+                                    and call
+                                ):
                                     group, _ = _group_for_call(
                                         (gen, call), corr, observer, ambiguous
                                     )
@@ -225,7 +232,9 @@ def _events(
                         corpus.requests[req_key] = candidate
                 elif event == "tool_call":
                     gen, call = corr.get("server_gen"), corr.get("call")
-                    if not all(isinstance(x, str) and x for x in (gen, call)):
+                    if not (
+                        isinstance(gen, str) and gen and isinstance(call, str) and call
+                    ):
                         corpus.counts["calls_without_identity"] += 1
                         continue
                     key = (gen, call)
@@ -259,7 +268,9 @@ def _events(
                     )
                 elif event in ("tool_result", "tool_error"):
                     gen, call = corr.get("server_gen"), corr.get("call")
-                    if not all(isinstance(x, str) and x for x in (gen, call)):
+                    if not (
+                        isinstance(gen, str) and gen and isinstance(call, str) and call
+                    ):
                         corpus.counts["terminals_without_identity"] += 1
                         continue
                     if event == "tool_error":
@@ -325,13 +336,13 @@ def analyze(
     corpus = Corpus()
     _events(capture_dir, corpus, mapping, ambiguous, until_utc)
     _resolve_terminals(corpus)
-    tools = collections.Counter()
-    labels = collections.Counter()
-    group_sources = collections.Counter()
-    input_states = collections.Counter()
-    outcomes = collections.Counter()
-    truncation = collections.Counter()
-    coupled = collections.Counter()
+    tools: collections.Counter[str] = collections.Counter()
+    labels: collections.Counter[str] = collections.Counter()
+    group_sources: collections.Counter[str] = collections.Counter()
+    input_states: collections.Counter[str] = collections.Counter()
+    outcomes: collections.Counter[str] = collections.Counter()
+    truncation: collections.Counter[str] = collections.Counter()
+    coupled: collections.Counter[str] = collections.Counter()
     safe: list[Call] = []
     for key, call in corpus.calls.items():
         tools[call.tool] += 1

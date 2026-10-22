@@ -4,7 +4,7 @@ Date: 2026-10-21. Reviewed repository: microsoft/multilspy main baseline
 62acb3cf2d7a0746992ca08767d8a4fded402ebb (v0.1.1).
 Contributed fork branch: feat/pyright-language-server-20261021.
 Reviewed and pushed revision: f6f7e6a3c2021b56fc99c4ac7d4530e8d9a94c44.
-Pull request: https://github.com/microsoft/multilspy/pull/168 .
+Pull request: <https://github.com/microsoft/multilspy/pull/168> .
 
 ## Review method
 
@@ -23,7 +23,7 @@ review of the initial revisions. No user source/logs used in that review.
   constructor semantics and Jedi behavior intact.
 - Uses a dedicated PyrightServer(LanguageServer) alongside other adapter
   classes, with ProcessLaunchInfo argv and canonical project root.
-- Loads a packaged initialize_params.json via _get_initialize_params,
+- Loads a packaged initialize_params.json via `_get_initialize_params`,
   matching other provider adapters rather than embedding the full
   initialization template inline in start_server.
 - Explicitly registers workspace/configuration, denied workspace/applyEdit,
@@ -49,6 +49,7 @@ notification and failure cases, and a local temporary project for real
 optional Provider tests. No new remote repository downloads in tests.
 
 Selected focused regression coverage consists of:
+
 - 10 Python/Pyright backend selection and real navigation/completion/hover/
   symbols/diagnostics/synchronous facade tests
 - 14 adapter notification/initialize/capability/config/cleanup mock tests

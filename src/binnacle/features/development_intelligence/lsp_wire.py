@@ -99,7 +99,9 @@ class LspFrameDecoder:
                 length = self._header_length(bytes(self._buffer[:separator]))
                 del self._buffer[: separator + 4]
                 self._body_length = length
-            assert self._body_length is not None
+            if self._body_length is None:
+                # Do not rely on assert: optimized Python removes assertions.
+                raise LspProtocolError("missing_body_length")
             if len(self._buffer) < self._body_length:
                 if len(self._buffer) > self.max_body:
                     raise LspProtocolError("body_buffer_too_large")

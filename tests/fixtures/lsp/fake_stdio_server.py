@@ -9,13 +9,21 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from lsp_dialogue import Dialogue
-from lsp_payloads import CAPABILITIES, semantic_result
-from lsp_transport import MODES, emit, frame
-from process_faults import MODES as FAULT_MODES
-from process_faults import Faults
+# The subprocess remains standalone while mypy follows canonical test modules.
+if TYPE_CHECKING:
+    from tests.fixtures.lsp.lsp_dialogue import Dialogue
+    from tests.fixtures.lsp.lsp_payloads import CAPABILITIES, semantic_result
+    from tests.fixtures.lsp.lsp_transport import MODES, emit, frame
+    from tests.fixtures.lsp.process_faults import MODES as FAULT_MODES
+    from tests.fixtures.lsp.process_faults import Faults
+else:
+    from lsp_dialogue import Dialogue
+    from lsp_payloads import CAPABILITIES, semantic_result
+    from lsp_transport import MODES, emit, frame
+    from process_faults import MODES as FAULT_MODES
+    from process_faults import Faults
 
 
 def _read_message() -> dict[str, Any] | None:

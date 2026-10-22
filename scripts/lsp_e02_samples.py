@@ -14,8 +14,9 @@ import re
 import sqlite3
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, NoReturn
 
-if __package__:
+if TYPE_CHECKING or __package__:
     from .lsp_e01_trace import Corpus, _events, _observer, _resolve_terminals, _time
     from .lsp_e02_private import write_document
     from .lsp_e02_selection import episodes, sample, summary
@@ -142,7 +143,7 @@ def run(
 class SafeParser(argparse.ArgumentParser):
     """Never echo an untrusted command-line value in parser errors."""
 
-    def error(self, message: str) -> None:
+    def error(self, message: str) -> NoReturn:
         self.exit(2, "E02_ARGUMENT_ERROR\n")
 
 

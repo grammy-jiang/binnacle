@@ -12,6 +12,7 @@ import os
 import platform
 import subprocess
 import time
+from typing import Any
 
 METHOD = "ps-pid-ppid-pgid-rss-time-lstart/1"
 PHASES = ("cold", "settling", "warm")
@@ -99,7 +100,7 @@ class Sampler:
             raise ValueError("sample interval must be 0.01..0.2 seconds")
         self.root, self.expected, self.interval = root, expected, interval
         self.known: dict[int, str] = {}
-        self.result = {
+        self.result: dict[str, Any] = {
             "status": "pending",
             "method": METHOD,
             "interval_s": interval,

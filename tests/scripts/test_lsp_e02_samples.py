@@ -33,6 +33,7 @@ def _fake_episode(i: int, stratum: str) -> Episode:
         "present",
         "result",
     )
+    assert call.group is not None  # synthetic fixture always has verified attribution
     return Episode(
         group=call.group,
         calls=(call,),

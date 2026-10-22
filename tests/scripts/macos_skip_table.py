@@ -116,6 +116,14 @@ integration/test_run_command_policy_telemetry.py | T0: Linux auto-background dur
 integration/test_run_command_error_telemetry.py | T0: Linux run_command default backend via composed server; Darwin counterpart tests/platform/darwin/test_native_smoke_mcp.py::test_run_command_sd18
 integration/test_search_settings.py | T0: Search child over Linux pathname Core (CR0-06); Darwin counterpart tests/platform/darwin/test_search_parity.py::test_native_local_ignore_and_glob_parity
 integration/test_setup_units.py | B0: systemd unit inspector; Darwin launchd inspector is follow-up DARWIN-FOLLOWUP-service-inspector (per-test LINUX_ONLY on the 6 binnacle mode tests that build it; R4 J4, Supervisor ruling A, PO-J4-3)
+integration/test_lsp_analyzer_audit.py | E0: POSIX analyzer modes and process evidence, per-test Linux and Darwin acceptance
+integration/test_lsp_owner_native_descendants.py | E0: POSIX P2.4 process group cleanup tests, Linux and Darwin
+integration/test_lsp_process_faults.py | E0: POSIX pipe and process signal fixture, Linux and Darwin
+integration/test_lsp_provider_tree_native.py | E0: POSIX process identity and cleanup fixture, Linux and Darwin
+integration/test_lsp_provider_tree_pyright.py | E0: POSIX native Pyright tree integration, Linux and Darwin
+integration/test_lsp_benchmark_resources.py | E0: per-test native process sampling requires Linux/Darwin
+scripts/test_lsp_e02_durability.py | E0: per-test POSIX directory descriptor audit
+unit/core/lsp_analyzer_test.py | E0: per-test POSIX file special types and modes
 contracts/test_darwin_interface.py | B0: Darwin root-grant lifecycle tests need native descriptors (R2D-T0A6-01 fix ecf6aea)
 platform/darwin/test_missing_roots.py | B0: Darwin missing-root lifespan tests need native descriptors (SD-24 fix 8132d8d)
 unit/tools/test_linux_fd_write_security.py | T0: SEC-FU-14: per-test Linux FD-relative parent and atomic write race fixtures; the Darwin provider uses opened grants instead
@@ -144,6 +152,14 @@ ALLOWED_PLATFORM_SKIPS = {
 
 # Per row: the platform-conditioned skip sites a file may hold (reviewable edit).
 PLATFORM_SITE_COUNTS = {
+    "tests/integration/test_lsp_analyzer_audit.py": 10,
+    "tests/integration/test_lsp_owner_native_descendants.py": 1,
+    "tests/integration/test_lsp_process_faults.py": 7,
+    "tests/integration/test_lsp_provider_tree_native.py": 6,
+    "tests/integration/test_lsp_provider_tree_pyright.py": 1,
+    "tests/integration/test_lsp_benchmark_resources.py": 1,
+    "tests/scripts/test_lsp_e02_durability.py": 1,
+    "tests/unit/core/lsp_analyzer_test.py": 1,
     "tests/system/test_uplink_network.py": 1,
     "tests/live/test_deployment_smoke.py": 0,
     "tests/scripts/test_macos_collection_native.py": 1,

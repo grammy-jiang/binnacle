@@ -43,6 +43,7 @@ not a provider security/containment or performance audit.
 | Whole workspace analysis | PASS, including unopened files and exclusion paths | Pyright CLI (not same as LSP) |
 
 Type-checking CLI mode acceptance on Mac:
+
 - Off: syntax and undefined symbols still diagnosed; type mismatches suppressed.
 - Basic / Standard: both report return/assignment type inconsistencies.
 - Strict: additional missing or unknown parameter annotations diagnosed.
@@ -110,7 +111,7 @@ tests and does not download or install any Provider.
   verified; this exact optional multilspy adapter regression has NOT been
   repeated on Sextant.
 - Microsoft multilspy upstream community PR
-  https://github.com/microsoft/multilspy/pull/168 was opened from the
+  <https://github.com/microsoft/multilspy/pull/168> was opened from the
   separate forked upstream branch feat/pyright-language-server-20261021.
   The upstream contribution keeps Jedi as default Python backend; it adds
   explicit Pyright selection, fixes optional LocationLink parsing and null
@@ -124,7 +125,6 @@ with canonical paths and valid request locations. Some features require
 the low-level multilspy API and high-level completion still needs an
 upstream fix. Keep Pyright as selected provider; continue P2.4 process
 ownership and P2.5 workspace/URI gates before public MCP exposure.
-
 
 ## Upstream follow-up verification (2026-10-21, later revision)
 

@@ -10,7 +10,17 @@ from pathlib import Path
 import pytest
 
 from scripts.lsp_e01_trace import Call, _digest
-from scripts.lsp_e22_sessions import scan_independent_sessions
+from scripts.lsp_e22_sessions import scan_independent_sessions as scan_native_sessions
+
+
+def scan_independent_sessions(home, targets, cutoff, *, server_name="MacBook_Pro_MCP"):
+    """Synthetic Codex rows name MacBook_Pro_MCP on ALL test platforms.
+
+    Explicit Raspberry_Pi_MCP overrides in Claude/Pi fixtures are forwarded;
+    never choose this test's agent identity from the runner's hostname.
+    """
+    return scan_native_sessions(home, targets, cutoff, server_name=server_name)
+
 
 HIDDEN = "DO_NOT_REPRINT_SESSION_PROMPT_777"
 TIME = "2026-10-21T01:00:00+00:00"

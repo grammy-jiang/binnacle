@@ -184,7 +184,9 @@ class NativeProviderTree:
             reason = "owned_process_still_alive"
         else:
             reason = "observed_processes_reaped"
-        status = "cleanup_unverified" if self.escaped or remaining else "observed_clean"
+        status: Literal["observed_clean", "cleanup_unverified"] = (
+            "cleanup_unverified" if self.escaped or remaining else "observed_clean"
+        )
         return ProcessCleanup(
             status=status,
             root_pid=root.pid,

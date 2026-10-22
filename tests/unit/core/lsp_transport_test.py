@@ -2,6 +2,7 @@
 
 import io
 import json
+from typing import Any
 
 import pytest
 
@@ -28,7 +29,7 @@ class WriteWitness(io.BytesIO):
         super().__init__()
         self.sizes: list[int] = []
 
-    def write(self, value: bytes) -> int:
+    def write(self, value: Any) -> int:
         self.sizes.append(len(value))
         return super().write(value)
 
@@ -70,7 +71,7 @@ def test_lsp_bad_frames_are_bounded(mode: str, exception: type[Exception], reaso
         with pytest.raises(exception, match=reason):
             peer.receive(timeout=2)
         assert peer.max_buffered <= 9216  # 8 KiB body limit plus one read chunk.
-    assert peer.process.poll() is not None
+    assert peer.process is not None and peer.process.poll() is not None
 
 
 @pytest.mark.parametrize("mode", ["unknown-id", "null-id", "boolean-id", "list-id"])
@@ -127,6 +128,7 @@ def test_lsp_server_request_rejected_by_response_validator():
 )
 def test_lsp_input_eof_exits_without_hanging(wire: bytes, exit_code: int):
     with LspPeer() as peer:
+        assert peer.process is not None
         stdout, stderr = peer.process.communicate(input=wire, timeout=3)
         assert peer.process.returncode == exit_code
         assert stdout == b""

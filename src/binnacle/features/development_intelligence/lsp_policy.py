@@ -31,7 +31,7 @@ def server_request_reply(
 ) -> dict:
     """Apply an exact, read-only allowlist, not arbitrary client extensions."""
     identifier = message.get("id")
-    if type(identifier) not in (int, str):
+    if not isinstance(identifier, (int, str)) or isinstance(identifier, bool):
         raise LspProtocolError("invalid_server_request_id")
     method = message.get("method")
     if not isinstance(method, str) or not method:

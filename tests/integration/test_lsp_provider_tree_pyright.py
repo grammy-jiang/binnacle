@@ -16,8 +16,6 @@ from binnacle.features.development_intelligence.lsp_process_tree import (
     NativeProviderTree,
 )
 
-pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX process owner")
-
 
 @pytest.fixture
 def executable():
@@ -28,11 +26,17 @@ def executable():
     return binary
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process owner")
 @pytest.mark.asyncio
 async def test_native_multilspy_provider_process_tree_lifecycle(executable, tmp_path):
-    from multilspy import LanguageServer
-    from multilspy.multilspy_config import Language, MultilspyConfig
-    from multilspy.multilspy_logger import MultilspyLogger
+    from multilspy import LanguageServer  # type: ignore[import-untyped]
+    from multilspy.multilspy_config import (  # type: ignore[import-untyped]
+        Language,
+        MultilspyConfig,
+    )
+    from multilspy.multilspy_logger import (  # type: ignore[import-untyped]
+        MultilspyLogger,
+    )
 
     project = (tmp_path / "workspace").resolve()
     project.mkdir()

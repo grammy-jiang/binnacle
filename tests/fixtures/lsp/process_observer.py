@@ -16,6 +16,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from typing_extensions import Self
+
 from tests.fixtures.lsp.lsp_peer import FIXTURE, LspPeer
 
 
@@ -28,11 +30,11 @@ class ProcessObserver(LspPeer):
         command=None,
         cwd: Path | None = None,
     ):
-        self.process = None
-        self.selector = None
-        self.control = None
+        self.process: subprocess.Popen[bytes] | None = None
+        self.selector: selectors.BaseSelector | None = None
+        self.control: int | None = None
         self.buffer = bytearray()
-        self.pending_length = None
+        self.pending_length: int | None = None
         self.max_buffered = 0
         self.stderr_size = 0
         self.stderr_sample = bytearray()
@@ -67,7 +69,9 @@ class ProcessObserver(LspPeer):
             )
             self.selector = selectors.DefaultSelector()
             for pipe in (self.process.stdout, self.process.stderr):
+                assert pipe is not None
                 self.selector.register(pipe, selectors.EVENT_READ)
+            assert self.process.stderr is not None
             os.set_blocking(self.process.stderr.fileno(), False)
         except BaseException:
             # If our synthetic provider already spawned a cooperative child,
@@ -106,6 +110,10 @@ class ProcessObserver(LspPeer):
             if read_fd is not None:
                 os.close(read_fd)
 
+    def __enter__(self) -> Self:
+        """Keep the concrete observer type through synthetic peer lifespans."""
+        return self
+
     def events(self) -> list[dict]:
         # Ignore only the incomplete final line during a concurrent append.
         data = self.trace.read_bytes()
@@ -126,17 +134,22 @@ class ProcessObserver(LspPeer):
 
     def read_chunk(self, timeout: float) -> bytes | None:
         """Drain stderr without retaining unbounded data; None means no stdout yet."""
-        ready = self.selector.select(max(0, timeout))
+        selector = self.selector
+        process = self.process
+        if selector is None or process is None:
+            raise RuntimeError("synthetic process observer is not started")
+        ready = selector.select(max(0, timeout))
         stdout_chunk = None
         for key, _ in ready:
-            chunk = os.read(key.fileobj.fileno(), 1024)
-            if key.fileobj is self.process.stdout:
+            fd = key.fileobj if isinstance(key.fileobj, int) else key.fileobj.fileno()
+            chunk = os.read(fd, 1024)
+            if key.fileobj is process.stdout:
                 stdout_chunk = chunk
                 continue
             # Drain a bounded burst, including bytes queued behind stdout readiness.
             for index in range(257):
                 if not chunk:
-                    self.selector.unregister(key.fileobj)
+                    selector.unregister(key.fileobj)
                     break
                 self.stderr_size += len(chunk)
                 self.stderr_sample.extend(
@@ -145,22 +158,25 @@ class ProcessObserver(LspPeer):
                 if index == 256:
                     break
                 try:
-                    chunk = os.read(key.fileobj.fileno(), 1024)
+                    chunk = os.read(fd, 1024)
                 except BlockingIOError:
                     break
         return stdout_chunk
 
     def close_children(self) -> None:
+        process = self.process
+        if process is None:
+            raise RuntimeError("synthetic process observer is not started")
         if self.control is not None:
             os.close(self.control)
             self.control = None
         if self.expects_child:
             self.wait_event("child-ready")
         children = [e for e in self.events() if e["event"] == "child-ready"]
-        self.escaped = any(e["pgid"] != self.process.pid for e in children)
+        self.escaped = any(e["pgid"] != process.pid for e in children)
         if children:
             self.wait_event("child-exit")
-            if self.process.poll() is None and self.reaps_via_rpc:
+            if process.poll() is None and self.reaps_via_rpc:
                 self.request("fixture/reap", 900)
             self.wait_event("child-reaped")
             # Exit intent is NOT proof of disappearance. Signal 0 only observes.
@@ -180,24 +196,26 @@ class ProcessObserver(LspPeer):
         return True
 
     def __exit__(self, *exc: object) -> None:
+        process = self.process
+        selector = self.selector
+        if process is None or selector is None:
+            self.release_resources()
+            raise RuntimeError("synthetic process observer never fully started")
         try:
             self.close_children()
         finally:
             try:
-                if self.process.poll() is None:
-                    self.process.send_signal(signal.SIGTERM)
+                if process.poll() is None:
+                    process.send_signal(signal.SIGTERM)
                     try:
-                        self.process.wait(timeout=0.2)
+                        process.wait(timeout=0.2)
                     except subprocess.TimeoutExpired:
                         self.escalated = True
-                        self.process.kill()
-                self.process.wait(timeout=3)
+                        process.kill()
+                process.wait(timeout=3)
             finally:
-                self.selector.close()
-                for pipe in (
-                    self.process.stdin,
-                    self.process.stdout,
-                    self.process.stderr,
-                ):
-                    pipe.close()
+                selector.close()
+                for pipe in (process.stdin, process.stdout, process.stderr):
+                    if pipe is not None:
+                        pipe.close()
         self.cleanup_verified = True
