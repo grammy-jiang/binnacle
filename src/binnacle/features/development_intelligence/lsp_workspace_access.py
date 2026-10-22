@@ -174,7 +174,10 @@ class AuthorizedWorkspace:
         self._workspace_parts = relative_root
         root_handle = _open_directory(authority_root, relative_root)
         try:
-            root_stat = os.fstat(root_handle)
+            try:
+                root_stat = os.fstat(root_handle)
+            except OSError as exc:
+                raise WorkspaceAccessError("workspace_root_unavailable") from exc
             self._root_identity = root_stat.st_dev, root_stat.st_ino
         finally:
             os.close(root_handle)
@@ -182,7 +185,11 @@ class AuthorizedWorkspace:
 
     def _workspace_fd(self) -> int:
         handle = _open_directory(self._authority_root, self._workspace_parts)
-        actual = os.fstat(handle)
+        try:
+            actual = os.fstat(handle)
+        except OSError as exc:
+            os.close(handle)
+            raise WorkspaceAccessError("workspace_root_unavailable") from exc
         if (actual.st_dev, actual.st_ino) != self._root_identity:
             os.close(handle)
             raise WorkspaceStaleError("workspace_root_replaced")
@@ -206,7 +213,10 @@ class AuthorizedWorkspace:
             except OSError as exc:
                 raise WorkspaceAccessError("source_not_authorized") from exc
             try:
-                before = os.fstat(file_fd)
+                try:
+                    before = os.fstat(file_fd)
+                except OSError as exc:
+                    raise WorkspaceAccessError("source_stat_unavailable") from exc
                 if not stat.S_ISREG(before.st_mode):
                     raise WorkspaceAccessError("source_not_regular_file")
                 if before.st_size > self.max_file_bytes:
@@ -223,7 +233,12 @@ class AuthorizedWorkspace:
                 except OSError as exc:
                     raise WorkspaceAccessError("source_read_unavailable") from exc
                 raw = b"".join(chunks)
-                after = os.fstat(file_fd)
+                try:
+                    after = os.fstat(file_fd)
+                except OSError as exc:
+                    raise WorkspaceStaleError(
+                        "source_stat_changed_during_read"
+                    ) from exc
 
                 def identity(st):
                     return (
@@ -259,8 +274,11 @@ class AuthorizedWorkspace:
                             raise WorkspaceStaleError("source_parent_replaced") from exc
                         os.close(confirmed)
                         confirmed = child
-                    actual_parent = os.fstat(confirmed)
-                    saved_parent = os.fstat(handle)
+                    try:
+                        actual_parent = os.fstat(confirmed)
+                        saved_parent = os.fstat(handle)
+                    except OSError as exc:
+                        raise WorkspaceStaleError("source_parent_unavailable") from exc
                     if (actual_parent.st_dev, actual_parent.st_ino) != (
                         saved_parent.st_dev,
                         saved_parent.st_ino,
@@ -271,7 +289,7 @@ class AuthorizedWorkspace:
                         after
                     ):
                         raise WorkspaceStaleError("source_replaced_during_read")
-                except FileNotFoundError as exc:
+                except OSError as exc:
                     raise WorkspaceStaleError("source_parent_replaced") from exc
                 finally:
                     os.close(confirmed)

@@ -63,10 +63,12 @@ ran the **same** P2.5 candidate and P2.4 suite in isolated worktrees.
 
 | Native host | CPython | Result |
 | --- | --- | --- |
-| MacBook Pro | 3.13 | P2.5 + P2.4 + startup manifest **86 passed** |
-| Raspberry Pi | 3.13 | Same candidate suite **86 passed** |
-| Sextant | 3.13 | Same candidate suite **86 passed** |
-| MacBook Pro | 3.10 and 3.14 | P2.5 focused native tests **25 passed per version** |
+| MacBook Pro | 3.10, 3.13, 3.14 | P2.5 + P2.4 + startup manifest **90 passed each** |
+| Raspberry Pi | 3.13 | Same candidate suite **90 passed** |
+| Sextant | 3.13 | Same candidate suite **90 passed** |
+
+The separate normal MCP application-composition selection on Mac resulted in
+**15 passed, 1 platform-expected skip**, excluded from the 86-case matrix.
 
 Tests establish actual `didOpen -> didChange(v2) -> didClose` on a real Git
 worktree, unchanged source bytes across navigation, full disk authoritative
@@ -99,8 +101,48 @@ export PYRIGHT_LSP_TEST_BIN=/absolute/trusted/path/to/pyright-langserver
   tests/unit/core/test_r6w3_e1g_server_set.py
 ```
 
-Ruff and formatting checks, Python 3.10-3.14 compilation, generated startup
-manifest verification, and default-off import behavior are independent checks.
+Ruff lint/format, focused mypy on the three new source modules, Bandit,
+`uv lock --check`, generated startup-manifest verification, Python 3.10-3.14
+native runtime compatibility, and default-off import behavior were checked
+separately. A wheel built with `uv build --wheel --no-sources` contains all
+three P2.5 modules and retains the fork SHA in the explicit optional-extra
+metadata. A fresh default installation has **no multilspy package**, proving
+that ordinary MCP deployment does not start or implicitly depend on Pyright.
+
+## Independent read-only source review and remediation
+
+The first independent reviewer attempt exceeded its tool-call budget and is
+**not** an acceptance result. A separate focused, read-only Fable review of
+`lsp_workspace_access.py`, `lsp_document_sync.py` and
+`lsp_authorized_session.py` returned five concrete findings; no tests or
+code changes were performed by that reviewer. The reviewed candidate was
+subsequently corrected in the development worktree and its functional
+regressions rerun on native hosts:
+
+1. Previously opened returned-target documents could retain an older LSP
+   buffer after their on-disk files changed. Definition responses now compare
+   returned target content and file identity **including times** against
+   their recorded `didOpen`/`didChange` snapshot; stale buffers fail closed.
+2. `str.splitlines()` treats Unicode separators as line breaks that the LSP
+   does not. Input anchors and target range checks now split only on CRLF,
+   CR or LF; a focused Unicode newline test exercises this correction.
+3. Timeout/cancellation now irrevocably poisons that one-shot document
+   session. It cannot issue a second request through a provider with uncertain
+   completion; owner teardown is required. This does not duplicate upstream
+   multilspy's separate RPC cancellation implementation.
+4. A local 25ms conservative timestamp uncertainty window rejects recently
+   modified unopened definition targets rather than treating sub-jiffy writes
+   as certainly fresh. This is an **engineering mitigation**, not a proof for
+   coarse remote filesystems or privileged timestamp rewriting. Explicit
+   workspace and provider confinement audits remain open.
+5. Descriptor `fstat` and path revalidation errors are converted into generic
+   workspace access/stale failures, with a root descriptor closed on stat
+   failure. Authorization races are not incorrectly labeled as LSP notify
+   failures or used to claim a READ-safe OS boundary.
+
+The independent review was **findings-bearing**, not a second independent
+post-fix sign-off. The functional regressions, targeted mypy/Bandit/Ruff, and
+native platform tests support a private development milestone only.
 
 ## Explicit limitations and outstanding gates
 
@@ -112,12 +154,18 @@ manifest verification, and default-off import behavior are independent checks.
    **not** count as native adversarial validation of the new descriptor-based
    reader. The code deliberately rejects symlink traversal and revalidates
    dirfd identities, yet this must not be overstated as a complete proof.
-2. **P2.4 repository-wide GitHub CI is RED** for baseline revision `9beddf6`
-   ([run 39695678041](https://github.com/grammy-jiang/binnacle/actions/runs/39695678041)),
-   despite passing private native tests. Failures include repository-wide
-   lint/typing/coverage and Python matrix gates, with numerous historical P1
-   fixture errors. That CI must be triaged and passed independently before a
-   merged/deployed release. No CI green claim is made for this P2.5 branch.
+2. **Repository-wide GitHub CI remains RED** for both the predecessor P2.4
+   baseline `9beddf6` ([run 39695678041](https://github.com/grammy-jiang/binnacle/actions/runs/39695678041))
+   and P2.5 candidate `d260c57` ([run 39700377064](https://github.com/grammy-jiang/binnacle/actions/runs/39700377064)).
+   P2.5 packaging succeeded but Code quality, Coverage policy and all four
+   default Python test jobs failed. A downloaded Python 3.10 JUnit artifact
+   confirms two classes of issues: CI's default tox environment lacks the
+   **optional** `multilspy`/`psutil` packages that P2.4's private tests
+   explicitly exercise, and unrelated existing P1/test-collection failures.
+   A correct CI remedy needs an explicit optional-provider test environment
+   without turning multilspy into a mandatory production dependency, plus
+   independent global lint/coverage/test baseline repair. No CI-green claim
+   or public/deployed release permission is made for this P2.5 branch.
 3. **No provider OS sandbox or READ certification.** Pyright can create type
    stubs through server-side commands without workspace/applyEdit. Even
    descriptor-safe Binnacle source reading does not constrain what the

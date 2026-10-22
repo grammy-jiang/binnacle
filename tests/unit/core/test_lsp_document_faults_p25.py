@@ -205,3 +205,96 @@ async def test_location_count_cap_never_returns_unbounded_data(documents):
             await client.definition(
                 "main.py", line=2, column=10, expected_symbol="greet"
             )
+
+
+@pytest.mark.asyncio
+async def test_open_definition_target_changed_before_other_request_is_stale(documents):
+    server, workspace, notifications, send, _entry = documents
+    async with AuthorizedDocumentSession(server, workspace) as client:
+        initial = await client.definition(
+            "lib.py", line=1, column=5, expected_symbol="greet"
+        )
+        assert initial[0]["relativePath"] == "lib.py"
+        # The target remains open in multilspy, with its original buffer.
+        send.target.write_text(
+            "def greet(name: str) -> str:\n    return name.title()\n"
+        )
+        with pytest.raises(WorkspaceStaleError, match="open_document_buffer_stale"):
+            await client.definition(
+                "main.py", line=2, column=10, expected_symbol="greet"
+            )
+        # Refreshing the target through the same authorized document session
+        # sends didChange and makes the target trustworthy for later requests.
+        refreshed = await client.definition(
+            "lib.py", line=1, column=5, expected_symbol="greet"
+        )
+        assert refreshed[0]["relativePath"] == "lib.py"
+        resolved = await client.definition(
+            "main.py", line=2, column=10, expected_symbol="greet"
+        )
+        assert resolved == initial
+    assert any(event == "change" for event, _payload in notifications.events)
+
+
+def test_lsp_line_rules_do_not_treat_unicode_separators_as_newlines():
+    text = 'quoted = "one\u2028two"; greet = greet\r\n'
+    anchor = text.index("greet") + 1
+    assert AuthorizedDocumentSession._position(text, 1, anchor, "greet") == {
+        "line": 0,
+        "character": anchor - 1,
+    }
+    assert AuthorizedDocumentSession._position("a = 1\r\ngreet = 2", 2, 1, "greet") == {
+        "line": 1,
+        "character": 0,
+    }
+    with pytest.raises(WorkspaceAccessError, match="source_column_out_of_range"):
+        AuthorizedDocumentSession._position("greet = 1\n", 2, 1, "greet")
+
+
+@pytest.mark.asyncio
+async def test_timeout_poisoned_session_never_accepts_second_request(documents):
+    server, workspace, _notifications, send, _entry = documents
+
+    async def wait_forever():
+        await asyncio.Event().wait()
+
+    send.hook = wait_forever
+    async with AuthorizedDocumentSession(
+        server, workspace, request_timeout_s=0.05
+    ) as client:
+        with pytest.raises(asyncio.TimeoutError):
+            await client.definition(
+                "main.py", line=2, column=10, expected_symbol="greet"
+            )
+        assert client.poisoned
+        with pytest.raises(DocumentSyncError, match="not_available"):
+            await client.definition(
+                "main.py", line=2, column=10, expected_symbol="greet"
+            )
+        assert len(send.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_cancellation_poisoned_session_and_closes_documents(documents):
+    server, workspace, notifications, send, _entry = documents
+    entered = asyncio.Event()
+
+    async def until_cancelled():
+        entered.set()
+        await asyncio.Event().wait()
+
+    send.hook = until_cancelled
+    async with AuthorizedDocumentSession(server, workspace) as client:
+        task = asyncio.create_task(
+            client.definition("main.py", line=2, column=10, expected_symbol="greet")
+        )
+        await asyncio.wait_for(entered.wait(), 1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert client.poisoned
+        with pytest.raises(DocumentSyncError, match="not_available"):
+            await client.definition(
+                "main.py", line=2, column=10, expected_symbol="greet"
+            )
+    assert [event for event, _ in notifications.events] == ["open", "close"]

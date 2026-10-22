@@ -1,6 +1,7 @@
 """Private document synchronization with an upstream LSP send/notify facade."""
 
 import asyncio
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -61,6 +62,9 @@ def documents(tmp_path):
     entry.write_text("from lib import greet\nresult = greet('Ada')\n")
     target = project / "lib.py"
     target.write_text("def greet(name: str) -> str:\n    return name\n")
+    # The private result gate conservatively rejects freshly touched unopened
+    # targets within a 25ms local filesystem timestamp uncertainty window.
+    time.sleep(0.035)
     workspace = AuthorizedWorkspace((allowed,), entry)
     notice = Notifications()
     send = Send(target)

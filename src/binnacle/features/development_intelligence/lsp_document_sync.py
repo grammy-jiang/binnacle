@@ -25,6 +25,12 @@ from .lsp_workspace_access import (
 from .lsp_workspace_policy import normalize_locations
 
 _TOKEN = re.compile(r"[^\W\d]\w*", flags=re.UNICODE)
+_LSP_LINE_BREAK = re.compile(r"\r\n|\r|\n")
+# Local ext4/APFS timestamp updates need not be as fine as time.time_ns().
+# Fail closed for recently touched, not-yet-synchronized definition targets.
+# Coarser network filesystems and privileged timestamp rewrites remain outside
+# P2.5's private correctness claim and need a separate OS/FS evidence gate.
+_RECENT_TARGET_GUARD_NS = 25_000_000
 
 
 class DocumentSyncError(RuntimeError):
@@ -123,7 +129,7 @@ class AuthorizedDocumentSession:
             or len(symbol) > 128
         ):
             raise WorkspaceAccessError("invalid_symbol_anchor")
-        lines = contents.splitlines()
+        lines = _LSP_LINE_BREAK.split(contents)
         if line > len(lines):
             raise WorkspaceAccessError("source_line_out_of_range")
         text = lines[line - 1]
@@ -193,9 +199,10 @@ class AuthorizedDocumentSession:
                 raise DocumentSyncError("unmanaged_upstream_buffers")
             snapshot = self.workspace.snapshot(relative_file)
             position = self._position(snapshot.contents, line, column, expected_symbol)
+            # Disk identity races are a source admission failure, not an LSP
+            # notification failure. Only actual notify failures poison state.
+            self.workspace.assert_fresh(snapshot)
             try:
-                # TOCTOU gate before notifying Pyright of the document.
-                self.workspace.assert_fresh(snapshot)
                 self._sync(snapshot)
             except WorkspaceAccessError:
                 raise
@@ -203,15 +210,22 @@ class AuthorizedDocumentSession:
                 self._poisoned = True
                 raise DocumentSyncError("document_notification_failed") from exc
             request_started_ns = time.time_ns()
-            response = await asyncio.wait_for(
-                self.server.server.send.definition(
-                    {
-                        "textDocument": {"uri": snapshot.uri},
-                        "position": position,
-                    }
-                ),
-                timeout=self.request_timeout_s,
-            )
+            try:
+                response = await asyncio.wait_for(
+                    self.server.server.send.definition(
+                        {
+                            "textDocument": {"uri": snapshot.uri},
+                            "position": position,
+                        }
+                    ),
+                    timeout=self.request_timeout_s,
+                )
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                # Even though patched multilspy unregisters cancelled JSON-RPC
+                # requests, a late response may reflect an older document.
+                # The one-shot owner must be closed before another request.
+                self._poisoned = True
+                raise
             if self._closed or self._poisoned:
                 raise DocumentSyncError("document_session_closed_during_request")
             self.workspace.assert_fresh(snapshot)
@@ -225,15 +239,34 @@ class AuthorizedDocumentSession:
                 if target is None:
                     target = self.workspace.snapshot_uri(entry["uri"])
                     targets[entry["uri"]] = target
-                if max(target.mtime_ns, target.ctime_ns) > request_started_ns:
+                current_buffer = self._documents.get(target.relative_path)
+                if current_buffer is not None and (
+                    current_buffer.snapshot.sha256 != target.sha256
+                    or (
+                        current_buffer.snapshot.device,
+                        current_buffer.snapshot.inode,
+                        current_buffer.snapshot.mtime_ns,
+                        current_buffer.snapshot.ctime_ns,
+                    )
+                    != (target.device, target.inode, target.mtime_ns, target.ctime_ns)
+                ):
+                    # Pyright may still be using a previous didOpen buffer for
+                    # a returned target even if it changed before this query.
+                    raise WorkspaceStaleError("open_document_buffer_stale")
+                if (
+                    current_buffer is None
+                    and max(target.mtime_ns, target.ctime_ns)
+                    >= request_started_ns - _RECENT_TARGET_GUARD_NS
+                ):
+                    # An unopened target has no pre-request baseline. A recent
+                    # timestamp, including the filesystem's coarse clock
+                    # uncertainty window, is conservatively stale.
                     raise WorkspaceStaleError(
                         "definition_target_modified_during_request"
                     )
-                lines = target.contents.splitlines()
-                if target.contents.endswith(("\r", "\n")):
-                    lines.append("")
-                if not lines:
-                    lines.append("")
+                # LSP recognizes CRLF, CR and LF only. splitlines() also
+                # treats U+2028 and form feeds as breaks, shifting positions.
+                lines = _LSP_LINE_BREAK.split(target.contents)
                 span = entry["range"]
                 left, right = span["start"], span["end"]
                 for endpoint in (left, right):
