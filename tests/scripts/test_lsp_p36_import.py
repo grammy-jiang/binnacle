@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -249,3 +250,21 @@ def test_partial_report_bad_p34_script_hash_rejected(tmp_path):
     p34["script_sha256"][importer.P34_SCRIPTS[0]] = "0" * 64
     with pytest.raises(importer.EvidenceRefused, match="p34_script_identity_mismatch"):
         importer.inspect(**_files(tmp_path, p34=p34))
+
+
+def test_ancestor_symlink_hardlink_and_writable_evidence_refused(tmp_path):
+    args = _files(tmp_path)
+    real = tmp_path / "real"
+    real.mkdir()
+    os.replace(args["p34"], real / "native34.json")
+    (tmp_path / "alias").symlink_to(real)
+    with pytest.raises(importer.EvidenceRefused, match="path_symlink_refused"):
+        importer.inspect(**{**args, "p34": tmp_path / "alias" / "native34.json"})
+    os.link(real / "native34.json", args["p34"])
+    with pytest.raises(importer.EvidenceRefused, match="file_hardlink_refused"):
+        importer.inspect(**args)
+    os.unlink(args["p34"])
+    os.replace(real / "native34.json", args["p34"])
+    args["p34"].chmod(0o666)
+    with pytest.raises(importer.EvidenceRefused, match="file_mode_unsafe"):
+        importer.inspect(**args)

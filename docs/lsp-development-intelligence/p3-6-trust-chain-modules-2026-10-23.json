@@ -1,0 +1,68 @@
+{
+  "manifest": "binnacle.p36.trust-chain-modules/1",
+  "scope": "private offline P3.6 reviewer authentication prototype; no runtime, MCP or production wiring",
+  "modules": {
+    "scripts/lsp_p36_secure_io.py": {
+      "role": "descriptor-based path, owner, symlink and hardlink policy",
+      "first_party_imports": [],
+      "third_party_imports": []
+    },
+    "scripts/lsp_p36_trust_registry.py": {
+      "role": "operator registry model/loader, key lifecycle, replay ledgers",
+      "first_party_imports": [
+        "scripts.lsp_p36_evidence",
+        "scripts.lsp_p36_secure_io"
+      ],
+      "third_party_imports": ["pydantic"]
+    },
+    "scripts/lsp_p36_signed_review.py": {
+      "role": "Ed25519 receipt v1 (self-contained, no authority) and v2 (registry-bound)",
+      "first_party_imports": [
+        "scripts.lsp_p36_evidence",
+        "scripts.lsp_p36_trust_registry"
+      ],
+      "third_party_imports": ["cryptography", "pydantic"]
+    },
+    "scripts/lsp_p36_link.py": {
+      "role": "three-stage evidence linking pipeline and CLI",
+      "first_party_imports": [
+        "scripts.lsp_p36_secure_io",
+        "scripts.lsp_p36_signed_review",
+        "scripts.lsp_p36_trust_registry"
+      ],
+      "third_party_imports": []
+    },
+    "scripts/lsp_p36_import.py": {
+      "role": "offline P3.4/P3.5 byte and source consistency preflight",
+      "first_party_imports": [
+        "scripts.lsp_p36_evidence",
+        "scripts.lsp_p36_secure_io"
+      ],
+      "third_party_imports": []
+    }
+  },
+  "forbidden_imports": [
+    "asyncio",
+    "ftplib",
+    "http",
+    "requests",
+    "shutil",
+    "smtplib",
+    "socket",
+    "ssl",
+    "subprocess",
+    "tempfile",
+    "urllib",
+    "binnacle.server",
+    "binnacle.tools"
+  ],
+  "forbidden_calls": ["system", "popen", "exec", "eval", "urlopen", "generate"],
+  "invariants": {
+    "authority_granted": false,
+    "attestations_verified": false,
+    "selection": "REWORK",
+    "read": "NO-GO",
+    "public_release": "NO-GO",
+    "registry_trust_anchor": "operator-owned filesystem path; not provable inside a same-account agent sandbox"
+  }
+}
