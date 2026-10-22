@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from binnacle.config_development_intelligence import DevelopmentIntelligenceSettings
 from binnacle.features.development_intelligence.lsp_process_tree import (
@@ -63,6 +63,7 @@ class PrivatePyrightProcessOwner:
         *,
         operator_allowed_roots: tuple[Path, ...],
         cleanup_timeout_s: float = 25.0,
+        sandbox_mode: Literal["none", "linux_bwrap_experimental"] = "none",
     ) -> None:
         if not settings.enabled:
             raise ProviderLifecycleError("development_intelligence_disabled")
@@ -121,6 +122,11 @@ class PrivatePyrightProcessOwner:
         self._selected_binary = binary
         self._operator_roots = tuple(approved)
         self._cleanup_timeout_s = float(cleanup_timeout_s)
+        if sandbox_mode not in ("none", "linux_bwrap_experimental"):
+            raise ProviderLifecycleError("unreviewed_private_sandbox_mode")
+        # This is a private explicit constructor argument, NOT a config option
+        # or agent-facing capability. No READ eligibility derives from it.
+        self._sandbox_mode = sandbox_mode
         self._active = False
         self._entered = False
         self._session_task: asyncio.Task | None = None
@@ -171,11 +177,31 @@ class PrivatePyrightProcessOwner:
         launch = server.server.process_launch_info
         if launch.cmd != [str(self._binary), "--stdio"] or launch.env:
             raise ProviderLifecycleError("pyright_launch_contract_changed")
-        # Reuse upstream PR #168 for all protocol/lifecycle behavior. Only the
-        # embedding host decides executable authority. Bypass env's shebang
-        # lookup and never mutate the parent environment (concurrent owners).
-        launch.cmd = [str(node), str(self._binary), "--stdio"]
-        launch.env = {"PATH": str(node.parent)}
+        # Reuse upstream PR #168 for protocol/lifecycle behavior. The Linux
+        # experiment keeps the same LSP absolute workspace URIs and process
+        # ownership but wraps the actual Node in OS namespaces. No runtime
+        # config, READ, or public tool is enabled by this private branch.
+        if self._sandbox_mode == "linux_bwrap_experimental":
+            from binnacle.features.development_intelligence.lsp_linux_bwrap import (
+                SandboxLaunchRefused,
+                build_private_bwrap_launch,
+            )
+
+            try:
+                bwrap = self._admit_launch_file(Path("/usr/bin/bwrap"))
+                launch.cmd = build_private_bwrap_launch(
+                    node=node, launcher=self._binary, workspace=self._root, bwrap=bwrap
+                )
+            except (OSError, ValueError, SandboxLaunchRefused) as exc:
+                raise ProviderLifecycleError(
+                    "experimental_linux_sandbox_launch_denied"
+                ) from exc
+            launch.env = {}
+        else:
+            # Native trust-only baseline. Bypass env's shebang lookup and never
+            # mutate the parent environment (concurrent owners).
+            launch.cmd = [str(node), str(self._binary), "--stdio"]
+            launch.env = {"PATH": str(node.parent)}
         return server
 
     def _admit_launch_file(self, selected: Path) -> Path:

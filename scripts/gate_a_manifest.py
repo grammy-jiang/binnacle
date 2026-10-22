@@ -96,6 +96,9 @@ def manifest_groups() -> dict[str, set[str]]:
             "features/development_intelligence/lsp_authorized_session.py",
             "features/development_intelligence/lsp_client.py",
             "features/development_intelligence/lsp_document_sync.py",
+            # Linux-only, private, default-off Bubblewrap process-launch policy.
+            # Explicit ownership, not a wildcard auto-admitting new adapters.
+            "features/development_intelligence/lsp_linux_bwrap.py",
             "features/development_intelligence/lsp_manager_cooldown.py",
             "features/development_intelligence/lsp_manager_eviction.py",
             "features/development_intelligence/lsp_manager_shutdown.py",

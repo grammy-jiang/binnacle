@@ -76,6 +76,7 @@ _SERVER_COMMON = (
     "binnacle.features.development_intelligence.lsp_authorized_session",
     "binnacle.features.development_intelligence.lsp_client",
     "binnacle.features.development_intelligence.lsp_document_sync",
+    "binnacle.features.development_intelligence.lsp_linux_bwrap",
     "binnacle.features.development_intelligence.lsp_manager_cooldown",
     "binnacle.features.development_intelligence.lsp_manager_eviction",
     "binnacle.features.development_intelligence.lsp_manager_shutdown",
