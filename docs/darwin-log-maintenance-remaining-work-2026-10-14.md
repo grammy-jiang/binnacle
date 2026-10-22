@@ -39,10 +39,20 @@ individual designs but must not be mistaken for independently finished goals.
 - [ ] Integration tests: actual FastMCP HTTP/tool contexts, late arrivals,
   cancellation, SIGTERM, stale PID, UNKNOWN jobs and negative ACK.
 
-C1 implementation is default OFF and currently verified only in
-disposable Linux fixtures. Installed Mac service request coverage and
-native cancellation behavior still require native acceptance; the
-final C1 test item remains OPEN.
+C1 implementation remains default OFF. An additional 2026-10-22 HTTP
+regression suite (`tests/integration/test_issue30_c1_http_concurrency.py`)
+passes in isolated ASGI/FastMCP fixtures on Linux ARM64 and native macOS:
+pre-admitted tool execution drains despite a concurrent fence; later requests
+are rejected; cancellation releases admission; and resources/prompts cannot
+bypass the fence. This is NOT an installed Mac service acceptance or SIGTERM
+proof, so the final C1 item remains OPEN.
+
+Client-side nuance: the pinned FastMCP client may issue a fresh `list_tools`
+request to validate an already completed tool result when it has not cached
+the tool catalogue. Such post-fence metadata requests are intentionally
+rejected, even when the original tool ran successfully. Normal clients
+should discover/cache tool schema before invoking a tool; no server-side
+maintenance bypass has been introduced to work around SDK postflight checks.
 
 ### C2 — Independent authenticated native maintenance control plane
 
