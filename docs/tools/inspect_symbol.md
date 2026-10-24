@@ -58,3 +58,45 @@ Existing explicit full-capture policy remains unchanged.
 
 The ChatGPT client may need tool discovery refreshed after deployment.
 A local P4 health check by itself does not prove visibility through ChatGPT.
+
+## ChatGPT metadata refresh and live acceptance
+
+**Do not report a complete ChatGPT deployment from P4 health checks or local
+FastMCP tests alone.** After the main MCP endpoint gains a new tool, ChatGPT
+may continue using its older six-action snapshot indefinitely. Updating the
+backend, restarting a tunnel, or opening a new conversation is insufficient
+until the ChatGPT-side app's actions are refreshed.
+
+For every affected private app (Raspberry Pi MCP, sextant, MacBook Pro MCP):
+
+1. Confirm port 8000 exposes seven tools to the
+   openai-mcp(ChatGPT) MCP identity, including inspect_symbol.
+2. In the **existing** ChatGPT plugin's Settings > Plugins > Manage app
+   page, select **Refresh tools**. Do not uninstall/reinstall the app,
+   regenerate a tunnel, or change its authentication.
+3. Confirm the ChatGPT connector account's action snapshot contains exactly
+   seven tools, retaining the prior six and adding inspect_symbol.
+4. Open a **new** ChatGPT conversation with that app selected. Ask for a
+   real Python definition/reference lookup and verify the actual
+   tool=inspect_symbol in the main MCP journal, using ChatGPT's
+   client=openai-mcp and a real conversation marker.
+5. Verify the P4 private usage journal gains an outcome record and that
+   it contains no source text or raw credentials. Check invalid_input,
+   partial, invalid_scope, timing and returned/excluded/clipped counts.
+
+**Verified on 2026-10-25 AEDT:** all three apps were refreshed in ChatGPT;
+each connector showed seven actions in its account-side snapshot. Distinct
+real ChatGPT conversations called inspect_symbol via the production tunnel:
+Raspberry Pi (09:16:54, one definition/two references), sextant
+(09:18:38, one/two) and MacBook Pro (09:19:06, one/zero).
+The Mac response correctly reported partial due to incomplete indexing.
+An additional natural-language code-navigation request on Raspberry Pi
+(09:20) selected LSP without naming the tool, initially passed an invalid
+reference_limit=1000, then self-corrected and returned one definition
+and two references. The P4 maximum is **100**, and callers should omit
+reference_limit unless necessary. No errors or secrets were recorded in
+the final successful results.
+
+A refreshed account snapshot does not retroactively add tools to an already
+running ChatGPT conversation. This is a tool-loading boundary, not a P4
+provider failure.
