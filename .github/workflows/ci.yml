@@ -31,7 +31,7 @@ jobs:
           key: pre-commit-${{ runner.os }}-py312-${{ hashFiles('.pre-commit-config.yaml') }}
 
       - name: Install uv and Python 3.12
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version-file: "uv.lock"
           python-version: "3.12"
@@ -70,7 +70,7 @@ jobs:
           persist-credentials: false
 
       - name: Install uv and Python ${{ matrix.python }}
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version-file: "uv.lock"
           python-version: ${{ matrix.python }}
@@ -133,7 +133,7 @@ jobs:
           persist-credentials: false
 
       - name: Install uv and Python 3.13
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version-file: "uv.lock"
           python-version: "3.13"
@@ -196,7 +196,7 @@ jobs:
           persist-credentials: false
 
       - name: Install uv and Python 3.13
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version-file: "uv.lock"
           python-version: "3.13"
