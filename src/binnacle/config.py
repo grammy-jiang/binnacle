@@ -404,6 +404,7 @@ class Settings(BaseSettings):
                 "run_command",
                 "job_status",
                 "stop_job",
+                "inspect_symbol",
             ),
         },
         description=(

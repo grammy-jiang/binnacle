@@ -87,6 +87,7 @@ _SERVER_COMMON = (
     "binnacle.features.files.tools.list_files",
     "binnacle.features.files.tools.read_file",
     "binnacle.features.files.tools.write_file",
+    "binnacle.features.lsp_bridge_server",
     "binnacle.features.search",
     "binnacle.features.search.search_server",
     "binnacle.features.search.search_text_adaptive",

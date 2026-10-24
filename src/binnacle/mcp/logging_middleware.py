@@ -47,6 +47,7 @@ from binnacle.mcp.identity import ClientIdentity
 from binnacle.observability.full_capture import FullCaptureSink
 from binnacle.observability.log_safety import (
     REDACTED,
+    SAFE_LSP_STATUSES,
     safe_arguments,
     safe_client_name,
     safe_smoke_proof,
@@ -70,6 +71,7 @@ HASHED_HEADERS: dict[str, str] = {"x-openai-session": "oai_session"}
 #: structured_content keys lifted into the tool_result line when present
 #: (every tool's own outcome and truncation facts; docs/tools/<name>.md).
 RESULT_KEYS = (
+    "status",  # LSP semantic status; no code text or paths
     "job_id",
     "state",
     "exit_code",
@@ -103,7 +105,14 @@ RESULT_KEYS = (
     "bytes",
 )
 #: List-valued keys logged as their length.
-RESULT_LIST_KEYS = ("entries", "jobs", "processes")
+RESULT_LIST_KEYS = (
+    "entries",
+    "jobs",
+    "processes",
+    "definitions",
+    "references",
+    "reason_codes",
+)
 
 
 def _request_id(context: MiddlewareContext[Any]) -> str:
@@ -216,6 +225,7 @@ def _text(value: Any, limit: int) -> str:
 
 
 _SAFE_RESULT_LABELS = {
+    "status": SAFE_LSP_STATUSES,
     "state": {"running", "exited", "unknown"},
     "kind": {"text", "binary", "empty"},
     "mode": {"list", "glob", "exact", "adaptive"},

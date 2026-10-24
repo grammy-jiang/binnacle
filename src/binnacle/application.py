@@ -175,6 +175,7 @@ def create_application(
     commands_factory: Callable[..., FastMCP] = create_commands_server,
     admission_gate: ToolAdmissionDrain | None = None,
     maintenance_runtime: MaintenanceSidecar | None = None,
+    lsp_bridge_factory: Callable[[], FastMCP] | None = None,
 ) -> FastMCP:
     """Build a pure native FastMCP tree from supplied application dependencies."""
     if isinstance(backend, RestrictedCommandBackend):
@@ -220,6 +221,12 @@ def create_application(
         # tool descriptions. First 512 chars self-contained (OpenAI guidance).
         instructions=_server_instructions(
             "manager" if isinstance(backend, DarwinManagerCommandBackend) else None
+        )
+        + (
+            " Use inspect_symbol for Python definitions and references in "
+            "projects; paths are relative to ~/Projects."
+            if lsp_bridge_factory is not None
+            else ""
         ),
         auth=StaticTokenVerifier(
             tokens={token: {"client_id": "binnacle-tunnel"}},
@@ -261,6 +268,9 @@ def create_application(
             listing_command_preview_chars=settings.jobs.listing_command_preview_chars,
         )
     )
+
+    if lsp_bridge_factory is not None:
+        root.mount(lsp_bridge_factory())
 
     @root.custom_route("/healthz", methods=["GET"], include_in_schema=False)
     async def healthz(request: Request) -> JSONResponse:

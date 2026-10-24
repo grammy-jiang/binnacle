@@ -283,12 +283,32 @@ def create_server(*, admission_gate: ToolAdmissionDrain | None = None) -> FastMC
         control = create_native_mcp_maintenance_sidecar(
             settings.mcp_maintenance.control_root, gate
         )
+    # Explicit operator opt-in only; no implicit P4/public READ promotion.
+    lsp_bridge_factory = None
+    bridge_state = os.environ.get("BINNACLE_LSP_BRIDGE_STATE_DIR")
+    if bridge_state:
+        from functools import partial
+
+        from binnacle.features.lsp_bridge_server import create_lsp_bridge_server
+
+        port_raw = os.environ.get("BINNACLE_LSP_BRIDGE_PORT", "18767")
+        try:
+            port = int(port_raw)
+        except ValueError as exc:
+            raise RuntimeError("invalid_lsp_bridge_port") from exc
+        lsp_bridge_factory = partial(
+            create_lsp_bridge_server,
+            state_dir=Path(bridge_state),
+            workspace=settings.roots.default_root,
+            port=port,
+        )
     file_access = None
     if host_os_family() == "darwin":
         file_access, backend = compose_native_tools(settings=settings)
     else:
         backend = create_command_backend()
     return create_application(
+        lsp_bridge_factory=lsp_bridge_factory,
         admission_gate=gate,
         maintenance_runtime=control,
         file_access=file_access,
