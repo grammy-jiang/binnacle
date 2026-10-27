@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 # Keep Dependabot compatible with the reviewed uv minor line. The exact
 # developer/pre-commit/CI uv version is the uv package pinned in uv.lock and
 # is enforced by scripts/dev.py.
-required-version = ">=0.12.7,<0.13"
+required-version = ">=0.13.4,<0.14"
 
 [project]
 name = "binnacle-mcp"
@@ -34,7 +34,7 @@ classifiers = [
 
 dependencies = [
     "cyclopts>=4.23.3", # the CLI framework fastmcp's own CLI uses
-    "fastmcp==4.1.0", # reviewed FastMCP 4.1 baseline
+    "fastmcp==4.1.2", # reviewed FastMCP 4.1 security-patch baseline
     "mcp==2.3.0", # latest MCP protocol SDK; exact released/tested pairing
     "mcp-types==2.3.0", # latest MCP wire types and schemas; exact paired release
     "orjson>=3.11.3",
@@ -98,8 +98,15 @@ dev = [
     "pre-commit>=4.0.0",
     "tox>=4.61.1",
     "tox-uv>=1.36.0",
-    "uv==0.12.24", # latest tested developer/CI toolchain release
+    "uv==0.13.4", # security-patched developer/CI toolchain release
 ]
+
+# Security-patched virtualenv/filelock (through pre-commit and tox) require
+# Python >=3.11.  This is ONLY the developer toolchain; server/runtime
+# and the test dependency group continue to support Python 3.10.
+[tool.uv.dependency-groups]
+dev = { requires-python = ">=3.11" }
+security = { requires-python = ">=3.11" }
 
 [tool.pytest.ini_options]
 # Fail on unknown pytest configuration, markers, parametrization ids and
