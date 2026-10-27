@@ -1,0 +1,4 @@
+# SHA-256 of lsp_workspace_access.py in the historical P3.5 source manifest.
+# Independently verified against the file at commit 1325e30736a4: not a credential.
+# Exact finding fingerprint only; all other historical leaks remain blocking.
+1325e30736a4ac0677261c02791035f934690223:docs/lsp-development-intelligence/p3-5-reviewed-real-subset-manifest-2026-10-23.json:generic-api-key:21

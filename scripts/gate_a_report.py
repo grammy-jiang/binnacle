@@ -156,12 +156,12 @@ def report() -> list[Cell]:
     cells: list[Cell] = []
 
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    stable_fastmcp = "fastmcp==4.1.0" in pyproject
+    stable_fastmcp = "fastmcp==4.1.2" in pyproject
     cells.append(
         Cell(
             "composition.stable_fastmcp_4",
             "PASS" if stable_fastmcp else "FAIL",
-            "fastmcp==4.1.0 pinned" if stable_fastmcp else "FastMCP 4.1.0 pin missing",
+            "fastmcp==4.1.2 pinned" if stable_fastmcp else "FastMCP 4.1.2 pin missing",
         )
     )
 

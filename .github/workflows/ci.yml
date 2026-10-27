@@ -94,8 +94,10 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/rg" --version | head -1 | grep -F "ripgrep ${RG_VERSION}"
 
-      - name: Sync development dependencies
-        run: uv sync --locked --group dev
+      # Keep the security-patched developer toolchain on Python 3.13;
+      # tox still runs the selected Python 3.10-3.14 test interpreter.
+      - name: Sync developer test runner (Python 3.13)
+        run: uv sync --locked --group dev --python 3.13
 
       - name: Prepare Binnacle test host
         run: |
@@ -107,7 +109,7 @@ jobs:
 
       - name: Run test suite
         run: >-
-          uv run tox -e ${{ matrix.tox-env }} --
+          uv run --locked --python 3.13 tox -e ${{ matrix.tox-env }} --
           --ignore=tests/integration/test_wheel_artifact.py
           --seed 12345
           --junit-dir .quality-artifacts/pytest-${{ matrix.python }}
