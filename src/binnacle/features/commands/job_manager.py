@@ -137,7 +137,9 @@ class JobManager:
             return self._stop(request)
         return {"ok": False, "error": f"unknown job-manager operation {op!r}"}
 
-    def _start(self, request: dict[str, Any]) -> dict[str, Any]:
+    def _start(
+        self, request: dict[str, Any], *, pinned_workdir_fd: int | None = None
+    ) -> dict[str, Any]:
         impl_started = time.perf_counter()
         command = request["command"]
         workdir = Path(request["workdir"])
@@ -160,6 +162,7 @@ class JobManager:
                 stdin,
                 owner_instance_id=self.owner_instance_id,
                 boot_id=self.boot_id,
+                pinned_workdir_fd=pinned_workdir_fd,
             )
         except OSError as exc:
             return {"ok": False, "error": f"could not start job: {exc}"}

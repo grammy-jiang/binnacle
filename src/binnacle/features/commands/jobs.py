@@ -275,6 +275,7 @@ def start_job(
     *,
     owner_instance_id: str | None = None,
     boot_id: str | None = None,
+    pinned_workdir_fd: int | None = None,
 ) -> tuple[str, ProcessHandle]:
     # The whole reservation -> process launch -> complete meta sequence is one
     # store transaction. A second concurrent start must see the first new job
@@ -311,13 +312,27 @@ def start_job(
             if stdin is not None
             else open(os.devnull, "rb") as inf,
         ):
-            proc = _PROCESS_BACKEND.launch(
-                _RESOURCE_ACCOUNTING.wrap_argv(["bash", "-c", command], cgroup),
-                workdir=workdir,
-                env=env,
-                stdin=inf,
-                output=logf,
-            )
+            argv = _RESOURCE_ACCOUNTING.wrap_argv(["bash", "-c", command], cgroup)
+            if pinned_workdir_fd is None:
+                # All existing v1/Python callers retain their original API.
+                proc = _PROCESS_BACKEND.launch(
+                    argv, workdir=workdir, env=env, stdin=inf, output=logf
+                )
+            else:
+                # The optional v2 path is Linux-only and never changes the
+                # ownership, spool or cgroup behavior of the old manager.
+                from binnacle.platform.linux.job_process import LinuxProcessBackend
+
+                if not isinstance(_PROCESS_BACKEND, LinuxProcessBackend):
+                    raise RuntimeError("pinned workdir launch requires Linux owner")
+                proc = _PROCESS_BACKEND.launch_pinned(
+                    argv,
+                    workdir=workdir,
+                    workdir_fd=pinned_workdir_fd,
+                    env=env,
+                    stdin=inf,
+                    output=logf,
+                )
         call_id = current_call.get()
         command_hash = hashlib.sha256(command.encode()).hexdigest()[:12]
         owner = "manager" if owner_instance_id is not None else "embedded"

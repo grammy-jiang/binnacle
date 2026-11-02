@@ -2,6 +2,7 @@
 
 import os
 import signal
+import stat
 import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -141,6 +142,42 @@ class LinuxProcessBackend:
         return subprocess.Popen(
             argv,
             cwd=str(workdir),
+            env=env,
+            stdin=stdin,
+            stdout=output,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+
+    def launch_pinned(
+        self,
+        argv: Sequence[str],
+        *,
+        workdir: Path,
+        workdir_fd: int,
+        env: Mapping[str, str],
+        stdin: BinaryIO,
+        output: BinaryIO,
+    ) -> ProcessHandle:
+        """Launch from the independently verified SCM_RIGHTS directory FD.
+
+        Unlike the v1 launch's pathname `cwd`, this path refers to the exact
+        directory inode held by the manager through child launch. Keep the
+        trusted logical `workdir` for durable metadata; /proc/self/fd/N is
+        *only* the transient, non-serializable launch mechanism.
+        """
+        target = os.fstat(workdir_fd)
+        if not stat.S_ISDIR(target.st_mode):
+            raise NotADirectoryError("received workdir FD is not a directory")
+        # Best-effort moved-parent refusal, as in fd_write._verify_parent.
+        # The FD remains stable even if the same-uid namespace moves later.
+        actual = os.readlink(f"/proc/self/fd/{workdir_fd}")
+        if actual != str(workdir):
+            raise OSError("received workdir directory changed before launch")
+        return subprocess.Popen(
+            argv,
+            cwd=f"/proc/self/fd/{workdir_fd}",
+            pass_fds=(workdir_fd,),
             env=env,
             stdin=stdin,
             stdout=output,
