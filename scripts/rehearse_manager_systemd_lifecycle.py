@@ -47,6 +47,7 @@ def main() -> None:
     from scripts.manager_systemd_test_support import (
         check_completed_job_is_preserved_on_owner_stop,
         check_control_group_stop_terminates_active_job,
+        check_untracked_job_cgroup_refuses_unsafe_stop,
     )
 
     before = _production_owner()
@@ -62,6 +63,9 @@ def main() -> None:
         drained = sandbox / "drained-job"
         drained.mkdir()
         completed_result = check_completed_job_is_preserved_on_owner_stop(drained)
+        orphan = sandbox / "untracked-job"
+        orphan.mkdir()
+        orphan_result = check_untracked_job_cgroup_refuses_unsafe_stop(orphan)
     after = _production_owner()
     assert after == before, (
         f"production Manager unexpectedly changed: {before}->{after}"
@@ -69,7 +73,7 @@ def main() -> None:
     print(
         json.dumps(
             {
-                "scope": "three standalone transient test-only systemd user units across two scenarios; NOT the live Manager",
+                "scope": "four transient test-only systemd user units across three scenarios; NOT the live Manager",
                 "active_job_terminated_by_control_group_stop": True,
                 "completed_job_retains_exit_zero_and_output_after_drain": True,
                 "real_systemd_delegate_subgroup_verified": True,
@@ -80,6 +84,7 @@ def main() -> None:
                 "decision": "active jobs are killed by control-group stop; pause-admission plus completed-job drain is verified on test units, NOT an approved production rollout",
                 "active_job": active_result,
                 "completed_job": completed_result,
+                "untracked_cgroup": orphan_result,
             },
             indent=2,
         )

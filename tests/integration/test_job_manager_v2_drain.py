@@ -34,7 +34,9 @@ def _control(
 def test_pause_is_durable_and_fences_both_existing_v1_and_v2_starts(running_owner):
     _, root, _, run, store = running_owner
     first = _control(run, "pause_starts")
-    assert first["ok"] and first["starts_paused"] and first["safe_to_stop"]
+    assert first["ok"] and first["starts_paused"]
+    assert first["owner_cgroup_verified"] is False
+    assert first["safe_to_stop"] is False  # pytest has no delegated owner cgroup
     assert first["active_jobs"] == []
     assert _control(run, "pause_starts")["ok"]  # idempotent same nonce
     marker = store.parent / "v2-start-receipts" / _MARKER
@@ -133,6 +135,63 @@ def test_pause_waits_for_inflight_v2_launch_to_persist_before_admitting_drain(
     assert _control(run, "pause_starts")["ok"] is True
 
 
+def test_pause_cannot_interrupt_v2_receipt_reservation_before_spawn(
+    running_owner, monkeypatch
+):
+    """A pause cannot strand a fresh pending receipt between reserve/Popen."""
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from binnacle.features.commands import job_manager_v2_receipts as receipts
+
+    _, root, _, run, store = running_owner
+    reserved = Event()
+    release = Event()
+    reserve_original = receipts.reserve
+
+    def suspended_reservation(payload):
+        result = reserve_original(payload)
+        reserved.set()  # O_EXCL+fsync has just succeeded.
+        assert release.wait(timeout=5), "test reservation never released"
+        return result
+
+    monkeypatch.setattr(receipts, "reserve", suspended_reservation)
+
+    def submit():
+        fd = _pinned_fd(root)
+        try:
+            return _send(
+                run / "start-v2.sock",
+                _request(
+                    root,
+                    command="sleep 0.15; cat marker",
+                    wait_seconds=0,
+                    call_id="reservation-atomic-pause",
+                ),
+                (fd,),
+            )
+        finally:
+            os.close(fd)
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        request = workers.submit(submit)
+        assert reserved.wait(timeout=3)
+        pause = workers.submit(_control, run, "pause_starts")
+        try:
+            time.sleep(0.06)
+            assert not pause.done(), "pause slipped between receipt and child launch"
+        finally:
+            release.set()
+        started = request.result(timeout=6)
+        paused = pause.result(timeout=6)
+
+    assert started["ok"] and paused["ok"]
+    assert len(_record_ids(store)) == 1
+    assert paused["pending_receipts"] == 0
+    assert paused["starts_paused"] is True
+    assert (store / started["job_id"] / "meta.json").is_file()
+
+
 def test_pause_reports_running_job_until_finished(running_owner):
     _, root, _, run, store = running_owner
     fd = _pinned_fd(root)
@@ -160,7 +219,8 @@ def test_pause_reports_running_job_until_finished(running_owner):
             break
         time.sleep(0.02)
     ready = _control(run, "pause_starts")
-    assert ready["ok"] and ready["safe_to_stop"] and not ready["active_jobs"]
+    assert ready["ok"] and not ready["active_jobs"]
+    assert ready["safe_to_stop"] is False  # no kernel cgroup proof in pytest
     assert (store / begin["job_id"] / "out.log").read_text() == "AUTHORIZED_ONLY\n"
 
 

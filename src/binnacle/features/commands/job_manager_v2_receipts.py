@@ -34,6 +34,10 @@ class ReceiptNotReady(ReceiptFailure):
     """An existing reservation is incomplete; its command may already run."""
 
 
+class ReceiptAlreadyReserved(ReceiptFailure):
+    """Existing call_id: the only valid operation is read-only reconciliation."""
+
+
 def payload_digest(request: dict[str, Any]) -> str:
     # Include all start behavior parameters except the unique call key itself.
     canonical = {k: v for k, v in request.items() if k != "call_id"}

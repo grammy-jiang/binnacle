@@ -158,6 +158,7 @@ class JobManager:
         pinned_workdir_fd: int | None = None,
         v2_request_fingerprint: str | None = None,
         v2_receipt_key: str | None = None,
+        v2_start_reservation: Callable[[], None] | None = None,
     ) -> dict[str, Any]:
         impl_started = time.perf_counter()
         command = request["command"]
@@ -184,6 +185,11 @@ class JobManager:
                 pinned_workdir_fd=pinned_workdir_fd,
                 v2_request_fingerprint=v2_request_fingerprint,
                 v2_receipt_key=v2_receipt_key,
+                **(
+                    {"start_reservation": v2_start_reservation}
+                    if v2_start_reservation is not None
+                    else {}
+                ),
                 **(
                     {"start_admission_guard": self._v2_start_admission_guard}
                     if self._v2_start_admission_guard is not None

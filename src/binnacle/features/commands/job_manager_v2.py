@@ -170,32 +170,44 @@ class _V2Handler(socketserver.BaseRequestHandler):
                 reply = drain.resume(request["nonce"])
             else:
                 server.authorize_workdir(request["workdir"], directory_fd)
-                # The shared owner lock checks the fence a second time at
-                # launch. This early check avoids creating a useless pending
-                # receipt for a request submitted while already paused.
-                drain.require_starts_allowed()
-                is_new, fingerprint = receipts.reserve(request)
-                if not is_new:
-                    # A duplicate start is only a lookup of the prior receipt.
-                    # Even when that receipt is uncertain, NEVER resubmit a job.
-                    reply = receipts.lookup(request)
-                else:
-                    response = server.manager._start(
-                        request,
-                        pinned_workdir_fd=directory_fd,
-                        v2_request_fingerprint=fingerprint,
-                        v2_receipt_key=receipts.receipt_key(request["call_id"]),
-                    )
-                    if response.get("ok") is not True:
-                        raise V2Denied("job owner rejected start")
-                    if not isinstance(response.get("job_id"), str) or not isinstance(
-                        response.get("state"), str
-                    ):
-                        raise V2Denied("job owner response invalid")
-                    receipts.accepted(request, response["job_id"])
-                    reply.update(response)
-                    reply["workdir_fd_accepted"] = True
-                    reply["ok"] = True
+                fingerprint = receipts.payload_digest(request)
+
+                def reserve_under_owner_lock() -> None:
+                    # Called inside jobs.start_job under its original RLock,
+                    # after the pause-fence check and before *any* child
+                    # launch. This closes reserve -> pause -> Popen races.
+                    is_new, _ = receipts.reserve(request)
+                    if not is_new:
+                        raise receipts.ReceiptAlreadyReserved(
+                            "v2 call already reserved"
+                        )
+
+                response = server.manager._start(
+                    request,
+                    pinned_workdir_fd=directory_fd,
+                    v2_request_fingerprint=fingerprint,
+                    v2_receipt_key=receipts.receipt_key(request["call_id"]),
+                    v2_start_reservation=reserve_under_owner_lock,
+                )
+                if response.get("ok") is not True:
+                    raise V2Denied("job owner rejected start")
+                if not isinstance(response.get("job_id"), str) or not isinstance(
+                    response.get("state"), str
+                ):
+                    raise V2Denied("job owner response invalid")
+                receipts.accepted(request, response["job_id"])
+                reply.update(response)
+                reply["workdir_fd_accepted"] = True
+                reply["ok"] = True
+        except receipts.ReceiptAlreadyReserved:
+            # Strictly a read-only lookup. Never retry Popen even when the
+            # original owner timed out, died or lost the acknowledgment.
+            try:
+                reply = receipts.lookup(request)
+            except receipts.ReceiptNotReady:
+                reply["error"] = "v2_start_outcome_unknown"
+            except receipts.ReceiptFailure:
+                reply["error"] = "v2 start refused"
         except receipts.ReceiptNotReady:
             # A second request may observe a newly O_EXCL-created but not
             # fully fsynced reservation. This is uncertain, NOT permission

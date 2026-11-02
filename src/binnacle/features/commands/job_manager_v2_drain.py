@@ -17,6 +17,7 @@ from pathlib import Path
 
 from binnacle.features.commands import job_manager_v2_receipts as receipts
 from binnacle.features.commands import jobs
+from binnacle.platform.linux import job_cgroup
 
 _MARKER = "starts-paused"
 _NONCE = re.compile(r"^[a-fA-F0-9-]{16,128}$")
@@ -71,6 +72,60 @@ def require_starts_allowed() -> None:
     with receipts._receipts_dir() as dirfd:
         if _read(dirfd) is not None:
             raise DrainRefused("job_manager_starts_paused")
+
+
+def _owner_cgroup_safety() -> tuple[bool, list[dict[str, str]]]:
+    """Verify no unknown processes remain in the *delegated owner service*.
+
+    Job records can be pruned or a leader can exit while descendants live.
+    Therefore `jobs.list_jobs()` alone is not a sufficient stop condition.
+    This reads the *actual* systemd/cgroup-v2 owner boundary, including
+    unknown per-job cgroups, without creating new resource-accounting code.
+    """
+    current = job_cgroup.process_cgroup()
+    if not current or Path(current).name != job_cgroup.MANAGER_SUBGROUP:
+        # The test runner may be invoked *as a child job* of the production
+        # independent Manager, inheriting INVOCATION_ID from systemd. That
+        # is NOT the owner's delegated subgroup and cannot verify it.
+        if current and re.fullmatch(r"job-[0-9a-f]{12}", Path(current).name):
+            return False, []
+        if os.environ.get("INVOCATION_ID") or os.environ.get("NOTIFY_SOCKET"):
+            return False, [{"job_id": "-", "state": "owner_cgroup_unverified"}]
+        # A standalone Python pytest fixture has no delegated systemd owner
+        # cgroup; it can validate logical admission separately.
+        return False, []
+    unit_root = Path("/sys/fs/cgroup") / current.lstrip("/")
+    owner_subgroup = unit_root
+    unit_root = unit_root.parent
+    try:
+        owner_pids = set((owner_subgroup / "cgroup.procs").read_text().split())
+        if owner_pids != {str(os.getpid())}:
+            return False, [
+                {"job_id": "-", "state": "owner_subgroup_has_other_processes"}
+            ]
+        if (unit_root / "cgroup.procs").read_text().strip():
+            return False, [{"job_id": "-", "state": "service_root_has_processes"}]
+        blocked: list[dict[str, str]] = []
+        for group in unit_root.iterdir():
+            # The cgroup2 root contains kernel-owned cgroup.* and memory.*
+            # control FILES as well as child directories. Only nested
+            # directories represent actual process-containing subgroups.
+            if not group.is_dir():
+                continue
+            if group.name == job_cgroup.MANAGER_SUBGROUP:
+                continue
+            if not re.fullmatch(r"job-[0-9a-f]{12}", group.name):
+                blocked.append({"job_id": "-", "state": "unexpected_owner_cgroup"})
+                continue
+            lines = (group / "cgroup.events").read_text().splitlines()
+            events = dict(line.split(maxsplit=1) for line in lines if " " in line)
+            if events.get("populated") != "0":
+                blocked.append(
+                    {"job_id": group.name[4:], "state": "job_cgroup_populated"}
+                )
+        return True, blocked
+    except (OSError, ValueError):
+        return False, [{"job_id": "-", "state": "owner_cgroup_scan_failed"}]
 
 
 def pause(nonce: str) -> dict[str, object]:
@@ -134,22 +189,43 @@ def pause(nonce: str) -> dict[str, object]:
                                     "state": "descendants_running",
                                 }
                             )
-        # A PENDING at-most-once receipt with no job metadata can mean that
-        # child launch already occurred and metadata/ack were interrupted.
-        # Do not call such a state safe to restart the owner.
+        # A PENDING at-most-once receipt might be after a completed Popen,
+        # while a v2 reply is still being finalized. If a *single* durable
+        # metadata record already links the exact fingerprint and receipt
+        # key, this is a known job tracked above. Otherwise its launch
+        # outcome remains ambiguous and we MUST NOT stop the owner.
         pending_receipts = 0
         for name in os.listdir(dirfd):
-            if re.fullmatch(r"[0-9a-f]{64}", name):
-                record = receipts._read(dirfd, name)
-                if record is None or record.get("state") == "pending":
-                    pending_receipts += 1
+            if not re.fullmatch(r"[0-9a-f]{64}", name):
+                continue
+            record = receipts._read(dirfd, name)
+            if record is None or record.get("state") != "pending":
+                continue
+            fingerprint = record.get("fingerprint")
+            matches = 0
+            for item in jobs.list_jobs():
+                meta = jobs._read_meta(item["job_id"])
+                if (
+                    meta is not None
+                    and meta.get("v2_receipt_key") == name
+                    and meta.get("v2_request_fingerprint") == fingerprint
+                ):
+                    matches += 1
+            if matches != 1:
+                pending_receipts += 1
+        cgroup_verified, unmatched_groups = _owner_cgroup_safety()
+        active.extend(unmatched_groups)
         return {
             "version": 2,
             "ok": True,
             "starts_paused": True,
             "active_jobs": active,
+            "owner_cgroup_verified": cgroup_verified,
             "pending_receipts": pending_receipts,
-            "safe_to_stop": not active and pending_receipts == 0,
+            # Only a verified kernel delegated owner cgroup proves there are
+            # no untracked process groups. A plain pytest/Popen owner is
+            # allowed to pause starts but must NEVER claim restart safety.
+            "safe_to_stop": cgroup_verified and not active and pending_receipts == 0,
         }
 
 

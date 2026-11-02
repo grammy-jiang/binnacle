@@ -280,6 +280,7 @@ def start_job(
     v2_request_fingerprint: str | None = None,
     v2_receipt_key: str | None = None,
     start_admission_guard: Callable[[], None] | None = None,
+    start_reservation: Callable[[], None] | None = None,
 ) -> tuple[str, ProcessHandle]:
     # The whole reservation -> process launch -> complete meta sequence is one
     # store transaction. A second concurrent start must see the first new job
@@ -289,6 +290,12 @@ def start_job(
             # In-process barrier: the maintenance RPC uses the SAME RLock.
             # A fence response cannot race an uncommitted child launch.
             start_admission_guard()
+        if start_reservation is not None:
+            # Reservation must happen while holding the SAME lock as the
+            # final admission check and actual Popen. Otherwise a pause
+            # arriving between reserve() and launch would strand an
+            # ambiguous `pending` receipt even though no child was started.
+            start_reservation()
         JOBS_DIR.mkdir(parents=True, exist_ok=True)
         _prune(reserve=1)
         job_id = job_store.new_job_id()

@@ -211,6 +211,61 @@ def check_control_group_stop_terminates_active_job(tmp_path: Path) -> dict:
         _cleanup_own_unit(unit)
 
 
+def check_untracked_job_cgroup_refuses_unsafe_stop(tmp_path: Path) -> dict:
+    """Lost/corrupt job metadata must not hide a still-populated cgroup."""
+    unit, root, run, store, source = _fixture(tmp_path)
+    try:
+        _start_disposable_manager_unit(
+            unit=unit, root=root, run=run, store=store, source=source
+        )
+        reply = _start_job(
+            root,
+            run,
+            "printf 'ORPHAN-START\n'; sleep 15; printf 'ORPHAN-END\n'",
+            "d1-isolated-orphan-job-group",
+        )
+        job_id = reply["job_id"]
+        meta_path = store / job_id / "meta.json"
+        assert _wait_for(meta_path.exists, timeout=5)
+        meta = json.loads(meta_path.read_text())
+        pid = meta["pid"]
+        service_cgroup = _unit_setting(unit, "ControlGroup")
+
+        def in_leaf():
+            try:
+                actual = (
+                    Path(f"/proc/{pid}/cgroup").read_text().split("::", 1)[1].strip()
+                )
+            except (OSError, IndexError):
+                return False
+            return actual == service_cgroup + "/job-" + job_id
+
+        assert _wait_for(in_leaf, timeout=4), (
+            "test child never entered delegated leaf cgroup"
+        )
+        # Simulate data-store loss from an interrupted write/prune, ONLY in
+        # this unique disposable job store; do not touch any live job store.
+        meta_path.unlink()
+        nonce = uuid.uuid4().hex
+        paused = _send(
+            run / "start-v2.sock",
+            {"version": 2, "op": "pause_starts", "nonce": nonce},
+            (),
+        )
+        assert paused["ok"] and paused["starts_paused"]
+        assert paused["owner_cgroup_verified"] is True
+        assert not paused["safe_to_stop"]
+        assert {"job_id": job_id, "state": "job_cgroup_populated"} in paused[
+            "active_jobs"
+        ], paused
+        return {
+            "untracked_active_process_detected_in_cgroup": True,
+            "missing_job_metadata_not_misclassified_safe": True,
+        }
+    finally:
+        _cleanup_own_unit(unit)
+
+
 def check_completed_job_is_preserved_on_owner_stop(tmp_path: Path) -> dict:
     """Active job -> pause v1+v2 -> drain -> stop -> restart paused -> resume."""
     unit, root, run, store, source = _fixture(tmp_path)
@@ -233,8 +288,14 @@ def check_completed_job_is_preserved_on_owner_stop(tmp_path: Path) -> dict:
         pause_req = {"version": 2, "op": "pause_starts", "nonce": nonce}
         initial = _send(run / "start-v2.sock", pause_req, ())
         assert initial["ok"] and initial["starts_paused"]
+        # Immediately after Popen the shell may still be moving out of the
+        # manager subgroup into its job cgroup. Such a transitional snapshot
+        # must be fail-closed; verified clean cgroups are required *later*,
+        # after the job and all descendants have actually drained.
         assert initial["safe_to_stop"] is False
-        assert {j["job_id"] for j in initial["active_jobs"]} == {job}
+        # The initial list may also contain an honest owner-cgroup-unverified
+        # entry while the shell moves into the per-job delegated cgroup.
+        assert job in {j["job_id"] for j in initial["active_jobs"]}, initial
         try:
             job_client.start(
                 run / "legacy.sock",
@@ -275,7 +336,8 @@ def check_completed_job_is_preserved_on_owner_stop(tmp_path: Path) -> dict:
         before = json.loads((store / job / "meta.json").read_text())
         assert before["exit_code"] == 0
         ready = _send(run / "start-v2.sock", pause_req, ())
-        assert ready["ok"] and ready["safe_to_stop"] and not ready["active_jobs"]
+        assert ready["ok"] and ready["safe_to_stop"] and not ready["active_jobs"], ready
+        assert ready["owner_cgroup_verified"] is True, ready
         _cleanup_own_unit(unit)
         after = json.loads((store / job / "meta.json").read_text())
         assert after["exit_code"] == 0
@@ -290,6 +352,9 @@ def check_completed_job_is_preserved_on_owner_stop(tmp_path: Path) -> dict:
             state_after_restart = _send(run / "start-v2.sock", pause_req, ())
             assert state_after_restart["ok"]
             assert state_after_restart["safe_to_stop"]
+            assert state_after_restart["owner_cgroup_verified"] is True, (
+                state_after_restart
+            )
             assert state_after_restart["starts_paused"]
             try:
                 job_client.start(
@@ -325,6 +390,7 @@ def check_completed_job_is_preserved_on_owner_stop(tmp_path: Path) -> dict:
             _cleanup_own_unit(after_unit)
         return {
             "owner_paused_with_active_job": True,
+            "owner_cgroup_tree_verified_at_active_drain_and_restart": True,
             "v1_and_v2_starts_rejected_during_drain": True,
             "completed_job_exit_code_preserved": 0,
             "completed_job_final_log_retained": True,
