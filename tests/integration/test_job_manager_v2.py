@@ -231,6 +231,58 @@ def test_v2_retarged_directory_cannot_run_outside_command(running_owner):
         os.close(fd)
 
 
+def test_v2_large_stdin_is_received_across_multiple_socket_reads(running_owner):
+    _, root, _, run, store = running_owner
+    fd = _pinned_fd(root)
+    try:
+        payload = _request(
+            root,
+            command="wc -c",
+            stdin="x" * 70_000,
+            call_id="multi-chunk-stdin",
+        )
+        response = _send(run / "start-v2.sock", payload, (fd,))
+        assert response["ok"] is True and response["state"] == "exited"
+        assert (store / response["job_id"] / "out.log").read_text().strip() == "70000"
+    finally:
+        os.close(fd)
+
+
+def test_v2_client_disconnect_does_not_cancel_durable_owner_job(running_owner):
+    _, root, _, run, store = running_owner
+    fd = _pinned_fd(root)
+    payload = _request(
+        root, command="cat marker", wait_seconds=1.0, call_id="client-disconnected"
+    )
+    wire = json.dumps(payload).encode() + b"\n"
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+            conn.connect(str(run / "start-v2.sock"))
+            sent = conn.sendmsg(
+                [wire],
+                [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", [fd]))],
+            )
+            assert sent == len(wire)
+            conn.shutdown(socket.SHUT_RDWR)
+        for _ in range(200):
+            snapshots = list(store.glob("*/meta.json")) if store.exists() else []
+            if snapshots:
+                break
+            time.sleep(0.01)
+        assert len(snapshots) == 1
+        meta = json.loads(snapshots[0].read_text())
+        assert meta["call_id"] == "client-disconnected"
+        assert meta["workdir"] == str(root)
+        output = snapshots[0].parent / "out.log"
+        for _ in range(300):
+            if output.read_text() == "AUTHORIZED_ONLY\n":
+                break
+            time.sleep(0.01)
+        assert output.read_text() == "AUTHORIZED_ONLY\n"
+    finally:
+        os.close(fd)
+
+
 def test_v2_peer_credential_is_required_before_request_dispatch(
     running_owner,
 ):

@@ -143,7 +143,7 @@ class _Root:
 class _V2Handler(socketserver.BaseRequestHandler):
     def handle(self) -> None:
         server: V2FDServer = self.server  # type: ignore[assignment]
-        conn: socket.socket = self.request  # type: ignore[assignment]
+        conn: socket.socket = self.request
         conn.settimeout(_TIMEOUT)
         reply: dict[str, Any] = {"version": _VERSION, "ok": False}
         directory_fd = -1
