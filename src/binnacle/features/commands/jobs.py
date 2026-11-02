@@ -276,6 +276,8 @@ def start_job(
     owner_instance_id: str | None = None,
     boot_id: str | None = None,
     pinned_workdir_fd: int | None = None,
+    v2_request_fingerprint: str | None = None,
+    v2_receipt_key: str | None = None,
 ) -> tuple[str, ProcessHandle]:
     # The whole reservation -> process launch -> complete meta sequence is one
     # store transaction. A second concurrent start must see the first new job
@@ -355,6 +357,9 @@ def start_job(
                 owner_instance_id=owner_instance_id,
                 boot_id=boot_id,
             )
+        if v2_request_fingerprint is not None and v2_receipt_key is not None:
+            meta["v2_request_fingerprint"] = v2_request_fingerprint
+            meta["v2_receipt_key"] = v2_receipt_key
         _write_meta(job_id, meta)
         # Keep command/workdir/call in their historical order for old journal
         # consumers; append structured telemetry afterwards.

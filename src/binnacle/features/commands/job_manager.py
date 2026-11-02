@@ -18,6 +18,7 @@ import os
 import socket
 import socketserver
 import subprocess
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -110,7 +111,19 @@ class JobManager:
         *,
         owner_instance_id: str | None = None,
         boot_id: str | None = None,
+        v2_socket_path: Path | None = None,
+        v2_allowed_roots: tuple[Path, ...] | None = None,
     ) -> None:
+        if (v2_socket_path is None) != (v2_allowed_roots is None):
+            raise ValueError(
+                "v2 socket and its manager-owned roots must be configured together"
+            )
+        if v2_socket_path is not None and v2_socket_path == socket_path:
+            raise ValueError("v2 socket must be separate from legacy v1 socket")
+        self.v2_socket_path = v2_socket_path
+        self.v2_allowed_roots = v2_allowed_roots
+        self._v2_server: socketserver.BaseServer | None = None
+        self._v2_thread: threading.Thread | None = None
         self.socket_path = socket_path
         self.owner_instance_id = owner_instance_id or uuid.uuid4().hex
         self.boot_id = boot_id or _boot_id()
@@ -138,7 +151,12 @@ class JobManager:
         return {"ok": False, "error": f"unknown job-manager operation {op!r}"}
 
     def _start(
-        self, request: dict[str, Any], *, pinned_workdir_fd: int | None = None
+        self,
+        request: dict[str, Any],
+        *,
+        pinned_workdir_fd: int | None = None,
+        v2_request_fingerprint: str | None = None,
+        v2_receipt_key: str | None = None,
     ) -> dict[str, Any]:
         impl_started = time.perf_counter()
         command = request["command"]
@@ -163,6 +181,8 @@ class JobManager:
                 owner_instance_id=self.owner_instance_id,
                 boot_id=self.boot_id,
                 pinned_workdir_fd=pinned_workdir_fd,
+                v2_request_fingerprint=v2_request_fingerprint,
+                v2_receipt_key=v2_receipt_key,
             )
         except OSError as exc:
             return {"ok": False, "error": f"could not start job: {exc}"}
@@ -256,25 +276,53 @@ class JobManager:
         server = _ThreadingUnixServer(str(self.socket_path), _Handler)
         server.manager = self  # type: ignore[attr-defined]
         self.server = server
-        os.chmod(self.socket_path, 0o600)
-        _notify_systemd_ready()
-        if _on_started is not None:  # E1-a5: the socket is bound and announced
-            _on_started()
-        log.info(
-            "event=job_manager_start pid=%d owner=%s boot=%s recovered=%d "
-            "protocol=%d package_version=%s revision=%s socket=%s",
-            os.getpid(),
-            self.owner_instance_id[:12],
-            self.boot_id,
-            recovered,
-            PROTOCOL_VERSION,
-            self.provenance.package_version,
-            self.provenance.revision,
-            self.socket_path,
-        )
+        v2_server: socketserver.BaseServer | None = None
+        v2_thread: threading.Thread | None = None
         try:
+            os.chmod(self.socket_path, 0o600)
+            if self.v2_socket_path is not None:
+                # Import/activate the optional v2 FD receiver only when
+                # explicitly configured. Existing managers remain v1-only.
+                from binnacle.features.commands.job_manager_v2 import V2FDServer
+
+                assert self.v2_allowed_roots is not None
+                v2_server = V2FDServer(self.v2_socket_path, self, self.v2_allowed_roots)
+                self._v2_server = v2_server
+                v2_thread = threading.Thread(
+                    target=v2_server.serve_forever,
+                    name="binnacle-manager-v2-receiver",
+                    daemon=True,
+                )
+                self._v2_thread = v2_thread
+                v2_thread.start()
+            # The old v1 socket stays available, and systemd readiness is
+            # signaled only after every explicitly enabled endpoint is bound.
+            _notify_systemd_ready()
+            if _on_started is not None:
+                _on_started()
+            log.info(
+                "event=job_manager_start pid=%d owner=%s boot=%s recovered=%d "
+                "protocol=%d v2_enabled=%s package_version=%s revision=%s socket=%s",
+                os.getpid(),
+                self.owner_instance_id[:12],
+                self.boot_id,
+                recovered,
+                PROTOCOL_VERSION,
+                v2_server is not None,
+                self.provenance.package_version,
+                self.provenance.revision,
+                self.socket_path,
+            )
             server.serve_forever(poll_interval=0.1)
         finally:
+            if v2_server is not None:
+                if v2_thread is not None and v2_thread.is_alive():
+                    v2_server.shutdown()
+                v2_server.server_close()
+                if v2_thread is not None:
+                    v2_thread.join(timeout=5)
+            self._v2_thread = None
+            self._v2_server = None
             server.server_close()
             self.server = None
             self.socket_path.unlink(missing_ok=True)
@@ -313,7 +361,16 @@ def main() -> None:
     global _on_started
     _on_started = started
     try:
-        JobManager(settings.jobs.socket_path).serve_forever()
+        v2_socket = getattr(settings.jobs, "v2_socket_path", None)
+        if v2_socket is None:
+            # Preserve original Manager v1-only entry and its import contract.
+            JobManager(settings.jobs.socket_path).serve_forever()
+        else:
+            JobManager(
+                settings.jobs.socket_path,
+                v2_socket_path=v2_socket,
+                v2_allowed_roots=settings.roots.canonical_allowed,
+            ).serve_forever()
     finally:
         _on_started = None
 

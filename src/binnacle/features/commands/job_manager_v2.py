@@ -11,6 +11,7 @@ remain in the original Python owner. No path-only v1 downgrade is permitted.
 from __future__ import annotations
 
 import array
+import errno
 import json
 import logging
 import os
@@ -22,6 +23,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from binnacle.features.commands import job_manager_v2_receipts as receipts
 from binnacle.features.files import fd_walk
 
 if TYPE_CHECKING:
@@ -151,16 +153,33 @@ class _V2Handler(socketserver.BaseRequestHandler):
             server.authorize_peer(conn)
             request, directory_fd = _receive(conn)
             server.authorize_workdir(request["workdir"], directory_fd)
-            response = server.manager._start(request, pinned_workdir_fd=directory_fd)
-            if response.get("ok") is not True:
-                raise V2Denied("job owner rejected start")
-            if not isinstance(response.get("job_id"), str) or not isinstance(
-                response.get("state"), str
-            ):
-                raise V2Denied("job owner response invalid")
-            reply.update(response)
-            reply["workdir_fd_accepted"] = True
-            reply["ok"] = True
+            is_new, fingerprint = receipts.reserve(request)
+            if not is_new:
+                # A duplicate start is only a lookup of the prior receipt.
+                # Even when that receipt is uncertain, NEVER resubmit a job.
+                reply = receipts.lookup(request)
+            else:
+                response = server.manager._start(
+                    request,
+                    pinned_workdir_fd=directory_fd,
+                    v2_request_fingerprint=fingerprint,
+                    v2_receipt_key=receipts.receipt_key(request["call_id"]),
+                )
+                if response.get("ok") is not True:
+                    raise V2Denied("job owner rejected start")
+                if not isinstance(response.get("job_id"), str) or not isinstance(
+                    response.get("state"), str
+                ):
+                    raise V2Denied("job owner response invalid")
+                receipts.accepted(request, response["job_id"])
+                reply.update(response)
+                reply["workdir_fd_accepted"] = True
+                reply["ok"] = True
+        except receipts.ReceiptNotReady:
+            # A second request may observe a newly O_EXCL-created but not
+            # fully fsynced reservation. This is uncertain, NOT permission
+            # to resubmit the potentially running command.
+            reply["error"] = "v2_start_outcome_unknown"
         except (V2Denied, OSError, ValueError, KeyError, TypeError) as exc:
             # Do not echo command, stdin, workdir or credentials in the reply.
             log.warning(
@@ -197,18 +216,39 @@ class V2FDServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     ) -> None:
         if not allowed_roots:
             raise ValueError("v2 manager requires explicit authorized roots")
-        if (
-            not socket_path.is_absolute()
-            or socket_path.exists()
-            or socket_path.is_symlink()
-        ):
-            raise ValueError("v2 socket must be a new absolute pathname")
+        if not socket_path.is_absolute() or socket_path.is_symlink():
+            raise ValueError("v2 socket must be an absolute non-symlink path")
         parent = socket_path.parent
         info = parent.stat()
         if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077:
             raise ValueError("v2 socket parent must be private and owner-controlled")
         if parent.is_symlink():
             raise ValueError("v2 socket parent may not be a symlink")
+        # A SIGKILL can leave an inert Unix socket pathname. The existing
+        # v1 Manager recovers such stale sockets; keep restart behavior while
+        # never unlinking an active endpoint or an unexpected file/symlink.
+        try:
+            stale = socket_path.lstat()
+        except FileNotFoundError:
+            stale = None
+        if stale is not None:
+            if not stat.S_ISSOCK(stale.st_mode) or stale.st_uid != os.geteuid():
+                raise ValueError("v2 socket pathname occupied by an unsafe object")
+            try:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+                    probe.settimeout(0.3)
+                    probe.connect(str(socket_path))
+            except OSError as exc:
+                if exc.errno != errno.ECONNREFUSED:
+                    raise ValueError(
+                        "v2 socket state cannot be safely recovered"
+                    ) from exc
+            else:
+                raise ValueError("v2 endpoint already has an active listener")
+            current = socket_path.lstat()
+            if (current.st_dev, current.st_ino) != (stale.st_dev, stale.st_ino):
+                raise ValueError("v2 socket changed during stale-socket check")
+            socket_path.unlink()
         self.manager = manager
         self.peer_uid = os.geteuid() if peer_uid is None else peer_uid
         self._resources = ExitStack()

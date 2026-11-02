@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from binnacle.features.commands import job_client, jobs
+from binnacle.features.commands import job_manager_v2_receipts as receipts
 from binnacle.features.commands.job_manager import JobManager
 from binnacle.features.commands.job_manager_v2 import V2FDServer
 
@@ -229,6 +230,165 @@ def test_v2_retarged_directory_cannot_run_outside_command(running_owner):
         assert (outside / "marker").read_text() == "OUTSIDE_SENTINEL\n"
     finally:
         os.close(fd)
+
+
+def test_v2_same_call_id_replays_only_one_durable_job(running_owner):
+    _, root, _, run, store = running_owner
+    payload = _request(root, call_id="one-durable-job")
+    fd = _pinned_fd(root)
+    try:
+        first = _send(run / "start-v2.sock", payload, (fd,))
+        second = _send(run / "start-v2.sock", payload, (fd,))
+    finally:
+        os.close(fd)
+    assert first["ok"] is True and first["state"] == "exited"
+    assert second["ok"] is True and second["replayed"] is True
+    assert first["job_id"] == second["job_id"]
+    assert len(_record_ids(store)) == 1
+    assert (store / first["job_id"] / "out.log").read_text() == "AUTHORIZED_ONLY\n"
+    receipt_file = (
+        store.parent / "v2-start-receipts" / receipts.receipt_key(payload["call_id"])
+    )
+    assert json.loads(receipt_file.read_text())["state"] == "accepted"
+    assert receipt_file.stat().st_mode & 0o077 == 0
+
+
+def test_v2_conflicting_payload_same_call_id_is_never_launched(running_owner):
+    _, root, _, run, store = running_owner
+    fd = _pinned_fd(root)
+    try:
+        request = _request(root, call_id="conflicting-call")
+        original = _send(run / "start-v2.sock", request, (fd,))
+        conflicting = _send(
+            run / "start-v2.sock",
+            _request(root, call_id="conflicting-call", command="printf ILLEGAL"),
+            (fd,),
+        )
+    finally:
+        os.close(fd)
+    assert original["ok"] is True and conflicting["ok"] is False
+    assert len(_record_ids(store)) == 1
+    assert (store / original["job_id"] / "out.log").read_text() == "AUTHORIZED_ONLY\n"
+
+
+def test_v2_incomplete_receipt_file_is_explicitly_unknown_not_reexecuted(running_owner):
+    _, root, _, run, store = running_owner
+    payload = _request(root, call_id="receipt-created-before-fsync")
+    receipt_dir = store.parent / "v2-start-receipts"
+    receipt_dir.mkdir(mode=0o700)
+    file = receipt_dir / receipts.receipt_key(payload["call_id"])
+    file.touch(mode=0o600)  # Deterministic other thread saw O_EXCL before write.
+    fd = _pinned_fd(root)
+    try:
+        response = _send(run / "start-v2.sock", payload, (fd,))
+    finally:
+        os.close(fd)
+    assert response == {"version": 2, "ok": False, "error": "v2_start_outcome_unknown"}
+    assert not _record_ids(store)
+
+
+def test_v2_symlinked_receipt_cannot_authorize_or_overwrite(running_owner):
+    _, root, outside, run, store = running_owner
+    payload = _request(root, call_id="symlink-receipt")
+    receipts_root = store.parent / "v2-start-receipts"
+    receipts_root.mkdir(mode=0o700)
+    foreign = outside / "receipt"
+    foreign.write_text("OUTSIDE-RECEIPT\n")
+    (receipts_root / receipts.receipt_key(payload["call_id"])).symlink_to(foreign)
+    fd = _pinned_fd(root)
+    try:
+        response = _send(run / "start-v2.sock", payload, (fd,))
+    finally:
+        os.close(fd)
+    assert response["ok"] is False
+    assert not _record_ids(store)
+    assert foreign.read_text() == "OUTSIDE-RECEIPT\n"
+
+
+def test_v2_durable_reservation_refuses_ambiguous_pending_retry(running_owner):
+    _, root, _, run, store = running_owner
+    payload = _request(root, call_id="reserved-before-crash")
+    created, _ = receipts.reserve(payload)
+    assert created
+    fd = _pinned_fd(root)
+    try:
+        response = _send(run / "start-v2.sock", payload, (fd,))
+    finally:
+        os.close(fd)
+    assert response == {"version": 2, "ok": False, "error": "v2_start_outcome_unknown"}
+    assert not _record_ids(store)
+
+
+def test_v2_reconciles_metadata_if_reply_commit_failed(running_owner, monkeypatch):
+    _, root, _, run, store = running_owner
+    payload = _request(root, call_id="committed-meta-lost-ack")
+    original = receipts.accepted
+
+    def lose_ack(*_args, **_kwargs):
+        raise OSError("injected failure after durable job metadata")
+
+    fd = _pinned_fd(root)
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(receipts, "accepted", lose_ack)
+            uncertain = _send(run / "start-v2.sock", payload, (fd,))
+        assert uncertain["ok"] is False
+        assert len(_record_ids(store)) == 1
+        patch_accepted = original
+        assert patch_accepted is receipts.accepted
+        recovered = _send(run / "start-v2.sock", payload, (fd,))
+    finally:
+        os.close(fd)
+    assert recovered["ok"] is True and recovered["replayed"] is True
+    assert len(_record_ids(store)) == 1
+    assert (store / recovered["job_id"] / "out.log").read_text() == "AUTHORIZED_ONLY\n"
+
+
+def test_v2_duplicate_through_another_socket_instance_does_not_spawn(running_owner):
+    manager, root, _, run, store = running_owner
+    fd = _pinned_fd(root)
+    try:
+        payload = _request(root, call_id="another-listener-same-journal")
+        original = _send(run / "start-v2.sock", payload, (fd,))
+        listener = V2FDServer(run / "secondary.sock", manager, (root,))
+        worker = threading.Thread(target=listener.serve_forever, daemon=True)
+        worker.start()
+        try:
+            replayed = _send(run / "secondary.sock", payload, (fd,))
+        finally:
+            listener.shutdown()
+            listener.server_close()
+            worker.join(timeout=3)
+    finally:
+        os.close(fd)
+    assert replayed["ok"] is True and replayed["replayed"] is True
+    assert replayed["job_id"] == original["job_id"]
+    assert len(_record_ids(store)) == 1
+
+
+def test_v2_two_simultaneous_identical_starts_never_duplicate(running_owner):
+    _, root, _, run, store = running_owner
+    from concurrent.futures import ThreadPoolExecutor
+
+    payload = _request(root, call_id="concurrent-one-only")
+
+    def send_once():
+        fd = _pinned_fd(root)
+        try:
+            return _send(run / "start-v2.sock", payload, (fd,))
+        finally:
+            os.close(fd)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outputs = list(executor.map(lambda _i: send_once(), range(2)))
+    assert len(_record_ids(store)) == 1
+    assert all(r["version"] == 2 for r in outputs)
+    assert not any(
+        r.get("error") not in (None, "v2_start_outcome_unknown") for r in outputs
+    )
+    replayed = send_once()
+    assert replayed["ok"] is True and replayed["replayed"] is True
+    assert len(_record_ids(store)) == 1
 
 
 def test_v2_large_stdin_is_received_across_multiple_socket_reads(running_owner):
