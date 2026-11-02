@@ -54,8 +54,30 @@ def _wait_for(predicate, timeout: float = 8) -> bool:
     return False
 
 
+_LEGACY_WORKER = r"""
+import signal, sys, threading
+from pathlib import Path
+from binnacle.features.commands import jobs
+from binnacle.features.commands.job_manager import JobManager
+root, run, store = map(Path, sys.argv[1:])
+jobs.JOBS_DIR = store
+manager = JobManager(run / 'legacy.sock', owner_instance_id='isolated-v1-owner',
+    boot_id=jobs._PROCESS_BACKEND.boot_id())
+def shutdown(_sig, _frame):
+    threading.Thread(target=manager.shutdown, daemon=True).start()
+signal.signal(signal.SIGTERM, shutdown)
+manager.serve_forever()
+"""
+
+
 def _start_disposable_manager_unit(
-    *, unit: str, root: Path, run: Path, store: Path, source: Path
+    *,
+    unit: str,
+    root: Path,
+    run: Path,
+    store: Path,
+    source: Path,
+    v2_enabled: bool = True,
 ) -> None:
     assert unit.startswith("binnacle-d1c-isolated-") and unit.endswith(".service")
     assert _unit_setting(unit, "LoadState") == "not-found"
@@ -82,7 +104,7 @@ def _start_disposable_manager_unit(
             "--setenv=PYTHONDONTWRITEBYTECODE=1",
             sys.executable,
             "-c",
-            _WORKER,
+            _WORKER if v2_enabled else _LEGACY_WORKER,
             str(root),
             str(run),
             str(store),
@@ -94,7 +116,7 @@ def _start_disposable_manager_unit(
     assert result.returncode == 0, result.stderr
     assert _wait_for(
         lambda: (
-            (run / "start-v2.sock").exists()
+            (run / "start-v2.sock").exists() == v2_enabled
             and (run / "legacy.sock").exists()
             and _unit_setting(unit, "ActiveState") == "active"
         ),
@@ -148,6 +170,124 @@ def _cleanup_own_unit(unit: str) -> None:
     finally:
         # Unique test-only unit: never call systemctl on production service.
         assert "binnacle-jobs.service" not in unit
+
+
+def check_v1_to_v2_then_v1_rollback_with_external_ingress_fenced_by_test_client(
+    tmp_path: Path,
+) -> dict:
+    """Isolated first-upgrade rehearsal; deliberately cannot prove live ingress freeze.
+
+    The legacy v1 Manager has NO pause RPC. This test owns its only client
+    and can withhold further calls while a disposable job drains. It then
+    upgrades to opt-in v2 and rolls back to the frozen original source.
+    Critically, after rollback the original v1 accepts starts even while the
+    v2's private durable pause marker remains. No false production GO.
+    """
+    unit, root, run, store, source_v2 = _fixture(tmp_path)
+    source_v1 = Path(__file__).resolve().parents[1].parent / "binnacle" / "src"
+    assert source_v1.joinpath("binnacle/features/commands/job_manager.py").is_file()
+    assert not source_v1.joinpath(
+        "binnacle/features/commands/job_manager_v2.py"
+    ).exists()
+    v2_unit = f"binnacle-d1c-isolated-{uuid.uuid4().hex[:12]}.service"
+    rollback_unit = f"binnacle-d1c-isolated-{uuid.uuid4().hex[:12]}.service"
+    units = (unit, v2_unit, rollback_unit)
+    try:
+        _start_disposable_manager_unit(
+            unit=unit,
+            root=root,
+            run=run,
+            store=store,
+            source=source_v1,
+            v2_enabled=False,
+        )
+        assert not (run / "start-v2.sock").exists()
+        assert job_client.ping(run / "legacy.sock")["version"] == 1
+        started = job_client.start(
+            run / "legacy.sock",
+            command="cat marker; sleep 0.3; echo V1-COMPLETE",
+            workdir=root,
+            stdin=None,
+            wait_seconds=0.0,
+            call_id="v1-first-upgrade-job",
+        )
+        assert started["ok"]
+        jid = started["job_id"]
+        assert _wait_for(lambda: (store / jid / "meta.json").exists(), timeout=5)
+        # Ingress freeze is SIMULATED by the only test client withholding any
+        # new calls; there is no server-side fence in this original v1 code.
+        assert _wait_for(
+            lambda: "exit_code" in json.loads((store / jid / "meta.json").read_text()),
+            timeout=6,
+        )
+        old_meta = json.loads((store / jid / "meta.json").read_text())
+        assert old_meta["exit_code"] == 0
+        assert (
+            store / jid / "out.log"
+        ).read_text() == "ISOLATED-CGROUP-ONLY\nV1-COMPLETE\n"
+        # Check old unit's delegated owner children are drained before stop.
+        old_cgroup = _unit_setting(unit, "ControlGroup")
+        for child in (Path("/sys/fs/cgroup") / old_cgroup.lstrip("/")).iterdir():
+            if child.name.startswith("job-"):
+                events = (child / "cgroup.events").read_text()
+                assert "populated 0" in events, (child, events)
+        _cleanup_own_unit(unit)
+        assert _unit_setting(unit, "ActiveState") in ("inactive", "failed")
+        # Now a different owner generation with v2 is deployed on the *same*
+        # private paths and durable spool. A production release still needs
+        # its own ingress admission control approval.
+        _start_disposable_manager_unit(
+            unit=v2_unit, root=root, run=run, store=store, source=source_v2
+        )
+        assert job_client.ping(run / "legacy.sock")["version"] == 1
+        assert json.loads((store / jid / "meta.json").read_text())["exit_code"] == 0
+        nonce = uuid.uuid4().hex
+        paused = _send(
+            run / "start-v2.sock",
+            {"version": 2, "op": "pause_starts", "nonce": nonce},
+            (),
+        )
+        assert (
+            paused["ok"] and paused["safe_to_stop"] and paused["owner_cgroup_verified"]
+        ), paused
+        _cleanup_own_unit(v2_unit)
+        # This is the negative rollback proof: the legacy process ignores
+        # the durable marker and will start a command if external ingress is
+        # re-opened too early. It only writes to the disposable fixture.
+        _start_disposable_manager_unit(
+            unit=rollback_unit,
+            root=root,
+            run=run,
+            store=store,
+            source=source_v1,
+            v2_enabled=False,
+        )
+        assert not (run / "start-v2.sock").exists()
+        assert (store.parent / "v2-start-receipts" / "starts-paused").exists()
+        despite_pause = job_client.start(
+            run / "legacy.sock",
+            command="cat marker",
+            workdir=root,
+            stdin=None,
+            wait_seconds=2.0,
+            call_id="unsafe-old-v1-ignores-pause",
+        )
+        assert despite_pause["ok"]
+        assert (
+            store / despite_pause["job_id"] / "out.log"
+        ).read_text() == "ISOLATED-CGROUP-ONLY\n"
+        return {
+            "first_upgrade_v1_source_is_original_production_checkout": True,
+            "initial_v1_drain_then_independent_v2_start_success": True,
+            "existing_v1_job_log_and_exit_survive_v2_start": True,
+            "v2_pause_proves_empty_owner_tree_before_rollback": True,
+            "rollback_legacy_v1_ignores_durable_v2_pause": True,
+            "external_ingress_freeze_only_simulated_in_test": True,
+            "production_cutover_approved": False,
+        }
+    finally:
+        for candidate in reversed(units):
+            _cleanup_own_unit(candidate)
 
 
 def check_control_group_stop_terminates_active_job(tmp_path: Path) -> dict:

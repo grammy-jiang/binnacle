@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Explicit D1 isolated real-systemd rehearsal, outside pytest's host guard.
 
-Run only with BINNACLE_D1_SYSTEMD_REHEARSAL=1 on Linux. It creates and stops
-exactly two uniquely named transient test units, never binnacle-jobs.service.
+Run only with BINNACLE_D1_SYSTEMD_REHEARSAL=1 on Linux. It creates and stops uniquely named transient test-only units, never
+binnacle-jobs.service. Includes an original-source v1→v2→v1 migration drill,
+but does NOT prove a production-wide external client ingress freeze.
 """
 
 from __future__ import annotations
@@ -48,6 +49,7 @@ def main() -> None:
         check_completed_job_is_preserved_on_owner_stop,
         check_control_group_stop_terminates_active_job,
         check_untracked_job_cgroup_refuses_unsafe_stop,
+        check_v1_to_v2_then_v1_rollback_with_external_ingress_fenced_by_test_client,
     )
 
     before = _production_owner()
@@ -66,6 +68,13 @@ def main() -> None:
         orphan = sandbox / "untracked-job"
         orphan.mkdir()
         orphan_result = check_untracked_job_cgroup_refuses_unsafe_stop(orphan)
+        upgrade = sandbox / "v1-v2-v1-upgrade"
+        upgrade.mkdir()
+        upgrade_result = (
+            check_v1_to_v2_then_v1_rollback_with_external_ingress_fenced_by_test_client(
+                upgrade
+            )
+        )
     after = _production_owner()
     assert after == before, (
         f"production Manager unexpectedly changed: {before}->{after}"
@@ -73,7 +82,7 @@ def main() -> None:
     print(
         json.dumps(
             {
-                "scope": "four transient test-only systemd user units across three scenarios; NOT the live Manager",
+                "scope": "seven transient test-only systemd user units across four scenarios; NOT the live Manager",
                 "active_job_terminated_by_control_group_stop": True,
                 "completed_job_retains_exit_zero_and_output_after_drain": True,
                 "real_systemd_delegate_subgroup_verified": True,
@@ -85,6 +94,7 @@ def main() -> None:
                 "active_job": active_result,
                 "completed_job": completed_result,
                 "untracked_cgroup": orphan_result,
+                "first_upgrade_and_rollback": upgrade_result,
             },
             indent=2,
         )
