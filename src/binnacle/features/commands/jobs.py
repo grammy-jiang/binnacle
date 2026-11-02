@@ -11,6 +11,7 @@ import logging
 import os
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
@@ -278,11 +279,16 @@ def start_job(
     pinned_workdir_fd: int | None = None,
     v2_request_fingerprint: str | None = None,
     v2_receipt_key: str | None = None,
+    start_admission_guard: Callable[[], None] | None = None,
 ) -> tuple[str, ProcessHandle]:
     # The whole reservation -> process launch -> complete meta sequence is one
     # store transaction. A second concurrent start must see the first new job
     # before deciding which old slot to prune.
     with _STORE_LOCK:
+        if start_admission_guard is not None:
+            # In-process barrier: the maintenance RPC uses the SAME RLock.
+            # A fence response cannot race an uncommitted child launch.
+            start_admission_guard()
         JOBS_DIR.mkdir(parents=True, exist_ok=True)
         _prune(reserve=1)
         job_id = job_store.new_job_id()

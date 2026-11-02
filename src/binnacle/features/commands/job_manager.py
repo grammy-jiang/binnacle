@@ -124,6 +124,7 @@ class JobManager:
         self.v2_allowed_roots = v2_allowed_roots
         self._v2_server: socketserver.BaseServer | None = None
         self._v2_thread: threading.Thread | None = None
+        self._v2_start_admission_guard: Callable[[], None] | None = None
         self.socket_path = socket_path
         self.owner_instance_id = owner_instance_id or uuid.uuid4().hex
         self.boot_id = boot_id or _boot_id()
@@ -183,6 +184,11 @@ class JobManager:
                 pinned_workdir_fd=pinned_workdir_fd,
                 v2_request_fingerprint=v2_request_fingerprint,
                 v2_receipt_key=v2_receipt_key,
+                **(
+                    {"start_admission_guard": self._v2_start_admission_guard}
+                    if self._v2_start_admission_guard is not None
+                    else {}
+                ),
             )
         except OSError as exc:
             return {"ok": False, "error": f"could not start job: {exc}"}

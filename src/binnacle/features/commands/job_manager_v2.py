@@ -23,6 +23,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from binnacle.features.commands import job_manager_v2_drain as drain
 from binnacle.features.commands import job_manager_v2_receipts as receipts
 from binnacle.features.files import fd_walk
 
@@ -67,9 +68,19 @@ def _request_from_wire(payload: bytes) -> dict[str, Any]:
         "wait_seconds",
         "call_id",
     }
-    if set(request) != required or type(request["version"]) is not int:
-        raise V2Denied("unsupported v2 request fields")
-    if request["version"] != _VERSION or request["op"] != "start":
+    if type(request.get("version")) is not int:
+        raise V2Denied("unsupported v2 request version")
+    if request.get("op") in ("pause_starts", "resume_starts"):
+        if request["version"] != _VERSION or set(request) != {"version", "op", "nonce"}:
+            raise V2Denied("invalid v2 maintenance operation")
+        if not isinstance(request["nonce"], str):
+            raise V2Denied("invalid maintenance nonce")
+        return request
+    if set(request) != required:
+        raise V2Denied("unsupported v2 start fields")
+    if request["version"] != _VERSION:
+        raise V2Denied("unsupported v2 manager version")
+    if request["op"] != "start":
         raise V2Denied("unsupported v2 manager operation")
     if request["workdir_fd"] is not True:
         raise V2Denied("workdir FD required")
@@ -113,8 +124,6 @@ def _receive(conn: socket.socket) -> tuple[dict[str, Any], int]:
             received.extend(ints)
         if flags & (socket.MSG_CTRUNC | getattr(socket, "MSG_TRUNC", 0)):
             raise V2Denied("truncated ancillary data or request")
-        if len(received) != 1:
-            raise V2Denied("exactly one directory FD required")
         if not raw:
             raise V2Denied("empty v2 request")
         content = bytearray(raw)
@@ -129,7 +138,10 @@ def _receive(conn: socket.socket) -> tuple[dict[str, Any], int]:
         if extra or len(line) > _MAX_REQUEST:
             raise V2Denied("unexpected trailing data or oversized v2 request")
         request = _request_from_wire(bytes(line))
-        return request, received.pop()
+        expected_fds = 1 if request["op"] == "start" else 0
+        if len(received) != expected_fds:
+            raise V2Denied("invalid descriptor count for v2 operation")
+        return request, received.pop() if expected_fds else -1
     finally:
         for fd in received:
             os.close(fd)
@@ -152,29 +164,38 @@ class _V2Handler(socketserver.BaseRequestHandler):
         try:
             server.authorize_peer(conn)
             request, directory_fd = _receive(conn)
-            server.authorize_workdir(request["workdir"], directory_fd)
-            is_new, fingerprint = receipts.reserve(request)
-            if not is_new:
-                # A duplicate start is only a lookup of the prior receipt.
-                # Even when that receipt is uncertain, NEVER resubmit a job.
-                reply = receipts.lookup(request)
+            if request["op"] == "pause_starts":
+                reply = drain.pause(request["nonce"])
+            elif request["op"] == "resume_starts":
+                reply = drain.resume(request["nonce"])
             else:
-                response = server.manager._start(
-                    request,
-                    pinned_workdir_fd=directory_fd,
-                    v2_request_fingerprint=fingerprint,
-                    v2_receipt_key=receipts.receipt_key(request["call_id"]),
-                )
-                if response.get("ok") is not True:
-                    raise V2Denied("job owner rejected start")
-                if not isinstance(response.get("job_id"), str) or not isinstance(
-                    response.get("state"), str
-                ):
-                    raise V2Denied("job owner response invalid")
-                receipts.accepted(request, response["job_id"])
-                reply.update(response)
-                reply["workdir_fd_accepted"] = True
-                reply["ok"] = True
+                server.authorize_workdir(request["workdir"], directory_fd)
+                # The shared owner lock checks the fence a second time at
+                # launch. This early check avoids creating a useless pending
+                # receipt for a request submitted while already paused.
+                drain.require_starts_allowed()
+                is_new, fingerprint = receipts.reserve(request)
+                if not is_new:
+                    # A duplicate start is only a lookup of the prior receipt.
+                    # Even when that receipt is uncertain, NEVER resubmit a job.
+                    reply = receipts.lookup(request)
+                else:
+                    response = server.manager._start(
+                        request,
+                        pinned_workdir_fd=directory_fd,
+                        v2_request_fingerprint=fingerprint,
+                        v2_receipt_key=receipts.receipt_key(request["call_id"]),
+                    )
+                    if response.get("ok") is not True:
+                        raise V2Denied("job owner rejected start")
+                    if not isinstance(response.get("job_id"), str) or not isinstance(
+                        response.get("state"), str
+                    ):
+                        raise V2Denied("job owner response invalid")
+                    receipts.accepted(request, response["job_id"])
+                    reply.update(response)
+                    reply["workdir_fd_accepted"] = True
+                    reply["ok"] = True
         except receipts.ReceiptNotReady:
             # A second request may observe a newly O_EXCL-created but not
             # fully fsynced reservation. This is uncertain, NOT permission
@@ -264,6 +285,9 @@ class V2FDServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
             os.chmod(socket_path, 0o600)
             self._socket_path = socket_path
             self._socket_identity = os.stat(socket_path)
+            # This is installed only in opt-in v2 manager instances. It
+            # governs BOTH existing v1 and new v2 start requests.
+            self.manager._v2_start_admission_guard = drain.require_starts_allowed
         except BaseException:
             self._resources.close()
             raise
