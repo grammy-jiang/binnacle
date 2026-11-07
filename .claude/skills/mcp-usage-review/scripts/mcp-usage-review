@@ -17,7 +17,7 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 DEFAULT_REPO = Path.home() / "Projects" / "binnacle"
@@ -331,7 +331,7 @@ def main() -> None:
             )
         return
 
-    today = datetime.now(timezone.utc).astimezone().date().isoformat()
+    today = datetime.now(UTC).astimezone().date().isoformat()
     cur = run_breakdown(repo, a.since, a.until)
     base_path, base = newest_baseline(repo)
     doc = render(cur, base, base_path, today)
