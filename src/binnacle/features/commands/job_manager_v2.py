@@ -19,16 +19,35 @@ import socket
 import socketserver
 import stat
 import struct
+from collections.abc import Callable
 from contextlib import ExitStack
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any, Protocol
 
 from binnacle.features.commands import job_manager_v2_drain as drain
 from binnacle.features.commands import job_manager_v2_receipts as receipts
 from binnacle.features.files import fd_walk
 
-if TYPE_CHECKING:
-    from binnacle.features.commands.job_manager import JobManager
+
+class StartOwner(Protocol):
+    """The JobManager surface this server uses.
+
+    A structural type instead of importing JobManager keeps
+    job_manager -> job_manager_v2 the only edge between the two modules.
+    """
+
+    _v2_start_admission_guard: Callable[[], None] | None
+
+    def _start(
+        self,
+        request: dict[str, Any],
+        *,
+        pinned_workdir_fd: int | None = None,
+        v2_request_fingerprint: str | None = None,
+        v2_receipt_key: str | None = None,
+        v2_start_reservation: Callable[[], None] | None = None,
+    ) -> dict[str, Any]: ...
+
 
 log = logging.getLogger("binnacle.job_manager_v2")
 _VERSION = 2
@@ -242,7 +261,7 @@ class V2FDServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     def __init__(
         self,
         socket_path: Path,
-        manager: JobManager,
+        manager: StartOwner,
         allowed_roots: tuple[Path, ...],
         *,
         peer_uid: int | None = None,

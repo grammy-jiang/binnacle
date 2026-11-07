@@ -6,6 +6,7 @@ own process group with output spooled to disk, so a job survives
 from process memory (ChatGPT re-initializes per call — no session state).
 """
 
+import functools
 import hashlib
 import logging
 import os
@@ -100,41 +101,22 @@ def _remove_job_dir(stale: Path) -> bool:
     return job_store.remove_job_dir(stale)
 
 
-def _prune(reserve: int = 0) -> None:
-    """Prune the base retention window, sparing stale jobs still running.
+def _is_running(job_id: str) -> bool:
+    try:
+        state = job_state(job_id)
+    except KeyError:
+        return False  # meta parsed but incomplete (e.g. killed mid-write)
+    return state is not None and state["state"] == "running"
 
-    ``reserve`` removes slots from the *existing* window before a caller adds
-    new jobs. ``start_job`` uses one reserved slot, so KEEP_NEWEST=50 means the
-    new directory becomes the 50th base entry rather than a permanent 51st.
-    Older live jobs outside that base window remain protected exceptions.
-    """
+
+def _prune(reserve: int = 0) -> None:
+    """Prune the base retention window, sparing stale jobs still running."""
     reserve = max(0, reserve)
     effective_keep = max(0, KEEP_NEWEST - reserve)
     with _STORE_LOCK:
-        try:
-            dirs = sorted(
-                (d for d in JOBS_DIR.iterdir() if d.is_dir()),
-                key=lambda d: d.stat().st_mtime,
-                reverse=True,
-            )
-        except OSError:
-            return
-        removed = 0
-        skipped_running = 0
-        for stale in dirs[effective_keep:]:
-            # Never delete a live job: its process would keep running while
-            # job_status loses it and the reaper crashes on exit. Unreadable or
-            # malformed meta, exited, and unknown (process gone, exit never
-            # recorded) all stay deletable so garbage cannot become immortal.
-            try:
-                state = job_state(stale.name)
-            except KeyError:
-                state = None  # meta parsed but incomplete (e.g. killed mid-write)
-            if state is not None and state["state"] == "running":
-                skipped_running += 1
-                continue
-            if _remove_job_dir(stale):
-                removed += 1
+        removed, skipped_running = job_store.prune(
+            JOBS_DIR, effective_keep, _is_running, lambda d: _remove_job_dir(d)
+        )
         if removed or skipped_running:
             logger.info(
                 "event=jobs_pruned removed=%d skipped_running=%d keep_newest=%d "
@@ -286,15 +268,12 @@ def start_job(
     # store transaction. A second concurrent start must see the first new job
     # before deciding which old slot to prune.
     with _STORE_LOCK:
+        # Both v2 callbacks run under the SAME RLock as the maintenance RPC and
+        # the Popen below: a fence cannot race an uncommitted launch, and a pause
+        # cannot strand a `pending` receipt for a child that never started.
         if start_admission_guard is not None:
-            # In-process barrier: the maintenance RPC uses the SAME RLock.
-            # A fence response cannot race an uncommitted child launch.
             start_admission_guard()
         if start_reservation is not None:
-            # Reservation must happen while holding the SAME lock as the
-            # final admission check and actual Popen. Otherwise a pause
-            # arriving between reserve() and launch would strand an
-            # ambiguous `pending` receipt even though no child was started.
             start_reservation()
         JOBS_DIR.mkdir(parents=True, exist_ok=True)
         _prune(reserve=1)
@@ -328,26 +307,16 @@ def start_job(
             else open(os.devnull, "rb") as inf,
         ):
             argv = _RESOURCE_ACCOUNTING.wrap_argv(["bash", "-c", command], cgroup)
-            if pinned_workdir_fd is None:
-                # All existing v1/Python callers retain their original API.
-                proc = _PROCESS_BACKEND.launch(
-                    argv, workdir=workdir, env=env, stdin=inf, output=logf
-                )
-            else:
-                # The optional v2 path is Linux-only and never changes the
-                # ownership, spool or cgroup behavior of the old manager.
-                from binnacle.platform.linux.job_process import LinuxProcessBackend
-
-                if not isinstance(_PROCESS_BACKEND, LinuxProcessBackend):
+            launch: Callable[..., ProcessHandle] = _PROCESS_BACKEND.launch
+            if pinned_workdir_fd is not None:
+                # The optional v2 path is Linux-only and keeps the old manager's
+                # ownership, spool and cgroup behavior. A feature module must not
+                # import a platform adapter, so it tests for the capability.
+                pinned = getattr(_PROCESS_BACKEND, "launch_pinned", None)
+                if pinned is None:
                     raise RuntimeError("pinned workdir launch requires Linux owner")
-                proc = _PROCESS_BACKEND.launch_pinned(
-                    argv,
-                    workdir=workdir,
-                    workdir_fd=pinned_workdir_fd,
-                    env=env,
-                    stdin=inf,
-                    output=logf,
-                )
+                launch = functools.partial(pinned, workdir_fd=pinned_workdir_fd)
+            proc = launch(argv, workdir=workdir, env=env, stdin=inf, output=logf)
         call_id = current_call.get()
         command_hash = hashlib.sha256(command.encode()).hexdigest()[:12]
         owner = "manager" if owner_instance_id is not None else "embedded"

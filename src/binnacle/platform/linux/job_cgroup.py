@@ -332,3 +332,7 @@ class CgroupResourceAccounting:
 
     def cleanup(self, identity: str | None) -> bool:
         return cleanup(identity)
+
+    def owner_cgroup(self) -> tuple[str | None, str]:
+        """This process's cgroup and the Manager's own subgroup (v2 drain check)."""
+        return process_cgroup(), MANAGER_SUBGROUP

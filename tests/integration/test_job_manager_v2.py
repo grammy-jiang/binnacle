@@ -114,7 +114,9 @@ def _send(path: Path, request: dict | bytes, fds: tuple[int, ...]):
         return json.loads(data)
 
 
-def _pinned_fd(path: Path):
+def _pinned_fd(path: Path) -> int:
+    if sys.platform != "linux":  # pytestmark skips the module; O_PATH is Linux-only
+        raise RuntimeError("SCM_RIGHTS tests run on Linux only")
     return os.open(path, os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
 
 
@@ -179,7 +181,7 @@ def test_v2_invalid_descriptor_and_framing_never_launch(
     other = _pinned_fd(outside)
     try:
         request: dict | bytes = _request(root)
-        fds = (good,)
+        fds: tuple[int, ...] = (good,)
         if reason == "missing_fd":
             fds = ()
         elif reason == "double_fd":
@@ -195,8 +197,9 @@ def test_v2_invalid_descriptor_and_framing_never_launch(
         elif reason == "version_one":
             request = _request(root, version=1)
         elif reason == "missing_key":
-            request = _request(root)
-            del request["call_id"]
+            missing = _request(root)
+            del missing["call_id"]
+            request = missing
         elif reason == "duplicate_json":
             wire = json.dumps(_request(root))
             request = wire[:-1].encode() + b',"version":2}\n'

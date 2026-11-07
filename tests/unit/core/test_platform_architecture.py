@@ -59,6 +59,8 @@ EDGES = {
         "startup_imports",
         # Only the __main__ manager process takes this early entry edge.
         "manager_bootstrap",
+        # The opt-in v2 SCM_RIGHTS start socket, imported only when enabled.
+        "job_manager_v2",
     },
     "manager_bootstrap": {"startup_imports", "config"},
     # E1 eager start-up imports: no features, no platform modules, no server.
@@ -92,6 +94,7 @@ MODULE_OWNERS = {
     "binnacle.features.commands.jobs": "jobs",
     "binnacle.features.commands.job_owner": "job_owner",
     "binnacle.features.commands.job_manager": "job_manager",
+    "binnacle.features.commands.job_manager_v2": "job_manager_v2",
     "binnacle.features.commands.job_client": "job_client",
     "binnacle.features.commands.job_output": "job_output",
 }

@@ -17,7 +17,6 @@ from pathlib import Path
 
 from binnacle.features.commands import job_manager_v2_receipts as receipts
 from binnacle.features.commands import jobs
-from binnacle.platform.linux import job_cgroup
 
 _MARKER = "starts-paused"
 _NONCE = re.compile(r"^[a-fA-F0-9-]{16,128}$")
@@ -82,8 +81,9 @@ def _owner_cgroup_safety() -> tuple[bool, list[dict[str, str]]]:
     This reads the *actual* systemd/cgroup-v2 owner boundary, including
     unknown per-job cgroups, without creating new resource-accounting code.
     """
-    current = job_cgroup.process_cgroup()
-    if not current or Path(current).name != job_cgroup.MANAGER_SUBGROUP:
+    owner_cgroup = getattr(jobs._RESOURCE_ACCOUNTING, "owner_cgroup", None)
+    current, manager_subgroup = owner_cgroup() if owner_cgroup else (None, "")
+    if not current or Path(current).name != manager_subgroup:
         # The test runner may be invoked *as a child job* of the production
         # independent Manager, inheriting INVOCATION_ID from systemd. That
         # is NOT the owner's delegated subgroup and cannot verify it.
@@ -112,7 +112,7 @@ def _owner_cgroup_safety() -> tuple[bool, list[dict[str, str]]]:
             # directories represent actual process-containing subgroups.
             if not group.is_dir():
                 continue
-            if group.name == job_cgroup.MANAGER_SUBGROUP:
+            if group.name == manager_subgroup:
                 continue
             if not re.fullmatch(r"job-[0-9a-f]{12}", group.name):
                 blocked.append({"job_id": "-", "state": "unexpected_owner_cgroup"})
