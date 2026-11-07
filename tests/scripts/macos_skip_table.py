@@ -20,6 +20,9 @@ tests/integration/test_http_workflows.py
 tests/integration/test_job_manager.py
 tests/integration/test_job_manager_reload.py
 tests/integration/test_job_manager_telemetry.py
+tests/integration/test_job_manager_probe.py
+tests/integration/test_job_manager_v2.py
+tests/integration/test_job_manager_v2_lifecycle.py
 tests/integration/test_job_telemetry.py
 tests/integration/test_jobs.py
 tests/integration/test_jobs_lifecycle.py
@@ -62,6 +65,9 @@ LINUX_ONLY_MODULES = frozenset(
         "test_job_telemetry",
         "test_os_job_rpc_cross_version",
         "test_logging_jobs",
+        "test_job_manager_v2",
+        "test_job_manager_v2_lifecycle",
+        "test_job_manager_probe",
     ]
 )
 _ROWS = """

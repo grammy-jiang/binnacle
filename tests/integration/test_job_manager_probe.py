@@ -10,11 +10,21 @@ from __future__ import annotations
 
 import logging
 import socket
+import sys
 import time
 from pathlib import Path
 
+import pytest
+
 from binnacle.features.commands import job_client
 from tests.integration.test_job_manager_v2 import running_owner  # noqa: F401
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
+
+pytestmark = LINUX_ONLY
 
 LOGGERS = ("binnacle.job_manager", "binnacle.job_manager_v2")
 

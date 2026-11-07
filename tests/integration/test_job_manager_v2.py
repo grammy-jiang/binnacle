@@ -22,7 +22,12 @@ from binnacle.features.commands import job_manager_v2_receipts as receipts
 from binnacle.features.commands.job_manager import JobManager
 from binnacle.features.commands.job_manager_v2 import V2FDServer
 
-pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="Linux SCM_RIGHTS")
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
+
+pytestmark = LINUX_ONLY
 
 
 @pytest.fixture()

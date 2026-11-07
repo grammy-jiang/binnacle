@@ -18,7 +18,12 @@ import pytest
 from binnacle.features.commands import job_client
 from tests.integration.test_job_manager_v2 import _pinned_fd, _request, _send
 
-pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="Linux Manager v2")
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
+
+pytestmark = LINUX_ONLY
 
 _WORKER = r"""
 import signal,sys,threading
