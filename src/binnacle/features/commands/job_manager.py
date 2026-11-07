@@ -70,6 +70,11 @@ class _Handler(socketserver.StreamRequestHandler):
         response: dict[str, Any] = {}
         try:
             raw = self.rfile.readline()
+            if not raw:
+                # EOF before any byte: an owner-identity probe (a client reads
+                # SO_PEERCRED and closes). There is no request to answer.
+                log.debug("event=job_manager_probe_closed")
+                return
             decoded = json.loads(raw)
             if not isinstance(decoded, dict):
                 raise TypeError("request must be a JSON object")
@@ -297,7 +302,10 @@ class JobManager:
                 # explicitly configured. Existing managers remain v1-only.
                 from binnacle.features.commands.job_manager_v2 import V2FDServer
 
-                assert self.v2_allowed_roots is not None
+                if self.v2_allowed_roots is None:  # set with v2_socket_path in __init__
+                    raise RuntimeError(
+                        "v2 start socket configured without allowed roots"
+                    )
                 v2_server = V2FDServer(self.v2_socket_path, self, self.v2_allowed_roots)
                 self._v2_server = v2_server
                 v2_thread = threading.Thread(

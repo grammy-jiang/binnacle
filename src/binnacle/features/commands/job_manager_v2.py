@@ -61,6 +61,10 @@ class V2Denied(ValueError):
     """A rejected v2 start request must never launch a job."""
 
 
+class V2ProbeClosed(V2Denied):
+    """The peer closed without a byte or an FD: an owner-identity probe."""
+
+
 def _unique_object(items: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in items:
@@ -144,6 +148,8 @@ def _receive(conn: socket.socket) -> tuple[dict[str, Any], int]:
         if flags & (socket.MSG_CTRUNC | getattr(socket, "MSG_TRUNC", 0)):
             raise V2Denied("truncated ancillary data or request")
         if not raw:
+            if not received:
+                raise V2ProbeClosed("connection closed before any request")
             raise V2Denied("empty v2 request")
         content = bytearray(raw)
         while b"\n" not in content:
@@ -218,6 +224,11 @@ class _V2Handler(socketserver.BaseRequestHandler):
                 reply.update(response)
                 reply["workdir_fd_accepted"] = True
                 reply["ok"] = True
+        except V2ProbeClosed:
+            # The Rust MCP admits its Manager by peer credentials only; the
+            # closed probe connection is not a refused start.
+            log.debug("event=job_manager_v2_probe_closed")
+            return
         except receipts.ReceiptAlreadyReserved:
             # Strictly a read-only lookup. Never retry Popen even when the
             # original owner timed out, died or lost the acknowledgment.
