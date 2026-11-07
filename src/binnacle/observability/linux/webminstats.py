@@ -13,7 +13,7 @@ import statistics
 import subprocess
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 HISTORY_DIR = Path("/var/webmin/modules/system-status/history")
@@ -196,8 +196,8 @@ def render(stats: WebminResourceStats) -> str:
     first, last = min(available), max(available)
     out.append(
         f"  samples={stats.samples} interval≈{stats.interval_s:.0f}s "
-        f"first={datetime.fromtimestamp(first, timezone.utc).astimezone().isoformat(timespec='seconds')} "
-        f"last={datetime.fromtimestamp(last, timezone.utc).astimezone().isoformat(timespec='seconds')}"
+        f"first={datetime.fromtimestamp(first, UTC).astimezone().isoformat(timespec='seconds')} "
+        f"last={datetime.fromtimestamp(last, UTC).astimezone().isoformat(timespec='seconds')}"
     )
 
     idle = _values(stats, "cpuidle")
@@ -248,7 +248,7 @@ def render(stats: WebminResourceStats) -> str:
         peaks = _peak_points(points, transform, 3)
         if peaks:
             text = ", ".join(
-                f"{datetime.fromtimestamp(ts, timezone.utc).astimezone().isoformat(timespec='minutes')}={value:.1f}{unit}"
+                f"{datetime.fromtimestamp(ts, UTC).astimezone().isoformat(timespec='minutes')}={value:.1f}{unit}"
                 for ts, value in peaks
             )
             out.append(f"    {label:12s} {text}")

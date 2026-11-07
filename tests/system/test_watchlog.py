@@ -1,5 +1,7 @@
 """The journal reader: what the richer watchdog logging is for."""
 
+from datetime import UTC
+
 from binnacle.companions.watchdog import watchlog
 
 LINES = """\
@@ -198,7 +200,7 @@ def test_short_formats_less_common_operational_events():
 
 
 def test_tunnel_polls_skips_bad_json_and_compares_naive_timestamps(tmp_path):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     log = tmp_path / "tunnel.log"
     log.write_text(
@@ -208,8 +210,8 @@ def test_tunnel_polls_skips_bad_json_and_compares_naive_timestamps(tmp_path):
         '{"time":"2026-09-14T15:53:00","msg":"poller recovered; polling operational"}\n'
         '{"time":"2026-09-14T16:30:00","msg":"poll failed; backing off"}\n'
     )
-    since = datetime(2026, 9, 14, 15, 50, tzinfo=timezone.utc)
-    until = datetime(2026, 9, 14, 16, 0, tzinfo=timezone.utc)
+    since = datetime(2026, 9, 14, 15, 50, tzinfo=UTC)
+    until = datetime(2026, 9, 14, 16, 0, tzinfo=UTC)
 
     polls = watchlog.tunnel_polls(log, since, until)
 

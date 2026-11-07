@@ -6,7 +6,7 @@ import json
 import re
 import subprocess
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -362,7 +362,7 @@ Dependency order: OS0 -> OS1 reviewed contracts -> OS2 pure composition -> OS3 /
 Immutable snapshots are OS0 evidence, not new goldens or permission to rewrite existing wire pins.
 """
 (OUT / "os0-risk-register.md").write_text(risk)
-stamp = datetime.now(timezone.utc).isoformat()
+stamp = datetime.now(UTC).isoformat()
 ledger = {
     "task_id": "BINNACLE-OS-STAGE1-IMPLEMENT-20261009",
     "baseline_sha": BASE,

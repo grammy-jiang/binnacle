@@ -76,9 +76,10 @@ def main() -> None:
             )
         )
     after = _production_owner()
-    assert after == before, (
-        f"production Manager unexpectedly changed: {before}->{after}"
-    )
+    if after != before:
+        raise RuntimeError(
+            f"production Manager unexpectedly changed: {before}->{after}"
+        )
     print(
         json.dumps(
             {

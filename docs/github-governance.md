@@ -12,7 +12,6 @@ The active policy requires these GitHub Actions checks from integration
 `github-actions`:
 
 - Code quality;
-- Tests / Python 3.10;
 - Tests / Python 3.11;
 - Tests / Python 3.12;
 - Tests / Python 3.14;

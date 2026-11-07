@@ -117,7 +117,7 @@ def main() -> int:
             "--no-error-summary",
             "--no-pretty",
             "--python-version",
-            "3.10",
+            "3.11",
             "--follow-imports",
             "normal",
         ]

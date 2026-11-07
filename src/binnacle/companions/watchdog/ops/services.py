@@ -221,7 +221,7 @@ def _rfc3339_epoch(stamp: str) -> float | None:
             i += 1
         stamp = f"{head}.{(digits + '000000')[:6]}{rest[i:]}"
     try:
-        return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+        return datetime.fromisoformat(stamp).timestamp()
     except ValueError:
         return None
 

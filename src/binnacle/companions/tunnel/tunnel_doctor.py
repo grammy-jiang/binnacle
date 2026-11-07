@@ -10,7 +10,7 @@ import subprocess
 import urllib.error
 import urllib.request
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from binnacle.companions.tunnel.tunnel_log import TunnelLogStatus, scan_tunnel_log
@@ -71,7 +71,7 @@ def parse_time(text: str) -> datetime | None:
         when = datetime.fromisoformat(text)
     except ValueError:
         return None
-    return when if when.tzinfo is not None else when.replace(tzinfo=timezone.utc)
+    return when if when.tzinfo is not None else when.replace(tzinfo=UTC)
 
 
 def tunnel_busy_reasons(
@@ -90,7 +90,7 @@ def tunnel_busy_reasons(
         stamp = scan_tunnel_log(log_file).last_forwarded
         when = parse_time(stamp) if stamp else None
         if when is not None:
-            current = (now or (lambda: datetime.now(timezone.utc)))()
+            current = (now or (lambda: datetime.now(UTC)))()
             age = (current - when).total_seconds()
             if age < window_s:
                 reasons.append(
