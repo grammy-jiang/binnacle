@@ -52,7 +52,7 @@ class Deadline(Middleware):
     async def on_call_tool(self, context, call_next):
         try:
             return await asyncio.wait_for(call_next(context), 0.05)
-        except asyncio.TimeoutError:  # not the builtin TimeoutError on 3.10
+        except TimeoutError:  # not the builtin TimeoutError on 3.10
             return _fake()
 
 

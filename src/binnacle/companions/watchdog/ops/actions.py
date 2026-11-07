@@ -3,7 +3,7 @@
 import logging
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from binnacle.companions.watchdog.ops.command import Run, _run
 from binnacle.companions.watchdog.ops.config import (
@@ -142,7 +142,7 @@ def _apply_demote(ctx: _ActionContext) -> bool:
         dev=action.dev,
         profile=profile,
         original_metric=route.metric,
-        since=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        since=datetime.now(UTC).isoformat(timespec="seconds"),
         reason=action.reason,
         kind=kind,
         target=target or "",

@@ -4,7 +4,7 @@ import json
 import logging
 import time
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from binnacle.companions.watchdog import uplink
 from binnacle.companions.watchdog.ops.command import Run
@@ -57,9 +57,7 @@ def record_cycle(
     if paused_until is not None:
         issues["watchdog"] = (
             "paused until "
-            + datetime.fromtimestamp(paused_until, timezone.utc).isoformat(
-                timespec="seconds"
-            )
+            + datetime.fromtimestamp(paused_until, UTC).isoformat(timespec="seconds")
             + "; observing, not acting"
         )
     _log_issues(state, policy, issues, n, now_cycle)

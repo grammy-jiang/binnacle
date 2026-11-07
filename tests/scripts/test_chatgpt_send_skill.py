@@ -9,7 +9,7 @@ import importlib.util
 import json
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
@@ -265,7 +265,7 @@ def test_the_post_time_falls_back_to_the_skill_start_time(tmp_path):
     module = _module()
     result, _ = _run(module, tmp_path, post_at=None)
     assert result["sent_at_source"] == "send_prompt_start"
-    expected = datetime(2026, 9, 27, 0, 36, 51, tzinfo=timezone.utc).timestamp()
+    expected = datetime(2026, 9, 27, 0, 36, 51, tzinfo=UTC).timestamp()
     assert result["sent_at_epoch_s"] == expected
 
 

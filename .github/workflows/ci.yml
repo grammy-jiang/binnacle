@@ -54,8 +54,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - python: "3.10"
-            tox-env: py310
           - python: "3.11"
             tox-env: py311
           - python: "3.12"
@@ -95,7 +93,7 @@ jobs:
           "$HOME/.local/bin/rg" --version | head -1 | grep -F "ripgrep ${RG_VERSION}"
 
       # Keep the security-patched developer toolchain on Python 3.13;
-      # tox still runs the selected Python 3.10-3.14 test interpreter.
+      # tox still runs the selected Python 3.11-3.14 test interpreter.
       - name: Sync developer test runner (Python 3.13)
         run: uv sync --locked --group dev --python 3.13
 

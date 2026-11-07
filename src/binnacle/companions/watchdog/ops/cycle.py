@@ -3,7 +3,7 @@
 import logging
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from binnacle.companions.watchdog import uplink
@@ -68,9 +68,7 @@ def _pause_state(
             "pause_started" if paused_until is not None else "pause_ended",
             cycle_n,
             (
-                datetime.fromtimestamp(paused_until, timezone.utc).isoformat(
-                    timespec="seconds"
-                )
+                datetime.fromtimestamp(paused_until, UTC).isoformat(timespec="seconds")
                 if paused_until is not None
                 else "-"
             ),
@@ -167,7 +165,7 @@ def _observe(
             proc.stderr.strip(),
         )
 
-    state.last_cycle = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    state.last_cycle = datetime.now(UTC).isoformat(timespec="seconds")
     state.last_summary = {dev: probe.summary() for dev, probe in probes.items()}
     _log_probes(probes, cycle_n)
 
@@ -317,7 +315,7 @@ def _execute_actions(
                 "dry_run" if policy.dry_run else "paused",
                 cycle_n,
                 (
-                    datetime.fromtimestamp(paused_until, timezone.utc).isoformat(
+                    datetime.fromtimestamp(paused_until, UTC).isoformat(
                         timespec="seconds"
                     )
                     if paused_until is not None

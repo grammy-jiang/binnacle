@@ -17,7 +17,7 @@ MCP endpoint to the public Internet without appropriate security controls.**
 
 ## Install from PyPI
 
-Binnacle targets Linux with Python 3.10–3.14. Its managed services use
+Binnacle targets Linux with Python 3.11–3.14. Its managed services use
 systemd --user and additionally require bash and ripgrep (rg).
 
 ```bash
@@ -44,7 +44,7 @@ bounded Darwin backlog are in
 ## Quick start
 
 Requirements: Linux with systemd user services, bash, ripgrep (rg), Git, and
-uv. Python 3.10-3.14 is supported by the current test matrix.
+uv. Python 3.11-3.14 is supported by the current test matrix.
 
 ```bash
 git clone https://github.com/grammy-jiang/binnacle.git

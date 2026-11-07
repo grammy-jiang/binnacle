@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -15,9 +15,7 @@ def build_payload(
 ) -> dict:
     """Bind every reported cell to one exact source snapshot."""
 
-    stamp = (
-        datetime.now(timezone.utc).isoformat() if observed_at is None else observed_at
-    )
+    stamp = datetime.now(UTC).isoformat() if observed_at is None else observed_at
     return {
         "schema_version": 1,
         "kind": "gate-a-preparation-report",

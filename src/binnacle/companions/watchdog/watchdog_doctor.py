@@ -10,7 +10,7 @@ import subprocess
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from binnacle.companions.watchdog.watchdog_config import get_watchdog_settings
@@ -37,7 +37,7 @@ def check_pause(pause_file: Path) -> list[Check]:
         return [warn("watchdog", f"pause file {pause_file} unreadable")]
     if until <= time.time():
         return []
-    stamp = datetime.fromtimestamp(until, timezone.utc).isoformat(timespec="seconds")
+    stamp = datetime.fromtimestamp(until, UTC).isoformat(timespec="seconds")
     return [
         warn(
             "watchdog",
@@ -104,7 +104,7 @@ def check_watchdog(
         )
         return out
     stamp = raw.get("last_cycle") or ""
-    current = (now or (lambda: datetime.now(timezone.utc)))()
+    current = (now or (lambda: datetime.now(UTC)))()
     try:
         age = (current - datetime.fromisoformat(stamp)).total_seconds()
     except ValueError:
@@ -334,7 +334,7 @@ def quiet_moment(
     else:
         verdict(True, "every grade healthy: " + ", ".join(sorted(grades)))
     stamp = raw.get("last_cycle") or ""
-    current = (now or (lambda: datetime.now(timezone.utc)))()
+    current = (now or (lambda: datetime.now(UTC)))()
     try:
         age: float | None = (current - datetime.fromisoformat(stamp)).total_seconds()
     except ValueError:

@@ -188,7 +188,7 @@ def _rfc3339(stamp: str) -> datetime | None:
             i += 1
         stamp = f"{head}.{(digits + '000000')[:6]}{rest[i:]}"
     try:
-        return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        return datetime.fromisoformat(stamp)
     except ValueError:
         return None
 
