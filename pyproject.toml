@@ -14,7 +14,7 @@ name = "binnacle-mcp"
 version = "1.0.1"
 description = "Linux and Raspberry Pi MCP server for files, search and durable commands."
 readme = "README.md"
-requires-python = ">=3.10,<3.15"
+requires-python = ">=3.11,<3.15"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Binnacle contributors" }]
@@ -24,7 +24,6 @@ classifiers = [
     "Environment :: Console",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -100,13 +99,6 @@ dev = [
     "tox-uv>=1.36.0",
     "uv==0.13.4", # security-patched developer/CI toolchain release
 ]
-
-# Security-patched virtualenv/filelock (through pre-commit and tox) require
-# Python >=3.11.  This is ONLY the developer toolchain; server/runtime
-# and the test dependency group continue to support Python 3.10.
-[tool.uv.dependency-groups]
-dev = { requires-python = ">=3.11" }
-security = { requires-python = ">=3.11" }
 
 [tool.pytest.ini_options]
 # Fail on unknown pytest configuration, markers, parametrization ids and
@@ -204,7 +196,7 @@ DEP004 = ["pytest"]
 [tool.mypy]
 # The floor of requires-python: catches APIs newer than the oldest
 # supported interpreter (e.g. PurePath.full_match, 3.13-only).
-python_version = "3.10"
+python_version = "3.11"
 # Global checks that are useful for tests and scripts without making their
 # intentionally partial fakes satisfy production-level typing strictness.
 warn_unused_configs = true
@@ -227,6 +219,8 @@ required-version = ">=0.16.5,<0.17"
 # Incremental, stable rule families with low migration cost. Preview rules stay
 # off so lint behaviour changes only when the pinned Ruff version is reviewed.
 extend-select = ["B", "I", "UP", "C4", "PIE", "RET", "DTZ", "T10"]
+# UP042 (StrEnum) would change str() of wire-visible enum members.
+ignore = ["UP042"]
 
 [tool.importlinter]
 root_package = "binnacle"

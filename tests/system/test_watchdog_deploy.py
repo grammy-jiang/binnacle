@@ -5,7 +5,7 @@ The generic unit checks live in tests/unit/core/test_units.py."""
 
 import json
 import subprocess
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -29,7 +29,7 @@ def companion(tmp_path: Path) -> Path:
 def state(tmp_path: Path, **over) -> Path:
     f = tmp_path / "watchdog.json"
     data = {
-        "last_cycle": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "last_cycle": datetime.now(UTC).isoformat(timespec="seconds"),
         "last_grade": {"wlan0": "healthy", "wlan1": "healthy"},
         "demoted": {},
     }
@@ -77,7 +77,7 @@ def test_not_quiet_without_grades(tmp_path):
 
 
 def test_not_quiet_when_the_loop_is_stale(tmp_path):
-    old = datetime.now(timezone.utc) - timedelta(minutes=10)
+    old = datetime.now(UTC) - timedelta(minutes=10)
     f = state(tmp_path, last_cycle=old.isoformat(timespec="seconds"))
     report = wdoc.quiet_moment(f, stale_after_s=180, journal=no_events)
     assert not report.ok and "[wait] last cycle" in report.lines[2]

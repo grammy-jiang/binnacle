@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import threading
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -54,10 +54,10 @@ def record_auto_match(
 
     if retention_days <= 0:
         return None
-    timestamp = now or datetime.now(timezone.utc)
+    timestamp = now or datetime.now(UTC)
     if timestamp.tzinfo is None:
-        timestamp = timestamp.replace(tzinfo=timezone.utc)
-    timestamp = timestamp.astimezone(timezone.utc)
+        timestamp = timestamp.replace(tzinfo=UTC)
+    timestamp = timestamp.astimezone(UTC)
     row: dict[str, Any] = {
         "timestamp": timestamp.isoformat(),
         "call": call_id,

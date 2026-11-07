@@ -9,7 +9,7 @@ in binnacle.server for backward-compatible CLI and ASGI exports.
 import platform
 from collections.abc import Callable, Mapping
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from threading import Event, RLock
 from time import time
 
@@ -387,7 +387,7 @@ class _ForegroundCommandBackend(RestrictedCommandBackend):
             "signal": result.signal,
             "runtime_s": result.duration_s,
             "started_at": datetime.fromtimestamp(
-                time() - result.duration_s, timezone.utc
+                time() - result.duration_s, UTC
             ).isoformat(),
             "workdir": str(request.workdir),
             "command": request.command,

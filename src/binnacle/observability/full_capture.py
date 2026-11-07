@@ -13,7 +13,7 @@ import logging
 import os
 import stat
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -78,7 +78,7 @@ class FullCaptureSink:
     def write(self, event: str, **fields: Any) -> None:
         row = {
             "schema": 1,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "pid": os.getpid(),
             "event": event,
             **fields,

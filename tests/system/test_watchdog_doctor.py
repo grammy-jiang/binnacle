@@ -2,7 +2,7 @@
 
 import json
 import subprocess
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from binnacle.companions.watchdog import watchdog_doctor
@@ -32,7 +32,7 @@ def fake_systemctl(states: dict[str, str], props: dict[str, str] | None = None):
 def watchdog_state(tmp_path, **over) -> Path:
     f = tmp_path / "watchdog.json"
     data = {
-        "last_cycle": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "last_cycle": datetime.now(UTC).isoformat(timespec="seconds"),
         "last_summary": {"wlan1": "gateway=ok dns=ok tcp=ok"},
         "demoted": {},
         "last_reset": {},
@@ -59,9 +59,7 @@ def test_watchdog_warns_when_not_running(tmp_path):
 
 
 def test_watchdog_warns_on_a_stale_cycle(tmp_path):
-    old = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(
-        timespec="seconds"
-    )
+    old = (datetime.now(UTC) - timedelta(hours=2)).isoformat(timespec="seconds")
     run = fake_systemctl({"binnacle-watchdog.service": "active"})
     checks = watchdog_doctor.check_watchdog(
         "binnacle-watchdog.service",
@@ -271,7 +269,7 @@ def test_pause_check_reports_an_active_pause_only(tmp_path):
 
 def test_watchdog_warns_when_the_fast_heartbeat_is_stale(tmp_path):
     run = fake_systemctl({"binnacle-watchdog.service": "active"})
-    now = datetime.now(timezone.utc).timestamp()
+    now = datetime.now(UTC).timestamp()
     stale = watchdog_state(tmp_path, fast_last=now - 600)
     checks = watchdog_doctor.check_watchdog(
         "binnacle-watchdog.service", stale, run=run, fast_interval_s=5.0

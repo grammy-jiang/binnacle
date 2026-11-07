@@ -84,7 +84,6 @@ def test_seven_required_check_ids_and_names_unchanged():
     ]
     assert names == [
         "Code quality",
-        "Tests / Python 3.10",
         "Tests / Python 3.11",
         "Tests / Python 3.12",
         "Tests / Python 3.14",
