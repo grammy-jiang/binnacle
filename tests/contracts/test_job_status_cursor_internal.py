@@ -27,7 +27,7 @@ def _record(
     root,
     monkeypatch,
     *,
-    job_id="cursorjob001",
+    job_id="c0500b000001",
     data=b"",
     state_name="exited",
     last_output_age_s=0.0,
@@ -228,4 +228,4 @@ def test_tail_mode_payload_remains_legacy_shape(cursor_store, monkeypatch):
 def test_cursor_missing_job_uses_existing_error(cursor_store, monkeypatch):
     monkeypatch.setattr(jobs, "job_state", lambda _requested: None)
     with pytest.raises(ToolError, match="No job with id"):
-        _status("prunedjob001", "start")
+        _status("deaded000001", "start")

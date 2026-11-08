@@ -32,7 +32,7 @@ def test_terminal_replace_then_fsync_eio_retries_to_durable_once(
 ):
     owner = ReferenceOwner()
     manager = manager_for(owner, tmp_path / "test-owned-jobs")
-    job_id = "fsyncretry123"
+    job_id = "f5c000000001"
     exited = pc.OwnedJobExit(job_id, 0, None, "normal_exit")
     owner.exits[job_id] = exited
     write_record(
@@ -105,7 +105,7 @@ def test_failed_sync_enqueues_before_writer_lock_released(tmp_path, monkeypatch)
     """The replay marker must be published atomically with a failed commit."""
     owner = ReferenceOwner()
     manager = manager_for(owner, tmp_path / "serial-owned-jobs")
-    job_id = "concurrent123"
+    job_id = "c0c000000001"
     exited = pc.OwnedJobExit(job_id, 0, None, "normal_exit")
     owner.exits[job_id] = exited
     write_record(
@@ -166,7 +166,7 @@ def test_two_writers_racing_failed_sync_never_resurrect_pending_exit(
     """A duplicate writer can finish before the first catches OSError."""
     owner = ReferenceOwner()
     manager = manager_for(owner, tmp_path / "race-owned-jobs")
-    job_id = "concurrent-next"
+    job_id = "c0c000000002"
     exited = pc.OwnedJobExit(job_id, 0, None, "normal_exit")
     owner.exits[job_id] = exited
     write_record(
@@ -231,7 +231,7 @@ def test_stale_lock_timeout_cannot_resurrect_already_acknowledged_exit(
 ):
     owner = ReferenceOwner()
     manager = manager_for(owner, tmp_path / "test-owned-timeout")
-    job_id = "expired-writer"
+    job_id = "e0e000000001"
     exited = pc.OwnedJobExit(job_id, 0, None, "normal_exit")
     owner.exits[job_id] = exited
     write_record(
@@ -289,7 +289,7 @@ def test_prune_never_deletes_terminal_json_pending_directory_sync(
 ):
     owner = ReferenceOwner()
     manager = manager_for(owner, tmp_path / "test-owned-retention", keep=1)
-    job_id = "pending-prune"
+    job_id = "be0d00000001"
     exited = pc.OwnedJobExit(job_id, 0, None, "normal_exit")
     owner.exits[job_id] = exited
     write_record(
@@ -338,7 +338,7 @@ def test_prune_never_deletes_terminal_json_pending_directory_sync(
 def test_visible_terminal_before_directory_sync_is_still_unknown(tmp_path, monkeypatch):
     owner = ReferenceOwner()
     manager = manager_for(owner, tmp_path / "test-owned-before-sync")
-    job_id = "visible-before-sync"
+    job_id = "b15000000001"
     exited = pc.OwnedJobExit(job_id, 0, None, "normal_exit")
     owner.exits[job_id] = exited
     write_record(

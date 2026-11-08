@@ -7,7 +7,7 @@ import pytest
 from binnacle.features.commands import jobs
 
 
-def _job(tmp_path: Path, job_id: str = "rangejob0001", data: bytes = b"0123456789"):
+def _job(tmp_path: Path, job_id: str = "a4e000000001", data: bytes = b"0123456789"):
     directory = tmp_path / job_id
     directory.mkdir(parents=True)
     (directory / "meta.json").write_text(
@@ -57,7 +57,7 @@ def test_read_log_range_at_or_beyond_eof(store, start):
 
 @pytest.mark.parametrize("missing", ["dir", "meta", "log"])
 def test_read_log_range_missing_job_artifact_raises_job_gone(store, missing):
-    job_id = "missing000001"
+    job_id = "dead00000001"
     directory = store / job_id
     if missing != "dir":
         directory.mkdir()

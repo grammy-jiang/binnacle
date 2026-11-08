@@ -70,17 +70,17 @@ def _fake_await(calls: list[float], result: dict | None):
 
 
 def test_stop_of_an_unknown_job_id_returns_none(store):
-    assert jobstore.stop_job_embedded("nosuchjob00") is None
+    assert jobstore.stop_job_embedded("dead00000002") is None
 
 
 def test_stop_of_an_exited_job_returns_its_record_without_signaling(store, monkeypatch):
-    _record("exited000001", _job(exit_code=0, ended_at=2.0))
+    _record("e1e7ed000001", _job(exit_code=0, ended_at=2.0))
     monkeypatch.setattr(
         jobstore._PROCESS_BACKEND,
         "signal_job",
         lambda *a: pytest.fail("must not signal"),
     )
-    assert jobstore.stop_job_embedded("exited000001")["state"] == "exited"
+    assert jobstore.stop_job_embedded("e1e7ed000001")["state"] == "exited"
 
 
 def test_stop_of_an_orphaned_job_returns_unknown_when_nobody_asked_to_stop_it(
@@ -88,12 +88,12 @@ def test_stop_of_an_orphaned_job_returns_unknown_when_nobody_asked_to_stop_it(
 ):
     """Process gone, exit never recorded, no stop on record: there is nothing
     to wait for, so the transient "unknown" is what the caller gets."""
-    _record("orphan000001", _job())
+    _record("0ae000000001", _job())
     monkeypatch.setattr(
         jobstore._PROCESS_BACKEND, "alive", lambda pid, starttime=None: False
     )
     monkeypatch.setattr(jobstore, "await_exit", lambda *a: pytest.fail("must not wait"))
-    assert jobstore.stop_job_embedded("orphan000001")["state"] == "unknown"
+    assert jobstore.stop_job_embedded("0ae000000001")["state"] == "unknown"
 
 
 def test_stop_of_an_orphaned_job_with_a_pending_stop_waits_for_the_record(
@@ -101,14 +101,14 @@ def test_stop_of_an_orphaned_job_with_a_pending_stop_waits_for_the_record(
 ):
     """A stop was already requested and the process is gone: the reaper is
     about to write the exit, so bridge that window instead of saying unknown."""
-    _record("orphan000002", _job(stop_requested=True))
+    _record("0ae000000002", _job(stop_requested=True))
     monkeypatch.setattr(
         jobstore._PROCESS_BACKEND, "alive", lambda pid, starttime=None: False
     )
     waits: list[float] = []
     settled = {"state": "exited", "signal": 15}
     monkeypatch.setattr(jobstore, "await_exit", _fake_await(waits, settled))
-    assert jobstore.stop_job_embedded("orphan000002") is settled
+    assert jobstore.stop_job_embedded("0ae000000002") is settled
     assert waits == [jobstore.STOP_SIGKILL_GRACE_S]
 
 
@@ -120,7 +120,7 @@ def test_stop_whose_group_vanished_before_sigterm_falls_through_to_the_record(
 ):
     """The lines that used to be covered only when two stops raced: the
     process group is gone between the "running" read and the killpg."""
-    _record("racing000001", _job())
+    _record("ace000000001", _job())
     monkeypatch.setattr(
         jobstore._PROCESS_BACKEND, "alive", lambda pid, starttime=None: True
     )
@@ -146,7 +146,7 @@ def test_stop_whose_group_vanished_before_sigterm_falls_through_to_the_record(
     waits: list[float] = []
     settled = {"state": "exited", "signal": 15}
     monkeypatch.setattr(jobstore, "await_exit", _fake_await(waits, settled))
-    assert jobstore.stop_job_embedded("racing000001") is settled
+    assert jobstore.stop_job_embedded("ace000000001") is settled
     assert signals == ["terminate"]
     assert closes == [True]
     assert waits == [jobstore.STOP_SIGKILL_GRACE_S]
@@ -155,7 +155,7 @@ def test_stop_whose_group_vanished_before_sigterm_falls_through_to_the_record(
 def test_stop_escalates_to_sigkill_and_tolerates_a_group_that_died_meanwhile(
     store, monkeypatch, caplog
 ):
-    _record("stubborn0001", _job())
+    _record("5b0000000001", _job())
     monkeypatch.setattr(
         jobstore._PROCESS_BACKEND, "alive", lambda pid, starttime=None: True
     )
@@ -189,7 +189,7 @@ def test_stop_escalates_to_sigkill_and_tolerates_a_group_that_died_meanwhile(
 
     monkeypatch.setattr(jobstore, "await_exit", await_exit)
     with caplog.at_level(logging.WARNING, logger="binnacle.jobs"):
-        assert jobstore.stop_job_embedded("stubborn0001") is settled
+        assert jobstore.stop_job_embedded("5b0000000001") is settled
     assert signals == ["terminate", "kill"]
     assert closes == [True]
     assert waits == [jobstore.STOP_SIGTERM_GRACE_S, jobstore.STOP_SIGKILL_GRACE_S]
@@ -233,24 +233,24 @@ def test_prune_treats_a_raising_record_as_garbage_and_keeps_going_past_a_stuck_d
     to the next entry). Only the newest record and the stuck one remain."""
     monkeypatch.setattr(jobstore, "KEEP_NEWEST", 1)
     names = (
-        "newest000001",
-        "halfwritten1",
-        "raises000001",
-        "stuck0000001",
-        "old000000001",
+        "0ede57000001",
+        "ba1f00000001",
+        "a15e00000001",
+        "57c000000001",
+        "01d000000001",
     )
-    _record("newest000001", _job(exit_code=0, ended_at=2.0))
-    _record("halfwritten1", {"command": "x"})  # parses, but incomplete
-    _record("raises000001", _job(exit_code=1, ended_at=2.0))
-    _record("stuck0000001", _job(exit_code=1, ended_at=2.0))
-    _record("old000000001", _job(exit_code=1, ended_at=2.0))
+    _record("0ede57000001", _job(exit_code=0, ended_at=2.0))
+    _record("ba1f00000001", {"command": "x"})  # parses, but incomplete
+    _record("a15e00000001", _job(exit_code=1, ended_at=2.0))
+    _record("57c000000001", _job(exit_code=1, ended_at=2.0))
+    _record("01d000000001", _job(exit_code=1, ended_at=2.0))
     for i, name in enumerate(names):
         stamp = 1_700_000_000 - i * 60
         os.utime(store / name, (stamp, stamp))
     real_state = jobstore.job_state
 
     def job_state(job_id: str) -> dict | None:
-        if job_id == "raises000001":
+        if job_id == "a15e00000001":
             raise KeyError("pid")  # meta parsed but incomplete, killed mid-write
         return real_state(job_id)
 
@@ -259,7 +259,7 @@ def test_prune_treats_a_raising_record_as_garbage_and_keeps_going_past_a_stuck_d
     monkeypatch.setattr(
         jobstore,
         "_remove_job_dir",
-        lambda d: False if d.name == "stuck0000001" else real_remove(d),
+        lambda d: False if d.name == "57c000000001" else real_remove(d),
     )
     jobstore._prune()
-    assert sorted(p.name for p in store.iterdir()) == ["newest000001", "stuck0000001"]
+    assert sorted(p.name for p in store.iterdir()) == ["0ede57000001", "57c000000001"]

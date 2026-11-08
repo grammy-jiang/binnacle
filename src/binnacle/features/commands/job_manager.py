@@ -195,8 +195,10 @@ class JobManager:
         impl_started = time.perf_counter()
         job_id = request["job_id"]
         call_id = str(request.get("call_id") or "-")
-        if not isinstance(job_id, str):
-            raise TypeError("job_id must be a string")
+        if not jobs.is_valid_job_id(job_id):
+            # Refuse before any path is built: the id is a spool path
+            # component (text: job_store.INVALID_JOB_ID).
+            raise jobs.InvalidJobId
         token = current_call.set(call_id)
         try:
             try:

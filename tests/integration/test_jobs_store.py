@@ -174,7 +174,7 @@ def test_prune_deletes_malformed_meta_dir(fresh_store):
     # mid-write) must count as garbage, not crash the prune.
     for i in range(jobstore.KEEP_NEWEST):
         _fake_finished_dir(f"fake{i:08x}0000")
-    bad = jobstore.JOBS_DIR / "badmeta000000"
+    bad = jobstore.JOBS_DIR / "badd00000000"
     bad.mkdir()
     (bad / "meta.json").write_text("{}")
     import os
@@ -185,7 +185,7 @@ def test_prune_deletes_malformed_meta_dir(fresh_store):
 
 
 def test_write_meta_replaces_complete_record_atomically(fresh_store, monkeypatch):
-    job_id = "atomicmeta001"
+    job_id = "a7031c000001"
     d = jobstore.JOBS_DIR / job_id
     d.mkdir(parents=True)
     old = {
@@ -215,7 +215,7 @@ def test_write_meta_replaces_complete_record_atomically(fresh_store, monkeypatch
 def test_atomic_meta_write_survives_concurrent_readers(fresh_store):
     import threading
 
-    job_id = "atomicmeta002"
+    job_id = "a7031c000002"
     d = jobstore.JOBS_DIR / job_id
     d.mkdir(parents=True)
     base = {"command": "x", "workdir": "/tmp", "pid": 1, "started_at": 1.0}
