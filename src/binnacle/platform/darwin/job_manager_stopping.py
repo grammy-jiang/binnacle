@@ -28,7 +28,10 @@ from binnacle.platform.contracts.process_contracts import OwnedJobExit
 
 log = logging.getLogger("binnacle.job_manager")
 Partial, Unowned = pc.JobSignalDeliveryError, pc.UnverifiedJobProcess
-_JOB_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
+# Same shape and refusal text as the Linux job_store: the id is a spool path
+# component, and job_store.new_job_id produces exactly 12 lowercase hex.
+_JOB_ID = re.compile(r"[0-9a-f]{12}")
+INVALID_JOB_ID = "job_id must be 12 lowercase hex"
 _STOP_PHASES: tuple[Literal["terminate", "kill"], ...] = ("terminate", "kill")
 # JCRP-F2: waiting handlers re-check ``stopping`` at least this often, so a
 # SIGTERM never waits for a run_command wait window (<= wait_max_s).

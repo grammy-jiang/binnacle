@@ -17,6 +17,7 @@ _T0A9 = """
 tests/integration/test_cli.py
 tests/integration/test_commands_settings.py
 tests/integration/test_http_workflows.py
+tests/integration/test_job_id_containment.py
 tests/integration/test_job_manager.py
 tests/integration/test_job_manager_reload.py
 tests/integration/test_job_manager_telemetry.py
@@ -57,6 +58,7 @@ LINUX_ONLY_MODULES = frozenset(
         "test_jobs",
         "test_jobs_lifecycle",
         "test_jobs_lifecycle_stops",
+        "test_job_id_containment",
         "test_job_manager",
         "test_jobs_state_machine",
         "test_job_telemetry",

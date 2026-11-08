@@ -137,8 +137,8 @@ def test_stop_and_disconnect_logs_keep_operation_correlation(manager, caplog):
 def test_recovery_log_links_original_and_new_owner(tmp_path, monkeypatch, caplog):
     store = tmp_path / "jobs"
     monkeypatch.setattr(jobs, "JOBS_DIR", store)
-    _unfinished(store, "recoverlog001", boot="boot-a", owner="owner-a")
-    meta_path = store / "recoverlog001" / "meta.json"
+    _unfinished(store, "eec000000001", boot="boot-a", owner="owner-a")
+    meta_path = store / "eec000000001" / "meta.json"
     meta = json.loads(meta_path.read_text())
     meta.update(call_id="origin-call", command_hash="abcdef123456")
     meta_path.write_text(json.dumps(meta))
@@ -152,7 +152,7 @@ def test_recovery_log_links_original_and_new_owner(tmp_path, monkeypatch, caplog
     line = next(
         record.getMessage()
         for record in caplog.records
-        if "event=job_interrupted job_id=recoverlog001" in record.getMessage()
+        if "event=job_interrupted job_id=eec000000001" in record.getMessage()
     )
     assert "reason=owner_restart" in line
     assert "call=origin-call" in line

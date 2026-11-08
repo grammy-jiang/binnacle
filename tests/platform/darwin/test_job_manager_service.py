@@ -188,15 +188,17 @@ def live(jobs_dir):
 
 TEXTS = (
     "wait_seconds outside manager bounds|workdir is not a directory: |no job with id|"
-    "command/stdin have invalid types|job_id must be a string|could not start job: |"
+    "command/stdin have invalid types|job_id must be 12 lowercase hex|"
+    "could not start job: |"
     "job stop partially failed: |internal job-manager error|invalid job-manager request"
 )
 
 
 def test_dispatch_objects_equal_linux_manager_text(tmp_path, jobs_dir, live):
     owner, manager = live
-    linux = (SRC / "job_manager.py").read_text()
+    linux = (SRC / "job_manager.py").read_text() + (SRC / "job_store.py").read_text()
     assert all(text in linux for text in TEXTS.split("|"))
+    assert svc.INVALID_JOB_ID == job_store.INVALID_JOB_ID
     pong = manager.handle({"version": 1, "op": "ping"})
     keys = {"ok", "version", "owner_instance_id", "boot_id", "pid", "revision"}
     assert set(pong) == keys | {
@@ -247,7 +249,11 @@ def test_start_exit_and_stop_term_then_kill(tmp_path, jobs_dir, live):
     assert (meta["stop_requested"], meta["signal"]) == (True, 9)  # TERM ignored
     assert meta["termination_reason"] == "stop_requested"
     assert manager.handle(stop_req(job_id)) == reply  # idempotent
-    assert manager.handle(stop_req("../etc"))["error"] == "no job with id '../etc'"
+    refused = "invalid job-manager request: job_id must be 12 lowercase hex"
+    assert manager.handle(stop_req("../etc"))["error"] == refused
+    assert (
+        manager.handle(stop_req("d" * 12))["error"] == "no job with id 'dddddddddddd'"
+    )
 
 
 def test_recovery_marks_foreign_records_unknown_without_adoption(jobs_dir):

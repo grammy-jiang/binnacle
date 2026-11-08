@@ -47,6 +47,7 @@ from binnacle.platform.darwin.job_manager_records import (
 )
 from binnacle.platform.darwin.job_manager_stopping import (
     _JOB_ID,
+    INVALID_JOB_ID,
     _ManagerStopping,
     _terminal,
 )
@@ -283,9 +284,9 @@ class DarwinJobManager(_ManagerStopping, ExitQueueStorage):
     def _stop(self, request: dict[str, Any]) -> dict[str, Any]:
         job_id = request["job_id"]
         call_id = str(request.get("call_id") or "-")
-        if not isinstance(job_id, str):
-            raise TypeError("job_id must be a string")
-        meta = self._meta(job_id) if _JOB_ID.fullmatch(job_id) else None
+        if not isinstance(job_id, str) or not _JOB_ID.fullmatch(job_id):
+            raise ValueError(INVALID_JOB_ID)
+        meta = self._meta(job_id)
         try:
             if meta is not None and meta.get(PARTIAL_SIGNAL_FIELD) is True:
                 raise Partial(PARTIAL_SIGNAL_MESSAGE)

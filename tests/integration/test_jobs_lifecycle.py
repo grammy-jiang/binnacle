@@ -355,9 +355,9 @@ def _fake_job(name: str, meta: dict, log: str = "") -> None:
 
 
 def test_malformed_meta_does_not_crash_status_or_listing(fresh_store):
-    _fake_job("badmeta00001", {"command": "x"})  # parses, but incomplete
+    _fake_job("badd00000001", {"command": "x"})  # parses, but incomplete
     with pytest.raises(ToolError, match="No job with id"):
-        status("badmeta00001")
+        status("badd00000001")
     assert status()["jobs"] == []  # listing skips it instead of raising
 
 
@@ -416,7 +416,7 @@ def test_pid_reuse_is_not_reported_as_running(fresh_store):
     # a different start time must not read as running, so stop_job never
     # signals a stranger after a reload.
     _fake_job(
-        "pidreuse0001",
+        "fed000000002",
         {
             "command": "x",
             "workdir": "/tmp",
@@ -426,14 +426,14 @@ def test_pid_reuse_is_not_reported_as_running(fresh_store):
             "started_at": time.time() - 100,
         },
     )
-    assert jobstore.job_state("pidreuse0001")["state"] == "unknown"
-    assert stop("pidreuse0001")["state"] == "unknown"  # returned without signaling
+    assert jobstore.job_state("fed000000002")["state"] == "unknown"
+    assert stop("fed000000002")["state"] == "unknown"  # returned without signaling
 
 
 def test_pid_identity_match_reads_as_running(fresh_store):
     mine = jobstore._PROCESS_BACKEND.starttime(os.getpid())
     _fake_job(
-        "pidmatch00001",
+        "fed000000001",
         {
             "command": "x",
             "workdir": "/tmp",
@@ -443,15 +443,15 @@ def test_pid_identity_match_reads_as_running(fresh_store):
             "started_at": time.time(),
         },
     )
-    assert jobstore.job_state("pidmatch00001")["state"] == "running"
+    assert jobstore.job_state("fed000000001")["state"] == "running"
 
 
 def test_legacy_record_without_starttime_falls_back_to_existence(fresh_store):
     _fake_job(
-        "legacy000001",
+        "1e9ac0000001",
         {"command": "x", "workdir": "/tmp", "pid": os.getpid(), "started_at": 1.0},
     )
-    assert jobstore.job_state("legacy000001")["state"] == "running"
+    assert jobstore.job_state("1e9ac0000001")["state"] == "running"
 
 
 def test_reload_orphan_running_then_unknown_and_stop_is_honest(fresh_store):

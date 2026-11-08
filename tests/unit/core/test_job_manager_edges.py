@@ -89,16 +89,16 @@ def test_start_validates_request_and_reports_launch_failure(tmp_path, monkeypatc
 
 def test_stop_validates_id_and_reports_missing_job(tmp_path, monkeypatch):
     runtime = _runtime(tmp_path)
-    with pytest.raises(TypeError, match="job_id must be a string"):
+    with pytest.raises(ValueError, match="job_id must be 12 lowercase hex"):
         runtime._stop({"job_id": 123})
 
     monkeypatch.setattr(
         job_manager.job_owner, "mark_stop_requested", lambda job_id: None
     )
     monkeypatch.setattr(job_manager.jobs, "stop_job_embedded", lambda job_id: None)
-    assert runtime._stop({"job_id": "missing"}) == {
+    assert runtime._stop({"job_id": "0123456789ab"}) == {
         "ok": False,
-        "error": "no job with id 'missing'",
+        "error": "no job with id '0123456789ab'",
     }
 
 
