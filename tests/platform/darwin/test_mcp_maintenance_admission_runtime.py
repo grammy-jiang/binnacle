@@ -21,8 +21,10 @@ from binnacle.platform.darwin.mcp_maintenance_admission_rpc import (
 def config():
     # Darwin sockaddr_un supports at most 103 pathname bytes; pytest tmp_path
     # test-name subdirectories can exceed it even on Linux.
+    # macOS /tmp is a symlink to /private/tmp, and the runtime refuses a root
+    # that is not its own resolved path; use the resolved directory.
     with tempfile.TemporaryDirectory(prefix="bi30-mcp-", dir="/tmp") as private:
-        root = Path(private) / "mcp-maintenance-admission"
+        root = Path(private).resolve() / "mcp-maintenance-admission"
         root.mkdir(mode=0o700)
         root.chmod(0o700)
         gate = ToolAdmissionDrain()
