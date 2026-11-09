@@ -122,6 +122,71 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  tests-macos:
+    # The Darwin adapters only run here: the Linux jobs skip them. Free on a
+    # public repository (GitHub-hosted standard runner).
+    name: Tests / macOS arm64 / Python 3.13
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv and Python 3.13
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version-file: "uv.lock"
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install ripgrep (pinned, checksum verified)
+        env:
+          RG_VERSION: "15.2.0"
+          RG_SHA256: 3750b2e93f37e0c692657da574d7019a101c0084da05a790c83fd335bad973e4
+        run: |
+          set -euo pipefail
+          archive="ripgrep-${RG_VERSION}-aarch64-apple-darwin.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/${archive}"
+          echo "${RG_SHA256}  $RUNNER_TEMP/$archive" | shasum -a 256 --check -
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" --strip-components=1 \
+            "ripgrep-${RG_VERSION}-aarch64-apple-darwin/rg"
+          install -m 0755 "$RUNNER_TEMP/rg" "$HOME/.local/bin/rg"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/rg" --version | head -1 | grep -F "ripgrep ${RG_VERSION}"
+
+      - name: Sync developer test runner (Python 3.13)
+        run: uv sync --locked --group dev --python 3.13
+
+      - name: Prepare Binnacle test host
+        run: |
+          mkdir -p "$HOME/.config/binnacle"
+          printf 'Bearer ci-test-token\n' > "$HOME/.config/binnacle/token"
+          chmod 600 "$HOME/.config/binnacle/token"
+          repo_parent=$(dirname "$GITHUB_WORKSPACE")
+          printf '[roots]\ndefault_root = "%s"\nextra_roots = ["/tmp"]\n'             "$repo_parent" > "$HOME/.config/binnacle/config.toml"
+
+      - name: Run test suite
+        run: >-
+          uv run --locked --python 3.13 tox -e py313 --
+          --ignore=tests/integration/test_wheel_artifact.py
+          --seed 12345
+          --junit-dir .quality-artifacts/pytest-macos
+          --durations=15
+
+      - name: Save failing test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pytest-macos-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .quality-artifacts/pytest-macos/*.xml
+          if-no-files-found: warn
+          retention-days: 7
+
   coverage:
     name: Coverage policy / Python 3.13
     runs-on: ubuntu-24.04
