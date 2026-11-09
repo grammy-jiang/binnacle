@@ -4,6 +4,7 @@ stand-in for the tunnel's health server."""
 
 import json
 import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -12,6 +13,13 @@ from pathlib import Path
 import pytest
 
 from binnacle.companions.tunnel import tunnel_unit
+
+# The script is the systemd unit's ExecStartPost (Linux only; the macOS tunnel
+# runs under launchd). Its `-nt` check needs sub-second mtimes, which bash 3.2
+# (stock macOS /bin/bash) does not compare.
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux", reason="systemd ExecStartPost readiness script"
+)
 
 
 class _Health(BaseHTTPRequestHandler):
@@ -89,12 +97,14 @@ def run_wait(
     return proc.returncode, time.monotonic() - started
 
 
+@LINUX_ONLY
 def test_ready_once_readyz_and_the_main_probe_are_ok(health, tmp_path):
     script = readiness_script(tmp_path / "binnacle.url", bound_s=8)
     code, elapsed = run_wait(script, health)
     assert code == 0 and elapsed < 5
 
 
+@LINUX_ONLY
 def test_ready_with_pretty_printed_status_too(health, tmp_path):
     _Health.compact = False
     script = readiness_script(tmp_path / "binnacle.url", bound_s=8)
@@ -104,6 +114,7 @@ def test_ready_with_pretty_printed_status_too(health, tmp_path):
 
 # bash's SECONDS counts whole wall-clock seconds, so a bound of N holds the
 # script for N-1 to N seconds; the unit's 10 means 9 to 10.
+@LINUX_ONLY
 def test_waits_out_the_bound_but_never_fails_when_the_probe_is_not_ok(health, tmp_path):
     _Health.probe = "error"
     script = readiness_script(tmp_path / "binnacle.url", bound_s=2)
@@ -111,6 +122,7 @@ def test_waits_out_the_bound_but_never_fails_when_the_probe_is_not_ok(health, tm
     assert code == 0 and 1 <= elapsed < 4
 
 
+@LINUX_ONLY
 def test_waits_out_the_bound_when_the_url_file_is_stale(tmp_path):
     url_file = tmp_path / "binnacle.url"
     url_file.write_text("http://127.0.0.1:1\n")  # older than the script's marker

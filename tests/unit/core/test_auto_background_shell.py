@@ -287,6 +287,13 @@ def test_codex_p2_operator_continues_heredoc_command(operator):
     check = subprocess.run(
         ["bash", "-n"], input=script, text=True, capture_output=True, check=False
     )
+    if operator == "|&" and check.returncode != 0:
+        # |& is bash 4+; stock macOS /bin/bash is 3.2 and cannot be the oracle.
+        old = subprocess.run(
+            ["bash", "-n"], input="true |& true\n", capture_output=True, check=False
+        )
+        if old.returncode != 0:
+            pytest.skip("this host's bash predates |& (bash 4)")
     assert check.returncode == 0, check.stderr
     found = match(script)
     assert found is not None and found.match_start == script.index("pytest")
