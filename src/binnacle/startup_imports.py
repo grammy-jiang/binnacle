@@ -176,6 +176,7 @@ MANAGER_MODULES = {
                 "binnacle.platform.darwin.job_process_owner",
                 "binnacle.platform.darwin.process_authority",
                 "binnacle.platform.darwin.process_backend",
+                "binnacle.platform.darwin.process_exit_settle",
             )
         )
     ),
