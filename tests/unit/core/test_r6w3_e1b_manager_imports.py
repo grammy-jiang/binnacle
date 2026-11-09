@@ -17,7 +17,6 @@ import signal
 import subprocess
 import sys
 import time
-import uuid
 from contextlib import contextmanager, suppress
 from pathlib import Path
 
@@ -25,6 +24,7 @@ import pytest
 
 from binnacle.platform.darwin import job_manager_entry
 from binnacle.startup_imports import manager_module_names
+from tests.private_state_home import make_private_home
 
 REPO = Path(__file__).resolve().parents[3]
 SRC = REPO / "src" / "binnacle"
@@ -81,10 +81,7 @@ def private_home():
     """One 0700 home under TEST_ROOT, removed by exact path."""
     import shutil
 
-    TEST_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
-    TEST_ROOT.chmod(0o700)
-    home = TEST_ROOT / f"m-{uuid.uuid4().hex[:12]}"
-    home.mkdir(mode=0o700)
+    home = make_private_home(TEST_ROOT, "m")
     try:
         yield home
     finally:

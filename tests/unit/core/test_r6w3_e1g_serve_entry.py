@@ -15,12 +15,10 @@ from __future__ import annotations
 
 import ast
 import json
-import os
 import shutil
 import subprocess
 import sys
 import textwrap
-import uuid
 from contextlib import suppress
 from pathlib import Path
 
@@ -32,6 +30,7 @@ from binnacle.startup_imports import (
     serving_entry,
     serving_entry_marked,
 )
+from tests.private_state_home import make_private_home
 from tests.unit.core.test_r6w3_e1f_record_processes import (
     free_port,
     plant,
@@ -45,10 +44,7 @@ TEST_ROOT = Path.home() / ".local" / "state" / "bt" / "e1a6"
 
 @pytest.fixture
 def home():
-    TEST_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(TEST_ROOT, 0o700)
-    path = TEST_ROOT / f"se-{uuid.uuid4().hex[:12]}"
-    path.mkdir(mode=0o700)
+    path = make_private_home(TEST_ROOT, "se")
     yield path
     shutil.rmtree(path)  # exact path this fixture created
     with suppress(OSError):  # only when no other test home remains

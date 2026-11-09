@@ -18,7 +18,6 @@ import socket
 import subprocess
 import sys
 import time
-import uuid
 from contextlib import suppress
 from pathlib import Path
 
@@ -29,6 +28,7 @@ from binnacle.startup_imports import (
     record_path,
     record_start_failure,
 )
+from tests.private_state_home import make_private_home
 from tests.unit.core.test_r6w3_e1b_manager_imports import PROBE, running_manager
 
 REPO = Path(__file__).resolve().parents[3]
@@ -43,10 +43,7 @@ print(json.dumps(sorted(m for m in sys.modules if m == "binnacle.server")))
 
 @pytest.fixture
 def home():
-    TEST_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(TEST_ROOT, 0o700)
-    path = TEST_ROOT / f"pr-{uuid.uuid4().hex[:12]}"
-    path.mkdir(mode=0o700)
+    path = make_private_home(TEST_ROOT, "pr")
     yield path
     shutil.rmtree(path)  # exact path this fixture created
     with suppress(OSError):

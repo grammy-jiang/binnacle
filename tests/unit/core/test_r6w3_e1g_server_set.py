@@ -18,7 +18,6 @@ import shutil
 import subprocess
 import sys
 import textwrap
-import uuid
 from contextlib import suppress
 from pathlib import Path
 
@@ -26,6 +25,7 @@ import pytest
 
 from binnacle import startup_imports, startup_server_modules
 from scripts import gen_startup_server_modules as gen
+from tests.private_state_home import make_private_home
 
 REPO = Path(__file__).resolve().parents[3]
 TEST_ROOT = Path.home() / ".local" / "state" / "bt" / "e1a6"
@@ -34,10 +34,7 @@ SYSTEMS = ("Linux", "Darwin")
 
 @pytest.fixture
 def home():
-    TEST_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(TEST_ROOT, 0o700)
-    path = TEST_ROOT / f"ss-{uuid.uuid4().hex[:12]}"
-    path.mkdir(mode=0o700)
+    path = make_private_home(TEST_ROOT, "ss")
     yield path
     shutil.rmtree(path)  # exact path this fixture created
     with suppress(OSError):  # only when no other test home remains
