@@ -207,10 +207,12 @@ def _violation(kind: str, job_id: str, payload: dict, log: bytes) -> str | None:
             return "output is not the prefix output_bytes measures"
     elif kind in ("tail", "wait"):
         text, size = payload["log_tail"], payload["log_bytes"]
-        if len((text + "\n").encode()) != size:
-            return (
-                f"log_bytes {size} != log_tail bytes {len((text + chr(10)).encode())}"
-            )
+        # A write() that crosses a page boundary grows st_size page by page,
+        # so a concurrent measurement can end inside a line: the tail then has
+        # no newline after its last, partial line.
+        shown = text + "\n" if log[:size].endswith(b"\n") else text
+        if len(shown.encode()) != size:
+            return f"log_bytes {size} != log_tail bytes {len(shown.encode())}"
         if text != "\n".join(log[:size].decode().splitlines()):
             return "log_tail is not the log log_bytes measures"
     else:
