@@ -45,12 +45,19 @@ def _secure_root(root: Path) -> bool:
 def _record(root: Path, *, state: str, pid: int | None = None) -> None:
     value = json.dumps({"state": state, "pid": pid}, sort_keys=True).encode()
     target = root / "guardian-outcome.json"
-    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    # Write a private file, then link it into place: a poller must never read
+    # a created but still empty outcome. link() keeps O_EXCL's one-outcome rule.
+    staged = root / f".guardian-outcome.{os.getpid()}"
+    fd = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     try:
         os.write(fd, value)
         os.fsync(fd)
     finally:
         os.close(fd)
+    try:
+        os.link(staged, target, follow_symlinks=False)
+    finally:
+        os.unlink(staged)
     dfd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         os.fsync(dfd)
