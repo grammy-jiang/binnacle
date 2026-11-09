@@ -68,6 +68,7 @@ LINUX_ONLY_MODULES = frozenset(
 )
 _ROWS = """
 system/test_uplink_network.py | baseline: Linux SO_BINDTODEVICE / iproute2 only
+system/test_tunnel_readiness.py | baseline: systemd ExecStartPost readiness script; macOS tunnel runs under launchd and stock bash 3.2 compares -nt in whole seconds
 live/test_deployment_smoke.py | baseline: opt-in live host (BINNACLE_LIVE=1)
 scripts/test_macos_collection_native.py | T0: Darwin host probe (sw_vers); the rest of the module runs everywhere
 platform/darwin/test_foreground_commands.py | A2: per-test Darwin posix_spawn owned-child mechanism
@@ -147,6 +148,7 @@ ALLOWED_PLATFORM_SKIPS = {
 # Per row: the platform-conditioned skip sites a file may hold (reviewable edit).
 PLATFORM_SITE_COUNTS = {
     "tests/system/test_uplink_network.py": 1,
+    "tests/system/test_tunnel_readiness.py": 1,
     "tests/live/test_deployment_smoke.py": 0,
     "tests/scripts/test_macos_collection_native.py": 1,
     "tests/platform/darwin/test_foreground_commands.py": 1,
