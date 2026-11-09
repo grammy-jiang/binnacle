@@ -219,6 +219,7 @@ _SERVER_EXTRA_DARWIN = (
     "binnacle.platform.darwin.mcp_maintenance_admission_runtime",
     "binnacle.platform.darwin.process_authority",
     "binnacle.platform.darwin.process_backend",
+    "binnacle.platform.darwin.process_exit_settle",
     "binnacle.platform.darwin.resource_accounting",
     "binnacle.platform.darwin.search_access",
     "binnacle.platform.darwin.service_launchd",

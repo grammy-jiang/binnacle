@@ -186,6 +186,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "platform/darwin/log_source.py",
             "platform/darwin/process_authority.py",
             "platform/darwin/process_backend.py",
+            "platform/darwin/process_exit_settle.py",
             "platform/darwin/resource_accounting.py",
             "platform/darwin/search_access.py",
             "platform/darwin/service_launchd.py",
