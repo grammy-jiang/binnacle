@@ -15,6 +15,7 @@ The active policy requires these GitHub Actions checks from integration
 - Tests / Python 3.11;
 - Tests / Python 3.12;
 - Tests / Python 3.14;
+- Tests / macOS arm64 / Python 3.13 (the only job that runs the Darwin adapters);
 - Coverage policy / Python 3.13;
 - Packaging / Python 3.13.
 

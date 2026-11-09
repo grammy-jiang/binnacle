@@ -87,6 +87,7 @@ def test_seven_required_check_ids_and_names_unchanged():
         "Tests / Python 3.11",
         "Tests / Python 3.12",
         "Tests / Python 3.14",
+        "Tests / macOS arm64 / Python 3.13",
         "Coverage policy / Python 3.13",
         "Packaging / Python 3.13",
     ]
