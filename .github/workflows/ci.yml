@@ -75,6 +75,12 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
+      - name: Restore the pinned ripgrep archive
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ripgrep-archive
+          key: ripgrep-15.2.0-x86_64-unknown-linux-musl-33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c
+
       - name: Install ripgrep (pinned, checksum verified)
         env:
           RG_VERSION: "15.2.0"
@@ -82,11 +88,18 @@ jobs:
         run: |
           set -euo pipefail
           archive="ripgrep-${RG_VERSION}-x86_64-unknown-linux-musl.tar.gz"
-          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/$archive" \
-            "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/${archive}"
-          echo "${RG_SHA256}  $RUNNER_TEMP/$archive" | sha256sum --check -
+          cached="$HOME/.cache/ripgrep-archive/$archive"
+          fetch() {
+            mkdir -p "$(dirname "$cached")"
+            curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o "$cached" \
+              "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/${archive}"
+          }
+          verify() { echo "${RG_SHA256}  $cached" | sha256sum --check -; }
+          # A cached archive is verified like a download; a bad one is fetched again.
+          [ -f "$cached" ] || fetch
+          verify || { rm -f "$cached"; fetch; verify; }
           mkdir -p "$HOME/.local/bin"
-          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" --strip-components=1 \
+          tar -xzf "$cached" -C "$RUNNER_TEMP" --strip-components=1 \
             "ripgrep-${RG_VERSION}-x86_64-unknown-linux-musl/rg"
           install -m 0755 "$RUNNER_TEMP/rg" "$HOME/.local/bin/rg"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
@@ -147,6 +160,12 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
+      - name: Restore the pinned ripgrep archive
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ripgrep-archive
+          key: ripgrep-15.2.0-aarch64-apple-darwin-3750b2e93f37e0c692657da574d7019a101c0084da05a790c83fd335bad973e4
+
       - name: Install ripgrep (pinned, checksum verified)
         env:
           RG_VERSION: "15.2.0"
@@ -154,11 +173,18 @@ jobs:
         run: |
           set -euo pipefail
           archive="ripgrep-${RG_VERSION}-aarch64-apple-darwin.tar.gz"
-          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/$archive" \
-            "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/${archive}"
-          echo "${RG_SHA256}  $RUNNER_TEMP/$archive" | shasum -a 256 --check -
+          cached="$HOME/.cache/ripgrep-archive/$archive"
+          fetch() {
+            mkdir -p "$(dirname "$cached")"
+            curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o "$cached" \
+              "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/${archive}"
+          }
+          verify() { echo "${RG_SHA256}  $cached" | shasum -a 256 --check -; }
+          # A cached archive is verified like a download; a bad one is fetched again.
+          [ -f "$cached" ] || fetch
+          verify || { rm -f "$cached"; fetch; verify; }
           mkdir -p "$HOME/.local/bin"
-          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" --strip-components=1 \
+          tar -xzf "$cached" -C "$RUNNER_TEMP" --strip-components=1 \
             "ripgrep-${RG_VERSION}-aarch64-apple-darwin/rg"
           install -m 0755 "$RUNNER_TEMP/rg" "$HOME/.local/bin/rg"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
@@ -210,6 +236,12 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
+      - name: Restore the pinned ripgrep archive
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ripgrep-archive
+          key: ripgrep-15.2.0-x86_64-unknown-linux-musl-33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c
+
       - name: Install ripgrep (pinned, checksum verified)
         env:
           RG_VERSION: "15.2.0"
@@ -217,11 +249,18 @@ jobs:
         run: |
           set -euo pipefail
           archive="ripgrep-${RG_VERSION}-x86_64-unknown-linux-musl.tar.gz"
-          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/$archive" \
-            "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/${archive}"
-          echo "${RG_SHA256}  $RUNNER_TEMP/$archive" | sha256sum --check -
+          cached="$HOME/.cache/ripgrep-archive/$archive"
+          fetch() {
+            mkdir -p "$(dirname "$cached")"
+            curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o "$cached" \
+              "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/${archive}"
+          }
+          verify() { echo "${RG_SHA256}  $cached" | sha256sum --check -; }
+          # A cached archive is verified like a download; a bad one is fetched again.
+          [ -f "$cached" ] || fetch
+          verify || { rm -f "$cached"; fetch; verify; }
           mkdir -p "$HOME/.local/bin"
-          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" --strip-components=1 \
+          tar -xzf "$cached" -C "$RUNNER_TEMP" --strip-components=1 \
             "ripgrep-${RG_VERSION}-x86_64-unknown-linux-musl/rg"
           install -m 0755 "$RUNNER_TEMP/rg" "$HOME/.local/bin/rg"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
