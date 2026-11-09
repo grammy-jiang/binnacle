@@ -190,8 +190,14 @@ def ping_when_ready(sock, child):
     while True:
         try:
             return client, client.ping(sock)
-        except job_client.JobManagerError:
-            if child.poll() is not None or time.monotonic() > deadline:
+        except job_client.JobManagerError as exc:
+            if child.poll() is not None:
+                # Say why the manager exited before it served a ping.
+                _, err = child.communicate(timeout=5)
+                tail = "\n".join((err or "").splitlines()[-20:])
+                message = f"manager exited {child.returncode} before a ping:\n{tail}"
+                raise AssertionError(message) from exc
+            if time.monotonic() > deadline:
                 raise
             time.sleep(0.05)
 
