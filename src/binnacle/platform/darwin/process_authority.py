@@ -35,6 +35,7 @@ from binnacle.platform.contracts.darwin_contracts import (
     OwnedWitness,
 )
 from binnacle.platform.contracts.process_contracts import OwnedJobExit
+from binnacle.platform.darwin.process_exit_settle import lone_leader_became_zombie
 
 _FOREGROUND_SCOPE = (
     "isolated process group; new process groups/sessions (setsid, set -m) "
@@ -440,12 +441,11 @@ class _ForegroundOwner:
             except OSError as exc:
                 failure = True
                 if exc.errno == errno.EPERM:
-                    record = self._owned_record_locked()
-                    try:
-                        members = _process_records(2, self._pid)
-                        failure = not (record.state == 5 and members == [record])
-                    except OSError:
-                        pass
+                    failure = not lone_leader_became_zombie(
+                        self._pid,
+                        self._owned_record_locked,
+                        lambda: _process_records(2, self._pid),
+                    )
         # Also supervise a moved leader, without ever signaling its new group.
         record = self._owned_record_locked()
         if record.state != 5:

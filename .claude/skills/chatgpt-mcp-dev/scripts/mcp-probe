@@ -117,7 +117,7 @@ def fmt_time(ts: int) -> str:
     import datetime
 
     return (
-        datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
+        datetime.datetime.fromtimestamp(ts, tz=datetime.UTC)
         .astimezone()
         .strftime("%H:%M:%S")
     )

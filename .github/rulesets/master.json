@@ -28,10 +28,6 @@
             "integration_id": 15368
           },
           {
-            "context": "Tests / Python 3.10",
-            "integration_id": 15368
-          },
-          {
             "context": "Tests / Python 3.11",
             "integration_id": 15368
           },
@@ -41,6 +37,10 @@
           },
           {
             "context": "Tests / Python 3.14",
+            "integration_id": 15368
+          },
+          {
+            "context": "Tests / macOS arm64 / Python 3.13",
             "integration_id": 15368
           },
           {

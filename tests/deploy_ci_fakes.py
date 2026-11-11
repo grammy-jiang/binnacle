@@ -15,10 +15,10 @@ SHA = "b" * 40
 SLUG = "grammy-jiang/binnacle"
 CONTEXTS = (
     "Code quality",
-    "Tests / Python 3.10",
     "Tests / Python 3.11",
     "Tests / Python 3.12",
     "Tests / Python 3.14",
+    "Tests / macOS arm64 / Python 3.13",
     "Coverage policy / Python 3.13",
     "Packaging / Python 3.13",
 )

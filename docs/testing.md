@@ -194,7 +194,7 @@ Actions without separate CI-specific evidence.
 Compatibility tox environments run `scripts/run_test_suite.py` and do not
 collect coverage. The dedicated `coverage-policy` tox environment owns
 coverage instrumentation and the semantic 95/90 per-module gate. In GitHub
-Actions, Python 3.10, 3.11, 3.12, and 3.14 remain compatibility jobs while
+Actions, Python 3.11, 3.12, and 3.14 remain compatibility jobs while
 Python 3.13 runs `coverage-policy`. Both paths use pytest-randomly seed `12345`
 for reproducibility; the weekly flake hunt, not ordinary CI, explores multiple
 seeds. CI does not hard-code a Pi worker count: the repository runner resolves

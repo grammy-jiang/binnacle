@@ -19,14 +19,14 @@ def test_positive_wait_bridges_process_death_until_recorded_exit(monkeypatch):
         "time",
         SimpleNamespace(monotonic=lambda: sum(delays), sleep=delays.append),
     )
-    assert jobs.await_exit("fixed", 1) is terminal
+    assert jobs.await_exit("f1fed0000001", 1) is terminal
     assert delays == [0.02, 0.03]
 
 
 def test_zero_wait_may_honestly_report_unknown(monkeypatch):
     transient = {"state": "unknown"}
     monkeypatch.setattr(jobs, "job_state", lambda job: transient)
-    assert jobs.await_exit("fixed", 0) is transient
+    assert jobs.await_exit("f1fed0000001", 0) is transient
 
 
 @pytest.mark.parametrize("timeout", [False, True])
@@ -43,15 +43,18 @@ def test_embedded_wait_only_hands_off_after_timeout(monkeypatch, timeout):
     should_timeout = timeout
     proc = Process()
     monkeypatch.setattr(jobs, "OWNER_MODE", "embedded")
-    monkeypatch.setattr(jobs, "start_job", lambda *args: ("fixed", proc))
+    monkeypatch.setattr(jobs, "start_job", lambda *args: ("f1fed0000001", proc))
     monkeypatch.setattr(
         jobs, "record_exit", lambda *args: calls.append(("record", args))
     )
     monkeypatch.setattr(
         jobs, "reap_in_background", lambda *args: calls.append(("reap", args))
     )
-    assert job_owner.start_and_wait("probe", Path("/tmp"), None, 0.25) == "fixed"
-    assert calls == [("wait", 0.25), ("reap" if timeout else "record", ("fixed", proc))]
+    assert job_owner.start_and_wait("probe", Path("/tmp"), None, 0.25) == "f1fed0000001"
+    assert calls == [
+        ("wait", 0.25),
+        ("reap" if timeout else "record", ("f1fed0000001", proc)),
+    ]
 
 
 def test_manager_record_routes_stop_with_embedded_default(monkeypatch):
@@ -70,8 +73,8 @@ def test_manager_record_routes_stop_with_embedded_default(monkeypatch):
     monkeypatch.setattr(
         job_client, "stop", lambda *args, **kwargs: calls.append((args, kwargs))
     )
-    assert job_owner.stop_job("fixed") is terminal
-    assert job_owner.stop_job("fixed") is terminal
+    assert job_owner.stop_job("f1fed0000001") is terminal
+    assert job_owner.stop_job("f1fed0000001") is terminal
     assert len(calls) == 1
 
 
@@ -104,7 +107,7 @@ def test_finalizer_callback_does_not_recreate_pruned_record(tmp_path, monkeypatc
 
 
 def test_each_atomic_write_uses_distinct_complete_temporary_file(tmp_path, monkeypatch):
-    (tmp_path / "fixed").mkdir()
+    (tmp_path / "f1fed0000001").mkdir()
     observed = []
     replace = job_store.os.replace
 
@@ -114,10 +117,12 @@ def test_each_atomic_write_uses_distinct_complete_temporary_file(tmp_path, monke
 
     monkeypatch.setattr(job_store.os, "replace", record)
     for value in (1, 2):
-        job_store.write_meta(tmp_path, "fixed", {"value": value})
+        job_store.write_meta(tmp_path, "f1fed0000001", {"value": value})
     assert observed[0][0] != observed[1][0]
     assert [text for _, text in observed] == ['{"value": 1}', '{"value": 2}']
-    assert [path.name for path in (tmp_path / "fixed").iterdir()] == ["meta.json"]
+    assert [path.name for path in (tmp_path / "f1fed0000001").iterdir()] == [
+        "meta.json"
+    ]
 
 
 def test_owner_uses_public_store_and_shared_lock(tmp_path, monkeypatch):
@@ -125,7 +130,7 @@ def test_owner_uses_public_store_and_shared_lock(tmp_path, monkeypatch):
 
     assert jobs._STORE_LOCK is job_store.STORE_LOCK
     monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path)
-    job_id = "public-store"
+    job_id = "9ab1c0000001"
     (tmp_path / job_id).mkdir()
     record = {
         "command": "true",

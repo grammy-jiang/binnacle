@@ -18,7 +18,6 @@ import shutil
 import threading
 import time
 import types
-import uuid
 from contextlib import suppress
 from pathlib import Path
 
@@ -38,6 +37,7 @@ from binnacle.startup_imports import (
     record_start_failure,
     state_root_of,
 )
+from tests.private_state_home import make_private_home
 
 SRC = Path(startup_imports.__file__).parent
 TEST_ROOT = Path.home() / ".local" / "state" / "bt" / "e1a6"
@@ -46,10 +46,7 @@ FAILURE = StartupImportFailed("binnacle.x", "ImportError", "binnacle/x.py:3")
 
 @pytest.fixture
 def home():
-    TEST_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(TEST_ROOT, 0o700)
-    path = TEST_ROOT / f"lc-{uuid.uuid4().hex[:12]}"
-    path.mkdir(mode=0o700)
+    path = make_private_home(TEST_ROOT, "lc")
     yield path
     shutil.rmtree(path)  # exact path this fixture created
     with suppress(OSError):  # only when no other test home remains

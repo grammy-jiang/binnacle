@@ -22,7 +22,6 @@ import socket
 import subprocess
 import sys
 import textwrap
-import uuid
 from pathlib import Path
 
 import pytest
@@ -36,6 +35,7 @@ from binnacle.startup_imports import (
     OPTIONAL_MODULES,
     manager_entry_closure_allowed,
 )
+from tests.private_state_home import make_private_home
 
 TEST_ROOT = Path.home() / ".local" / "state" / "bt" / "e1a6"
 SECRET = "e1e-secret-message-text"
@@ -111,10 +111,7 @@ DRIVER = textwrap.dedent(
 
 @pytest.fixture
 def home():
-    TEST_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(TEST_ROOT, 0o700)
-    path = TEST_ROOT / f"ff-{uuid.uuid4().hex[:12]}"
-    path.mkdir(mode=0o700)
+    path = make_private_home(TEST_ROOT, "ff")
     yield path
     shutil.rmtree(path)  # exact path this fixture created
 

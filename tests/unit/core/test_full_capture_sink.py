@@ -92,7 +92,7 @@ def test_writer_refuses_symlink_or_insecure_existing_file(tmp_path, filetype):
     sink = FullCaptureSink(FullCaptureSettings(enabled=True, directory=output))
     import datetime
 
-    day = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+    day = datetime.datetime.now(datetime.UTC).date().isoformat()
     target = output / f"{day}.jsonl"
     if filetype == "symlink":
         target.symlink_to(tmp_path / "outside")

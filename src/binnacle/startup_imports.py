@@ -66,6 +66,10 @@ _EXCLUDED_BY_OS = {
         "binnacle.features.commands.jobs",
         "binnacle.features.commands.job_owner",
         "binnacle.features.commands.job_manager",
+        # Manager v2 is the Linux durable engine; it imports jobs on load.
+        "binnacle.features.commands.job_manager_v2",
+        "binnacle.features.commands.job_manager_v2_drain",
+        "binnacle.features.commands.job_manager_v2_receipts",
     ),
 }
 
@@ -166,6 +170,8 @@ MANAGER_MODULES = {
                 "binnacle.platform.darwin.job_manager_procinfo",
                 "binnacle.platform.darwin.job_manager_queue",
                 "binnacle.platform.darwin.job_manager_lifecycle",
+                # job_manager_entry imports the dormant start fence at top level.
+                "binnacle.platform.darwin.job_manager_maintenance_fence",
                 "binnacle.platform.darwin.job_manager_telemetry",
                 "binnacle.platform.darwin.job_manager_records",
                 "binnacle.platform.darwin.job_manager_service",
@@ -174,6 +180,7 @@ MANAGER_MODULES = {
                 "binnacle.platform.darwin.job_process_owner",
                 "binnacle.platform.darwin.process_authority",
                 "binnacle.platform.darwin.process_backend",
+                "binnacle.platform.darwin.process_exit_settle",
             )
         )
     ),

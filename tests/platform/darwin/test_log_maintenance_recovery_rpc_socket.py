@@ -287,3 +287,33 @@ def test_unauthed_socket_client_cannot_invoke_rpc_or_mutate_journal(roots) -> No
         assert (tx_root / "transaction.json").read_bytes() == original
     finally:
         _stop(stop, thread, failures)
+
+
+def test_endpoint_listens_before_it_is_published(roots, monkeypatch) -> None:
+    """A client that sees the socket and .auth never meets ECONNREFUSED.
+
+    serve_authenticated published both names before listen(); a connect in
+    that window was refused (seen on CI as ipc_connect_refused).
+    """
+    tx_root, socket_path = roots
+    with MaintenanceTransactionJournal(tx_root) as tx:
+        begin(tx)
+        advance_to(tx, "guardian_armed")
+    publish, seen = ipc_transport._publish_entry, []
+
+    def probe_then_publish(fd: int, source: str, target: str) -> None:
+        if target == socket_path.name:
+            probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                probe.connect(str(socket_path.with_name(source)))
+                seen.append("listening")
+            except ConnectionRefusedError:
+                seen.append("refused")
+            finally:
+                probe.close()
+        publish(fd, source, target)
+
+    monkeypatch.setattr(ipc_transport, "_publish_entry", probe_then_publish)
+    _lease, stop, thread, failures = _launch_a3(socket_path, tx_root)
+    _stop(stop, thread, failures)
+    assert seen == ["listening"]

@@ -333,7 +333,7 @@ def test_repository_uv_toolchain_has_one_exact_lock_pin() -> None:
     assert locked is not None
 
     pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
-    assert 'required-version = ">=0.12.7,<0.13"' in pyproject
+    assert 'required-version = ">=0.13.4,<0.14"' in pyproject
     assert f'"uv=={locked}"' in pyproject
 
     pre_commit = (root / ".pre-commit-config.yaml").read_text(encoding="utf-8")

@@ -1,7 +1,7 @@
 """The tunnel companion's diagnostics: the quiet gate and the composition."""
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -31,12 +31,12 @@ def test_parse_time_handles_go_nanoseconds_naive_and_bad_input():
     zulu = tunnel_doctor.parse_time("2026-09-20T13:31:30Z")
     assert zulu is not None and zulu.utcoffset() == timedelta(0)
     naive = tunnel_doctor.parse_time("2026-09-20T13:31:30")
-    assert naive is not None and naive.tzinfo == timezone.utc
+    assert naive is not None and naive.tzinfo == UTC
     assert tunnel_doctor.parse_time("yesterday") is None
 
 
 def test_busy_when_the_tunnel_forwarded_a_command_recently(tmp_path):
-    now = datetime(2026, 9, 20, 13, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 9, 20, 13, 0, 0, tzinfo=UTC)
     log = log_with(tmp_path / "tunnel.log", [(now - timedelta(seconds=5)).isoformat()])
     reasons = tunnel_doctor.tunnel_busy_reasons(
         30, log, fetch=lambda u, s: "", now=lambda: now

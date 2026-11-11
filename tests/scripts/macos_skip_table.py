@@ -17,9 +17,18 @@ _T0A9 = """
 tests/integration/test_cli.py
 tests/integration/test_commands_settings.py
 tests/integration/test_http_workflows.py
+tests/integration/test_job_id_containment.py
 tests/integration/test_job_manager.py
 tests/integration/test_job_manager_reload.py
 tests/integration/test_job_manager_telemetry.py
+tests/integration/test_job_manager_probe.py
+tests/integration/test_job_manager_v2.py
+tests/integration/test_job_manager_v2_lifecycle.py
+tests/integration/test_job_manager_v2_drain.py
+tests/integration/test_job_manager_v1_edges.py
+tests/integration/test_job_manager_v2_drain_edges.py
+tests/integration/test_job_manager_v2_edges.py
+tests/integration/test_job_manager_v2_receipts_edges.py
 tests/integration/test_job_telemetry.py
 tests/integration/test_jobs.py
 tests/integration/test_jobs_lifecycle.py
@@ -57,15 +66,25 @@ LINUX_ONLY_MODULES = frozenset(
         "test_jobs",
         "test_jobs_lifecycle",
         "test_jobs_lifecycle_stops",
+        "test_job_id_containment",
         "test_job_manager",
         "test_jobs_state_machine",
         "test_job_telemetry",
         "test_os_job_rpc_cross_version",
         "test_logging_jobs",
+        "test_job_manager_v2",
+        "test_job_manager_v2_lifecycle",
+        "test_job_manager_v2_drain",
+        "test_job_manager_v1_edges",
+        "test_job_manager_v2_drain_edges",
+        "test_job_manager_v2_edges",
+        "test_job_manager_v2_receipts_edges",
+        "test_job_manager_probe",
     ]
 )
 _ROWS = """
 system/test_uplink_network.py | baseline: Linux SO_BINDTODEVICE / iproute2 only
+system/test_tunnel_readiness.py | baseline: systemd ExecStartPost readiness script; macOS tunnel runs under launchd and stock bash 3.2 compares -nt in whole seconds
 live/test_deployment_smoke.py | baseline: opt-in live host (BINNACLE_LIVE=1)
 scripts/test_macos_collection_native.py | T0: Darwin host probe (sw_vers); the rest of the module runs everywhere
 platform/darwin/test_foreground_commands.py | A2: per-test Darwin posix_spawn owned-child mechanism
@@ -145,6 +164,7 @@ ALLOWED_PLATFORM_SKIPS = {
 # Per row: the platform-conditioned skip sites a file may hold (reviewable edit).
 PLATFORM_SITE_COUNTS = {
     "tests/system/test_uplink_network.py": 1,
+    "tests/system/test_tunnel_readiness.py": 1,
     "tests/live/test_deployment_smoke.py": 0,
     "tests/scripts/test_macos_collection_native.py": 1,
     "tests/platform/darwin/test_foreground_commands.py": 1,

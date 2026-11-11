@@ -324,6 +324,13 @@ class JobsSettings(BaseModel):
         None,
         description="Private AF_UNIX socket for binnacle-jobs.service; resolved at Linux host composition.",
     )
+    v2_socket_path: Path | None = Field(
+        None,
+        description=(
+            "Optional separate Linux SCM_RIGHTS job-start socket; disabled by default. "
+            "Only the independent job manager owns this endpoint."
+        ),
+    )
     dir: Path = Field(
         default_factory=lambda: Path.home() / ".local" / "state" / "binnacle" / "jobs",
         description="Job spool; survives reloads.",

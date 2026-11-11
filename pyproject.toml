@@ -7,14 +7,14 @@ build-backend = "setuptools.build_meta"
 # Keep Dependabot compatible with the reviewed uv minor line. The exact
 # developer/pre-commit/CI uv version is the uv package pinned in uv.lock and
 # is enforced by scripts/dev.py.
-required-version = ">=0.12.7,<0.13"
+required-version = ">=0.13.4,<0.14"
 
 [project]
 name = "binnacle-mcp"
 version = "1.0.1"
 description = "Linux and Raspberry Pi MCP server for files, search and durable commands."
 readme = "README.md"
-requires-python = ">=3.10,<3.15"
+requires-python = ">=3.11,<3.15"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Binnacle contributors" }]
@@ -24,7 +24,6 @@ classifiers = [
     "Environment :: Console",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -34,7 +33,7 @@ classifiers = [
 
 dependencies = [
     "cyclopts>=4.23.3", # the CLI framework fastmcp's own CLI uses
-    "fastmcp==4.1.0", # reviewed FastMCP 4.1 baseline
+    "fastmcp==4.1.2", # reviewed FastMCP 4.1 security-patch baseline
     "mcp==2.3.0", # latest MCP protocol SDK; exact released/tested pairing
     "mcp-types==2.3.0", # latest MCP wire types and schemas; exact paired release
     "orjson>=3.11.3",
@@ -98,7 +97,7 @@ dev = [
     "pre-commit>=4.0.0",
     "tox>=4.61.1",
     "tox-uv>=1.36.0",
-    "uv==0.12.24", # latest tested developer/CI toolchain release
+    "uv==0.13.4", # security-patched developer/CI toolchain release
 ]
 
 [tool.pytest.ini_options]
@@ -197,7 +196,7 @@ DEP004 = ["pytest"]
 [tool.mypy]
 # The floor of requires-python: catches APIs newer than the oldest
 # supported interpreter (e.g. PurePath.full_match, 3.13-only).
-python_version = "3.10"
+python_version = "3.11"
 # Global checks that are useful for tests and scripts without making their
 # intentionally partial fakes satisfy production-level typing strictness.
 warn_unused_configs = true
@@ -220,6 +219,8 @@ required-version = ">=0.16.5,<0.17"
 # Incremental, stable rule families with low migration cost. Preview rules stay
 # off so lint behaviour changes only when the pinned Ruff version is reviewed.
 extend-select = ["B", "I", "UP", "C4", "PIE", "RET", "DTZ", "T10"]
+# UP042 (StrEnum) would change str() of wire-visible enum members.
+ignore = ["UP042"]
 
 [tool.importlinter]
 root_package = "binnacle"

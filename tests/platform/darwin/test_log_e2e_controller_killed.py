@@ -13,10 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from binnacle.platform.darwin.log_maintenance_observer import (
-    inspect_unowned_transaction,
-)
 from binnacle.platform.darwin.log_maintenance_transaction import JournalSnapshot
+from tests.issue30_full_transaction_fixture import inspect_when_unlocked
 
 NONCE = "a" * 32
 RAW = "mcp.stderr.log.0"
@@ -64,7 +62,7 @@ def _run_crash(root: Path, mode: str) -> tuple[dict, JournalSnapshot]:
         controller.stderr,
     )
     result = _wait_outcome(root)
-    state = inspect_unowned_transaction(root / ("txn-" + NONCE))
+    state = inspect_when_unlocked(root / ("txn-" + NONCE))
     assert state.needs_external_recovery
     assert state.producer_may_be_stopped
     assert not state.production_authorized

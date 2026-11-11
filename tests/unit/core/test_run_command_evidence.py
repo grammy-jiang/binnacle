@@ -1,6 +1,6 @@
 import json
 import stat
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from binnacle.features.commands.run_command_evidence import (
     load_evidence,
@@ -23,7 +23,7 @@ def _record(root, *, retention_days=14, day=25, now=None):
         match_start=5,
         match_end=11,
         root=root,
-        now=now or datetime(2026, 9, day, 12, 0, tzinfo=timezone.utc),
+        now=now or datetime(2026, 9, day, 12, 0, tzinfo=UTC),
     )
 
 
@@ -35,7 +35,7 @@ def test_evidence_disabled_writes_nothing(tmp_path):
 
 def test_evidence_normalizes_naive_timestamp_to_utc(tmp_path):
     root = tmp_path / "evidence"
-    naive = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc).replace(tzinfo=None)
+    naive = datetime(2026, 9, 25, 12, 0, tzinfo=UTC).replace(tzinfo=None)
     path = _record(root, now=naive)
 
     assert path is not None

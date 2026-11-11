@@ -3,7 +3,7 @@
 ## Release identity and account setup
 
 The distribution is named **binnacle-mcp**, licensed **MIT**, and uses
-Python 3.10–3.14. Public release artifacts have complete README metadata,
+Python 3.11–3.14. Public release artifacts have complete README metadata,
 source links and an included LICENSE file. v1.0.1 is the first PyPI-ready
 candidate; previous GitHub v1.0.0 release assets are immutable and unchanged.
 
