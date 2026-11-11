@@ -372,6 +372,10 @@ class V2FDServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     def server_close(self) -> None:
         super().server_close()
         try:
+            # A failed bind in __init__ calls this before the socket is
+            # recorded; let the bind error, not AttributeError, surface.
+            if not hasattr(self, "_socket_identity"):
+                return
             existing = self._socket_path.lstat()
             if (existing.st_dev, existing.st_ino) == (
                 self._socket_identity.st_dev,
