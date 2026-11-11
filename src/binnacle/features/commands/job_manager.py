@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from binnacle.config import get_settings
-from binnacle.features.commands import job_owner, jobs
+from binnacle.features.commands import job_owner, job_store, jobs
 from binnacle.features.commands.job_client import PROTOCOL_VERSION
 from binnacle.mcp.callctx import current_call
 from binnacle.platform.contracts.process_contracts import JobSignalDeliveryError
@@ -235,10 +235,10 @@ class JobManager:
         impl_started = time.perf_counter()
         job_id = request["job_id"]
         call_id = str(request.get("call_id") or "-")
-        if not jobs.is_valid_job_id(job_id):
+        if not job_store.is_valid_job_id(job_id):
             # Refuse before any path is built: the id is a spool path
             # component (text: job_store.INVALID_JOB_ID).
-            raise jobs.InvalidJobId
+            raise job_store.InvalidJobId
         token = current_call.set(call_id)
         try:
             try:
