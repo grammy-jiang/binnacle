@@ -143,7 +143,7 @@ def test_pause_with_different_nonce_is_refused_and_keeps_marker(
     assert not _marker(store).exists()
 
 
-def test_partial_marker_write_is_refused_and_fails_closed(
+def test_partial_marker_write_leaves_no_marker_and_can_be_retried(
     store: Path, monkeypatch
 ) -> None:
     real_write = os.write
@@ -157,12 +157,31 @@ def test_partial_marker_write_is_refused_and_fails_closed(
         patch.setattr(drain.os, "write", short_write)
         with pytest.raises(drain.DrainRefused, match="partial maintenance marker"):
             drain.pause(_NONCE)
-    # The truncated marker stays on disk: starts remain fenced (fail closed).
-    assert _marker(store).read_bytes() == b'{"ver'
-    with pytest.raises(drain.DrainRefused, match="maintenance marker corrupt"):
-        drain.require_starts_allowed()
-    with pytest.raises(drain.DrainRefused, match="maintenance marker corrupt"):
-        drain.resume(_NONCE)
+    # The fence was never published: no marker, no staged file, starts allowed.
+    assert not _marker(store).exists()
+    assert not list(_marker(store).parent.glob(".starts-paused.*"))
+    drain.require_starts_allowed()
+    # A retry pauses normally, and the same nonce resumes it.
+    assert drain.pause(_NONCE)["starts_paused"] is True
+    assert drain.resume(_NONCE)["starts_paused"] is False
+
+
+def test_pause_removes_staged_leftovers_of_a_crashed_pause(store: Path) -> None:
+    leftover = _marker(store).parent / ".starts-paused.999999"
+    leftover.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    leftover.write_bytes(b'{"ver')
+    drain.pause(_NONCE)
+    assert not leftover.exists()
+    assert _marker(store).stat().st_nlink == 1
+
+
+def test_published_marker_has_one_link_and_no_staged_file(store: Path) -> None:
+    drain.pause(_NONCE)
+    marker = _marker(store)
+    assert marker.stat().st_nlink == 1
+    assert not list(marker.parent.glob(".starts-paused.*"))
+    with pytest.raises(drain.DrainRefused, match="different nonce"):
+        drain.pause("f" * 32)
 
 
 def test_verified_owner_with_no_work_is_safe_to_stop(store: Path, monkeypatch) -> None:
