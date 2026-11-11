@@ -13,6 +13,7 @@ import json
 import os
 import re
 import stat
+from contextlib import suppress
 from pathlib import Path
 
 from binnacle.features.commands import job_manager_v2_receipts as receipts
@@ -128,6 +129,38 @@ def _owner_cgroup_safety() -> tuple[bool, list[dict[str, str]]]:
         return False, [{"job_id": "-", "state": "owner_cgroup_scan_failed"}]
 
 
+def _publish_marker(dirfd: int, wanted: str) -> None:
+    """Write the fence to a private file, then link it into place.
+
+    A short write leaves no marker (the pause fails and may be retried); a
+    half-written marker could never be resumed. link() keeps O_EXCL's rule:
+    FileExistsError when a marker is already there.
+    """
+    staged = f".{_MARKER}.{os.getpid()}"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
+    # One owner per spool and the store lock is held: any staged file is a
+    # leftover of a crashed pause.
+    for name in os.listdir(dirfd):
+        if name.startswith(f".{_MARKER}."):
+            with suppress(FileNotFoundError):
+                os.unlink(name, dir_fd=dirfd)
+    fd = os.open(staged, flags, 0o600, dir_fd=dirfd)
+    try:
+        payload = json.dumps(
+            {"version": 2, "nonce_hash": wanted}, separators=(",", ":")
+        ).encode()
+        if os.write(fd, payload) != len(payload):
+            raise DrainRefused("partial maintenance marker write")
+        os.fsync(fd)
+        os.link(staged, _MARKER, src_dir_fd=dirfd, dst_dir_fd=dirfd)
+        os.unlink(staged, dir_fd=dirfd)  # the marker must have one link
+        os.fsync(dirfd)
+    finally:
+        os.close(fd)
+        with suppress(FileNotFoundError):
+            os.unlink(staged, dir_fd=dirfd)
+
+
 def pause(nonce: str) -> dict[str, object]:
     """Serialize against every running start, fsync a fence, then inventory.
 
@@ -137,28 +170,12 @@ def pause(nonce: str) -> dict[str, object]:
     wanted = _nonce_hash(nonce)
     with jobs._STORE_LOCK, receipts._receipts_dir() as dirfd:
         try:
-            fd = os.open(
-                _MARKER,
-                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
-                0o600,
-                dir_fd=dirfd,
-            )
+            _publish_marker(dirfd, wanted)
         except FileExistsError:
             if _read(dirfd) != wanted:
                 raise DrainRefused(
                     "pause already active for a different nonce"
                 ) from None
-        else:
-            try:
-                payload = json.dumps(
-                    {"version": 2, "nonce_hash": wanted}, separators=(",", ":")
-                ).encode()
-                if os.write(fd, payload) != len(payload):
-                    raise DrainRefused("partial maintenance marker write")
-                os.fsync(fd)
-                os.fsync(dirfd)
-            finally:
-                os.close(fd)
         active = []
         for item in jobs.list_jobs():
             if item["state"] in ("running", "unknown"):
