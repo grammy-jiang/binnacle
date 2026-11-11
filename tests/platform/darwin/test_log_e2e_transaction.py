@@ -4,22 +4,16 @@ from __future__ import annotations
 
 import bz2
 import sys
-import time
 from pathlib import Path
 
 import pytest
 
 from binnacle.companions.darwin_log_j7_interlocks import J7Interlocks
 from binnacle.mcp.tool_admission_drain import ToolAdmissionDrain, ToolAdmissionPaused
-from binnacle.platform.darwin.log_maintenance_observer import (
-    inspect_unowned_transaction,
-)
-from binnacle.platform.darwin.log_maintenance_transaction import (
-    MaintenanceJournalRefused,
-)
 from tests.issue30_full_transaction_fixture import (
     FixtureProducer,
     RehearsalRefused,
+    inspect_when_unlocked,
     run_complete_fixture_transaction,
     setup_fixture,
 )
@@ -59,16 +53,7 @@ def _run(scenario, **change):
 
 
 def _journal(root: Path):
-    # The fixture guardian polls this journal with a non-blocking flock every
-    # 40 ms, so one inspect can meet its lock for an instant. Retry briefly.
-    deadline = time.monotonic() + 2.0
-    while True:
-        try:
-            return inspect_unowned_transaction(root / ("txn-" + NONCE))
-        except MaintenanceJournalRefused:
-            if time.monotonic() >= deadline:
-                raise
-            time.sleep(0.01)
+    return inspect_when_unlocked(root / ("txn-" + NONCE))
 
 
 def _barriers_released(root: Path) -> None:

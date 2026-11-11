@@ -17,9 +17,6 @@ from binnacle.companions.darwin_log_transaction_controller import (
     StepReceipt,
     run_maintenance_transaction,
 )
-from binnacle.platform.darwin.log_maintenance_observer import (
-    inspect_unowned_transaction,
-)
 from binnacle.platform.darwin.log_maintenance_transaction import (
     MaintenanceTransactionJournal,
 )
@@ -28,6 +25,7 @@ from tests.issue30_controller_real_components import (
 )
 from tests.issue30_full_transaction_fixture import (
     _guardian_outcome,
+    inspect_when_unlocked,
     setup_fixture,
 )
 
@@ -67,7 +65,7 @@ def run(scenario, **updates):
 
 
 def snapshot(root: Path):
-    return inspect_unowned_transaction(root / ("txn-" + NONCE))
+    return inspect_when_unlocked(root / ("txn-" + NONCE))
 
 
 def assert_no_archive_mutation(root: Path) -> None:

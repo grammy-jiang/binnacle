@@ -9,6 +9,7 @@ import os
 import re
 import threading
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 
 STORE_LOCK = threading.RLock()  # Process-local; not an interprocess transaction.
@@ -133,3 +134,35 @@ def list_job_ids(root: Path) -> list[str]:
         return [path.name for path in root.iterdir() if path.is_dir()]
     except OSError:
         return []
+
+
+def prune(
+    jobs_dir: Path,
+    keep: int,
+    is_running: Callable[[str], bool],
+    remove: Callable[[Path], bool],
+) -> tuple[int, int]:
+    """Remove job directories beyond the ``keep`` newest; return (removed, running).
+
+    The caller passes ``keep`` already reduced by the slots it reserves:
+    ``start_job`` reserves one, so KEEP_NEWEST=50 makes the new directory the
+    50th base entry rather than a permanent 51st. Never delete a live job: its
+    process would keep running while job_status loses it and the reaper
+    crashes on exit. Unreadable or malformed meta, exited, and unknown jobs
+    stay deletable so garbage cannot become immortal.
+    """
+    try:
+        dirs = sorted(
+            (d for d in jobs_dir.iterdir() if d.is_dir()),
+            key=lambda d: d.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        return 0, 0
+    removed = skipped_running = 0
+    for stale in dirs[keep:]:
+        if is_running(stale.name):
+            skipped_running += 1
+        elif remove(stale):
+            removed += 1
+    return removed, skipped_running
