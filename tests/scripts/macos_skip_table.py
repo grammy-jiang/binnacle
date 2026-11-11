@@ -24,6 +24,7 @@ tests/integration/test_job_manager_telemetry.py
 tests/integration/test_job_manager_probe.py
 tests/integration/test_job_manager_v2.py
 tests/integration/test_job_manager_v2_lifecycle.py
+tests/integration/test_job_manager_v2_drain.py
 tests/integration/test_job_telemetry.py
 tests/integration/test_jobs.py
 tests/integration/test_jobs_lifecycle.py
@@ -69,6 +70,7 @@ LINUX_ONLY_MODULES = frozenset(
         "test_logging_jobs",
         "test_job_manager_v2",
         "test_job_manager_v2_lifecycle",
+        "test_job_manager_v2_drain",
         "test_job_manager_probe",
     ]
 )

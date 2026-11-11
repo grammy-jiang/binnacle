@@ -61,6 +61,9 @@ EDGES = {
         "manager_bootstrap",
         # The opt-in v2 SCM_RIGHTS start socket, imported only when enabled.
         "job_manager_v2",
+        # v1 stop validates the job id against the spool rules before any
+        # path exists (2c673ae3), as job_owner already may.
+        "job_store",
     },
     "manager_bootstrap": {"startup_imports", "config"},
     # E1 eager start-up imports: no features, no platform modules, no server.

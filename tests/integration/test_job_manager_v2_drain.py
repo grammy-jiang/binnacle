@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -23,6 +24,13 @@ from tests.integration.test_job_manager_v2 import (
 pytest_plugins = ["tests.integration.test_job_manager_v2"]
 
 _NONCE = "1234567890abcdef1234567890abcdef"
+
+LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="no Darwin counterpart: durable jobs / Linux job engine are UNAVAILABLE on Darwin by release scope (CR0-04)",
+)
+
+pytestmark = LINUX_ONLY
 
 
 def _control(

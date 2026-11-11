@@ -66,6 +66,10 @@ _EXCLUDED_BY_OS = {
         "binnacle.features.commands.jobs",
         "binnacle.features.commands.job_owner",
         "binnacle.features.commands.job_manager",
+        # Manager v2 is the Linux durable engine; it imports jobs on load.
+        "binnacle.features.commands.job_manager_v2",
+        "binnacle.features.commands.job_manager_v2_drain",
+        "binnacle.features.commands.job_manager_v2_receipts",
     ),
 }
 
