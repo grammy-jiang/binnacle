@@ -17,6 +17,12 @@ from binnacle import server
 from binnacle.features import lsp_bridge_server as bridge
 
 
+def _default_root_name() -> str:
+    from binnacle.config import get_settings
+
+    return get_settings().roots.default_root.expanduser().resolve().name
+
+
 def test_chatgpt_can_discover_and_call_lsp_on_authenticated_root(
     monkeypatch, tmp_path: Path
 ):
@@ -30,7 +36,9 @@ def test_chatgpt_can_discover_and_call_lsp_on_authenticated_root(
         json.dumps(
             {
                 "pid": os.getpid(),
-                "grants": {"wsg_private_test": Path.home().joinpath("Projects").name},
+                # The bridge serves the configured default root (~/Projects on
+                # a host, the checkout parent on CI): grant exactly that name.
+                "grants": {"wsg_private_test": _default_root_name()},
             }
         )
     )
