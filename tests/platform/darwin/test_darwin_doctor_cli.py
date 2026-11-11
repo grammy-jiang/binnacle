@@ -13,7 +13,7 @@ import pytest
 from binnacle.diagnostics import darwin_doctor as native
 from binnacle.diagnostics import doctor as linux_checks
 from binnacle.doctor_contracts import ok
-from scripts.mac_w3_deploy_gate import parse_startup_doctor
+from tests.doctor_json_support import startup_clean, startup_statuses
 
 
 def fixtures(tmp_path: Path, **fields: object) -> Path:
@@ -192,12 +192,13 @@ def test_manager_refuses_missing_unit_and_ipc_error(tmp_path, monkeypatch):
     assert "private key" not in rows[0].detail
 
 
-def test_manager_stale_checkout_revision_is_fail(tmp_path, monkeypatch):
+def test_manager_stale_checkout_revision_is_warn(tmp_path, monkeypatch):
     reply, _ = fake_manager(tmp_path, monkeypatch)
     rows = native.check_native_job_manager(
         "b" * 12, {"jobs": 1007}, ping=lambda _: reply
     )
-    assert [x.status for x in rows] == ["ok", "fail"]
+    assert [x.status for x in rows] == ["ok", "warn"]
+    assert "differs from checkout bbbbbbbbbbbb" in rows[1].detail
 
 
 def test_manager_unknown_jobs_and_python_capability_fail(tmp_path, monkeypatch):
@@ -275,7 +276,7 @@ def test_malformed_checks_are_diagnostic_fail_not_uncaught_exception(fake_result
     assert len(checks) == 1
     assert checks[0].group == "startup"
     assert checks[0].status == "fail"
-    assert parse_startup_doctor(linux_checks.render_json(checks)[0])[0] is False
+    assert not startup_clean(linux_checks.render_json(checks)[0])
 
 
 def test_unexpected_launchd_error_keeps_a_valid_json_report(monkeypatch):
@@ -306,7 +307,7 @@ def test_unexpected_launchd_error_keeps_a_valid_json_report(monkeypatch):
     assert any(
         x["group"] == "launchd" and x["status"] == "fail" for x in body["checks"]
     )
-    assert parse_startup_doctor(rendered)[:2] == (True, "startup_ok")
+    assert startup_clean(rendered)
 
 
 def test_unavailable_startup_checker_is_a_blocking_gate_failure(monkeypatch):
@@ -319,5 +320,5 @@ def test_unavailable_startup_checker_is_a_blocking_gate_failure(monkeypatch):
     native._append_safe(rows, "startup", linux_checks.check_startup_imports)
     body, rc = linux_checks.render_json(rows)
     assert rc == 1
-    assert parse_startup_doctor(body)[:2] == (False, "startup_failure")
+    assert "fail" in startup_statuses(body)
     assert "unreadable record" not in body

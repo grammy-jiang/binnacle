@@ -4,6 +4,9 @@ This is deliberately NOT the generation-bound private service log contract:
 production launchd owns stdout/stderr paths, while that contract governs
 explicitly leased test services. Refuse unknown service labels and unsafe files;
 never silently present an incomplete capped read as complete.
+
+``read_window`` serves the deploy gate's polling: it bisects the active
+stderr file by byte offset instead of reading weeks of history.
 """
 
 from __future__ import annotations
@@ -23,6 +26,10 @@ from typing import BinaryIO
 from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 
 MAX_QUERY_BYTES = 256 << 20
+WINDOW_MAX_BYTES = 64 << 20
+_SLACK_S = 2.0  # records written slightly out of order stay in the window
+_BISECT_STOP = 64 << 10
+_SCAN_LINES = 4096
 _ISO = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?)\s")
 _RICH = re.compile(r"^\[(\d\d/\d\d/\d\d \d\d:\d\d:\d\d)\]")
 _OFFSET = re.compile(
@@ -104,6 +111,37 @@ def _safe_fd(path: Path) -> BinaryIO:
         raise ServiceLogError(
             f"cannot safely open macOS service log: {type(exc).__name__}"
         ) from exc
+
+
+def _next_stamp(handle: BinaryIO, offset: int) -> float | None:
+    """The first timestamp on a whole line at or after ``offset``."""
+    handle.seek(offset)
+    if offset:
+        handle.readline()  # finish the line ``offset`` falls inside
+    for _ in range(_SCAN_LINES):
+        line = handle.readline(1 << 20)
+        if not line:
+            return None
+        marked = _stamp(line.decode("utf-8", "replace"))
+        if marked is not None:
+            return marked
+    return None
+
+
+def _window_start(handle: BinaryIO, size: int, since: float) -> int:
+    """A line-aligned offset at or before the first record of the window."""
+    low, high = 0, size
+    while high - low > _BISECT_STOP:
+        middle = (low + high) // 2
+        marked = _next_stamp(handle, middle)
+        if marked is None or marked >= since - _SLACK_S:
+            high = middle
+        else:
+            low = middle
+    handle.seek(low)
+    if low:
+        handle.readline()
+    return handle.tell()
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,3 +254,43 @@ class DarwinDaemonLogStatsSource:
             )
         output.sort(key=lambda item: (item[0], item[1]))
         return "".join(line for _, _, line in output)
+
+    def read_window(
+        self,
+        services: Sequence[str],
+        since_epoch: float,
+        until_epoch: float | None = None,
+    ) -> str:
+        """Active stderr records stamped in [since, until], with continuations.
+
+        Lines without a timestamp (wrapped console records, tracebacks) belong
+        to the record before them. Archives are not read: a deploy gate's
+        window is seconds to minutes old.
+        """
+        output: list[str] = []
+        for name in services:
+            try:
+                service = _ALIASES[name]
+            except KeyError:
+                raise ServiceLogError("unrecognised macOS service log unit") from None
+            active = next(
+                p for p in self._paths(service) if p.name == _LOGS[service][0]
+            )
+            with _safe_fd(active) as handle:
+                size = os.fstat(handle.fileno()).st_size
+                handle.seek(_window_start(handle, size, since_epoch))
+                total, inside = 0, False
+                while chunk := handle.readline(1 << 20):
+                    line = chunk.decode("utf-8", "replace")
+                    marked = _stamp(line)
+                    if marked is not None:
+                        if until_epoch is not None and marked > until_epoch:
+                            break
+                        inside = marked >= since_epoch
+                    if not inside:
+                        continue
+                    total += len(chunk)
+                    if total > WINDOW_MAX_BYTES:
+                        raise ServiceLogError("macOS service log window too large")
+                    output.append(line)
+        return "".join(output)

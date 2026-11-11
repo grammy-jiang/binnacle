@@ -60,8 +60,9 @@ def test_deploy_journal_composition_needs_only_semantic_read_window(monkeypatch)
             )
             return "a\nb\n"
 
-    def factory(*, command_timeout_s):
+    def factory(*, command_timeout_s, installed):
         seen["timeout"] = command_timeout_s
+        seen["installed"] = installed
         return EpochOnlySource()
 
     monkeypatch.setattr(deploy_smoke, "create_service_log_source", factory)
@@ -69,6 +70,7 @@ def test_deploy_journal_composition_needs_only_semantic_read_window(monkeypatch)
     assert deploy_smoke.read_journal(10.9, 20.1) == ["a", "b"]
     assert seen == {
         "timeout": 60.0,
+        "installed": True,
         "services": ("binnacle-mcp.service",),
         "since": 10.9,
         "until": 20.1,

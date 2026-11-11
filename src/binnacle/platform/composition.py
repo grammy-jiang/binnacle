@@ -132,12 +132,15 @@ def create_service_log_source(
     command_timeout_s: float | None = None,
     root: Path | None = None,
     generation: str | None = None,
+    installed: bool = False,
 ) -> ServiceLogSource:
     if host_os_family() == "darwin":
+        if installed:  # the production LaunchDaemons' log files (deploy gate)
+            from binnacle.platform.darwin import daemon_logstats
+
+            return daemon_logstats.DarwinDaemonLogStatsSource()
         if root is None or generation is None:
-            raise UnsupportedHostOS(
-                "Darwin service logs require an explicit root and generation"
-            )
+            raise UnsupportedHostOS("Darwin service logs need a root and generation")
         from binnacle.platform.darwin.log_source import PrivateServiceLogSource
 
         return PrivateServiceLogSource(root=root, generation=generation)
@@ -146,36 +149,32 @@ def create_service_log_source(
     return JournalServiceLogSource(command_timeout_s=command_timeout_s)
 
 
-def create_service_inspector(
-    *, lease: ServiceLease | None = None
-) -> ManagedServiceInspector:
+def _services(lease: ServiceLease | None, installed: bool):
     if host_os_family() == "darwin":
+        if installed:  # the production LaunchDaemons (deploy gate)
+            from binnacle.platform.darwin import service_launchd_system
+
+            return service_launchd_system.LaunchdSystemServices()
         if lease is None:
-            raise UnsupportedHostOS(
-                "Darwin service requires an explicit generation lease"
-            )
+            raise UnsupportedHostOS("Darwin service requires a generation lease")
         from binnacle.platform.darwin.service_launchd import LaunchdUserServices
 
         return LaunchdUserServices(lease)
     from binnacle.platform.linux.service_systemd import SystemdUserServices
 
     return SystemdUserServices()
+
+
+def create_service_inspector(
+    *, lease: ServiceLease | None = None, installed: bool = False
+) -> ManagedServiceInspector:
+    return _services(lease, installed)
 
 
 def create_service_controller(
-    *, lease: ServiceLease | None = None
+    *, lease: ServiceLease | None = None, installed: bool = False
 ) -> ManagedServiceController:
-    if host_os_family() == "darwin":
-        if lease is None:
-            raise UnsupportedHostOS(
-                "Darwin service requires an explicit generation lease"
-            )
-        from binnacle.platform.darwin.service_launchd import LaunchdUserServices
-
-        return LaunchdUserServices(lease)
-    from binnacle.platform.linux.service_systemd import SystemdUserServices
-
-    return SystemdUserServices()
+    return _services(lease, installed)
 
 
 def create_native_installed_cli():

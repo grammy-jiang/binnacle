@@ -125,6 +125,17 @@ def test_status_and_noop_preserve_installed_plist(installed):
     assert not any("/usr/bin/sudo" in c for c in runner.calls)
 
 
+def test_lsp_bridge_environment_is_a_known_installed_identity(installed):
+    mode, _, repo, plist = installed
+    d = plistlib.loads(plist.read_bytes())
+    d["EnvironmentVariables"].update(
+        BINNACLE_LSP_BRIDGE_PORT="18767", BINNACLE_LSP_BRIDGE_STATE_DIR="/tmp/b"
+    )
+    plist.write_bytes(plistlib.dumps(d))
+    assert "prod mode" in mode.status()
+    assert f"checkout={repo}" in mode.status()
+
+
 def test_dry_run_preserves_live_server_and_plist(installed, capsys):
     mode, runner, repo, plist = installed
     before = plist.read_bytes()
