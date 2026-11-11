@@ -84,4 +84,14 @@ def test_no_shadow_mcp_registry_or_extra_public_tool_registration():
         and isinstance(node.func, ast.Attribute)
         and node.func.attr == "mount"
     ]
-    assert len(mounts) == 3
+    # Files, search and commands, plus the one opt-in LSP bridge mount that
+    # happens only behind `if lsp_bridge_factory is not None`.
+    bridge = [
+        node
+        for node in ast.walk(text[server])
+        if isinstance(node, ast.If)
+        and ast.unparse(node.test) == "lsp_bridge_factory is not None"
+        for call in ast.walk(node)
+        if call in mounts and ast.unparse(call.args[0]) == "lsp_bridge_factory()"
+    ]
+    assert len(mounts) == 4 and len(bridge) == 1
