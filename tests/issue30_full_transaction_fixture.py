@@ -36,8 +36,12 @@ from binnacle.companions.service_watchdog_safety import active_jobs
 from binnacle.mcp.tool_admission_drain import ToolAdmissionDrain
 from binnacle.platform.darwin.job_manager_maintenance_fence import ManagerStartFence
 from binnacle.platform.darwin.job_manager_service import PROTOCOL_VERSION
+from binnacle.platform.darwin.log_maintenance_observer import (
+    inspect_unowned_transaction,
+)
 from binnacle.platform.darwin.log_maintenance_transaction import (
     JournalSnapshot,
+    MaintenanceJournalRefused,
     MaintenanceTransactionJournal,
 )
 from tests.issue30_rehearsal_support import (
@@ -233,6 +237,22 @@ def _open_guardian(root: Path) -> subprocess.Popen[str]:
         guardian.communicate(timeout=3)
         raise RehearsalRefused("independent fixture guardian not ready")
     return guardian
+
+
+def inspect_when_unlocked(txn_root: Path, *, timeout: float = 2.0) -> JournalSnapshot:
+    """Inspect the journal, retrying while the fixture guardian holds its lock.
+
+    The guardian polls the same journal with a non-blocking flock every 40 ms,
+    so one inspect can meet that lock for an instant (seen on CI).
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            return inspect_unowned_transaction(txn_root)
+        except MaintenanceJournalRefused:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.01)
 
 
 def _guardian_outcome(root: Path, *, timeout: float = 5) -> str:
