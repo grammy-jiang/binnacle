@@ -16,6 +16,20 @@ from pathlib import Path
 from typing import Any
 
 REDACTED = "[redacted]"
+SAFE_LSP_STATUSES = frozenset(
+    {
+        "ok",
+        "partial",
+        "ambiguous",
+        "stale",
+        "unavailable",
+        "invalid_input",
+        "invalid_scope",
+        "timeout",
+        "provider_error",
+        "unsafe_profile",
+    }
+)
 SMOKE_CORRELATION_FIELD = "binnacle/smoke-correlation"
 # A 128-bit generated marker is diagnostic-only, never an authorization claim.
 _SMOKE_PROOF = re.compile(r"^[0-9a-f]{32}$")
@@ -29,6 +43,7 @@ PUBLIC_TOOLS = frozenset(
         "run_command",
         "job_status",
         "stop_job",
+        "inspect_symbol",
     }
 )
 _CLIENT_LABELS = frozenset(
@@ -63,6 +78,11 @@ _ARGUMENT_KEYS = frozenset(
         "wait_seconds",
         "tail_lines",
         "background",
+        "line",
+        "column",
+        "reference_limit",
+        "include_hover",
+        "symbol_text",
     }
 )
 _SAFE_SCALARS = frozenset(
@@ -78,6 +98,10 @@ _SAFE_SCALARS = frozenset(
         "wait_seconds",
         "tail_lines",
         "background",
+        "line",
+        "column",
+        "reference_limit",
+        "include_hover",
     }
 )
 _HASHED_PATH = re.compile(r"^pathhash:([0-9a-f]{12})(?:\.file)?$")
@@ -152,6 +176,13 @@ def safe_arguments(arguments: object, *, root: Path | None = None) -> dict[str, 
             result[key] = value
         elif key in {"path", "workdir"}:
             result[key] = safe_path(value, root=root)
+        elif key == "symbol_text" and isinstance(value, str):
+            result[key] = (
+                "symbolhash:"
+                + hashlib.sha256(value.encode("utf-8", errors="replace")).hexdigest()[
+                    :12
+                ]
+            )
         elif (
             key == "job_id" and isinstance(value, str) and _JOB_ID.fullmatch(value)
         ) or (key == "cursor" and value in ("start", "end")):

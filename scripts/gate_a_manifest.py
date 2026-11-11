@@ -29,7 +29,11 @@ def manifest_groups() -> dict[str, set[str]]:
             "entrypoint.py",
             "startup_server_modules.py",
         },
-        "feature_namespace": {"features/__init__.py"},
+        "feature_namespace": {
+            "features/__init__.py",
+            # Opt-in ChatGPT bridge to the private LSP service (BINNACLE_LSP_BRIDGE_STATE_DIR).
+            "features/lsp_bridge_server.py",
+        },
         "mcp": {
             "mcp/__init__.py",
             "mcp/identity.py",

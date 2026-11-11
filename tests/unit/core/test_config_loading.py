@@ -42,6 +42,7 @@ def test_defaults_load_without_config_file(tmp_path, monkeypatch):
         "run_command",
         "job_status",
         "stop_job",
+        "inspect_symbol",
     )
 
 
