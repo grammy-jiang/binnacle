@@ -21,7 +21,7 @@ def test_all_checkout_steps_disable_token_persistence():
                 if str(step.get("uses", "")).startswith("actions/checkout@"):
                     assert step["with"]["persist-credentials"] is False
                     found += 1
-    assert found == 5
+    assert found == 6  # quality, tests, tests-macos, coverage, packaging, security
 
 
 def test_dependabot_cooldown_preserves_immediate_security_updates():
@@ -87,6 +87,7 @@ def test_seven_required_check_ids_and_names_unchanged():
         "Tests / Python 3.11",
         "Tests / Python 3.12",
         "Tests / Python 3.14",
+        "Tests / macOS arm64 / Python 3.13",
         "Coverage policy / Python 3.13",
         "Packaging / Python 3.13",
     ]

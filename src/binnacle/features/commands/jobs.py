@@ -43,6 +43,8 @@ if MANAGER_SOCKET is None:
     raise RuntimeError("host composition did not resolve the jobs socket")
 
 JobGone = job_store.JobGone
+InvalidJobId = job_store.InvalidJobId
+is_valid_job_id = job_store.is_valid_job_id
 
 
 def _resolve_owner_mode() -> str:

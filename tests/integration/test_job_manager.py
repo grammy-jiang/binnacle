@@ -205,7 +205,7 @@ def _unfinished(store: Path, name: str, *, boot: str, owner: str) -> None:
 def test_prepare_classifies_previous_owner_on_same_boot(tmp_path, monkeypatch):
     store = tmp_path / "jobs"
     monkeypatch.setattr(jobs, "JOBS_DIR", store)
-    _unfinished(store, "oldowner0001", boot="boot-a", owner="owner-a")
+    _unfinished(store, "01d0e0000001", boot="boot-a", owner="owner-a")
     runtime = JobManager(
         tmp_path / "run" / "jobs.sock",
         owner_instance_id="owner-b",
@@ -213,7 +213,7 @@ def test_prepare_classifies_previous_owner_on_same_boot(tmp_path, monkeypatch):
     )
 
     assert runtime.prepare() == 1
-    state = jobs.job_state("oldowner0001")
+    state = jobs.job_state("01d0e0000001")
     assert state is not None and state["state"] == "exited"
     assert state["exit_code"] is None and state["signal"] is None
     assert state["termination_reason"] == "owner_restart"
@@ -222,7 +222,7 @@ def test_prepare_classifies_previous_owner_on_same_boot(tmp_path, monkeypatch):
 def test_prepare_classifies_previous_boot(tmp_path, monkeypatch):
     store = tmp_path / "jobs"
     monkeypatch.setattr(jobs, "JOBS_DIR", store)
-    _unfinished(store, "oldboot00001", boot="boot-old", owner="owner-a")
+    _unfinished(store, "01db00000001", boot="boot-old", owner="owner-a")
     runtime = JobManager(
         tmp_path / "run" / "jobs.sock",
         owner_instance_id="owner-b",
@@ -230,14 +230,14 @@ def test_prepare_classifies_previous_boot(tmp_path, monkeypatch):
     )
 
     assert runtime.prepare() == 1
-    state = jobs.job_state("oldboot00001")
+    state = jobs.job_state("01db00000001")
     assert state is not None and state["termination_reason"] == "host_reboot"
 
 
 def test_prepare_leaves_legacy_records_for_legacy_reader(tmp_path, monkeypatch):
     store = tmp_path / "jobs"
     monkeypatch.setattr(jobs, "JOBS_DIR", store)
-    directory = store / "legacy000001"
+    directory = store / "1e9ac0000001"
     directory.mkdir(parents=True)
     (directory / "meta.json").write_text(
         json.dumps(
@@ -251,7 +251,7 @@ def test_prepare_leaves_legacy_records_for_legacy_reader(tmp_path, monkeypatch):
     )
 
     assert runtime.prepare() == 0
-    assert jobs.job_state("legacy000001")["state"] == "unknown"
+    assert jobs.job_state("1e9ac0000001")["state"] == "unknown"
 
 
 def test_unavailable_socket_is_a_manager_error(tmp_path):
@@ -374,7 +374,7 @@ def test_interrupted_job_has_useful_public_summary(tmp_path, monkeypatch):
 
     store = tmp_path / "jobs"
     monkeypatch.setattr(jobs, "JOBS_DIR", store)
-    _unfinished(store, "interrupted01", boot="boot-a", owner="owner-a")
+    _unfinished(store, "1e7e00000001", boot="boot-a", owner="owner-a")
     runtime = JobManager(
         tmp_path / "run" / "jobs.sock",
         owner_instance_id="owner-b",
@@ -382,9 +382,9 @@ def test_interrupted_job_has_useful_public_summary(tmp_path, monkeypatch):
     )
     assert runtime.prepare() == 1
 
-    status_result = status_tool.job_status_impl("interrupted01", 20)
+    status_result = status_tool.job_status_impl("1e7e00000001", 20)
     assert "interrupted (owner_restart)" in str(status_result.content)
-    stop_result = stop_tool.stop_job_impl("interrupted01")
+    stop_result = stop_tool.stop_job_impl("1e7e00000001")
     assert "interrupted (owner_restart)" in str(stop_result.content)
 
 

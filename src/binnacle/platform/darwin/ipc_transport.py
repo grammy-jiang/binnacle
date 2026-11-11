@@ -392,6 +392,7 @@ def serve_authenticated(
         listener.bind(str(socket_path.with_name(staged_socket)))
         owned[staged_socket] = _identity(fd, staged_socket)
         os.chmod(staged_socket, 0o600, dir_fd=fd, follow_symlinks=False)
+        listener.listen(8)  # before publication: no ECONNREFUSED once visible
         key = secrets.token_bytes(32)
         info = owned[staged_socket]
         credentials = {
@@ -420,7 +421,6 @@ def serve_authenticated(
             _publish_entry(fd, source, target)
             owned[target] = owned.pop(source)
         name = socket_path.name + ".auth"
-        listener.listen(8)
         listener.settimeout(0.1)
         lock_info = os.fstat(lock)
 

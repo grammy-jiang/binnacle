@@ -238,5 +238,5 @@ def test_repository_governance_files_have_expected_contract() -> None:
     checks = next(
         rule for rule in desired["rules"] if rule["type"] == "required_status_checks"
     )["parameters"]["required_status_checks"]
-    assert len(checks) == 6
+    assert len(checks) == 7
     assert {check["integration_id"] for check in checks} == {15368}

@@ -45,6 +45,9 @@ def host(tmp_path, monkeypatch):
         run=platform_run,
     )
     monkeypatch.setattr(cli, "create_linux_provisioner", lambda **kwargs: provisioner)
+    # The fake host is a Linux host: keep a macOS run off the native launchd
+    # CLI, which would read the real installed MCP of the machine.
+    monkeypatch.setattr(cli, "create_native_installed_cli", lambda: None)
     monkeypatch.setattr(
         cli,
         "_systemctl",

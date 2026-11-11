@@ -142,7 +142,11 @@ def test_close_persists_every_unreleased_exit_and_many_jobs_in_budget(
     manager.grace = (svc.STOP_SIGTERM_GRACE_S, svc.STOP_SIGKILL_GRACE_S)
     halt = threading.Event()
     reaper = threading.Thread(target=manager.reap_forever, args=(halt,), name="rp")
-    with lock_open_fails(monkeypatch, "rp"):
+    # Only the reaper may record these exits. A start with wait 0 still records
+    # an exit the reaper already reaped, on the caller's thread, where the
+    # .lock open succeeds; a slow host reaches that before the reaper's write.
+    no_inline_exit = mock.patch.object(manager, "_wait_exit", return_value=None)
+    with lock_open_fails(monkeypatch, "rp"), no_inline_exit:
         reaper.start()
         short = [manager.handle(req(tmp_path, f"exit {n}"))["job_id"] for n in (3, 4)]
         running = [

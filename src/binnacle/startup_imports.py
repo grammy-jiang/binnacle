@@ -166,6 +166,8 @@ MANAGER_MODULES = {
                 "binnacle.platform.darwin.job_manager_procinfo",
                 "binnacle.platform.darwin.job_manager_queue",
                 "binnacle.platform.darwin.job_manager_lifecycle",
+                # job_manager_entry imports the dormant start fence at top level.
+                "binnacle.platform.darwin.job_manager_maintenance_fence",
                 "binnacle.platform.darwin.job_manager_telemetry",
                 "binnacle.platform.darwin.job_manager_records",
                 "binnacle.platform.darwin.job_manager_service",
@@ -174,6 +176,7 @@ MANAGER_MODULES = {
                 "binnacle.platform.darwin.job_process_owner",
                 "binnacle.platform.darwin.process_authority",
                 "binnacle.platform.darwin.process_backend",
+                "binnacle.platform.darwin.process_exit_settle",
             )
         )
     ),
