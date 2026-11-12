@@ -89,6 +89,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "features/commands/job_manager_v2_receipts.py",
             "features/commands/jobs.py",
             "features/commands/job_stop.py",
+            "features/commands/job_exit.py",
             "features/commands/job_client.py",
             "features/commands/job_manager.py",
             "features/commands/job_output.py",

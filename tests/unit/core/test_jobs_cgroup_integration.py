@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from binnacle.features.commands import jobs
+from binnacle.features.commands import job_resource_history, jobs
 from binnacle.platform.contracts.resource_contracts import NoResourceAccounting
 
 LINUX_ONLY = pytest.mark.skipif(
@@ -116,10 +116,10 @@ def test_record_exit_defers_history_when_descendant_keeps_cgroup_populated(
         assert callable(on_finalized)
         finalizers.append((job_id, cgroup, meta))
 
-    monkeypatch.setattr(jobs.job_resource_history, "finalize_async", fake_finalize)
+    monkeypatch.setattr(job_resource_history, "finalize_async", fake_finalize)
     history_calls: list[object] = []
     monkeypatch.setattr(
-        jobs.job_resource_history,
+        job_resource_history,
         "append_best_effort",
         lambda *args, **kwargs: history_calls.append(args) or "/unexpected",
     )

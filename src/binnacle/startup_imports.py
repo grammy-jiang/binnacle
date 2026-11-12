@@ -127,6 +127,7 @@ MANAGER_MODULES = {
                 "binnacle.features",
                 "binnacle.features.commands",
                 "binnacle.features.commands.job_client",
+                "binnacle.features.commands.job_exit",
                 "binnacle.features.commands.job_manager",
                 "binnacle.features.commands.job_output",
                 "binnacle.features.commands.job_owner",

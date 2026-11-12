@@ -60,6 +60,7 @@ _SERVER_COMMON = (
     "binnacle.features.commands.job_awareness.receipts",
     "binnacle.features.commands.job_awareness.snapshots",
     "binnacle.features.commands.job_client",
+    "binnacle.features.commands.job_exit",
     "binnacle.features.commands.job_output",
     "binnacle.features.commands.job_resource_history",
     "binnacle.features.commands.job_stop",
