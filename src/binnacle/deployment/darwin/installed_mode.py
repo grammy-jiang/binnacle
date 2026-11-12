@@ -22,7 +22,16 @@ from typing import Literal
 
 DEFAULT_PLIST = Path("/Library/LaunchDaemons/com.binnacle.mcp.plist")
 TARGET = "system/com.binnacle.mcp"
-ALLOWED_ENV = frozenset({"HOME", "PATH", "BINNACLE_CONFIG_FILE"})
+# The LSP bridge variables enable the guarded bridge mount (server.py).
+ALLOWED_ENV = frozenset(
+    {
+        "HOME",
+        "PATH",
+        "BINNACLE_CONFIG_FILE",
+        "BINNACLE_LSP_BRIDGE_PORT",
+        "BINNACLE_LSP_BRIDGE_STATE_DIR",
+    }
+)
 
 
 class InstalledMcpModeError(RuntimeError):

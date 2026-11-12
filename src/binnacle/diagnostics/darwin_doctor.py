@@ -183,12 +183,14 @@ def check_native_job_manager(
             )
         )
     elif revision[:12] != expected_revision[:12]:
+        # As on Linux: an MCP deploy moves the checkout first; the manager
+        # follows at a quiet moment, so a lagging manager is not a failure.
         checks.append(
-            fail(
+            warn(
                 "jobs-service",
                 f"manager revision={revision} differs from checkout "
                 f"{expected_revision[:12]}",
-                "defer a managed switch until the J7 quiet gate allows it",
+                "restart com.binnacle.jobs only when no jobs are running",
             )
         )
     if unknown_jobs:

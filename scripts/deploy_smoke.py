@@ -18,6 +18,10 @@ The smoke proves that the deployed server works for a real client:
 rolls back on failure (``scripts/deploy_flow.py``). The checks live in
 ``scripts/smoke_checks.py``.
 
+The same checks run on both hosts: on Linux against the systemd user unit
+and its journal, on macOS against the installed ``system/com.binnacle.mcp``
+LaunchDaemon and its stderr log file (restarted with ``sudo -n``).
+
 Output follows cron-report: the first line is ``OK: ...``, ``WARN: ...`` or
 ``ALERT: ...``, and the exit code is non-zero only on ALERT. With
 ``--quiet-ok`` the command prints nothing when every check passes, so cron
@@ -64,7 +68,7 @@ def run_command(argv: Sequence[str], timeout: float) -> tuple[int, str]:
 
 
 def read_journal(since_epoch: float, until_epoch: float | None = None) -> list[str]:
-    source = create_service_log_source(command_timeout_s=60.0)
+    source = create_service_log_source(command_timeout_s=60.0, installed=True)
     return source.read_window((UNIT,), since_epoch, until_epoch).splitlines()
 
 
@@ -85,8 +89,8 @@ def default_env(checkout: Path = DEFAULT_CHECKOUT) -> Env:
         sleep=time.sleep,
         client=mcp_client,
         read=lambda p: p.read_text(encoding="utf-8"),
-        services=create_service_inspector(),
-        service_controller=create_service_controller(),
+        services=create_service_inspector(installed=True),
+        service_controller=create_service_controller(installed=True),
         checkout=checkout,
         state_dir=STATE_DIR,
         tmp_root=Path("/tmp"),

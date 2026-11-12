@@ -47,8 +47,9 @@ def test_read_journal_uses_semantic_source_and_60_second_bound(
             seen["until"] = until_epoch
             return "a\nb\n"
 
-    def factory(*, command_timeout_s):
+    def factory(*, command_timeout_s, installed):
         seen["timeout"] = command_timeout_s
+        seen["installed"] = installed
         return Source()
 
     monkeypatch.setattr(deploy_smoke, "create_service_log_source", factory)
@@ -56,6 +57,7 @@ def test_read_journal_uses_semantic_source_and_60_second_bound(
     assert deploy_smoke.read_journal(100.7, 200.2) == ["a", "b"]
     assert seen == {
         "timeout": 60.0,
+        "installed": True,
         "services": (deploy_smoke.UNIT,),
         "since": 100.7,
         "until": 200.2,
@@ -70,7 +72,7 @@ def test_read_journal_propagates_typed_acquisition_failure(monkeypatch: Any) -> 
     monkeypatch.setattr(
         deploy_smoke,
         "create_service_log_source",
-        lambda *, command_timeout_s: BrokenSource(),
+        lambda *, command_timeout_s, installed: BrokenSource(),
     )
 
     with pytest.raises(ServiceLogError, match="boom"):

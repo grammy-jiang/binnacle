@@ -14,7 +14,7 @@ from binnacle.diagnostics import darwin_doctor as native
 from binnacle.diagnostics import doctor as linux_checks
 from binnacle.doctor_contracts import fail, ok
 from binnacle.platform import composition
-from scripts.mac_w3_deploy_gate import parse_startup_doctor
+from tests.doctor_json_support import startup_clean, startup_statuses
 
 
 def test_safe_darwin_aggregator_keeps_startup_when_other_checks_fail(monkeypatch):
@@ -50,7 +50,7 @@ def test_safe_darwin_aggregator_keeps_startup_when_other_checks_fail(monkeypatch
     assert any(x["group"] == "startup" and x["status"] == "ok" for x in body["checks"])
     assert any(x["group"] == "config" and x["status"] == "fail" for x in body["checks"])
     assert "config private secret" not in text
-    assert parse_startup_doctor(text)[:2] == (True, "startup_ok")
+    assert startup_clean(text)
 
 
 def test_startup_failure_keeps_w3_gate_blocked_in_json(monkeypatch):
@@ -75,7 +75,7 @@ def test_startup_failure_keeps_w3_gate_blocked_in_json(monkeypatch):
         native.run_all(server_url="http://localhost/mcp", token_file=Path("/none"))
     )
     assert rc == 1
-    assert parse_startup_doctor(output)[:2] == (False, "startup_failure")
+    assert "fail" in startup_statuses(output)
 
 
 def test_darwin_cli_never_calls_linux_provisioner(monkeypatch, capsys):

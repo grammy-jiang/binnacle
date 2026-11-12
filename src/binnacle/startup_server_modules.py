@@ -227,6 +227,7 @@ _SERVER_EXTRA_DARWIN = (
     "binnacle.platform.darwin.resource_accounting",
     "binnacle.platform.darwin.search_access",
     "binnacle.platform.darwin.service_launchd",
+    "binnacle.platform.darwin.service_launchd_system",
     "binnacle.platform.darwin.witness_protocol",
 )
 SERVER_MODULES = {
