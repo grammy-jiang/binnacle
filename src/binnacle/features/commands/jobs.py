@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import cast
 
 from binnacle.config import get_settings
-from binnacle.features.commands import job_resource_history, job_stop, job_store
+from binnacle.features.commands import job_exit, job_stop, job_store
 from binnacle.features.commands.job_output import (
     clip_head_tail as job_output_clip_head_tail,
 )
@@ -129,110 +129,19 @@ def _prune(reserve: int = 0) -> None:
             )
 
 
-def _termination_reason(meta: dict, rc: int | None) -> str:
-    if meta.get("stop_requested"):
-        return "stop_requested"
-    if rc is not None and rc < 0:
-        return "signal"
-    return "normal_exit"
-
-
 def _save_final_resource_meta(job_id: str, final_meta: dict) -> None:
-    with _STORE_LOCK:
-        current = _read_meta(job_id)
-        if current is None:
-            return
-        job_resource_history.merge_final_meta(current, final_meta)
-        try:
-            _write_meta(job_id, current)
-        except OSError:
-            pass
+    job_exit.save_final_resource_meta(JOBS_DIR, job_id, final_meta)
 
 
 def record_exit(job_id: str, proc: ProcessHandle) -> None:
     """Write an already-exited process's status to meta.json.
 
-    The exit is read from the in-memory Popen object (``proc.returncode``),
-    which is the authoritative record while the server lives; meta.json is
-    the durable copy for later, stateless job_status/stop_job calls (which
-    may run after a ``uvicorn --reload``). Whoever observed the exit calls
-    this: the run_command request thread for a command that finished within
-    its wait window, or the background reaper for one that outlived it.
-    Call only after the process has exited (``proc.returncode`` is set).
+    The exit is read from the in-memory Popen object (``proc.returncode``);
+    meta.json is the durable copy for later, stateless calls. Whoever
+    observed the exit calls this: the run_command request thread, or the
+    background reaper. Call only after the process has exited.
     """
-    rc = proc.returncode
-    with _STORE_LOCK:
-        meta = _read_meta(job_id) or {}
-        if rc is not None and rc < 0:
-            meta["signal"] = -rc
-            meta["exit_code"] = None
-        else:
-            meta["exit_code"] = rc
-        meta["ended_at"] = time.time()
-        meta["termination_reason"] = _termination_reason(meta, rc)
-        cgroup = meta.get("cgroup")
-        resources = _RESOURCE_ACCOUNTING.snapshot(
-            cgroup if isinstance(cgroup, str) else None
-        )
-        if resources:
-            meta["resource_usage"] = resources
-        cleanup_pending = False
-        if isinstance(cgroup, str) and not _RESOURCE_ACCOUNTING.cleanup(cgroup):
-            cleanup_pending = True
-            meta["cgroup_cleanup_pending"] = True
-        elif resources:
-            history = job_resource_history.append_best_effort(
-                JOBS_DIR.parent / "resource-jobs", job_id, meta, resources
-            )
-            if history is not None:
-                meta["resource_history_path"] = history
-        try:
-            _write_meta(job_id, meta)
-        except OSError:
-            # The job dir vanished (pruned or removed externally); there is
-            # nowhere to record the exit, and crashing helps nobody.
-            logger.warning(
-                "event=job_exit_unrecorded job_id=%s exit_code=%s signal=%s "
-                "call=%s owner=%s owner_instance=%s command_hash=%s",
-                job_id,
-                meta.get("exit_code"),
-                meta.get("signal"),
-                meta.get("call_id", "-"),
-                meta.get("owner", "embedded"),
-                str(meta.get("owner_instance_id") or "-")[:12],
-                meta.get("command_hash", "-"),
-            )
-            return
-    if cleanup_pending and isinstance(cgroup, str):
-        job_resource_history.finalize_async(
-            job_id,
-            cgroup,
-            dict(meta),
-            accounting=_RESOURCE_ACCOUNTING,
-            history_root=JOBS_DIR.parent / "resource-jobs",
-            on_finalized=lambda final: _save_final_resource_meta(job_id, final),
-        )
-    try:
-        log_bytes = (_job_dir(job_id) / "out.log").stat().st_size
-    except OSError:
-        log_bytes = 0
-    started = meta.get("started_at")
-    logger.info(
-        "event=job_exit job_id=%s exit_code=%s signal=%s reason=%s runtime_s=%s "
-        "log_bytes=%d call=%s owner=%s owner_instance=%s command_hash=%s",
-        job_id,
-        meta.get("exit_code"),
-        meta.get("signal"),
-        meta.get("termination_reason"),
-        round(meta["ended_at"] - started, 3)
-        if isinstance(started, (int, float))
-        else "-",
-        log_bytes,
-        meta.get("call_id", "-"),
-        meta.get("owner", "embedded"),
-        str(meta.get("owner_instance_id") or "-")[:12],
-        meta.get("command_hash", "-"),
-    )
+    job_exit.record_exit(JOBS_DIR, job_id, proc.returncode, _RESOURCE_ACCOUNTING)
 
 
 def reap_in_background(job_id: str, proc: ProcessHandle) -> None:
