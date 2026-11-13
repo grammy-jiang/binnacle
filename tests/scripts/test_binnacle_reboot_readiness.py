@@ -25,6 +25,7 @@ def make_plist(tmp_path, *, label="com.binnacle.mcp", **overrides):
     payload = {key: value for key, value in payload.items() if value is not None}
     path = tmp_path / (label + ".plist")
     path.write_bytes(plistlib.dumps(payload))
+    path.chmod(0o644)  # independent of the caller's umask
     return path
 
 

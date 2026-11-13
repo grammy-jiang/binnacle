@@ -45,7 +45,9 @@ def _lsof(raw: evidence.FDIdentity, canary: evidence.WritableCanary):
     argv = evidence.lsof_readonly_argv(raw, canary)
     assert argv[0] == "/usr/sbin/lsof"
     result = subprocess.run(
-        [str(_LSOF_LINUX), *argv[1:]],
+        # -w drops host-specific warnings (for example Docker overlay mounts)
+        # that would make the production classifier refuse non-empty stderr.
+        [str(_LSOF_LINUX), "-w", *argv[1:]],
         capture_output=True,
         text=True,
         timeout=8,
